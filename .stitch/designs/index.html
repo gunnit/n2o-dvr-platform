@@ -3,14 +3,18 @@
 <head>
   <meta charset="utf-8" />
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-  <title>N2O Safety &mdash; Proposte Design</title>
+  <title>N2O Sicurezza &mdash; Proposte Design Piattaforma</title>
+  <link rel="icon" href="https://n2o-sicurezza.it/wp-content/uploads/2025/04/favicon-n2o.png" />
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&family=Roboto:wght@300;400;500;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
   <script>
     tailwind.config = {
       theme: {
         extend: {
+          colors: {
+            n2o: { navy: '#18244E', blue: '#1B5594', light: '#a5c8ff' },
+          },
           fontFamily: {
             display: ['"Plus Jakarta Sans"', 'sans-serif'],
             body: ['Inter', 'sans-serif'],
@@ -20,100 +24,235 @@
     };
   </script>
   <style>
-    .material-symbols-outlined {
-      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-    }
+    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; }
+    *, *::before, *::after { box-sizing: border-box; }
+
     body {
-      background: #0a0a0f;
+      background: #06060b;
       color: #fff;
+      -webkit-font-smoothing: antialiased;
     }
+
+    /* Hero gradient */
+    .hero-glow {
+      position: absolute;
+      width: 600px; height: 600px;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.12;
+      pointer-events: none;
+    }
+
+    /* Design card */
     .design-card {
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.08);
-      transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      background: rgba(255,255,255,0.025);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 20px;
+      overflow: hidden;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+    .design-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 20px;
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.08), transparent 60%);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
     }
     .design-card:hover {
-      border-color: rgba(255,255,255,0.2);
-      transform: translateY(-6px);
-      box-shadow: 0 24px 48px rgba(0,0,0,0.4);
+      border-color: rgba(255,255,255,0.12);
+      transform: translateY(-8px);
+      box-shadow: 0 32px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
     }
     .design-card:hover .card-img {
-      transform: scale(1.04);
+      transform: scale(1.03);
     }
+    .design-card:hover .explore-label {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
     .card-img {
-      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
     }
+
+    .explore-label {
+      opacity: 0;
+      transform: translateX(-8px);
+      transition: all 0.3s ease;
+    }
+
+    /* Swatches */
     .swatch {
-      width: 28px;
-      height: 28px;
-      border-radius: 8px;
-      border: 2px solid rgba(255,255,255,0.1);
-      flex-shrink: 0;
+      width: 32px; height: 32px;
+      border-radius: 10px;
+      border: 2px solid rgba(255,255,255,0.08);
+      transition: transform 0.2s ease;
+      cursor: default;
+      position: relative;
     }
-    .tag {
-      font-size: 0.65rem;
-      letter-spacing: 0.08em;
+    .swatch:hover {
+      transform: scale(1.2);
+      z-index: 1;
+    }
+
+    /* Tags */
+    .mode-tag {
+      font-size: 0.6rem;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
-      padding: 3px 10px;
+      padding: 4px 12px;
       border-radius: 100px;
-      font-weight: 600;
+      font-weight: 700;
     }
-    .tag-dark { background: rgba(165,200,255,0.15); color: #a5c8ff; }
-    .tag-light { background: rgba(0,61,116,0.15); color: #7eb8ff; }
+    .mode-dark { background: rgba(165,200,255,0.1); color: #8bb8ff; }
+    .mode-light { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); }
+
+    /* Number badge */
+    .design-num {
+      width: 36px; height: 36px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 800;
+      font-size: 0.85rem;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.4);
+    }
+
+    /* Divider */
+    .section-divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06) 20%, rgba(255,255,255,0.06) 80%, transparent);
+    }
+
+    /* Source site thumbnail */
+    .source-frame {
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.02);
+    }
+
+    /* Smooth scroll */
+    html { scroll-behavior: smooth; }
+
+    /* Responsive image container */
+    .img-container {
+      position: relative;
+      overflow: hidden;
+      background: rgba(0,0,0,0.3);
+    }
   </style>
 </head>
-<body class="min-h-screen font-body antialiased">
-  <div class="max-w-5xl mx-auto px-6 py-16">
+<body class="font-body antialiased">
 
-    <!-- Header -->
-    <div class="text-center mb-6">
-      <p class="text-xs tracking-[0.2em] uppercase text-white/30 font-display mb-4">Piattaforma Sicurezza sul Lavoro</p>
-      <h1 class="font-display text-5xl font-800 tracking-tight text-white mb-3">Proposte Design</h1>
-      <p class="text-lg text-white/40 font-body max-w-xl mx-auto">Quattro direzioni creative per la piattaforma N2O. Clicca su una proposta per esplorare il design completo.</p>
-      <div class="mt-6 h-px w-24 mx-auto bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+  <!-- Hero -->
+  <header class="relative overflow-hidden pt-16 pb-20 md:pt-24 md:pb-28">
+    <div class="hero-glow bg-n2o-blue" style="top:-200px;left:50%;transform:translateX(-50%)"></div>
+
+    <div class="relative max-w-4xl mx-auto px-6 text-center">
+      <!-- Logo -->
+      <div class="mb-10">
+        <img src="https://n2o-sicurezza.it/wp-content/uploads/2025/04/logo-n2o-bianco-new-200.png" alt="N2O Sicurezza" class="h-12 mx-auto opacity-90" />
+      </div>
+
+      <!-- Title -->
+      <p class="text-[0.7rem] tracking-[0.25em] uppercase text-white/30 font-display font-600 mb-5">Piattaforma Digitale &mdash; Sicurezza sul Lavoro</p>
+      <h1 class="font-display text-4xl md:text-6xl font-800 tracking-tight text-white leading-[1.1] mb-6">
+        Proposte Design
+      </h1>
+      <p class="text-base md:text-lg text-white/40 max-w-2xl mx-auto leading-relaxed mb-10">
+        Abbiamo analizzato il vostro sito <a href="https://n2o-sicurezza.it" target="_blank" rel="noopener" class="text-n2o-light/70 hover:text-n2o-light transition-colors underline decoration-n2o-light/30 underline-offset-2">n2o-sicurezza.it</a> per estrarre l'identita' visiva, la palette cromatica e il tono del brand N2O. Partendo da queste fondamenta, abbiamo elaborato quattro direzioni creative per la vostra nuova piattaforma di gestione della sicurezza, ognuna con un'atmosfera e una personalita' distinta.
+      </p>
+
+      <!-- Source site reference -->
+      <div class="inline-flex flex-col items-center">
+        <div class="source-frame mb-3 shadow-2xl shadow-black/40">
+          <img src="https://storage.googleapis.com/firecrawl-scrape-media/screenshot-7aeb20e7-f941-4916-9abe-82c620d80d0e.png?GoogleAccessId=scrape-bucket-accessor%40firecrawl.iam.gserviceaccount.com&Expires=1775689384&Signature=RY0RNMK36lnn7pvGL5DDo4kW%2BzyRh9GssuWCsuXQa9LMLSpf9mv8GDrv9TK%2F%2Bxpko28iWrN4pSPeVgKF4XEYZeFjQe%2Fn9Rs9w9cK9wY4MZxsZoyQNpJI0GIlf%2FTEotckT8nZkzFHvjKqQ1Z3mc7sYnK1H9F9p3C0HKQJc6mKLQB%2BLxopyHU%2B4G5iXII7XPafdyPn9KyNbwrmGACfgKesmrJA%2F54g1%2FA4YkIHVhGlPdRo15XUDF2yieSFdNbK0I8ZkSItAZDvBdc%2ByOvp2SdFL15r6xOhkB6KO6KOuPbeVp2Z5Vg90GuohsxpzAID55VZ04Vl37oFgh0N7Tu5KDr0NA%3D%3D" alt="n2o-sicurezza.it" class="w-[320px] md:w-[480px] h-auto" />
+        </div>
+        <div class="flex items-center gap-2 text-white/25 text-xs">
+          <span class="material-symbols-outlined text-sm">language</span>
+          <span>n2o-sicurezza.it &mdash; riferimento brand</span>
+        </div>
+      </div>
+
+      <!-- Brand extract -->
+      <div class="mt-12 max-w-lg mx-auto">
+        <p class="text-[0.6rem] tracking-[0.2em] uppercase text-white/20 font-display font-600 mb-3">Colori estratti dal brand</p>
+        <div class="flex items-center justify-center gap-3">
+          <div class="text-center">
+            <div class="swatch mx-auto mb-1" style="background:#18244E" title="#18244E"></div>
+            <span class="text-[0.55rem] text-white/20">Navy</span>
+          </div>
+          <div class="text-center">
+            <div class="swatch mx-auto mb-1" style="background:#1B5594" title="#1B5594"></div>
+            <span class="text-[0.55rem] text-white/20">Blu</span>
+          </div>
+          <div class="text-center">
+            <div class="swatch mx-auto mb-1" style="background:#50485B" title="#50485B"></div>
+            <span class="text-[0.55rem] text-white/20">Viola</span>
+          </div>
+          <div class="text-center">
+            <div class="swatch mx-auto mb-1" style="background:#FFFFFF;border-color:rgba(255,255,255,0.2)" title="#FFFFFF"></div>
+            <span class="text-[0.55rem] text-white/20">Bianco</span>
+          </div>
+          <div class="text-center">
+            <div class="swatch mx-auto mb-1" style="background:#333333" title="#333333"></div>
+            <span class="text-[0.55rem] text-white/20">Testo</span>
+          </div>
+        </div>
+      </div>
     </div>
+  </header>
 
-    <!-- Legend -->
-    <div class="flex justify-center gap-6 mb-12 text-sm text-white/40">
-      <div class="flex items-center gap-2"><span class="tag tag-dark">Dark Mode</span></div>
-      <div class="flex items-center gap-2"><span class="tag tag-light">Light Mode</span></div>
+  <div class="section-divider max-w-5xl mx-auto"></div>
+
+  <!-- Designs Section -->
+  <section class="max-w-5xl mx-auto px-6 py-16 md:py-24">
+    <div class="text-center mb-16">
+      <p class="text-[0.65rem] tracking-[0.2em] uppercase text-white/25 font-display font-600 mb-3">4 Direzioni Creative</p>
+      <h2 class="font-display text-2xl md:text-3xl font-800 text-white">Scegli il design che meglio rappresenta N2O</h2>
     </div>
 
     <!-- Design 1: Digital Vault -->
-    <a href="digital-vault.html" class="design-card rounded-2xl overflow-hidden block group mb-8">
+    <a href="digital-vault.html" class="design-card block mb-10 group">
       <div class="md:flex">
-        <div class="md:w-1/2 overflow-hidden">
-          <img src="v2-01-dashboard.png" alt="Digital Vault" class="card-img w-full h-72 md:h-full object-cover object-top" />
+        <div class="img-container md:w-[55%]">
+          <img src="v2-01-dashboard.png" alt="Digital Vault" class="card-img w-full h-64 md:h-[380px] object-cover object-top" />
         </div>
-        <div class="md:w-1/2 p-8 flex flex-col justify-center">
-          <div class="flex items-center gap-3 mb-1">
-            <span class="tag tag-dark">Dark Mode</span>
+        <div class="md:w-[45%] p-7 md:p-10 flex flex-col justify-center">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="design-num">01</div>
+            <span class="mode-tag mode-dark">Dark Mode</span>
           </div>
-          <h2 class="font-display text-3xl font-800 text-white mt-3 mb-1">Digital Vault</h2>
-          <p class="text-white/30 text-sm font-display mb-4">N2O Safety</p>
-          <p class="text-white/50 text-sm leading-relaxed mb-6">Estetica vault/cassaforte digitale con glass-morphism e gradienti profondi. Sfondo navy scuro con accenti blu chiaro e arancione. Atmosfera premium e hi-tech.</p>
+          <h3 class="font-display text-2xl md:text-3xl font-800 text-white mb-1">Digital Vault</h3>
+          <p class="text-white/25 text-sm font-display font-500 mb-4">N2O Safety</p>
+          <p class="text-white/45 text-sm leading-relaxed mb-7">Cassaforte digitale con estetica premium. Glass-morphism, gradienti profondi su sfondo navy e accenti blu/arancione. Comunicazione di solidita' e affidabilita'.</p>
 
-          <!-- Palette -->
-          <div class="mb-5">
-            <p class="text-[0.65rem] tracking-widest uppercase text-white/25 mb-2">Palette</p>
+          <div class="mb-6">
+            <p class="text-[0.6rem] tracking-[0.15em] uppercase text-white/20 font-display mb-2">Palette</p>
             <div class="flex items-center gap-2">
-              <div class="swatch" style="background:#020f3a" title="Background: #020f3a"></div>
-              <div class="swatch" style="background:#a5c8ff" title="Primary: #a5c8ff"></div>
-              <div class="swatch" style="background:#1b5594" title="Primary Container: #1b5594"></div>
-              <div class="swatch" style="background:#ffb77e" title="Accent: #ffb77e"></div>
-              <div class="swatch" style="background:#b6c7e6" title="Secondary: #b6c7e6"></div>
-              <div class="swatch" style="background:#dce1ff" title="Text: #dce1ff"></div>
+              <div class="swatch" style="background:#020f3a" title="#020f3a"></div>
+              <div class="swatch" style="background:#a5c8ff" title="#a5c8ff"></div>
+              <div class="swatch" style="background:#1b5594" title="#1b5594"></div>
+              <div class="swatch" style="background:#ffb77e" title="#ffb77e"></div>
+              <div class="swatch" style="background:#b6c7e6" title="#b6c7e6"></div>
             </div>
           </div>
-
-          <!-- Typography -->
-          <div class="mb-5">
-            <p class="text-[0.65rem] tracking-widest uppercase text-white/25 mb-1">Tipografia</p>
-            <p class="text-white/40 text-xs">Nunito (titoli) &bull; Roboto (corpo) &bull; Plus Jakarta Sans (etichette)</p>
+          <div class="mb-7">
+            <p class="text-[0.6rem] tracking-[0.15em] uppercase text-white/20 font-display mb-1">Tipografia</p>
+            <p class="text-white/30 text-xs">Nunito &bull; Roboto &bull; Plus Jakarta Sans</p>
           </div>
 
-          <div class="flex items-center gap-1 text-white/60 text-sm font-500 group-hover:text-white transition-colors">
-            <span>Esplora design</span>
+          <div class="explore-label flex items-center gap-1.5 text-n2o-light/80 text-sm font-600">
+            <span>Esplora questo design</span>
             <span class="material-symbols-outlined text-base">arrow_forward</span>
           </div>
         </div>
@@ -121,40 +260,37 @@
     </a>
 
     <!-- Design 2: Sentinel DVR -->
-    <a href="sentinel-dvr.html" class="design-card rounded-2xl overflow-hidden block group mb-8">
+    <a href="sentinel-dvr.html" class="design-card block mb-10 group">
       <div class="md:flex flex-row-reverse">
-        <div class="md:w-1/2 overflow-hidden">
-          <img src="v2-03-documenti.png" alt="Sentinel DVR" class="card-img w-full h-72 md:h-full object-cover object-top" />
+        <div class="img-container md:w-[55%]">
+          <img src="v2-03-documenti.png" alt="Sentinel DVR" class="card-img w-full h-64 md:h-[380px] object-cover object-top" />
         </div>
-        <div class="md:w-1/2 p-8 flex flex-col justify-center">
-          <div class="flex items-center gap-3 mb-1">
-            <span class="tag tag-dark">Dark Mode</span>
+        <div class="md:w-[45%] p-7 md:p-10 flex flex-col justify-center">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="design-num">02</div>
+            <span class="mode-tag mode-dark">Dark Mode</span>
           </div>
-          <h2 class="font-display text-3xl font-800 text-white mt-3 mb-1">Sentinel DVR</h2>
-          <p class="text-white/30 text-sm font-display mb-4">Sicurezza d'Avanguardia</p>
-          <p class="text-white/50 text-sm leading-relaxed mb-6">Centro di comando per la generazione documenti. Glass-morphism intenso con profondita' di sfocatura maggiore. Status badge colorati e timeline attivita' in tempo reale.</p>
+          <h3 class="font-display text-2xl md:text-3xl font-800 text-white mb-1">Sentinel DVR</h3>
+          <p class="text-white/25 text-sm font-display font-500 mb-4">Sicurezza d'Avanguardia</p>
+          <p class="text-white/45 text-sm leading-relaxed mb-7">Centro di comando per la generazione documenti. Glass-morphism intenso con badge di stato colorati e timeline attivita'. Progettato per il controllo operativo.</p>
 
-          <!-- Palette -->
-          <div class="mb-5">
-            <p class="text-[0.65rem] tracking-widest uppercase text-white/25 mb-2">Palette</p>
+          <div class="mb-6">
+            <p class="text-[0.6rem] tracking-[0.15em] uppercase text-white/20 font-display mb-2">Palette</p>
             <div class="flex items-center gap-2">
-              <div class="swatch" style="background:#020f3a" title="Background: #020f3a"></div>
-              <div class="swatch" style="background:#a5c8ff" title="Primary: #a5c8ff"></div>
-              <div class="swatch" style="background:#1b5594" title="Primary Container: #1b5594"></div>
-              <div class="swatch" style="background:#ffb77e" title="Accent: #ffb77e"></div>
-              <div class="swatch" style="background:#b6c7e6" title="Secondary: #b6c7e6"></div>
-              <div class="swatch" style="background:#dce1ff" title="Text: #dce1ff"></div>
+              <div class="swatch" style="background:#020f3a" title="#020f3a"></div>
+              <div class="swatch" style="background:#a5c8ff" title="#a5c8ff"></div>
+              <div class="swatch" style="background:#1b5594" title="#1b5594"></div>
+              <div class="swatch" style="background:#ffb77e" title="#ffb77e"></div>
+              <div class="swatch" style="background:#b6c7e6" title="#b6c7e6"></div>
             </div>
           </div>
-
-          <!-- Typography -->
-          <div class="mb-5">
-            <p class="text-[0.65rem] tracking-widest uppercase text-white/25 mb-1">Tipografia</p>
-            <p class="text-white/40 text-xs">Plus Jakarta Sans (titoli) &bull; Inter (corpo) &bull; Roboto (etichette)</p>
+          <div class="mb-7">
+            <p class="text-[0.6rem] tracking-[0.15em] uppercase text-white/20 font-display mb-1">Tipografia</p>
+            <p class="text-white/30 text-xs">Plus Jakarta Sans &bull; Inter &bull; Roboto</p>
           </div>
 
-          <div class="flex items-center gap-1 text-white/60 text-sm font-500 group-hover:text-white transition-colors">
-            <span>Esplora design</span>
+          <div class="explore-label flex items-center gap-1.5 text-n2o-light/80 text-sm font-600">
+            <span>Esplora questo design</span>
             <span class="material-symbols-outlined text-base">arrow_forward</span>
           </div>
         </div>
@@ -162,40 +298,37 @@
     </a>
 
     <!-- Design 3: Digital Guardian -->
-    <a href="digital-guardian.html" class="design-card rounded-2xl overflow-hidden block group mb-8">
+    <a href="digital-guardian.html" class="design-card block mb-10 group">
       <div class="md:flex">
-        <div class="md:w-1/2 overflow-hidden">
-          <img src="02-sopralluogo-survey.png" alt="Digital Guardian" class="card-img w-full h-72 md:h-full object-cover object-top" />
+        <div class="img-container md:w-[55%]">
+          <img src="02-sopralluogo-survey.png" alt="Digital Guardian" class="card-img w-full h-64 md:h-[380px] object-cover object-top" />
         </div>
-        <div class="md:w-1/2 p-8 flex flex-col justify-center">
-          <div class="flex items-center gap-3 mb-1">
-            <span class="tag tag-light">Light Mode</span>
+        <div class="md:w-[45%] p-7 md:p-10 flex flex-col justify-center">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="design-num">03</div>
+            <span class="mode-tag mode-light">Light Mode</span>
           </div>
-          <h2 class="font-display text-3xl font-800 text-white mt-3 mb-1">Digital Guardian</h2>
-          <p class="text-white/30 text-sm font-display mb-4">Sicurezza Editoriale</p>
-          <p class="text-white/50 text-sm leading-relaxed mb-6">Design chiaro ed editoriale con sidebar navy. Interfaccia pulita orientata ai form con wizard a step progressivi. Accenti marroni caldi per un tocco professionale.</p>
+          <h3 class="font-display text-2xl md:text-3xl font-800 text-white mb-1">Digital Guardian</h3>
+          <p class="text-white/25 text-sm font-display font-500 mb-4">Sicurezza Editoriale</p>
+          <p class="text-white/45 text-sm leading-relaxed mb-7">Design chiaro ed editoriale con sidebar navy ispirata direttamente al brand N2O. Wizard a step progressivi con accenti caldi. Ideale per operatori sul campo.</p>
 
-          <!-- Palette -->
-          <div class="mb-5">
-            <p class="text-[0.65rem] tracking-widest uppercase text-white/25 mb-2">Palette</p>
+          <div class="mb-6">
+            <p class="text-[0.6rem] tracking-[0.15em] uppercase text-white/20 font-display mb-2">Palette</p>
             <div class="flex items-center gap-2">
-              <div class="swatch" style="background:#f8f9fc" title="Background: #f8f9fc"></div>
-              <div class="swatch" style="background:#003d74" title="Primary: #003d74"></div>
-              <div class="swatch" style="background:#1b5594" title="Primary Container: #1b5594"></div>
-              <div class="swatch" style="background:#583500" title="Tertiary: #583500"></div>
-              <div class="swatch" style="background:#515c89" title="Secondary: #515c89"></div>
-              <div class="swatch" style="background:#18244E" title="Sidebar: #18244E"></div>
+              <div class="swatch" style="background:#f8f9fc;border-color:rgba(255,255,255,0.15)" title="#f8f9fc"></div>
+              <div class="swatch" style="background:#18244E" title="#18244E"></div>
+              <div class="swatch" style="background:#003d74" title="#003d74"></div>
+              <div class="swatch" style="background:#1b5594" title="#1b5594"></div>
+              <div class="swatch" style="background:#583500" title="#583500"></div>
             </div>
           </div>
-
-          <!-- Typography -->
-          <div class="mb-5">
-            <p class="text-[0.65rem] tracking-widest uppercase text-white/25 mb-1">Tipografia</p>
-            <p class="text-white/40 text-xs">Plus Jakarta Sans (titoli) &bull; Roboto (corpo) &bull; Inter (etichette)</p>
+          <div class="mb-7">
+            <p class="text-[0.6rem] tracking-[0.15em] uppercase text-white/20 font-display mb-1">Tipografia</p>
+            <p class="text-white/30 text-xs">Plus Jakarta Sans &bull; Roboto &bull; Inter</p>
           </div>
 
-          <div class="flex items-center gap-1 text-white/60 text-sm font-500 group-hover:text-white transition-colors">
-            <span>Esplora design</span>
+          <div class="explore-label flex items-center gap-1.5 text-n2o-light/80 text-sm font-600">
+            <span>Esplora questo design</span>
             <span class="material-symbols-outlined text-base">arrow_forward</span>
           </div>
         </div>
@@ -203,51 +336,55 @@
     </a>
 
     <!-- Design 4: Vigilant Curator -->
-    <a href="vigilant-curator.html" class="design-card rounded-2xl overflow-hidden block group mb-8">
+    <a href="vigilant-curator.html" class="design-card block mb-10 group">
       <div class="md:flex flex-row-reverse">
-        <div class="md:w-1/2 overflow-hidden">
-          <img src="hybrid-02-sopralluogo.png" alt="Vigilant Curator" class="card-img w-full h-72 md:h-full object-cover object-top" />
+        <div class="img-container md:w-[55%]">
+          <img src="hybrid-02-sopralluogo.png" alt="Vigilant Curator" class="card-img w-full h-64 md:h-[380px] object-cover object-top" />
         </div>
-        <div class="md:w-1/2 p-8 flex flex-col justify-center">
-          <div class="flex items-center gap-3 mb-1">
-            <span class="tag tag-light">Light Mode</span>
+        <div class="md:w-[45%] p-7 md:p-10 flex flex-col justify-center">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="design-num">04</div>
+            <span class="mode-tag mode-light">Light Mode</span>
           </div>
-          <h2 class="font-display text-3xl font-800 text-white mt-3 mb-1">Vigilant Curator</h2>
-          <p class="text-white/30 text-sm font-display mb-4">DVR N2O</p>
-          <p class="text-white/50 text-sm leading-relaxed mb-6">Design minimale e accessibile con accenti verdi per segnalare completamento e sicurezza. Step colorati con checkmark, timer sessione e salvataggio automatico.</p>
+          <h3 class="font-display text-2xl md:text-3xl font-800 text-white mb-1">Vigilant Curator</h3>
+          <p class="text-white/25 text-sm font-display font-500 mb-4">DVR N2O</p>
+          <p class="text-white/45 text-sm leading-relaxed mb-7">Minimalismo funzionale con accenti verdi per segnalare completamento e sicurezza. Timer di sessione e salvataggio automatico. Massima chiarezza, zero distrazioni.</p>
 
-          <!-- Palette -->
-          <div class="mb-5">
-            <p class="text-[0.65rem] tracking-widest uppercase text-white/25 mb-2">Palette</p>
+          <div class="mb-6">
+            <p class="text-[0.6rem] tracking-[0.15em] uppercase text-white/20 font-display mb-2">Palette</p>
             <div class="flex items-center gap-2">
-              <div class="swatch" style="background:#f8f9fd" title="Background: #f8f9fd"></div>
-              <div class="swatch" style="background:#003d74" title="Primary: #003d74"></div>
-              <div class="swatch" style="background:#1b5594" title="Primary Container: #1b5594"></div>
-              <div class="swatch" style="background:#00481c" title="Tertiary Green: #00481c"></div>
-              <div class="swatch" style="background:#515c89" title="Secondary: #515c89"></div>
-              <div class="swatch" style="background:#0b1842" title="Sidebar: #0b1842"></div>
+              <div class="swatch" style="background:#f8f9fd;border-color:rgba(255,255,255,0.15)" title="#f8f9fd"></div>
+              <div class="swatch" style="background:#0b1842" title="#0b1842"></div>
+              <div class="swatch" style="background:#003d74" title="#003d74"></div>
+              <div class="swatch" style="background:#1b5594" title="#1b5594"></div>
+              <div class="swatch" style="background:#00481c" title="#00481c"></div>
             </div>
           </div>
-
-          <!-- Typography -->
-          <div class="mb-5">
-            <p class="text-[0.65rem] tracking-widest uppercase text-white/25 mb-1">Tipografia</p>
-            <p class="text-white/40 text-xs">Plus Jakarta Sans (titoli) &bull; Inter (corpo &amp; etichette)</p>
+          <div class="mb-7">
+            <p class="text-[0.6rem] tracking-[0.15em] uppercase text-white/20 font-display mb-1">Tipografia</p>
+            <p class="text-white/30 text-xs">Plus Jakarta Sans &bull; Inter</p>
           </div>
 
-          <div class="flex items-center gap-1 text-white/60 text-sm font-500 group-hover:text-white transition-colors">
-            <span>Esplora design</span>
+          <div class="explore-label flex items-center gap-1.5 text-n2o-light/80 text-sm font-600">
+            <span>Esplora questo design</span>
             <span class="material-symbols-outlined text-base">arrow_forward</span>
           </div>
         </div>
       </div>
     </a>
+  </section>
 
-    <!-- Footer -->
-    <div class="mt-12 text-center text-white/20 text-xs font-display">
-      <p>N2O SRL &mdash; Piattaforma Sicurezza sul Lavoro</p>
-      <p class="mt-1">Progettato da Niuexa &bull; 2026</p>
+  <div class="section-divider max-w-5xl mx-auto"></div>
+
+  <!-- Footer -->
+  <footer class="max-w-5xl mx-auto px-6 py-12 text-center">
+    <div class="flex items-center justify-center gap-3 mb-4 opacity-40">
+      <img src="https://n2o-sicurezza.it/wp-content/uploads/2025/04/logo-n2o-bianco-new-100.png" alt="N2O" class="h-6" />
+      <span class="text-white/20">&times;</span>
+      <span class="font-display font-700 text-sm text-white/50">Niuexa</span>
     </div>
-  </div>
+    <p class="text-white/15 text-xs">Proposte design riservate &mdash; Aprile 2026</p>
+  </footer>
+
 </body>
 </html>
