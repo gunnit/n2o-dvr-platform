@@ -1,0 +1,61 @@
+# Environment & Secrets
+.env
+.env.*
+.env.local
+credentials/
+*.pem
+*.key
+
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+dist/
+build/
+*.egg-info/
+.next/
+.vercel/
+out/
+
+# Claude Code
+.claude/
+
+# Tool artifacts
+.playwright-mcp/
+.stitch/designs/*.png
+.stitch/designs/*.html
+
+# Python
+*.egg
+*.whl
+pip-log.txt
+pip-delete-this-directory.txt
+htmlcov/
+.tox/
+.coverage
+.cache
+.pytest_cache/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temp
+tmp/
+*.tmp
