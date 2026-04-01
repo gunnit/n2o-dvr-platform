@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html class="dark" lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>N2O Safety - Design Templates</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: "#a5c8ff",
+            surface: "#0a1a4a",
+            bg: "#020f3a",
+          },
+          fontFamily: {
+            display: ['"Plus Jakarta Sans"', 'sans-serif'],
+            body: ['Roboto', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    body {
+      background-color: #020f3a;
+      color: #FFFFFF;
+    }
+    .glass-card {
+      background: rgba(39, 50, 93, 0.4);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(165, 200, 255, 0.1);
+      transition: all 0.3s ease;
+    }
+    .glass-card:hover {
+      border-color: rgba(165, 200, 255, 0.3);
+      transform: translateY(-4px);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    }
+    .card-img {
+      transition: transform 0.3s ease;
+    }
+    .glass-card:hover .card-img {
+      transform: scale(1.03);
+    }
+  </style>
+</head>
+<body class="min-h-screen font-body antialiased">
+  <div class="max-w-6xl mx-auto px-6 py-12">
+    <!-- Header -->
+    <div class="text-center mb-16">
+      <div class="inline-flex items-center gap-3 mb-6">
+        <span class="material-symbols-outlined text-primary" style="font-size:40px">shield</span>
+        <h1 class="font-display text-4xl font-800 tracking-tight text-white">N2O Safety</h1>
+      </div>
+      <p class="text-lg text-white/60 font-display">Design Templates &mdash; Anteprima Piattaforma</p>
+      <div class="mt-4 h-px w-32 mx-auto bg-gradient-to-r from-transparent via-primary/50 to-transparent"></div>
+    </div>
+
+    <!-- Cards Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+      <!-- Dashboard -->
+      <a href="dashboard.html" class="glass-card rounded-2xl overflow-hidden block group">
+        <div class="overflow-hidden">
+          <img src="v2-01-dashboard.png" alt="Dashboard" class="card-img w-full h-56 object-cover object-top" />
+        </div>
+        <div class="p-6">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="material-symbols-outlined text-primary text-xl">dashboard</span>
+            <h2 class="font-display text-xl font-700 text-white">Dashboard Principale</h2>
+          </div>
+          <p class="text-white/50 text-sm leading-relaxed">Pannello di controllo con panoramica aziende, documenti recenti, stato sopralluoghi e quota archiviazione.</p>
+          <div class="mt-4 flex items-center gap-1 text-primary text-sm font-500 opacity-0 group-hover:opacity-100 transition-opacity">
+            <span>Apri template</span>
+            <span class="material-symbols-outlined text-base">arrow_forward</span>
+          </div>
+        </div>
+      </a>
+
+      <!-- Sopralluogo Digitale -->
+      <a href="sopralluogo-digitale.html" class="glass-card rounded-2xl overflow-hidden block group">
+        <div class="overflow-hidden">
+          <img src="hybrid-02-sopralluogo.png" alt="Sopralluogo Digitale" class="card-img w-full h-56 object-cover object-top" />
+        </div>
+        <div class="p-6">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="material-symbols-outlined text-primary text-xl">assignment</span>
+            <h2 class="font-display text-xl font-700 text-white">Sopralluogo Digitale</h2>
+          </div>
+          <p class="text-white/50 text-sm leading-relaxed">Modulo di sopralluogo digitale con wizard guidato, raccolta dati ambienti di lavoro e rischi identificati.</p>
+          <div class="mt-4 flex items-center gap-1 text-primary text-sm font-500 opacity-0 group-hover:opacity-100 transition-opacity">
+            <span>Apri template</span>
+            <span class="material-symbols-outlined text-base">arrow_forward</span>
+          </div>
+        </div>
+      </a>
+
+      <!-- Sopralluogo Survey -->
+      <a href="sopralluogo-survey.html" class="glass-card rounded-2xl overflow-hidden block group">
+        <div class="overflow-hidden">
+          <img src="02-sopralluogo-survey.png" alt="Sopralluogo Survey" class="card-img w-full h-56 object-cover object-top" />
+        </div>
+        <div class="p-6">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="material-symbols-outlined text-primary text-xl">fact_check</span>
+            <h2 class="font-display text-xl font-700 text-white">Sopralluogo Survey</h2>
+          </div>
+          <p class="text-white/50 text-sm leading-relaxed">Interfaccia alternativa per il sopralluogo con tema chiaro, navigazione breadcrumb e layout stepper.</p>
+          <div class="mt-4 flex items-center gap-1 text-primary text-sm font-500 opacity-0 group-hover:opacity-100 transition-opacity">
+            <span>Apri template</span>
+            <span class="material-symbols-outlined text-base">arrow_forward</span>
+          </div>
+        </div>
+      </a>
+
+      <!-- Generazione Documenti -->
+      <a href="generazione-documenti.html" class="glass-card rounded-2xl overflow-hidden block group">
+        <div class="overflow-hidden">
+          <img src="v2-03-documenti.png" alt="Generazione Documenti" class="card-img w-full h-56 object-cover object-top" />
+        </div>
+        <div class="p-6">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="material-symbols-outlined text-primary text-xl">description</span>
+            <h2 class="font-display text-xl font-700 text-white">Generazione Documenti</h2>
+          </div>
+          <p class="text-white/50 text-sm leading-relaxed">Motore di generazione documenti DVR con anteprima, selezione template e monitoraggio stato generazione.</p>
+          <div class="mt-4 flex items-center gap-1 text-primary text-sm font-500 opacity-0 group-hover:opacity-100 transition-opacity">
+            <span>Apri template</span>
+            <span class="material-symbols-outlined text-base">arrow_forward</span>
+          </div>
+        </div>
+      </a>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="mt-16 text-center text-white/30 text-sm font-display">
+      <p>N2O SRL &mdash; Piattaforma Sicurezza sul Lavoro</p>
+      <p class="mt-1">Progettato da Niuexa &bull; 2026</p>
+    </div>
+  </div>
+</body>
+</html>

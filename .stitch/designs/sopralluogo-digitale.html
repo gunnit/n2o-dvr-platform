@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+
+<html class="light" lang="it"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sopralluogo Digitale | DVR N2O</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "tertiary": "#00481c",
+                        "outline-variant": "#c2c6d2",
+                        "tertiary-container": "#006229",
+                        "outline": "#727781",
+                        "tertiary-fixed": "#6bff8f",
+                        "on-surface-variant": "#424750",
+                        "on-primary": "#ffffff",
+                        "surface": "#f8f9fd",
+                        "tertiary-fixed-dim": "#4ae176",
+                        "secondary": "#515c89",
+                        "on-secondary-fixed": "#0b1842",
+                        "on-tertiary-fixed": "#002109",
+                        "on-secondary-container": "#495481",
+                        "surface-container": "#edeef2",
+                        "on-error": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "surface-container-low": "#f2f3f7",
+                        "inverse-surface": "#2e3134",
+                        "surface-dim": "#d9dade",
+                        "surface-bright": "#f8f9fd",
+                        "inverse-on-surface": "#eff1f5",
+                        "surface-container-highest": "#e1e2e6",
+                        "on-primary-fixed-variant": "#004785",
+                        "secondary-fixed-dim": "#b9c4f8",
+                        "on-surface": "#191c1f",
+                        "on-background": "#191c1f",
+                        "error": "#ba1a1a",
+                        "background": "#f8f9fd",
+                        "surface-tint": "#295f9f",
+                        "on-primary-container": "#a9caff",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-fixed": "#d4e3ff",
+                        "primary": "#003d74",
+                        "on-tertiary-container": "#4de478",
+                        "secondary-container": "#bfcafe",
+                        "surface-variant": "#e1e2e6",
+                        "secondary-fixed": "#dce1ff",
+                        "error-container": "#ffdad6",
+                        "surface-container-high": "#e7e8ec",
+                        "on-primary-fixed": "#001c3a",
+                        "on-secondary": "#ffffff",
+                        "primary-fixed-dim": "#a5c8ff",
+                        "inverse-primary": "#a5c8ff",
+                        "on-secondary-fixed-variant": "#394470",
+                        "primary-container": "#1b5594",
+                        "on-tertiary-fixed-variant": "#005321"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    fontFamily: {
+                        "headline": ["Plus Jakarta Sans", "sans-serif"],
+                        "body": ["Inter", "sans-serif"],
+                        "label": ["Inter", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, .font-headline { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .step-line-active { background: linear-gradient(90deg, #006229 0%, #1b5594 100%); }
+        .custom-shadow { shadow-[0_4px_24px_rgba(24,36,78,0.04)] }
+    </style>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- SIDEBAR -->
+<aside class="w-[240px] h-screen fixed left-0 top-0 bg-[#0b1842] flex flex-col py-8 shadow-xl z-50 overflow-hidden">
+<div class="px-6 mb-10 flex items-center gap-3">
+<div class="w-10 h-10 bg-primary-container rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-white" style="font-variation-settings: 'FILL' 1;">security</span>
+</div>
+<div>
+<h1 class="text-white text-xl font-bold tracking-widest uppercase leading-none">DVR N2O</h1>
+<p class="text-slate-400 text-[10px] tracking-tight">Vigilant Curator</p>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center px-6 py-3 text-slate-400 hover:text-white transition-colors duration-200 hover:bg-blue-900/20" href="#">
+<span class="material-symbols-outlined mr-3">dashboard</span>
+<span class="font-medium text-sm tracking-tight">Dashboard</span>
+</a>
+<a class="flex items-center px-6 py-3 bg-blue-900/40 text-white font-bold border-l-4 border-[#1b5594] transition-colors duration-200" href="#">
+<span class="material-symbols-outlined mr-3" style="font-variation-settings: 'FILL' 1;">poll</span>
+<span class="font-medium text-sm tracking-tight">Sondaggi</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-400 hover:text-white transition-colors duration-200 hover:bg-blue-900/20" href="#">
+<span class="material-symbols-outlined mr-3">analytics</span>
+<span class="font-medium text-sm tracking-tight">Analisi</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-400 hover:text-white transition-colors duration-200 hover:bg-blue-900/20" href="#">
+<span class="material-symbols-outlined mr-3">security</span>
+<span class="font-medium text-sm tracking-tight">Sicurezza</span>
+</a>
+<a class="flex items-center px-6 py-3 text-slate-400 hover:text-white transition-colors duration-200 hover:bg-blue-900/20" href="#">
+<span class="material-symbols-outlined mr-3">settings</span>
+<span class="font-medium text-sm tracking-tight">Impostazioni</span>
+</a>
+</nav>
+<div class="px-6 mt-auto">
+<div class="p-4 rounded-xl bg-blue-900/20 flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-slate-700 overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="portrait of a professional male engineer in a dark blue business suit with a confident smile against a neutral background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDN-xZpiT1au9TB6nrpw7OklBQGqfz76rdCKOMi5_gZjut7SbrjWnR8PVFtrWihxhljukCuic_LGOpEbtnvbzyGWBdI3hr0dgLnkQ1nzfyV_jshinavHeadD_P4mE5SLbPUOKH5owZP6GDpAmeYDdbumD46puZDYSCvXmb7X_dXkgU1XfwzaW1n7rqkiakzL4iSW5OauifyVfb9Q3NlxKpoBoY8P5U3N6ecjTFHFA423XiVUhqjHJCi3MS0cbl6SbRGew9ycqXaz9Nm"/>
+</div>
+<div class="overflow-hidden">
+<p class="text-white text-xs font-bold truncate">Mario Rossi</p>
+<p class="text-slate-400 text-[10px] truncate">Admin Safety</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- MAIN CONTENT -->
+<main class="ml-[240px] min-h-screen flex flex-col">
+<!-- HEADER -->
+<header class="fixed top-0 right-0 w-[calc(100%-240px)] h-16 bg-surface z-40 flex items-center justify-between px-8">
+<nav class="flex items-center gap-2 text-sm">
+<span class="text-on-surface-variant">Dashboard</span>
+<span class="material-symbols-outlined text-outline text-xs">chevron_right</span>
+<span class="text-on-surface-variant">Aziende</span>
+<span class="material-symbols-outlined text-outline text-xs">chevron_right</span>
+<span class="text-on-surface-variant">Rossi Costruzioni SRL</span>
+<span class="material-symbols-outlined text-outline text-xs">chevron_right</span>
+<span class="text-primary font-semibold">Sopralluogo</span>
+</nav>
+<div class="flex items-center gap-4">
+<button class="px-5 py-2 text-primary font-semibold border border-primary-container rounded-xl hover:bg-primary-fixed transition-all duration-200">
+                    Salva Bozza
+                </button>
+<button class="px-5 py-2 bg-primary text-white font-semibold rounded-xl flex items-center gap-2 hover:opacity-90 transition-all duration-200">
+                    Avanti <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</header>
+<!-- CONTENT SCROLL AREA -->
+<div class="mt-16 pb-24 p-8 flex flex-col gap-8 max-w-7xl mx-auto w-full">
+<!-- WIZARD STEPPER -->
+<section class="bg-surface-container-lowest p-8 rounded-xl shadow-[0_4px_24px_rgba(24,36,78,0.04)] relative">
+<div class="flex items-center justify-between relative z-10">
+<!-- Step 1 Done -->
+<div class="flex flex-col items-center gap-2 w-full relative">
+<div class="w-10 h-10 rounded-full bg-tertiary-container text-white flex items-center justify-center border-4 border-white shadow-sm">
+<span class="material-symbols-outlined text-base">check</span>
+</div>
+<span class="text-[10px] font-bold text-tertiary-container uppercase tracking-wider">Azienda</span>
+<div class="absolute top-5 left-1/2 w-full h-[3px] bg-tertiary-container -z-10 translate-x-1"></div>
+</div>
+<!-- Step 2 Done -->
+<div class="flex flex-col items-center gap-2 w-full relative">
+<div class="w-10 h-10 rounded-full bg-tertiary-container text-white flex items-center justify-center border-4 border-white shadow-sm">
+<span class="material-symbols-outlined text-base">check</span>
+</div>
+<span class="text-[10px] font-bold text-tertiary-container uppercase tracking-wider">Persone</span>
+<div class="absolute top-5 left-1/2 w-full h-[3px] step-line-active -z-10 translate-x-1"></div>
+</div>
+<!-- Step 3 Active -->
+<div class="flex flex-col items-center gap-2 w-full relative">
+<div class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center border-4 border-primary-fixed shadow-md ring-4 ring-primary-fixed/20">
+<span class="font-bold">3</span>
+</div>
+<span class="text-[10px] font-bold text-primary uppercase tracking-wider">Ambienti</span>
+<div class="absolute top-5 left-1/2 w-full h-[2px] border-t-2 border-dashed border-outline-variant -z-10 translate-x-1"></div>
+</div>
+<!-- Step 4 Pending -->
+<div class="flex flex-col items-center gap-2 w-full relative">
+<div class="w-10 h-10 rounded-full border-2 border-outline-variant bg-surface flex items-center justify-center">
+<span class="font-bold text-outline">4</span>
+</div>
+<span class="text-[10px] font-bold text-outline-variant uppercase tracking-wider">Rischi</span>
+<div class="absolute top-5 left-1/2 w-full h-[2px] border-t-2 border-dashed border-outline-variant -z-10 translate-x-1"></div>
+</div>
+<!-- Step 5 Pending -->
+<div class="flex flex-col items-center gap-2 w-full relative">
+<div class="w-10 h-10 rounded-full border-2 border-outline-variant bg-surface flex items-center justify-center">
+<span class="font-bold text-outline">5</span>
+</div>
+<span class="text-[10px] font-bold text-outline-variant uppercase tracking-wider">DPI</span>
+<div class="absolute top-5 left-1/2 w-full h-[2px] border-t-2 border-dashed border-outline-variant -z-10 translate-x-1"></div>
+</div>
+<!-- Step 6 Pending -->
+<div class="flex flex-col items-center gap-2 w-full relative">
+<div class="w-10 h-10 rounded-full border-2 border-outline-variant bg-surface flex items-center justify-center">
+<span class="font-bold text-outline">6</span>
+</div>
+<span class="text-[10px] font-bold text-outline-variant uppercase tracking-wider">Misure</span>
+<div class="absolute top-5 left-1/2 w-full h-[2px] border-t-2 border-dashed border-outline-variant -z-10 translate-x-1"></div>
+</div>
+<!-- Step 7 Pending -->
+<div class="flex flex-col items-center gap-2">
+<div class="w-10 h-10 rounded-full border-2 border-outline-variant bg-surface flex items-center justify-center">
+<span class="font-bold text-outline">7</span>
+</div>
+<span class="text-[10px] font-bold text-outline-variant uppercase tracking-wider">Fine</span>
+</div>
+</div>
+</section>
+<div class="grid grid-cols-1 lg:grid-cols-10 gap-8">
+<!-- LEFT COLUMN (70%) -->
+<div class="lg:col-span-7 space-y-8">
+<!-- Ambienti di Lavoro Card -->
+<div class="bg-surface-container-lowest p-8 rounded-xl shadow-[0_4px_24px_rgba(24,36,78,0.04)]">
+<div class="flex items-center justify-between mb-8">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-3xl">location_on</span>
+<h2 class="text-xl font-bold">Ambienti di Lavoro</h2>
+</div>
+<span class="px-3 py-1 bg-primary-fixed text-on-primary-fixed text-xs font-bold rounded-full uppercase">4 ambienti censiti</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Card Ufficio -->
+<div class="p-4 bg-surface-container-low rounded-xl border border-transparent hover:border-primary-fixed-dim transition-all group">
+<div class="flex justify-between items-start mb-3">
+<div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-primary">desktop_windows</span>
+</div>
+<button class="text-outline hover:text-error transition-colors">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+<h3 class="font-bold text-on-surface">Ufficio Tecnico</h3>
+<div class="mt-2 flex items-center justify-between text-xs text-on-surface-variant">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">square_foot</span> 45 mq</span>
+<span class="font-medium text-primary">Dettagli</span>
+</div>
+</div>
+<!-- Card Magazzino -->
+<div class="p-4 bg-surface-container-low rounded-xl border border-transparent hover:border-primary-fixed-dim transition-all group">
+<div class="flex justify-between items-start mb-3">
+<div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-primary">inventory_2</span>
+</div>
+<button class="text-outline hover:text-error transition-colors">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+<h3 class="font-bold text-on-surface">Magazzino A</h3>
+<div class="mt-2 flex items-center justify-between text-xs text-on-surface-variant">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">square_foot</span> 120 mq</span>
+<span class="font-medium text-primary">Dettagli</span>
+</div>
+</div>
+<!-- Card Sala Corsi -->
+<div class="p-4 bg-surface-container-low rounded-xl border border-transparent hover:border-primary-fixed-dim transition-all group">
+<div class="flex justify-between items-start mb-3">
+<div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-primary">school</span>
+</div>
+<button class="text-outline hover:text-error transition-colors">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+<h3 class="font-bold text-on-surface">Sala Corsi</h3>
+<div class="mt-2 flex items-center justify-between text-xs text-on-surface-variant">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">square_foot</span> 30 mq</span>
+<span class="font-medium text-primary">Dettagli</span>
+</div>
+</div>
+<!-- Card Spogliatoio -->
+<div class="p-4 bg-surface-container-low rounded-xl border border-transparent hover:border-primary-fixed-dim transition-all group">
+<div class="flex justify-between items-start mb-3">
+<div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-primary">checkroom</span>
+</div>
+<button class="text-outline hover:text-error transition-colors">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+<h3 class="font-bold text-on-surface">Spogliatoio</h3>
+<div class="mt-2 flex items-center justify-between text-xs text-on-surface-variant">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">square_foot</span> 18 mq</span>
+<span class="font-medium text-primary">Dettagli</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Add New Ambiente Card -->
+<div class="bg-surface-container-lowest p-8 rounded-xl shadow-[0_4px_24px_rgba(24,36,78,0.04)]">
+<div class="flex items-center gap-3 mb-8">
+<span class="material-symbols-outlined text-primary text-3xl">add_circle</span>
+<h2 class="text-xl font-bold">Aggiungi Nuovo Ambiente</h2>
+</div>
+<form class="space-y-6">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="space-y-2">
+<label class="text-xs font-bold text-on-surface-variant uppercase ml-1">Nome Ambiente</label>
+<input class="w-full bg-surface-container-low border-none rounded-xl focus:ring-2 focus:ring-primary-fixed transition-all px-4 py-3 placeholder:text-outline/50" placeholder="Esempio: Produzione Blocco B" type="text"/>
+</div>
+<div class="space-y-2">
+<label class="text-xs font-bold text-on-surface-variant uppercase ml-1">Tipo Ambiente</label>
+<select class="w-full bg-surface-container-low border-none rounded-xl focus:ring-2 focus:ring-primary-fixed transition-all px-4 py-3">
+<option>Scegli tipologia...</option>
+<option>Ufficio</option>
+<option>Area Produttiva</option>
+<option>Magazzino</option>
+<option>Servizi</option>
+</select>
+</div>
+<div class="space-y-2">
+<label class="text-xs font-bold text-on-surface-variant uppercase ml-1">Superficie (mq)</label>
+<input class="w-full bg-surface-container-low border-none rounded-xl focus:ring-2 focus:ring-primary-fixed transition-all px-4 py-3" placeholder="0" type="number"/>
+</div>
+<div class="space-y-2">
+<label class="text-xs font-bold text-on-surface-variant uppercase ml-1">Preposto Sicurezza</label>
+<input class="w-full bg-surface-container-low border-none rounded-xl focus:ring-2 focus:ring-primary-fixed transition-all px-4 py-3" placeholder="Cerca collaboratore..." type="text"/>
+</div>
+</div>
+<div class="space-y-2">
+<label class="text-xs font-bold text-on-surface-variant uppercase ml-1">Descrizione Attività</label>
+<textarea class="w-full bg-surface-container-low border-none rounded-xl focus:ring-2 focus:ring-primary-fixed transition-all px-4 py-3" placeholder="Descrivi brevemente le attività svolte in questo ambiente..." rows="3"></textarea>
+</div>
+<div class="space-y-2">
+<label class="text-xs font-bold text-on-surface-variant uppercase ml-1">Documentazione Fotografica</label>
+<div class="border-2 border-dashed border-outline-variant rounded-xl p-8 flex flex-col items-center justify-center bg-surface hover:bg-primary-fixed/10 transition-colors cursor-pointer group">
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors text-4xl mb-2">add_a_photo</span>
+<p class="text-sm font-medium text-on-surface-variant">Trascina le foto qui o clicca per caricare</p>
+<p class="text-[10px] text-outline mt-1 uppercase">Massimo 10 foto (JPG, PNG)</p>
+</div>
+</div>
+<div class="flex justify-end pt-4">
+<button class="px-8 py-3 bg-primary text-white font-bold rounded-xl shadow-lg hover:opacity-90 active:scale-95 transition-all">
+                                    + Aggiungi Ambiente
+                                </button>
+</div>
+</form>
+</div>
+</div>
+<!-- RIGHT COLUMN (30%) -->
+<div class="lg:col-span-3 space-y-6">
+<!-- Riepilogo Card -->
+<div class="bg-surface-container-lowest p-6 rounded-xl shadow-[0_4px_24px_rgba(24,36,78,0.04)] sticky top-24">
+<h3 class="font-bold text-lg mb-6">Avanzamento</h3>
+<!-- Circular Gauge -->
+<div class="flex justify-center mb-8">
+<div class="relative w-32 h-32 flex items-center justify-center">
+<svg class="w-full h-full -rotate-90">
+<circle class="text-surface-container-high" cx="64" cy="64" fill="transparent" r="56" stroke="currentColor" stroke-width="8"></circle>
+<circle class="text-primary" cx="64" cy="64" fill="transparent" r="56" stroke="currentColor" stroke-dasharray="351.8" stroke-dashoffset="204" stroke-width="8"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="text-2xl font-bold text-primary leading-none">42%</span>
+<span class="text-[10px] uppercase font-bold text-outline">Completato</span>
+</div>
+</div>
+</div>
+<ul class="space-y-4 mb-8">
+<li class="flex items-center gap-3">
+<span class="material-symbols-outlined text-tertiary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div class="flex-1">
+<p class="text-sm font-bold leading-none">Azienda</p>
+<p class="text-[10px] text-outline uppercase tracking-tight">Completato</p>
+</div>
+</li>
+<li class="flex items-center gap-3">
+<span class="material-symbols-outlined text-tertiary-container text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div class="flex-1">
+<p class="text-sm font-bold leading-none">Persone</p>
+<p class="text-[10px] text-outline uppercase tracking-tight">Completato</p>
+</div>
+</li>
+<li class="flex items-center gap-3">
+<span class="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
+<span class="w-2 h-2 rounded-full bg-white"></span>
+</span>
+<div class="flex-1">
+<p class="text-sm font-bold leading-none text-primary">Ambienti</p>
+<p class="text-[10px] text-primary uppercase tracking-tight">In corso</p>
+</div>
+</li>
+<li class="flex items-center gap-3 opacity-40">
+<span class="w-5 h-5 rounded-md bg-surface-container-highest"></span>
+<p class="text-sm font-medium">Altri Step</p>
+</li>
+</ul>
+<div class="pt-6 border-t border-surface-container border-dashed space-y-3">
+<div class="flex items-center justify-between text-xs">
+<span class="text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-sm">schedule</span> Timer sessione</span>
+<span class="font-mono font-bold text-primary">00:14:52</span>
+</div>
+<div class="flex items-center justify-between text-[10px]">
+<span class="text-on-surface-variant">Ultimo salvataggio</span>
+<span class="text-outline">14:41</span>
+</div>
+</div>
+</div>
+<!-- Assistenza Card -->
+<div class="bg-primary text-white p-6 rounded-xl shadow-[0_4px_24px_rgba(24,36,78,0.12)] relative overflow-hidden group">
+<div class="relative z-10">
+<div class="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center mb-4">
+<span class="material-symbols-outlined text-white">headphones</span>
+</div>
+<h3 class="font-bold text-lg mb-2">Hai bisogno di aiuto?</h3>
+<p class="text-xs text-white/80 mb-4 leading-relaxed">I nostri consulenti della sicurezza sono a tua disposizione per guidarti nel sopralluogo.</p>
+<button class="w-full py-2 bg-white text-primary font-bold rounded-lg text-sm transition-transform active:scale-95">
+                                Parla con un esperto
+                            </button>
+</div>
+<div class="absolute -right-4 -bottom-4 opacity-10 transform rotate-12 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-9xl">support_agent</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- FIXED FOOTER -->
+<footer class="fixed bottom-0 right-0 w-[calc(100%-240px)] bg-white/90 backdrop-blur-md border-t border-surface-container shadow-[0_-4px_24px_rgba(24,36,78,0.04)] px-12 py-4 flex items-center justify-between z-40">
+<div class="flex items-center gap-2 text-tertiary-container">
+<span class="material-symbols-outlined text-sm animate-pulse">cloud_done</span>
+<span class="text-[10px] font-bold uppercase tracking-widest">Auto-salvataggio attivo</span>
+</div>
+<button class="flex items-center gap-2 px-4 py-2 text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-xl">visibility</span>
+<span class="text-xs font-bold uppercase">Anteprima Report</span>
+</button>
+<div class="flex items-center gap-4">
+<button class="px-6 py-2 text-on-surface-variant font-bold text-sm hover:text-primary transition-colors">
+                    Indietro
+                </button>
+<button class="px-8 py-2 bg-primary text-white font-bold rounded-xl shadow-lg hover:opacity-90 active:scale-95 transition-all flex items-center gap-2">
+                    Avanti <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</footer>
+</main>
+</body></html>

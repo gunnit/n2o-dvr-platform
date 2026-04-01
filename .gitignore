@@ -38,8 +38,6 @@ out/
 
 # Tool artifacts
 .playwright-mcp/
-.stitch/designs/*.png
-.stitch/designs/*.html
 
 # Python
 *.egg
