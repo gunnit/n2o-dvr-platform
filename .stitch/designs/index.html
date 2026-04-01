@@ -1,25 +1,19 @@
 <!DOCTYPE html>
-<html class="dark" lang="it">
+<html lang="it">
 <head>
   <meta charset="utf-8" />
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-  <title>N2O Safety - Design Templates</title>
+  <title>N2O Safety &mdash; Proposte Design</title>
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&family=Roboto:wght@300;400;500;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
   <script>
     tailwind.config = {
-      darkMode: "class",
       theme: {
         extend: {
-          colors: {
-            primary: "#a5c8ff",
-            surface: "#0a1a4a",
-            bg: "#020f3a",
-          },
           fontFamily: {
             display: ['"Plus Jakarta Sans"', 'sans-serif'],
-            body: ['Roboto', 'sans-serif'],
+            body: ['Inter', 'sans-serif'],
           },
         },
       },
@@ -30,120 +24,227 @@
       font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
     }
     body {
-      background-color: #020f3a;
-      color: #FFFFFF;
+      background: #0a0a0f;
+      color: #fff;
     }
-    .glass-card {
-      background: rgba(39, 50, 93, 0.4);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(165, 200, 255, 0.1);
-      transition: all 0.3s ease;
+    .design-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .glass-card:hover {
-      border-color: rgba(165, 200, 255, 0.3);
-      transform: translateY(-4px);
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    .design-card:hover {
+      border-color: rgba(255,255,255,0.2);
+      transform: translateY(-6px);
+      box-shadow: 0 24px 48px rgba(0,0,0,0.4);
+    }
+    .design-card:hover .card-img {
+      transform: scale(1.04);
     }
     .card-img {
-      transition: transform 0.3s ease;
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .glass-card:hover .card-img {
-      transform: scale(1.03);
+    .swatch {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: 2px solid rgba(255,255,255,0.1);
+      flex-shrink: 0;
     }
+    .tag {
+      font-size: 0.65rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-weight: 600;
+    }
+    .tag-dark { background: rgba(165,200,255,0.15); color: #a5c8ff; }
+    .tag-light { background: rgba(0,61,116,0.15); color: #7eb8ff; }
   </style>
 </head>
 <body class="min-h-screen font-body antialiased">
-  <div class="max-w-6xl mx-auto px-6 py-12">
+  <div class="max-w-5xl mx-auto px-6 py-16">
+
     <!-- Header -->
-    <div class="text-center mb-16">
-      <div class="inline-flex items-center gap-3 mb-6">
-        <span class="material-symbols-outlined text-primary" style="font-size:40px">shield</span>
-        <h1 class="font-display text-4xl font-800 tracking-tight text-white">N2O Safety</h1>
+    <div class="text-center mb-6">
+      <p class="text-xs tracking-[0.2em] uppercase text-white/30 font-display mb-4">Piattaforma Sicurezza sul Lavoro</p>
+      <h1 class="font-display text-5xl font-800 tracking-tight text-white mb-3">Proposte Design</h1>
+      <p class="text-lg text-white/40 font-body max-w-xl mx-auto">Quattro direzioni creative per la piattaforma N2O. Clicca su una proposta per esplorare il design completo.</p>
+      <div class="mt-6 h-px w-24 mx-auto bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+    </div>
+
+    <!-- Legend -->
+    <div class="flex justify-center gap-6 mb-12 text-sm text-white/40">
+      <div class="flex items-center gap-2"><span class="tag tag-dark">Dark Mode</span></div>
+      <div class="flex items-center gap-2"><span class="tag tag-light">Light Mode</span></div>
+    </div>
+
+    <!-- Design 1: Digital Vault -->
+    <a href="digital-vault.html" class="design-card rounded-2xl overflow-hidden block group mb-8">
+      <div class="md:flex">
+        <div class="md:w-1/2 overflow-hidden">
+          <img src="v2-01-dashboard.png" alt="Digital Vault" class="card-img w-full h-72 md:h-full object-cover object-top" />
+        </div>
+        <div class="md:w-1/2 p-8 flex flex-col justify-center">
+          <div class="flex items-center gap-3 mb-1">
+            <span class="tag tag-dark">Dark Mode</span>
+          </div>
+          <h2 class="font-display text-3xl font-800 text-white mt-3 mb-1">Digital Vault</h2>
+          <p class="text-white/30 text-sm font-display mb-4">N2O Safety</p>
+          <p class="text-white/50 text-sm leading-relaxed mb-6">Estetica vault/cassaforte digitale con glass-morphism e gradienti profondi. Sfondo navy scuro con accenti blu chiaro e arancione. Atmosfera premium e hi-tech.</p>
+
+          <!-- Palette -->
+          <div class="mb-5">
+            <p class="text-[0.65rem] tracking-widest uppercase text-white/25 mb-2">Palette</p>
+            <div class="flex items-center gap-2">
+              <div class="swatch" style="background:#020f3a" title="Background: #020f3a"></div>
+              <div class="swatch" style="background:#a5c8ff" title="Primary: #a5c8ff"></div>
+              <div class="swatch" style="background:#1b5594" title="Primary Container: #1b5594"></div>
+              <div class="swatch" style="background:#ffb77e" title="Accent: #ffb77e"></div>
+              <div class="swatch" style="background:#b6c7e6" title="Secondary: #b6c7e6"></div>
+              <div class="swatch" style="background:#dce1ff" title="Text: #dce1ff"></div>
+            </div>
+          </div>
+
+          <!-- Typography -->
+          <div class="mb-5">
+            <p class="text-[0.65rem] tracking-widest uppercase text-white/25 mb-1">Tipografia</p>
+            <p class="text-white/40 text-xs">Nunito (titoli) &bull; Roboto (corpo) &bull; Plus Jakarta Sans (etichette)</p>
+          </div>
+
+          <div class="flex items-center gap-1 text-white/60 text-sm font-500 group-hover:text-white transition-colors">
+            <span>Esplora design</span>
+            <span class="material-symbols-outlined text-base">arrow_forward</span>
+          </div>
+        </div>
       </div>
-      <p class="text-lg text-white/60 font-display">Design Templates &mdash; Anteprima Piattaforma</p>
-      <div class="mt-4 h-px w-32 mx-auto bg-gradient-to-r from-transparent via-primary/50 to-transparent"></div>
-    </div>
+    </a>
 
-    <!-- Cards Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-
-      <!-- Dashboard -->
-      <a href="dashboard.html" class="glass-card rounded-2xl overflow-hidden block group">
-        <div class="overflow-hidden">
-          <img src="v2-01-dashboard.png" alt="Dashboard" class="card-img w-full h-56 object-cover object-top" />
+    <!-- Design 2: Sentinel DVR -->
+    <a href="sentinel-dvr.html" class="design-card rounded-2xl overflow-hidden block group mb-8">
+      <div class="md:flex flex-row-reverse">
+        <div class="md:w-1/2 overflow-hidden">
+          <img src="v2-03-documenti.png" alt="Sentinel DVR" class="card-img w-full h-72 md:h-full object-cover object-top" />
         </div>
-        <div class="p-6">
-          <div class="flex items-center gap-2 mb-2">
-            <span class="material-symbols-outlined text-primary text-xl">dashboard</span>
-            <h2 class="font-display text-xl font-700 text-white">Dashboard Principale</h2>
+        <div class="md:w-1/2 p-8 flex flex-col justify-center">
+          <div class="flex items-center gap-3 mb-1">
+            <span class="tag tag-dark">Dark Mode</span>
           </div>
-          <p class="text-white/50 text-sm leading-relaxed">Pannello di controllo con panoramica aziende, documenti recenti, stato sopralluoghi e quota archiviazione.</p>
-          <div class="mt-4 flex items-center gap-1 text-primary text-sm font-500 opacity-0 group-hover:opacity-100 transition-opacity">
-            <span>Apri template</span>
+          <h2 class="font-display text-3xl font-800 text-white mt-3 mb-1">Sentinel DVR</h2>
+          <p class="text-white/30 text-sm font-display mb-4">Sicurezza d'Avanguardia</p>
+          <p class="text-white/50 text-sm leading-relaxed mb-6">Centro di comando per la generazione documenti. Glass-morphism intenso con profondita' di sfocatura maggiore. Status badge colorati e timeline attivita' in tempo reale.</p>
+
+          <!-- Palette -->
+          <div class="mb-5">
+            <p class="text-[0.65rem] tracking-widest uppercase text-white/25 mb-2">Palette</p>
+            <div class="flex items-center gap-2">
+              <div class="swatch" style="background:#020f3a" title="Background: #020f3a"></div>
+              <div class="swatch" style="background:#a5c8ff" title="Primary: #a5c8ff"></div>
+              <div class="swatch" style="background:#1b5594" title="Primary Container: #1b5594"></div>
+              <div class="swatch" style="background:#ffb77e" title="Accent: #ffb77e"></div>
+              <div class="swatch" style="background:#b6c7e6" title="Secondary: #b6c7e6"></div>
+              <div class="swatch" style="background:#dce1ff" title="Text: #dce1ff"></div>
+            </div>
+          </div>
+
+          <!-- Typography -->
+          <div class="mb-5">
+            <p class="text-[0.65rem] tracking-widest uppercase text-white/25 mb-1">Tipografia</p>
+            <p class="text-white/40 text-xs">Plus Jakarta Sans (titoli) &bull; Inter (corpo) &bull; Roboto (etichette)</p>
+          </div>
+
+          <div class="flex items-center gap-1 text-white/60 text-sm font-500 group-hover:text-white transition-colors">
+            <span>Esplora design</span>
             <span class="material-symbols-outlined text-base">arrow_forward</span>
           </div>
         </div>
-      </a>
+      </div>
+    </a>
 
-      <!-- Sopralluogo Digitale -->
-      <a href="sopralluogo-digitale.html" class="glass-card rounded-2xl overflow-hidden block group">
-        <div class="overflow-hidden">
-          <img src="hybrid-02-sopralluogo.png" alt="Sopralluogo Digitale" class="card-img w-full h-56 object-cover object-top" />
+    <!-- Design 3: Digital Guardian -->
+    <a href="digital-guardian.html" class="design-card rounded-2xl overflow-hidden block group mb-8">
+      <div class="md:flex">
+        <div class="md:w-1/2 overflow-hidden">
+          <img src="02-sopralluogo-survey.png" alt="Digital Guardian" class="card-img w-full h-72 md:h-full object-cover object-top" />
         </div>
-        <div class="p-6">
-          <div class="flex items-center gap-2 mb-2">
-            <span class="material-symbols-outlined text-primary text-xl">assignment</span>
-            <h2 class="font-display text-xl font-700 text-white">Sopralluogo Digitale</h2>
+        <div class="md:w-1/2 p-8 flex flex-col justify-center">
+          <div class="flex items-center gap-3 mb-1">
+            <span class="tag tag-light">Light Mode</span>
           </div>
-          <p class="text-white/50 text-sm leading-relaxed">Modulo di sopralluogo digitale con wizard guidato, raccolta dati ambienti di lavoro e rischi identificati.</p>
-          <div class="mt-4 flex items-center gap-1 text-primary text-sm font-500 opacity-0 group-hover:opacity-100 transition-opacity">
-            <span>Apri template</span>
+          <h2 class="font-display text-3xl font-800 text-white mt-3 mb-1">Digital Guardian</h2>
+          <p class="text-white/30 text-sm font-display mb-4">Sicurezza Editoriale</p>
+          <p class="text-white/50 text-sm leading-relaxed mb-6">Design chiaro ed editoriale con sidebar navy. Interfaccia pulita orientata ai form con wizard a step progressivi. Accenti marroni caldi per un tocco professionale.</p>
+
+          <!-- Palette -->
+          <div class="mb-5">
+            <p class="text-[0.65rem] tracking-widest uppercase text-white/25 mb-2">Palette</p>
+            <div class="flex items-center gap-2">
+              <div class="swatch" style="background:#f8f9fc" title="Background: #f8f9fc"></div>
+              <div class="swatch" style="background:#003d74" title="Primary: #003d74"></div>
+              <div class="swatch" style="background:#1b5594" title="Primary Container: #1b5594"></div>
+              <div class="swatch" style="background:#583500" title="Tertiary: #583500"></div>
+              <div class="swatch" style="background:#515c89" title="Secondary: #515c89"></div>
+              <div class="swatch" style="background:#18244E" title="Sidebar: #18244E"></div>
+            </div>
+          </div>
+
+          <!-- Typography -->
+          <div class="mb-5">
+            <p class="text-[0.65rem] tracking-widest uppercase text-white/25 mb-1">Tipografia</p>
+            <p class="text-white/40 text-xs">Plus Jakarta Sans (titoli) &bull; Roboto (corpo) &bull; Inter (etichette)</p>
+          </div>
+
+          <div class="flex items-center gap-1 text-white/60 text-sm font-500 group-hover:text-white transition-colors">
+            <span>Esplora design</span>
             <span class="material-symbols-outlined text-base">arrow_forward</span>
           </div>
         </div>
-      </a>
+      </div>
+    </a>
 
-      <!-- Sopralluogo Survey -->
-      <a href="sopralluogo-survey.html" class="glass-card rounded-2xl overflow-hidden block group">
-        <div class="overflow-hidden">
-          <img src="02-sopralluogo-survey.png" alt="Sopralluogo Survey" class="card-img w-full h-56 object-cover object-top" />
+    <!-- Design 4: Vigilant Curator -->
+    <a href="vigilant-curator.html" class="design-card rounded-2xl overflow-hidden block group mb-8">
+      <div class="md:flex flex-row-reverse">
+        <div class="md:w-1/2 overflow-hidden">
+          <img src="hybrid-02-sopralluogo.png" alt="Vigilant Curator" class="card-img w-full h-72 md:h-full object-cover object-top" />
         </div>
-        <div class="p-6">
-          <div class="flex items-center gap-2 mb-2">
-            <span class="material-symbols-outlined text-primary text-xl">fact_check</span>
-            <h2 class="font-display text-xl font-700 text-white">Sopralluogo Survey</h2>
+        <div class="md:w-1/2 p-8 flex flex-col justify-center">
+          <div class="flex items-center gap-3 mb-1">
+            <span class="tag tag-light">Light Mode</span>
           </div>
-          <p class="text-white/50 text-sm leading-relaxed">Interfaccia alternativa per il sopralluogo con tema chiaro, navigazione breadcrumb e layout stepper.</p>
-          <div class="mt-4 flex items-center gap-1 text-primary text-sm font-500 opacity-0 group-hover:opacity-100 transition-opacity">
-            <span>Apri template</span>
+          <h2 class="font-display text-3xl font-800 text-white mt-3 mb-1">Vigilant Curator</h2>
+          <p class="text-white/30 text-sm font-display mb-4">DVR N2O</p>
+          <p class="text-white/50 text-sm leading-relaxed mb-6">Design minimale e accessibile con accenti verdi per segnalare completamento e sicurezza. Step colorati con checkmark, timer sessione e salvataggio automatico.</p>
+
+          <!-- Palette -->
+          <div class="mb-5">
+            <p class="text-[0.65rem] tracking-widest uppercase text-white/25 mb-2">Palette</p>
+            <div class="flex items-center gap-2">
+              <div class="swatch" style="background:#f8f9fd" title="Background: #f8f9fd"></div>
+              <div class="swatch" style="background:#003d74" title="Primary: #003d74"></div>
+              <div class="swatch" style="background:#1b5594" title="Primary Container: #1b5594"></div>
+              <div class="swatch" style="background:#00481c" title="Tertiary Green: #00481c"></div>
+              <div class="swatch" style="background:#515c89" title="Secondary: #515c89"></div>
+              <div class="swatch" style="background:#0b1842" title="Sidebar: #0b1842"></div>
+            </div>
+          </div>
+
+          <!-- Typography -->
+          <div class="mb-5">
+            <p class="text-[0.65rem] tracking-widest uppercase text-white/25 mb-1">Tipografia</p>
+            <p class="text-white/40 text-xs">Plus Jakarta Sans (titoli) &bull; Inter (corpo &amp; etichette)</p>
+          </div>
+
+          <div class="flex items-center gap-1 text-white/60 text-sm font-500 group-hover:text-white transition-colors">
+            <span>Esplora design</span>
             <span class="material-symbols-outlined text-base">arrow_forward</span>
           </div>
         </div>
-      </a>
-
-      <!-- Generazione Documenti -->
-      <a href="generazione-documenti.html" class="glass-card rounded-2xl overflow-hidden block group">
-        <div class="overflow-hidden">
-          <img src="v2-03-documenti.png" alt="Generazione Documenti" class="card-img w-full h-56 object-cover object-top" />
-        </div>
-        <div class="p-6">
-          <div class="flex items-center gap-2 mb-2">
-            <span class="material-symbols-outlined text-primary text-xl">description</span>
-            <h2 class="font-display text-xl font-700 text-white">Generazione Documenti</h2>
-          </div>
-          <p class="text-white/50 text-sm leading-relaxed">Motore di generazione documenti DVR con anteprima, selezione template e monitoraggio stato generazione.</p>
-          <div class="mt-4 flex items-center gap-1 text-primary text-sm font-500 opacity-0 group-hover:opacity-100 transition-opacity">
-            <span>Apri template</span>
-            <span class="material-symbols-outlined text-base">arrow_forward</span>
-          </div>
-        </div>
-      </a>
-
-    </div>
+      </div>
+    </a>
 
     <!-- Footer -->
-    <div class="mt-16 text-center text-white/30 text-sm font-display">
+    <div class="mt-12 text-center text-white/20 text-xs font-display">
       <p>N2O SRL &mdash; Piattaforma Sicurezza sul Lavoro</p>
       <p class="mt-1">Progettato da Niuexa &bull; 2026</p>
     </div>
