@@ -1,494 +1,507 @@
-<!DOCTYPE html>
+<html class="dark" lang="it"><head></head><body class="bg-[#020F3A] bg-gradient-to-br from-[#020F3A] via-[#0B1842] to-[#18244E] text-on-surface font-body selection:bg-primary/30 min-h-screen overflow-x-hidden">```html
 
-<html class="dark" lang="it"><head>
+
+
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Sentinel DVR - Generazione Documenti</title>
+<title>N2O Sentinel - Generazione Documenti</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Inter:wght@300;400;500;600&amp;family=Nunito:wght@600;700;800&amp;family=Roboto:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;family=Nunito:wght@400;600;700&amp;family=Inter:wght@400;500;600&amp;family=Roboto+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <script id="tailwind-config">
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    colors: {
-                        "on-secondary-fixed-variant": "#374861",
-                        "tertiary-container": "#824400",
-                        "tertiary-fixed": "#ffdcc3",
-                        "on-primary": "#00315e",
-                        "secondary-container": "#394a63",
-                        "background": "#020f3a",
-                        "on-tertiary-fixed-variant": "#6e3900",
-                        "tertiary-fixed-dim": "#ffb77e",
-                        "on-primary-fixed": "#001c3a",
-                        "on-secondary": "#203149",
-                        "inverse-surface": "#dce1ff",
-                        "on-background": "#dce1ff",
-                        "on-secondary-fixed": "#091c33",
-                        "secondary-fixed-dim": "#b6c7e6",
-                        "primary-fixed": "#d4e3ff",
-                        "surface-container-lowest": "#000a32",
-                        "primary-fixed-dim": "#a5c8ff",
-                        "surface-container-high": "#1b2751",
-                        "outline": "#8c919b",
-                        "on-tertiary": "#4d2600",
-                        "on-tertiary-container": "#ffba84",
-                        "surface": "#020f3a",
-                        "primary": "#a5c8ff",
-                        "inverse-primary": "#295f9f",
-                        "surface-container": "#101c46",
-                        "secondary": "#b6c7e6",
-                        "error-container": "#93000a",
-                        "surface-container-low": "#0b1842",
-                        "tertiary": "#ffb77e",
-                        "error": "#ffb4ab",
-                        "on-error-container": "#ffdad6",
-                        "on-primary-container": "#a9caff",
-                        "surface-tint": "#a5c8ff",
-                        "inverse-on-surface": "#222e58",
-                        "secondary-fixed": "#d4e3ff",
-                        "on-tertiary-fixed": "#2f1500",
-                        "surface-dim": "#020f3a",
-                        "on-secondary-container": "#a8b9d7",
-                        "outline-variant": "#424750",
-                        "surface-container-highest": "#27325d",
-                        "on-surface": "#dce1ff",
-                        "primary-container": "#1b5594",
-                        "on-surface-variant": "#c2c6d2",
-                        "surface-bright": "#2b3762",
-                        "on-error": "#690005",
-                        "surface-variant": "#27325d",
-                        "on-primary-fixed-variant": "#004785"
-                    },
-                    fontFamily: {
-                        "headline": ["Plus Jakarta Sans", "Nunito"],
-                        "body": ["Inter", "Roboto"],
-                        "label": ["Inter", "Roboto"]
-                    },
-                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
-                },
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "tertiary-container": "#824400",
+              "secondary-fixed": "#d4e3ff",
+              "surface-container-high": "#1b2751",
+              "on-tertiary": "#4d2600",
+              "on-background": "#dce1ff",
+              "tertiary-fixed": "#ffdcc3",
+              "on-surface-variant": "#c2c6d2",
+              "surface-variant": "#27325d",
+              "background": "#020f3a",
+              "surface-dim": "#020f3a",
+              "on-error": "#690005",
+              "error-container": "#93000a",
+              "surface": "#020f3a",
+              "inverse-surface": "#dce1ff",
+              "on-primary-fixed": "#001c3a",
+              "inverse-primary": "#295f9f",
+              "primary-fixed-dim": "#a5c8ff",
+              "surface-tint": "#a5c8ff",
+              "on-secondary": "#203149",
+              "primary": "#a5c8ff",
+              "surface-container-low": "#0b1842",
+              "tertiary-fixed-dim": "#ffb77e",
+              "on-primary-container": "#a9caff",
+              "secondary-fixed-dim": "#b6c7e6",
+              "on-secondary-container": "#a8b9d7",
+              "inverse-on-surface": "#222e58",
+              "error": "#ffb4ab",
+              "surface-container-lowest": "#000a32",
+              "on-primary": "#00315e",
+              "primary-fixed": "#d4e3ff",
+              "on-secondary-fixed": "#091c33",
+              "outline": "#8c919b",
+              "on-surface": "#dce1ff",
+              "surface-container": "#101c46",
+              "on-primary-fixed-variant": "#004785",
+              "on-error-container": "#ffdad6",
+              "tertiary": "#ffb77e",
+              "surface-bright": "#2b3762",
+              "outline-variant": "#424750",
+              "secondary": "#b6c7e6",
+              "surface-container-highest": "#27325d",
+              "secondary-container": "#394a63",
+              "primary-container": "#1b5594",
+              "on-tertiary-container": "#ffba84",
+              "on-tertiary-fixed-variant": "#6e3900",
+              "on-tertiary-fixed": "#2f1500",
+              "on-secondary-fixed-variant": "#374861"
             },
-        }
+            fontFamily: {
+              "headline": ["Plus Jakarta Sans"],
+              "body": ["Inter"],
+              "label": ["Inter"],
+              "mono": ["Roboto Mono", "monospace"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1.25rem", "full": "9999px"},
+            animation: {
+              'fade-up': 'fadeUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards',
+              'shimmer-beam': 'shimmerBeam 2s infinite linear',
+              'pulse-soft': 'pulseSoft 2s infinite ease-in-out',
+              'border-beam': 'borderBeam 4s infinite linear',
+            },
+            keyframes: {
+              fadeUp: {
+                '0%': { opacity: '0', transform: 'translateY(20px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              shimmerBeam: {
+                '0%': { transform: 'translateX(-100%)' },
+                '100%': { transform: 'translateX(100%)' },
+              },
+              pulseSoft: {
+                '0%, 100%': { opacity: '0.4', transform: 'scale(1)' },
+                '50%': { opacity: '0.8', transform: 'scale(1.02)' },
+              },
+              borderBeam: {
+                '100%': { offsetDistance: '100%' },
+              }
+            }
+          },
+        },
+      }
     </script>
 <style>
-        .glass-card {
-            background: rgba(39, 50, 93, 0.4);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            transition: all 0.3s ease;
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
         }
-        .glass-card:hover {
-            border-color: rgba(165, 200, 255, 0.4);
-            background: rgba(39, 50, 93, 0.6);
-            transform: translateY(-2px);
+        .premium-glass {
+            background: rgba(39, 50, 93, 0.35);
+            backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .ghost-border {
-            border: 1px solid rgba(255, 255, 255, 0.1);
+        .premium-glass:hover {
+            border-color: rgba(165, 200, 255, 0.3);
+            transform: translateY(-4px);
+            box-shadow: 0 8px 32px rgba(165, 200, 255, 0.12);
         }
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 4px;
+        .status-ready:hover {
+            box-shadow: 0 4px 24px rgba(74, 225, 118, 0.08), 0 8px 32px rgba(165, 200, 255, 0.12);
         }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: rgba(2, 15, 58, 0.1);
+        .error-ghost-pulse {
+            border-color: rgba(239, 68, 68, 0.2);
+            animation: error-pulse 2s infinite;
         }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(165, 200, 255, 0.2);
-            border-radius: 10px;
+        @keyframes error-pulse {
+            0%, 100% { border-color: rgba(239, 68, 68, 0.1); box-shadow: 0 0 0 rgba(239, 68, 68, 0); }
+            50% { border-color: rgba(239, 68, 68, 0.4); box-shadow: 0 0 15px rgba(239, 68, 68, 0.15); }
         }
+        .beam-container {
+            position: relative;
+            overflow: hidden;
+        }
+        .beam-container::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(245, 158, 11, 0.3), transparent);
+            animation: shimmer-beam 2s infinite linear;
+        }
+        .text-gradient {
+            background: linear-gradient(to right, #ffffff, #a5c8ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .cta-beam {
+            position: relative;
+            z-index: 0;
+            overflow: hidden;
+        }
+        .cta-beam::before {
+            content: "";
+            position: absolute;
+            z-index: -1;
+            inset: -2px;
+            background: conic-gradient(from 0deg, transparent, #a5c8ff, transparent, #a5c8ff, transparent);
+            animation: rotate 4s linear infinite;
+        }
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .stagger-1 { animation-delay: 80ms; }
+        .stagger-2 { animation-delay: 160ms; }
+        .stagger-3 { animation-delay: 240ms; }
+        .stagger-4 { animation-delay: 320ms; }
+        .stagger-5 { animation-delay: 400ms; }
+        .stagger-6 { animation-delay: 480ms; }
+        .stagger-7 { animation-delay: 560ms; }
+        .stagger-8 { animation-delay: 640ms; }
+        .stagger-9 { animation-delay: 720ms; }
+        .stagger-10 { animation-delay: 800ms; }
+        .stagger-11 { animation-delay: 880ms; }
     </style>
-</head>
-<body class="bg-background text-on-surface font-body selection:bg-primary-container selection:text-white overflow-hidden h-screen flex">
-<!-- Sidebar Component (Sentinel DVR) -->
-<aside class="fixed left-0 top-0 h-screen flex flex-col p-4 bg-[#0B1842]/60 backdrop-blur-xl w-64 border-r border-white/10 z-50">
-<div class="mb-8 px-2 flex items-center gap-3">
-<div class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-container flex items-center justify-center shadow-lg">
-<span class="material-symbols-outlined text-background font-bold" data-icon="security">security</span>
+<!-- SIDE NAV BAR -->
+<aside class="fixed left-0 top-0 h-full z-40 flex flex-col w-64 border-r border-white/5 bg-[#0B1842]/60 backdrop-blur-xl">
+<div class="p-8">
+<h1 class="text-2xl font-bold text-white tracking-tight font-headline">N2O</h1>
+<p class="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-[0.2em]">Sicurezza Digitale</p>
 </div>
-<div>
-<h1 class="text-[#A5C8FF] font-bold tracking-tighter text-lg leading-tight">Sentinel DVR</h1>
-<p class="text-xs text-slate-400 font-medium">Sicurezza d'Avanguardia</p>
-</div>
-</div>
-<nav class="flex-1 space-y-2 overflow-y-auto custom-scrollbar">
-<a class="flex items-center gap-3 p-3 text-slate-400 hover:text-white transition-all duration-300 hover:bg-white/5 rounded-lg active:scale-95" href="#">
-<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<nav class="flex-1 px-4 space-y-2 mt-4">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-white transition-all hover:bg-white/5 rounded-xl group" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">dashboard</span>
 <span class="text-sm font-medium">Dashboard</span>
 </a>
-<a class="flex items-center gap-3 p-3 text-slate-400 hover:text-white transition-all duration-300 hover:bg-white/5 rounded-lg active:scale-95" href="#">
-<span class="material-symbols-outlined" data-icon="domain">domain</span>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-white transition-all hover:bg-white/5 rounded-xl group" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">business</span>
 <span class="text-sm font-medium">Aziende</span>
 </a>
-<a class="flex items-center gap-3 p-3 text-slate-400 hover:text-white transition-all duration-300 hover:bg-white/5 rounded-lg active:scale-95" href="#">
-<span class="material-symbols-outlined" data-icon="fact_check">fact_check</span>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-white transition-all hover:bg-white/5 rounded-xl group" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">fact_check</span>
 <span class="text-sm font-medium">Sopralluoghi</span>
 </a>
-<a class="flex items-center gap-3 p-3 bg-white/10 text-white font-semibold rounded-lg shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] active:scale-95" href="#">
-<span class="material-symbols-outlined" data-icon="description">description</span>
-<span class="text-sm flex-1">Documenti</span>
-<span class="bg-primary-container text-[10px] px-2 py-0.5 rounded-full">3</span>
+<a class="flex items-center gap-3 px-4 py-3 bg-white/10 text-white rounded-xl backdrop-blur-md border-l-2 border-primary transition-all shadow-lg shadow-blue-900/20" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">description</span>
+<span class="text-sm font-bold">Documenti</span>
 </a>
-<a class="flex items-center gap-3 p-3 text-slate-400 hover:text-white transition-all duration-300 hover:bg-white/5 rounded-lg active:scale-95" href="#">
-<span class="material-symbols-outlined" data-icon="science">science</span>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-white transition-all hover:bg-white/5 rounded-xl group" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">biotech</span>
 <span class="text-sm font-medium">SDS Chimiche</span>
 </a>
-<a class="flex items-center gap-3 p-3 text-slate-400 hover:text-white transition-all duration-300 hover:bg-white/5 rounded-lg active:scale-95" href="#">
-<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-white transition-all hover:bg-white/5 rounded-xl group" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">settings</span>
 <span class="text-sm font-medium">Impostazioni</span>
 </a>
 </nav>
-<div class="mt-auto pt-4 border-t border-white/5">
-<div class="flex items-center gap-3 p-2 bg-white/5 rounded-xl">
-<img alt="Avatar" class="w-10 h-10 rounded-lg object-cover" data-alt="professional male profile photo with neutral background and corporate attire" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJ2zDTMx731_jDTDCZWd0u9XQOW-m_Py0bU-ZOgVOLi7yDHnVDOuRCCpKDCYs5qArnHEFaymwZg1nMj-Sd7x_HCyJulPLLi1lC-5gYPdOqIwS01YsZaveskYiHtagIC7RWQLIO-qN02uhs6t7zY8LoLwksIUwGU9HO6pAipBTkRCqLa0q22zd7f-_UWrC8SswR1RssCTrgr20NFNXrtkUlnGTlCld13g4MfLsyUiN-5X8Fm6RdAkPYfht5f0Du5_cQUA4sOwjF58U"/>
-<div class="flex-1 overflow-hidden">
-<p class="text-xs font-bold text-white truncate">Alessandro Rossi</p>
-<p class="text-[10px] text-slate-400">Amministratore</p>
-</div>
-<span class="material-symbols-outlined text-slate-500 text-sm" data-icon="logout">logout</span>
+<div class="mt-auto p-6 border-t border-white/5">
+<div class="flex items-center gap-3 px-4 py-3 text-slate-300">
+<div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">MR</div>
+<span class="text-sm font-medium">Mario Rossi</span>
 </div>
 </div>
 </aside>
-<!-- Main Content Shell -->
-<main class="ml-64 flex-1 h-screen flex flex-col relative overflow-hidden bg-gradient-to-tr from-[#020F3A] via-[#0B1842] to-[#18244E]">
-<!-- TopNavBar Component -->
-<header class="h-20 flex justify-between items-center px-8 z-40 bg-[#020F3A]/40 backdrop-blur-md shadow-xl shadow-black/20 shrink-0">
-<div class="flex flex-col">
-<div class="flex items-center gap-2">
-<h2 class="font-headline font-extrabold italic text-[#A5C8FF] text-xl tracking-tight">Rossi Costruzioni SRL</h2>
-<span class="material-symbols-outlined text-[#A5C8FF] text-lg" data-icon="expand_more">expand_more</span>
-</div>
-<span class="text-[10px] font-label tracking-widest uppercase text-slate-300">Generazione Documenti</span>
+<!-- TOP NAV BAR -->
+<header class="flex justify-between items-center w-full px-12 h-24 ml-64 max-w-[calc(100%-16rem)] bg-transparent backdrop-blur-lg fixed top-0 z-30">
+<div class="flex items-center gap-8">
+<span class="text-slate-400 font-['Plus_Jakarta_Sans'] font-semibold tracking-wide">N2O Sentinel</span>
+<div class="h-6 w-[1px] bg-white/10"></div>
+<button class="flex items-center gap-2 text-slate-300 hover:bg-primary/10 px-4 py-2 rounded-xl transition-all">
+<span class="material-symbols-outlined text-lg">apartment</span>
+<span class="text-sm font-bold text-primary">Selettore Azienda</span>
+</button>
 </div>
 <div class="flex items-center gap-6">
-<div class="flex items-center gap-4">
-<button class="p-2 text-slate-300 hover:bg-[#1B5594]/20 rounded-full transition-all active:opacity-80">
-<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<button class="p-3 text-slate-300 hover:bg-white/5 rounded-full transition-all hover:scale-110">
+<span class="material-symbols-outlined">bolt</span>
 </button>
-<button class="p-2 text-slate-300 hover:bg-[#1B5594]/20 rounded-full transition-all active:opacity-80">
-<span class="material-symbols-outlined" data-icon="bolt">bolt</span>
-</button>
+<div class="p-[1px] rounded-xl cta-beam">
+<button class="relative bg-[#020F3A] text-white px-8 py-2.5 rounded-[11px] font-bold text-sm shadow-xl hover:bg-transparent transition-all">
+        Genera Tutti
+    </button>
 </div>
-<button class="bg-gradient-to-r from-[#A5C8FF] to-[#1B5594] text-[#00315E] font-bold py-2.5 px-6 rounded-xl flex items-center gap-2 shadow-lg hover:shadow-primary/20 transition-all active:scale-95">
-<span class="material-symbols-outlined font-bold" data-icon="bolt">bolt</span>
-                    Genera Tutti
-                </button>
 </div>
 </header>
-<!-- Page Content Canvas -->
-<section class="flex-1 overflow-hidden flex">
-<!-- Document Grid Area -->
-<div class="flex-1 p-8 overflow-y-auto custom-scrollbar">
-<div class="grid grid-cols-1 xl:grid-cols-4 gap-6">
-<!-- DVR Master (Ready) -->
-<div class="glass-card p-5 rounded-xl flex flex-col gap-4">
-<div class="flex justify-between items-start">
-<div class="w-12 h-12 bg-primary-container/30 rounded-lg flex items-center justify-center text-primary">
-<span class="material-symbols-outlined text-3xl" data-icon="article">article</span>
+<!-- MAIN CANVAS -->
+<main class="ml-64 pt-32 pb-24 px-12 min-h-screen relative">
+<!-- Atmospheric Glow -->
+<div class="absolute top-1/2 left-1/3 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[120px] pointer-events-none -z-10"></div>
+<!-- Header Section -->
+<section class="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-8">
+<div class="opacity-0 animate-fade-up">
+<div class="flex items-center gap-4 mb-3">
+<h2 class="text-4xl font-extrabold font-headline text-white tracking-tight">Generazione Documenti</h2>
+<div class="flex items-center bg-white/5 px-4 py-2 rounded-2xl border border-white/5 cursor-pointer hover:bg-white/10 transition-all">
+<span class="text-lg font-bold text-gradient tracking-[-0.02em]">Rossi Costruzioni SRL</span>
+<span class="material-symbols-outlined ml-2 text-slate-400">keyboard_arrow_down</span>
 </div>
-<span class="bg-green-500/10 text-green-400 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Pronto</span>
 </div>
-<div class="space-y-1">
-<h3 class="font-headline font-bold text-base text-on-surface">DVR Master</h3>
-<p class="text-xs text-slate-400 flex items-center gap-2">
-<span class="material-symbols-outlined text-[14px]" data-icon="description">description</span> 187 pag. • 01/04/2026
-                            </p>
+<div class="flex flex-wrap gap-4 mt-6">
+<span class="flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/10 text-emerald-400 text-[9px] font-black tracking-[0.12em] uppercase">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span> 3 Pronti
+</span>
+<span class="flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/10 text-blue-400 text-[9px] font-black tracking-[0.12em] uppercase">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></span> 2 In Generazione
+</span>
+<span class="flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-500/10 border border-slate-500/10 text-slate-400 text-[9px] font-black tracking-[0.12em] uppercase">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span> 4 Da Generare
+</span>
+<span class="flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-500/10 border border-red-500/10 text-red-400 text-[9px] font-black tracking-[0.12em] uppercase">
+<span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]"></span> 1 Errore
+</span>
 </div>
-<div class="flex items-center justify-between pt-2 border-t border-white/5">
-<div class="flex gap-2">
-<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-primary" title="Scarica">
-<span class="material-symbols-outlined" data-icon="download">download</span>
+</div>
+</section>
+<!-- Document Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-7 pr-[360px]">
+<!-- 1. DVR Master -->
+<div class="premium-glass status-ready p-6 rounded-2xl group opacity-0 animate-fade-up stagger-1 ring-2 ring-primary/20">
+<div class="flex justify-between items-start mb-8">
+<div class="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-3xl" style="font-variation-settings: 'FILL' 1;">shield</span>
+</div>
+<span class="bg-emerald-500/10 text-emerald-400 text-[9px] font-black uppercase tracking-[0.12em] px-3 py-1 rounded-full border border-emerald-500/10">PRONTO</span>
+</div>
+<h3 class="text-lg font-bold text-white mb-1 tracking-[-0.01em]">DVR Master</h3>
+<p class="text-xs text-slate-400 mb-8">187 pag · 111 tabelle</p>
+<div class="flex items-center gap-4">
+<button class="p-2.5 hover:bg-white/10 rounded-xl text-slate-300 transition-all hover:scale-110 hover:text-primary hover:shadow-[0_0_15px_rgba(165,200,255,0.2)]">
+<span class="material-symbols-outlined text-xl">download</span>
 </button>
-<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-slate-400" title="Anteprima">
-<span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+<button class="p-2.5 hover:bg-white/10 rounded-xl text-slate-300 transition-all hover:scale-110 hover:text-primary hover:shadow-[0_0_15px_rgba(165,200,255,0.2)]">
+<span class="material-symbols-outlined text-xl">visibility</span>
 </button>
-</div>
-<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-slate-400">
-<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
-</button>
-</div>
-</div>
-<!-- Allegato MMC (Ready) -->
-<div class="glass-card p-5 rounded-xl flex flex-col gap-4 border-primary-container/30">
-<div class="flex justify-between items-start">
-<div class="w-12 h-12 bg-primary-container/30 rounded-lg flex items-center justify-center text-primary">
-<span class="material-symbols-outlined text-3xl" data-icon="fitness_center">fitness_center</span>
-</div>
-<span class="bg-green-500/10 text-green-400 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Pronto</span>
-</div>
-<div class="space-y-1">
-<h3 class="font-headline font-bold text-base text-on-surface">Allegato MMC</h3>
-<p class="text-xs text-slate-400 flex items-center gap-2">
-<span class="material-symbols-outlined text-[14px]" data-icon="description">description</span> 24 pag. • 01/04/2026
-                            </p>
-</div>
-<div class="flex items-center justify-between pt-2 border-t border-white/5">
-<div class="flex gap-2">
-<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-primary" title="Scarica">
-<span class="material-symbols-outlined" data-icon="download">download</span>
-</button>
-</div>
-<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-slate-400">
-<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+<button class="p-2.5 hover:bg-white/10 rounded-xl text-slate-300 transition-all hover:scale-110 hover:text-primary hover:shadow-[0_0_15px_rgba(165,200,255,0.2)]">
+<span class="material-symbols-outlined text-xl">add_to_drive</span>
 </button>
 </div>
 </div>
-<!-- Allegato VDT (Generating) -->
-<div class="glass-card p-5 rounded-xl flex flex-col gap-4">
-<div class="flex justify-between items-start">
-<div class="w-12 h-12 bg-tertiary-container/30 rounded-lg flex items-center justify-center text-tertiary">
-<span class="material-symbols-outlined text-3xl animate-pulse" data-icon="monitor">monitor</span>
+<!-- 2. Allegato MMC -->
+<div class="premium-glass status-ready p-6 rounded-2xl group opacity-0 animate-fade-up stagger-2">
+<div class="flex justify-between items-start mb-8">
+<div class="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-slate-300 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-3xl">fitness_center</span>
 </div>
-<span class="bg-amber-500/10 text-amber-400 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">In Generazione</span>
+<span class="bg-emerald-500/10 text-emerald-400 text-[9px] font-black uppercase tracking-[0.12em] px-3 py-1 rounded-full border border-emerald-500/10">PRONTO</span>
 </div>
-<div class="space-y-3">
-<h3 class="font-headline font-bold text-base text-on-surface">Allegato VDT</h3>
-<div class="space-y-1">
-<div class="flex justify-between text-[10px] font-bold text-amber-400">
-<span>GENERAZIONE...</span>
-<span>67%</span>
-</div>
-<div class="w-full h-1 bg-white/10 rounded-full overflow-hidden">
-<div class="h-full bg-amber-400 rounded-full" style="width: 67%"></div>
+<h3 class="text-lg font-bold text-white mb-1 tracking-[-0.01em]">Allegato MMC</h3>
+<p class="text-xs text-slate-400 mb-8">35 pag</p>
+<div class="flex items-center gap-4">
+<button class="p-2.5 hover:bg-white/10 rounded-xl text-slate-300 transition-all hover:scale-110 hover:text-primary hover:shadow-[0_0_15px_rgba(165,200,255,0.2)]"><span class="material-symbols-outlined">download</span></button>
+<button class="p-2.5 hover:bg-white/10 rounded-xl text-slate-300 transition-all hover:scale-110 hover:text-primary hover:shadow-[0_0_15px_rgba(165,200,255,0.2)]"><span class="material-symbols-outlined">visibility</span></button>
 </div>
 </div>
+<!-- 3. Allegato VDT -->
+<div class="premium-glass p-6 rounded-2xl group opacity-0 animate-fade-up stagger-3">
+<div class="flex justify-between items-start mb-6">
+<div class="w-14 h-14 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-3xl">monitor</span>
+</div>
+<span class="bg-blue-500/10 text-blue-400 text-[9px] font-black uppercase tracking-[0.12em] px-3 py-1 rounded-full border border-blue-500/10">IN GENERAZIONE</span>
+</div>
+<h3 class="text-lg font-bold text-white mb-1 tracking-[-0.01em]">Allegato VDT</h3>
+<p class="text-xs text-slate-400 mb-6">40 pag</p>
+<div class="w-full bg-white/5 h-2 rounded-full mb-3 overflow-hidden beam-container">
+<div class="bg-blue-500 h-full rounded-full shadow-[0_0_12px_rgba(59,130,246,0.6)]" style="width: 67%"></div>
+</div>
+<div class="flex justify-between text-[9px] font-black text-blue-400 tracking-widest">
+<span>67% COMPLETATO</span>
 </div>
 </div>
-<!-- Allegato Stress (Generating) -->
-<div class="glass-card p-5 rounded-xl flex flex-col gap-4">
-<div class="flex justify-between items-start">
-<div class="w-12 h-12 bg-tertiary-container/30 rounded-lg flex items-center justify-center text-tertiary">
-<span class="material-symbols-outlined text-3xl animate-pulse" data-icon="psychology">psychology</span>
+<!-- 4. Allegato Stress -->
+<div class="premium-glass p-6 rounded-2xl group opacity-0 animate-fade-up stagger-4">
+<div class="flex justify-between items-start mb-6">
+<div class="w-14 h-14 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-3xl">psychology</span>
 </div>
-<span class="bg-amber-500/10 text-amber-400 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">In Generazione</span>
+<span class="bg-blue-500/10 text-blue-400 text-[9px] font-black uppercase tracking-[0.12em] px-3 py-1 rounded-full border border-blue-500/10">IN GENERAZIONE</span>
 </div>
-<div class="space-y-3">
-<h3 class="font-headline font-bold text-base text-on-surface">Allegato Stress</h3>
-<div class="space-y-1">
-<div class="flex justify-between text-[10px] font-bold text-amber-400">
-<span>ANALISI DATI...</span>
-<span>23%</span>
+<h3 class="text-lg font-bold text-white mb-1 tracking-[-0.01em]">Allegato Stress</h3>
+<p class="text-xs text-slate-400 mb-6">30 pag</p>
+<div class="w-full bg-white/5 h-2 rounded-full mb-3 overflow-hidden beam-container">
+<div class="bg-blue-500 h-full rounded-full shadow-[0_0_12px_rgba(59,130,246,0.6)]" style="width: 23%"></div>
 </div>
-<div class="w-full h-1 bg-white/10 rounded-full overflow-hidden">
-<div class="h-full bg-amber-400 rounded-full" style="width: 23%"></div>
+<div class="flex justify-between text-[9px] font-black text-blue-400 tracking-widest">
+<span>23% COMPLETATO</span>
 </div>
 </div>
+<!-- 5. Allegato Gestanti -->
+<div class="premium-glass p-6 rounded-2xl group opacity-60 hover:opacity-100 opacity-0 animate-fade-up stagger-5">
+<div class="flex justify-between items-start mb-8">
+<div class="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-slate-500 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-3xl">child_care</span>
 </div>
+<span class="bg-white/5 text-slate-500 text-[9px] font-black uppercase tracking-[0.12em] px-3 py-1 rounded-full border border-white/5">DA GENERARE</span>
 </div>
-<!-- Allegato Gestanti (Pending) -->
-<div class="glass-card p-5 rounded-xl flex flex-col gap-4 opacity-70">
-<div class="flex justify-between items-start">
-<div class="w-12 h-12 bg-slate-700/30 rounded-lg flex items-center justify-center text-slate-400">
-<span class="material-symbols-outlined text-3xl" data-icon="child_care">child_care</span>
-</div>
-<span class="bg-slate-500/10 text-slate-400 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Da Generare</span>
-</div>
-<div class="space-y-1">
-<h3 class="font-headline font-bold text-base text-on-surface">Allegato Gestanti</h3>
-<p class="text-xs text-slate-500">Pronto per la coda</p>
-</div>
-<button class="mt-2 text-xs font-bold text-primary flex items-center gap-1 hover:underline">
-<span class="material-symbols-outlined text-xs" data-icon="add_circle">add_circle</span> Avvia ora
-                        </button>
-</div>
-<!-- Allegato Incendio (Pending) -->
-<div class="glass-card p-5 rounded-xl flex flex-col gap-4 opacity-70">
-<div class="flex justify-between items-start">
-<div class="w-12 h-12 bg-slate-700/30 rounded-lg flex items-center justify-center text-slate-400">
-<span class="material-symbols-outlined text-3xl" data-icon="local_fire_department">local_fire_department</span>
-</div>
-<span class="bg-slate-500/10 text-slate-400 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Da Generare</span>
-</div>
-<div class="space-y-1">
-<h3 class="font-headline font-bold text-base text-on-surface">Allegato Incendio</h3>
-<p class="text-xs text-slate-500">Verifica antincendio</p>
-</div>
-</div>
-<!-- Allegato Microclima (Locked) -->
-<div class="glass-card p-5 rounded-xl flex flex-col gap-4 opacity-60 relative group">
-<div class="absolute inset-0 bg-background/40 backdrop-blur-[2px] rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-<div class="bg-surface p-3 rounded-xl border border-white/10 shadow-2xl flex flex-col items-center gap-2">
-<span class="material-symbols-outlined text-error" data-icon="lock">lock</span>
-<span class="text-[10px] font-bold">DATI MANCANTI</span>
-</div>
-</div>
-<div class="flex justify-between items-start">
-<div class="w-12 h-12 bg-slate-700/30 rounded-lg flex items-center justify-center text-slate-400">
-<span class="material-symbols-outlined text-3xl" data-icon="thermostat">thermostat</span>
-</div>
-<span class="bg-slate-500/10 text-slate-400 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Da Generare</span>
-</div>
-<div class="space-y-1">
-<h3 class="font-headline font-bold text-base text-on-surface">Allegato Microclima</h3>
-<p class="text-xs text-slate-500 flex items-center gap-1">
-<span class="material-symbols-outlined text-xs" data-icon="warning">warning</span> Dati ambientali non inseriti
-                            </p>
-</div>
-</div>
-<!-- PEE (Pending) -->
-<div class="glass-card p-5 rounded-xl flex flex-col gap-4 opacity-70">
-<div class="flex justify-between items-start">
-<div class="w-12 h-12 bg-slate-700/30 rounded-lg flex items-center justify-center text-slate-400">
-<span class="material-symbols-outlined text-3xl" data-icon="exit_to_app">exit_to_app</span>
-</div>
-<span class="bg-slate-500/10 text-slate-400 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Da Generare</span>
-</div>
-<div class="space-y-1">
-<h3 class="font-headline font-bold text-base text-on-surface">PEE</h3>
-<p class="text-xs text-slate-500">Piano Emergenza</p>
-</div>
-</div>
-<!-- HACCP (Pending) -->
-<div class="glass-card p-5 rounded-xl flex flex-col gap-4 opacity-70">
-<div class="flex justify-between items-start">
-<div class="w-12 h-12 bg-slate-700/30 rounded-lg flex items-center justify-center text-slate-400">
-<span class="material-symbols-outlined text-3xl" data-icon="restaurant">restaurant</span>
-</div>
-<span class="bg-slate-500/10 text-slate-400 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Da Generare</span>
-</div>
-<div class="space-y-1">
-<h3 class="font-headline font-bold text-base text-on-surface">HACCP</h3>
-<p class="text-xs text-slate-500">Igiene Alimentare</p>
-</div>
-</div>
-<!-- DUVRI (Error) -->
-<div class="glass-card p-5 rounded-xl flex flex-col gap-4 border-error/20 bg-error/5">
-<div class="flex justify-between items-start">
-<div class="w-12 h-12 bg-error-container/30 rounded-lg flex items-center justify-center text-error">
-<span class="material-symbols-outlined text-3xl" data-icon="warning">warning</span>
-</div>
-<span class="bg-error/10 text-error text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Errore</span>
-</div>
-<div class="space-y-1">
-<h3 class="font-headline font-bold text-base text-on-surface">DUVRI</h3>
-<p class="text-xs text-error/80 font-medium">Dati contraente mancanti</p>
-</div>
-<button class="mt-auto text-xs font-bold text-primary flex items-center gap-1 hover:underline">
-<span class="material-symbols-outlined text-xs" data-icon="edit">edit</span> Correggi ora
-                        </button>
-</div>
-<!-- 6 Placeholder Cards to complete 4x4 Grid -->
-<div class="glass-card p-5 rounded-xl flex flex-col gap-4 opacity-40 border-dashed border-white/5">
-<div class="w-12 h-12 bg-white/5 rounded-lg"></div>
-<div class="h-4 w-3/4 bg-white/10 rounded"></div>
-<div class="h-3 w-1/2 bg-white/5 rounded"></div>
-</div>
-<div class="glass-card p-5 rounded-xl flex flex-col gap-4 opacity-40 border-dashed border-white/5">
-<div class="w-12 h-12 bg-white/5 rounded-lg"></div>
-<div class="h-4 w-3/4 bg-white/10 rounded"></div>
-<div class="h-3 w-1/2 bg-white/5 rounded"></div>
-</div>
-<div class="glass-card p-5 rounded-xl flex flex-col gap-4 opacity-40 border-dashed border-white/5">
-<div class="w-12 h-12 bg-white/5 rounded-lg"></div>
-<div class="h-4 w-3/4 bg-white/10 rounded"></div>
-<div class="h-3 w-1/2 bg-white/5 rounded"></div>
-</div>
-<div class="glass-card p-5 rounded-xl flex flex-col gap-4 opacity-40 border-dashed border-white/5">
-<div class="w-12 h-12 bg-white/5 rounded-lg"></div>
-<div class="h-4 w-3/4 bg-white/10 rounded"></div>
-<div class="h-3 w-1/2 bg-white/5 rounded"></div>
-</div>
-<div class="glass-card p-5 rounded-xl flex flex-col gap-4 opacity-40 border-dashed border-white/5">
-<div class="w-12 h-12 bg-white/5 rounded-lg"></div>
-<div class="h-4 w-3/4 bg-white/10 rounded"></div>
-<div class="h-3 w-1/2 bg-white/5 rounded"></div>
-</div>
-<div class="glass-card p-5 rounded-xl flex flex-col gap-4 opacity-40 border-dashed border-white/5">
-<div class="w-12 h-12 bg-white/5 rounded-lg"></div>
-<div class="h-4 w-3/4 bg-white/10 rounded"></div>
-<div class="h-3 w-1/2 bg-white/5 rounded"></div>
-</div>
-</div>
-<!-- Bottom Timeline Log -->
-<div class="mt-12 mb-8 bg-[#0B1842]/40 rounded-2xl p-6 border border-white/5">
-<h4 class="text-xs font-bold uppercase tracking-widest text-primary mb-4 flex items-center gap-2">
-<span class="material-symbols-outlined text-sm" data-icon="history">history</span> Activity Log
-                    </h4>
-<div class="space-y-3">
-<div class="flex gap-4 items-center">
-<span class="text-[10px] font-mono text-slate-500">14:28</span>
-<div class="w-2 h-2 rounded-full bg-green-500"></div>
-<span class="text-xs text-slate-300"><span class="text-white font-bold">DVR Master</span> generato con successo e archiviato.</span>
-</div>
-<div class="flex gap-4 items-center">
-<span class="text-[10px] font-mono text-slate-500">14:25</span>
-<div class="w-2 h-2 rounded-full bg-green-500"></div>
-<span class="text-xs text-slate-300"><span class="text-white font-bold">Allegato MMC</span> pronto per il download.</span>
-</div>
-<div class="flex gap-4 items-center">
-<span class="text-[10px] font-mono text-slate-500">14:24</span>
-<div class="w-2 h-2 rounded-full bg-amber-500"></div>
-<span class="text-xs text-slate-300">Avviata generazione batch per <span class="text-white font-bold">Rossi Costruzioni SRL</span>...</span>
-</div>
-</div>
-</div>
-</div>
-<!-- Right Slide-in Panel (Preview) -->
-<aside class="w-[400px] border-l border-white/10 bg-[#0B1842]/80 backdrop-blur-3xl p-8 flex flex-col gap-8 shadow-[-20px_0_50px_rgba(2,15,58,0.5)] z-30">
-<div class="flex justify-between items-center">
-<h3 class="font-headline font-bold text-lg text-white">Anteprima Doc</h3>
-<button class="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10">
-<span class="material-symbols-outlined text-sm" data-icon="close">close</span>
+<h3 class="text-lg font-bold text-white mb-1 tracking-[-0.01em]">Allegato Gestanti</h3>
+<p class="text-xs text-slate-400 mb-8">12 pag</p>
+<button class="text-[10px] font-black text-primary flex items-center gap-2 hover:translate-x-1 transition-transform tracking-widest">
+<span class="material-symbols-outlined text-sm">play_arrow</span> AVVIA ORA
 </button>
 </div>
-<!-- Doc Thumbnail -->
-<div class="relative group cursor-pointer">
-<div class="aspect-[3/4] rounded-xl overflow-hidden shadow-2xl border border-white/20 bg-white">
-<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent z-10"></div>
-<div class="absolute bottom-6 left-6 right-6 z-20 space-y-2">
-<div class="w-12 h-1 bg-primary rounded-full"></div>
-<p class="text-xs font-bold text-white uppercase tracking-tighter">Documento Valutazione Rischi</p>
-<h4 class="text-lg font-extrabold text-white leading-tight">Rossi Costruzioni<br/>Annuario 2026</h4>
+<!-- 6. Allegato Incendio -->
+<div class="premium-glass p-6 rounded-2xl group opacity-60 hover:opacity-100 opacity-0 animate-fade-up stagger-6">
+<div class="flex justify-between items-start mb-8">
+<div class="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-slate-500 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-3xl">local_fire_department</span>
 </div>
-<img alt="DVR Preview" class="w-full h-full object-cover grayscale-[20%]" data-alt="close up of technical safety manual document with modern layout and professional corporate branding" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB83jjKLjvnoCWBrYGrriBqeo1gDoKnPpZ4HKuTEQVEKpR_iMfwHspsjvgGyGJ68lxrVsDZw59l-NeLlGgL5Vh6Z5RAR0wf1W5yattzsB19dWxrmFNX0SNvxV6ur3T1NxEf0Ytn8VaLp1NH_2nt_eT81tRD9Nk1LCatzUzHmJaKT_I3WuCsO3w4Wc-6_dlXwTYGWkeTSzSWR3ydndc97WklH4xdi8UqgtETvhzV8C2O7q7CHzT_-gXlr_3DFHDyX8SsvXKrWTvoS5U"/>
+<span class="bg-white/5 text-slate-500 text-[9px] font-black uppercase tracking-[0.12em] px-3 py-1 rounded-full border border-white/5">DA GENERARE</span>
 </div>
-<div class="absolute top-4 right-4 z-20">
-<span class="bg-primary-container text-on-primary-container px-3 py-1 rounded-lg text-[10px] font-black shadow-xl">DOCX</span>
+<h3 class="text-lg font-bold text-white mb-1 tracking-[-0.01em]">Allegato Incendio</h3>
+<p class="text-xs text-slate-400 mb-8">Configurazione base</p>
+<button class="text-[10px] font-black text-primary flex items-center gap-2 hover:translate-x-1 transition-transform tracking-widest">
+<span class="material-symbols-outlined text-sm">play_arrow</span> AVVIA ORA
+</button>
+</div>
+<!-- 7. Allegato Microclima -->
+<div class="premium-glass p-6 rounded-2xl opacity-40 bg-black/10 border-white/5 opacity-0 animate-fade-up stagger-7">
+<div class="flex justify-between items-start mb-8">
+<div class="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-slate-600">
+<span class="material-symbols-outlined text-3xl">device_thermostat</span>
+</div>
+<span class="bg-white/5 text-slate-600 text-[9px] font-black uppercase tracking-[0.12em] px-3 py-1 rounded-full flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[12px]">lock</span> DATI MANCANTI
+</span>
+</div>
+<h3 class="text-lg font-bold text-slate-500 mb-1 tracking-[-0.01em]">Allegato Microclima</h3>
+<p class="text-[10px] text-slate-600 mb-8 leading-tight">Configura il modulo sensori per procedere</p>
+</div>
+<!-- 8. PEE -->
+<div class="premium-glass p-6 rounded-2xl group opacity-60 hover:opacity-100 opacity-0 animate-fade-up stagger-8">
+<div class="flex justify-between items-start mb-8">
+<div class="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-slate-500 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-3xl">notification_important</span>
+</div>
+<span class="bg-white/5 text-slate-500 text-[9px] font-black uppercase tracking-[0.12em] px-3 py-1 rounded-full border border-white/5">DA GENERARE</span>
+</div>
+<h3 class="text-lg font-bold text-white mb-1 tracking-[-0.01em]">PEE</h3>
+<p class="text-xs text-slate-400 mb-8">Piano Emergenza</p>
+<button class="text-[10px] font-black text-primary flex items-center gap-2 hover:translate-x-1 transition-transform tracking-widest">
+<span class="material-symbols-outlined text-sm">play_arrow</span> AVVIA ORA
+</button>
+</div>
+<!-- 9. HACCP -->
+<div class="premium-glass p-6 rounded-2xl group opacity-60 hover:opacity-100 opacity-0 animate-fade-up stagger-9">
+<div class="flex justify-between items-start mb-8">
+<div class="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-slate-500 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-3xl">restaurant</span>
+</div>
+<span class="bg-white/5 text-slate-500 text-[9px] font-black uppercase tracking-[0.12em] px-3 py-1 rounded-full border border-white/5">DA GENERARE</span>
+</div>
+<h3 class="text-lg font-bold text-white mb-1 tracking-[-0.01em]">HACCP</h3>
+<p class="text-xs text-slate-400 mb-8">Igiene Alimentare</p>
+<button class="text-[10px] font-black text-primary flex items-center gap-2 hover:translate-x-1 transition-transform tracking-widest">
+<span class="material-symbols-outlined text-sm">play_arrow</span> AVVIA ORA
+</button>
+</div>
+<!-- 10. DUVRI (Error) -->
+<div class="premium-glass p-6 rounded-2xl group error-ghost-pulse opacity-0 animate-fade-up stagger-10">
+<div class="flex justify-between items-start mb-8">
+<div class="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-500 group-hover:scale-110 transition-transform shadow-[0_0_20px_rgba(239,68,68,0.1)]">
+<span class="material-symbols-outlined text-3xl">handshake</span>
+</div>
+<span class="bg-red-500/10 text-red-500 text-[9px] font-black uppercase tracking-[0.12em] px-3 py-1 rounded-full border border-red-500/10">ERRORE</span>
+</div>
+<h3 class="text-lg font-bold text-white mb-1 tracking-[-0.01em]">DUVRI</h3>
+<p class="text-xs text-red-400/80 font-semibold mb-6">Dati contraente mancanti</p>
+<button class="w-full py-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-[10px] font-black tracking-widest hover:bg-red-500/20 transition-all uppercase">
+    RISOLVI ORA
+</button>
+</div>
+<!-- 11. POS -->
+<div class="premium-glass p-6 rounded-2xl group opacity-60 hover:opacity-100 opacity-0 animate-fade-up stagger-11">
+<div class="flex justify-between items-start mb-8">
+<div class="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-slate-500 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-3xl">engineering</span>
+</div>
+<span class="bg-white/5 text-slate-500 text-[9px] font-black uppercase tracking-[0.12em] px-3 py-1 rounded-full border border-white/5">DA GENERARE</span>
+</div>
+<h3 class="text-lg font-bold text-white mb-1 tracking-[-0.01em]">POS</h3>
+<p class="text-xs text-slate-400 mb-8">Sicurezza Operativa</p>
+<button class="text-[10px] font-black text-primary flex items-center gap-2 hover:translate-x-1 transition-transform tracking-widest">
+<span class="material-symbols-outlined text-sm">play_arrow</span> AVVIA ORA
+</button>
 </div>
 </div>
-<!-- Doc Stats -->
+<!-- RIGHT SLIDE-IN PANEL -->
+<aside class="fixed right-0 top-24 h-[calc(100%-6rem)] w-[360px] bg-[#0B1842]/40 backdrop-blur-[24px] border-l border-white/5 p-10 z-20 flex flex-col overflow-y-auto shadow-2xl">
+<div class="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent pointer-events-none"></div>
+<h4 class="text-[10px] font-mono uppercase tracking-[0.3em] text-slate-500 mb-8">Dettaglio Documento</h4>
+<div class="relative group rounded-2xl overflow-hidden mb-10 aspect-[3/4] shadow-[0_20px_50px_rgba(0,0,0,0.5)] transform hover:scale-[1.02] transition-all duration-500">
+<img class="w-full h-full object-cover grayscale-[20%] group-hover:grayscale-0 transition-all duration-700" data-alt="professional document cover page" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDgodfOxaxZylU_VEjdE5TCHLgnqwv34OcXegGYkiyIKz7N9l0UO3sVSzHxKEUrcLUYj8K6myqh8u6UVAU7itCxXBk71LV9vOqIe8HWXS6wjHxmn7ElTrPRhyM3jHKrBTovDWUfLKdgVLDJjBXqEXjlPWJUa9mYBaypXeLAAmYCepoc494S7sIF3mit8WrOx5P6hsnGCzoygpdxRRJxmCDeYb9hThscLeDPoGgKS6vlDnuEEzYGHk6IjuDTzngWaXj_5MVUiqBOFSQ"/>
+<div class="absolute inset-0 bg-gradient-to-t from-[#020F3A] via-transparent to-transparent opacity-80"></div>
+<div class="absolute bottom-6 left-6">
+<span class="text-white text-xl font-bold block tracking-tight">DVR Rischio Master</span>
+<span class="text-primary text-xs font-mono">v1.0.42</span>
+</div>
+</div>
+<div class="space-y-5 mb-10">
+<div class="flex justify-between items-center py-3 border-b border-white/5">
+<span class="text-xs text-slate-500 uppercase tracking-widest font-semibold">Generato il</span>
+<span class="text-xs font-mono font-medium text-white">01/04/2026</span>
+</div>
+<div class="flex justify-between items-center py-3 border-b border-white/5">
+<span class="text-xs text-slate-500 uppercase tracking-widest font-semibold">Peso File</span>
+<span class="text-xs font-mono font-medium text-white">4.8 MB</span>
+</div>
+<div class="flex justify-between items-center py-3 border-b border-white/5">
+<span class="text-xs text-slate-500 uppercase tracking-widest font-semibold">Validità</span>
+<span class="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Certificato
+</span>
+</div>
+</div>
 <div class="space-y-4">
-<div class="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-<div class="flex items-center gap-3">
-<span class="material-symbols-outlined text-primary" data-icon="auto_stories">auto_stories</span>
-<span class="text-xs font-medium text-slate-300">Pagine</span>
-</div>
-<span class="text-sm font-bold text-white">187</span>
-</div>
-<div class="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-<div class="flex items-center gap-3">
-<span class="material-symbols-outlined text-primary" data-icon="table_chart">table_chart</span>
-<span class="text-xs font-medium text-slate-300">Tabelle Normative</span>
-</div>
-<span class="text-sm font-bold text-white">111</span>
-</div>
-<div class="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-<div class="flex items-center gap-3">
-<span class="material-symbols-outlined text-primary" data-icon="save">save</span>
-<span class="text-xs font-medium text-slate-300">Dimensione</span>
-</div>
-<span class="text-sm font-bold text-white">4.8 MB</span>
-</div>
-</div>
-<!-- Action Buttons -->
-<div class="mt-auto space-y-3">
-<button class="w-full bg-primary text-background font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-95">
-<span class="material-symbols-outlined font-bold" data-icon="download">download</span>
-                        Scarica .docx
-                    </button>
-<button class="w-full bg-white/5 border border-white/10 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-white/10 transition-all active:scale-95">
-<span class="material-symbols-outlined" data-icon="cloud_upload">cloud_upload</span>
-                        Carica su Drive
-                    </button>
-<button class="w-full text-primary font-bold py-2 rounded-xl text-xs hover:bg-primary/5 transition-all">
-                        Apri Anteprima Completa
-                    </button>
+<button class="w-full py-4 rounded-2xl bg-emerald-500 text-[#003100] font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-emerald-500/20 group">
+<span class="material-symbols-outlined text-xl group-hover:scale-125 transition-transform">description</span> Scarica .docx
+</button>
+<button class="w-full py-4 rounded-2xl bg-primary text-[#001C3A] font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-primary/20 group">
+<span class="material-symbols-outlined text-xl group-hover:scale-125 transition-transform">cloud_upload</span> Carica su Drive
+</button>
+<button class="w-full py-4 rounded-2xl border border-white/10 text-white font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-white/5 transition-all group">
+<span class="material-symbols-outlined text-xl group-hover:scale-125 transition-transform">open_in_new</span> Anteprima
+</button>
+<button class="w-full py-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-500 font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-amber-500/20 transition-all group">
+<span class="material-symbols-outlined text-xl group-hover:rotate-180 transition-transform duration-500">refresh</span> Rigenera
+</button>
 </div>
 </aside>
-</section>
 </main>
-<!-- Floating Action for Mobile (Hidden by default in desktop layout but part of the design specs) -->
-<button class="fixed bottom-8 right-8 w-14 h-14 bg-primary text-background rounded-full shadow-2xl flex items-center justify-center lg:hidden z-[100]">
-<span class="material-symbols-outlined" data-icon="add">add</span>
-</button>
-</body></html>
+<!-- FOOTER TIMELINE LOG -->
+<footer class="fixed bottom-0 right-0 w-[calc(100%-16rem)] border-t border-white/5 bg-[#020F3A]/90 backdrop-blur-md flex justify-between items-center px-8 py-3 z-30">
+<div class="flex items-center gap-10 overflow-x-auto no-scrollbar py-1 space-x-4">
+<div class="flex items-center gap-3 whitespace-nowrap px-4 py-1.5 rounded-lg hover:bg-white/5 transition-colors">
+<span class="text-[10px] font-mono text-slate-500">14:28 —</span>
+<span class="material-symbols-outlined text-emerald-400 text-sm">check_circle</span>
+<span class="text-[10px] font-mono uppercase tracking-widest text-emerald-400">DVR Master generato (4.8 MB, 2m 34s)</span>
+</div>
+<div class="flex items-center gap-3 whitespace-nowrap px-4 py-1.5 rounded-lg hover:bg-white/5 transition-colors">
+<span class="text-[10px] font-mono text-slate-500">14:25 —</span>
+<span class="material-symbols-outlined text-emerald-400 text-sm">check_circle</span>
+<span class="text-[10px] font-mono uppercase tracking-widest text-emerald-400">Allegato MMC generato (1.2 MB, 45s)</span>
+</div>
+<div class="flex items-center gap-3 whitespace-nowrap px-4 py-1.5 rounded-lg hover:bg-white/5 transition-colors">
+<span class="text-[10px] font-mono text-slate-500">14:24 —</span>
+<span class="material-symbols-outlined text-blue-400 text-sm">rocket_launch</span>
+<span class="text-[10px] font-mono uppercase tracking-widest text-blue-400">Avviata generazione batch</span>
+</div>
+</div>
+<div class="flex items-center gap-8 pl-8 border-l border-white/10">
+<span class="text-[9px] font-mono text-slate-500 uppercase tracking-widest">Server status: <span class="text-emerald-400">OK</span></span>
+<span class="text-[9px] font-mono text-emerald-400/60 uppercase tracking-widest">Ultimo backup: 2m fa</span>
+</div>
+</footer>
+
+```</body></html>

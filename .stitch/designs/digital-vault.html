@@ -7,19 +7,110 @@
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Roboto:wght@300;400;500;700&amp;family=Nunito:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <style>
         .material-symbols-outlined {
             font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
         }
-        .glass-card {
-            background: rgba(39, 50, 93, 0.4);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+        
+        * {
+            transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
         }
+
         body {
             background-color: #020f3a;
             color: #FFFFFF;
+        }
+
+        .glass-card {
+            background: rgba(39, 50, 93, 0.35);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .stat-card-hover:hover {
+            transform: translateY(-4px);
+            border-color: rgba(165, 200, 255, 0.25);
+            box-shadow: 0 8px 32px rgba(165, 200, 255, 0.12);
+        }
+
+        .stat-card-hover:hover .bar-chunk {
+            transform: scaleY(1.1);
+        }
+
+        .bar-chunk:nth-child(1) { transition-delay: 50ms; }
+        .bar-chunk:nth-child(2) { transition-delay: 100ms; }
+        .bar-chunk:nth-child(3) { transition-delay: 150ms; }
+        .bar-chunk:nth-child(4) { transition-delay: 200ms; }
+        .bar-chunk:nth-child(5) { transition-delay: 250ms; }
+
+        .sidebar-gradient {
+            background: linear-gradient(to bottom, #0B1842, #060d2e);
+        }
+
+        .nav-active-glow {
+            border-left: 3px solid #a5c8ff;
+            box-shadow: -12px 0 20px -10px rgba(165, 200, 255, 0.4);
+        }
+
+        .heading-premium {
+            font-size: 2.75rem;
+            line-height: 1.1;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            background: linear-gradient(135deg, #FFFFFF 0%, #a5c8ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .tabular-nums {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .table-row-hover:hover {
+            transform: translateX(2px);
+            background: rgba(165, 200, 255, 0.03);
+            box-shadow: inset 2px 0 0 0 #a5c8ff;
+        }
+
+        @keyframes scroll {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        .animate-scroll {
+            animation: scroll 30s linear infinite;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { filter: drop-shadow(0 0 2px rgba(165, 200, 255, 0.4)); }
+            50% { filter: drop-shadow(0 0 12px rgba(165, 200, 255, 0.6)); }
+        }
+
+        .donut-glow {
+            animation: pulse-glow 3s ease-in-out infinite;
+        }
+
+        @keyframes border-beam {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .fab-container {
+            position: relative;
+            padding: 2px;
+            overflow: hidden;
+            border-radius: 1.25rem;
+        }
+        
+        .fab-beam {
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(from 0deg, transparent, #a5c8ff, transparent, #a5c8ff, transparent);
+            animation: border-beam 4s linear infinite;
+            top: -50%;
+            left: -50%;
         }
     </style>
 <script id="tailwind-config">
@@ -59,7 +150,7 @@
                 "on-surface-variant": "#c2c6d2",
                 "primary-fixed": "#d4e3ff",
                 "error": "#ffb4ab",
-                "outline-variant": "#424750",
+                "outline-variant": "rgba(255,255,255,0.08)",
                 "tertiary": "#ffb77e",
                 "on-background": "#dce1ff",
                 "surface-container-lowest": "#000a32",
@@ -77,19 +168,19 @@
                 "surface-container": "#101c46"
               },
               fontFamily: {
-                "headline": ["Nunito", "sans-serif"],
+                "headline": ["Plus Jakarta Sans", "Nunito", "sans-serif"],
                 "body": ["Roboto", "sans-serif"],
                 "label": ["Plus Jakarta Sans", "sans-serif"]
               },
-              borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+              borderRadius: {"DEFAULT": "0.5rem", "lg": "0.75rem", "xl": "1rem", "full": "9999px"},
             },
           },
         }
       </script>
 </head>
 <body class="font-body text-on-surface selection:bg-primary/30">
-<!-- SideNavBar (Authority: JSON & Design System) -->
-<aside class="h-screen w-64 fixed left-0 top-0 bg-[#0b1842]/60 backdrop-blur-xl flex flex-col py-8 px-4 z-50 shadow-[32px_0_64px_-4px_rgba(0,0,0,0.15)]">
+<!-- SideNavBar -->
+<aside class="h-screen w-64 fixed left-0 top-0 sidebar-gradient flex flex-col py-8 px-4 z-50 shadow-[32px_0_64px_-4px_rgba(0,0,0,0.15)]">
 <div class="mb-12 px-4 flex items-center gap-3">
 <div class="w-10 h-10 bg-gradient-to-tr from-primary-container to-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
 <span class="material-symbols-outlined text-on-primary text-2xl" data-icon="shield">shield</span>
@@ -99,257 +190,257 @@
 <p class="text-[10px] uppercase tracking-widest text-primary/70 font-label">Digital Vault</p>
 </div>
 </div>
-<nav class="flex-1 space-y-1">
-<a class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-white font-bold border-r-2 border-[#a5c8ff] bg-surface-container-high/30" href="#">
+<nav class="flex-1 space-y-2">
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-white font-bold nav-active-glow bg-surface-container-high/40" href="#">
 <span class="material-symbols-outlined text-lg" data-icon="dashboard">dashboard</span>
 <span class="font-label text-sm">Dashboard</span>
 </a>
-<a class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-[#c2c6d2] hover:bg-[#1b2751]/50 hover:text-white font-label text-sm" href="#">
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-[#c2c6d2] hover:bg-[#1b2751]/40 hover:text-white font-label text-sm" href="#">
 <span class="material-symbols-outlined text-lg" data-icon="business">business</span>
 <span class="font-label text-sm">Aziende</span>
 </a>
-<a class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-[#c2c6d2] hover:bg-[#1b2751]/50 hover:text-white font-label text-sm" href="#">
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-[#c2c6d2] hover:bg-[#1b2751]/40 hover:text-white font-label text-sm" href="#">
 <span class="material-symbols-outlined text-lg" data-icon="fact_check">fact_check</span>
 <span class="font-label text-sm">Sopralluoghi</span>
 </a>
-<a class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-[#c2c6d2] hover:bg-[#1b2751]/50 hover:text-white font-label text-sm justify-between" href="#">
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-[#c2c6d2] hover:bg-[#1b2751]/40 hover:text-white font-label text-sm justify-between" href="#">
 <div class="flex items-center gap-3">
 <span class="material-symbols-outlined text-lg" data-icon="description">description</span>
 <span class="font-label text-sm">Documenti</span>
 </div>
 <span class="bg-primary/20 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">12</span>
 </a>
-<a class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-[#c2c6d2] hover:bg-[#1b2751]/50 hover:text-white font-label text-sm" href="#">
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-[#c2c6d2] hover:bg-[#1b2751]/40 hover:text-white font-label text-sm" href="#">
 <span class="material-symbols-outlined text-lg" data-icon="science">science</span>
 <span class="font-label text-sm">SDS Chimiche</span>
 </a>
-<a class="mt-8 flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-[#c2c6d2] hover:bg-[#1b2751]/50 hover:text-white font-label text-sm" href="#">
+<a class="mt-8 flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-[#c2c6d2] hover:bg-[#1b2751]/40 hover:text-white font-label text-sm" href="#">
 <span class="material-symbols-outlined text-lg" data-icon="settings">settings</span>
 <span class="font-label text-sm">Impostazioni</span>
 </a>
 </nav>
-<div class="mt-auto px-4 pt-8">
-<div class="bg-surface-container-high/40 rounded-2xl p-4 glass-card border border-outline-variant/10">
-<p class="text-xs text-on-surface-variant font-body mb-3">Spazio di archiviazione</p>
-<div class="w-full h-1.5 bg-surface-container-lowest rounded-full overflow-hidden">
+<div class="mt-auto px-4 pt-10">
+<div class="bg-surface-container-high/30 rounded-2xl p-5 glass-card">
+<p class="text-xs text-on-surface-variant font-label mb-4">Spazio di archiviazione</p>
+<div class="w-full h-2 bg-surface-container-lowest rounded-full overflow-hidden">
 <div class="w-3/4 h-full bg-gradient-to-r from-primary to-primary-container"></div>
 </div>
-<p class="text-[10px] text-right mt-2 text-primary">75% di 10GB</p>
+<p class="text-[10px] text-right mt-3 text-primary font-bold">7.5GB / 10GB</p>
 </div>
 </div>
 </aside>
 <!-- Main Content Area -->
-<main class="ml-64 min-h-screen flex flex-col relative pb-12">
-<!-- TopNavBar (Authority: JSON & Design System) -->
-<header class="w-[calc(100%-16rem)] fixed top-0 h-20 bg-[#1b2751]/60 backdrop-blur-md flex justify-between items-center px-8 z-40">
+<main class="ml-64 min-h-screen flex flex-col relative pb-16">
+<!-- TopNavBar -->
+<header class="w-[calc(100%-16rem)] fixed top-0 h-20 bg-[#0b1842]/40 backdrop-blur-xl flex justify-between items-center px-8 z-40 border-b border-white/5">
 <div class="flex items-center w-full max-w-xl">
 <div class="w-full relative group">
 <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant" data-icon="search">search</span>
-<input class="w-full bg-surface-container-low border-none rounded-xl py-2.5 pl-12 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-1 focus:ring-primary/30 transition-all outline-none" placeholder="Cerca aziende, documenti o normative..." type="text"/>
+<input class="w-full bg-surface-container-low border-none rounded-xl py-3 pl-12 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/40 transition-all outline-none" placeholder="Cerca aziende, documenti o normative..." type="text"/>
 </div>
 </div>
 <div class="flex items-center gap-6">
 <button class="relative w-10 h-10 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-surface-container-high transition-all">
 <span class="material-symbols-outlined" data-icon="notifications">notifications</span>
-<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border-2 border-surface-container-high"></span>
+<span class="absolute top-2.5 right-2.5 w-2 h-2 bg-error rounded-full border-2 border-[#0b1842]"></span>
 </button>
-<div class="h-8 w-px bg-outline-variant/20"></div>
+<div class="h-8 w-px bg-outline-variant/10"></div>
 <div class="flex items-center gap-3 pl-2">
 <div class="text-right">
 <p class="text-xs font-bold text-white font-label">Luca M.</p>
-<p class="text-[10px] text-on-surface-variant">Safety Admin</p>
+<p class="text-[10px] text-on-surface-variant uppercase tracking-tighter">Safety Admin</p>
 </div>
-<img alt="Luca M." class="w-10 h-10 rounded-xl object-cover border border-primary/20" data-alt="portrait of a professional man in a dark navy suit, minimalist office background, sharp studio lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB-_3JICgbt-BT8SL1MA3TKxfGIxbBbMOW5v4qxpw1qN8-13LZLweQ4KlN526geiRy3HLYOWd70jnHoQAyxBDwRYinkheqrgIyP9EQz77UXBy_dfM41KyfqZVD-yzeLgZEsLNx0PIS6SdBgySGS6yxZK-vUc5uGJ4193P4WcxnJvrYo36OFRqXgJpkT96KuDAaWb9YKR39ivswI8opH9rz4OItsyV5eMExDQERYH1yBCVr2YDmXn-qD-PY_T54-31bpxfz5Vf2FHTc"/>
+<img alt="Luca M." class="w-10 h-10 rounded-xl object-cover border border-primary/10" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB-_3JICgbt-BT8SL1MA3TKxfGIxbBbMOW5v4qxpw1qN8-13LZLweQ4KlN526geiRy3HLYOWd70jnHoQAyxBDwRYinkheqrgIyP9EQz77UXBy_dfM41KyfqZVD-yzeLgZEsLNx0PIS6SdBgySGS6yxZK-vUc5uGJ4193P4WcxnJvrYo36OFRqXgJpkT96KuDAaWb9YKR39ivswI8opH9rz4OItsyV5eMExDQERYH1yBCVr2YDmXn-qD-PY_T54-31bpxfz5Vf2FHTc"/>
 </div>
 </div>
 </header>
 <!-- Page Content -->
-<div class="pt-28 px-8 flex-1">
+<div class="pt-32 px-10 flex-1">
 <!-- Welcome Header -->
-<div class="mb-10">
-<h2 class="text-3xl font-extrabold text-white font-headline tracking-tight">Benvenuto nel Caveau Digitale</h2>
-<p class="text-on-surface-variant mt-1 font-body">L'automazione della sicurezza sul lavoro per le tue aziende è aggiornata.</p>
+<div class="mb-12">
+<h2 class="heading-premium">Benvenuto nel Caveau Digitale</h2>
+<p class="text-on-surface-variant/80 mt-2 font-body text-lg">L'automazione della sicurezza sul lavoro per le tue aziende è aggiornata.</p>
 </div>
 <!-- Stat Cards Bento Grid -->
-<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
 <!-- Card 1 -->
-<div class="surface-container-high p-6 rounded-2xl border border-outline-variant/10 shadow-lg relative overflow-hidden group">
-<div class="absolute -right-4 -top-4 w-24 h-24 bg-primary/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-all"></div>
-<div class="flex justify-between items-start mb-4">
-<div class="p-2 bg-primary/10 rounded-lg">
+<div class="glass-card stat-card-hover p-7 rounded-2xl relative overflow-hidden group">
+<div class="absolute -right-8 -top-8 w-32 h-32 bg-primary/5 rounded-full blur-[40px]"></div>
+<div class="flex justify-between items-start mb-6">
+<div class="p-2.5 bg-primary/10 rounded-xl">
 <span class="material-symbols-outlined text-primary" data-icon="business">business</span>
 </div>
-<span class="text-xs font-bold text-primary flex items-center gap-1">
+<span class="text-xs font-bold text-primary flex items-center gap-1 bg-primary/5 px-2 py-1 rounded-full">
 <span class="material-symbols-outlined text-[14px]" data-icon="trending_up">trending_up</span> +2
-                        </span>
+                    </span>
 </div>
-<p class="text-3xl font-extrabold text-white font-headline">12</p>
-<p class="text-xs text-on-surface-variant font-label uppercase tracking-wider mt-1">Aziende Attive</p>
-<div class="mt-4 flex gap-1 items-end h-8">
-<div class="flex-1 bg-primary/30 h-1/2 rounded-sm"></div>
-<div class="flex-1 bg-primary/30 h-3/4 rounded-sm"></div>
-<div class="flex-1 bg-primary/30 h-2/3 rounded-sm"></div>
-<div class="flex-1 bg-primary h-full rounded-sm"></div>
-<div class="flex-1 bg-primary/50 h-5/6 rounded-sm"></div>
+<p class="text-[2.5rem] font-extrabold text-white font-headline tabular-nums leading-none">12</p>
+<p class="text-[10px] text-on-surface-variant font-label uppercase tracking-[0.15em] mt-2">Aziende Attive</p>
+<div class="mt-6 flex gap-1.5 items-end h-8">
+<div class="flex-1 bg-primary/30 h-1/2 rounded-sm bar-chunk"></div>
+<div class="flex-1 bg-primary/30 h-3/4 rounded-sm bar-chunk"></div>
+<div class="flex-1 bg-primary/30 h-2/3 rounded-sm bar-chunk"></div>
+<div class="flex-1 bg-primary h-full rounded-sm bar-chunk"></div>
+<div class="flex-1 bg-primary/50 h-5/6 rounded-sm bar-chunk"></div>
 </div>
 </div>
 <!-- Card 2 -->
-<div class="surface-container-high p-6 rounded-2xl border border-outline-variant/10 shadow-lg relative overflow-hidden group">
-<div class="absolute -right-4 -top-4 w-24 h-24 bg-primary/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-all"></div>
-<div class="flex justify-between items-start mb-4">
-<div class="p-2 bg-primary/10 rounded-lg">
+<div class="glass-card stat-card-hover p-7 rounded-2xl relative overflow-hidden group">
+<div class="absolute -right-8 -top-8 w-32 h-32 bg-primary/5 rounded-full blur-[40px]"></div>
+<div class="flex justify-between items-start mb-6">
+<div class="p-2.5 bg-primary/10 rounded-xl">
 <span class="material-symbols-outlined text-primary" data-icon="description">description</span>
 </div>
-<span class="text-xs font-bold text-primary flex items-center gap-1">
+<span class="text-xs font-bold text-primary flex items-center gap-1 bg-primary/5 px-2 py-1 rounded-full">
 <span class="material-symbols-outlined text-[14px]" data-icon="trending_up">trending_up</span> +8
-                        </span>
+                    </span>
 </div>
-<p class="text-3xl font-extrabold text-white font-headline">48</p>
-<p class="text-xs text-on-surface-variant font-label uppercase tracking-wider mt-1">Documenti Generati</p>
-<div class="mt-4 flex gap-1 items-end h-8">
-<div class="flex-1 bg-primary/30 h-1/3 rounded-sm"></div>
-<div class="flex-1 bg-primary/30 h-1/2 rounded-sm"></div>
-<div class="flex-1 bg-primary h-full rounded-sm"></div>
-<div class="flex-1 bg-primary/50 h-2/3 rounded-sm"></div>
-<div class="flex-1 bg-primary/80 h-3/4 rounded-sm"></div>
+<p class="text-[2.5rem] font-extrabold text-white font-headline tabular-nums leading-none">48</p>
+<p class="text-[10px] text-on-surface-variant font-label uppercase tracking-[0.15em] mt-2">Documenti Generati</p>
+<div class="mt-6 flex gap-1.5 items-end h-8">
+<div class="flex-1 bg-primary/30 h-1/3 rounded-sm bar-chunk"></div>
+<div class="flex-1 bg-primary/30 h-1/2 rounded-sm bar-chunk"></div>
+<div class="flex-1 bg-primary h-full rounded-sm bar-chunk"></div>
+<div class="flex-1 bg-primary/50 h-2/3 rounded-sm bar-chunk"></div>
+<div class="flex-1 bg-primary/80 h-3/4 rounded-sm bar-chunk"></div>
 </div>
 </div>
 <!-- Card 3 -->
-<div class="surface-container-high p-6 rounded-2xl border border-outline-variant/10 shadow-lg relative overflow-hidden group">
-<div class="absolute -right-4 -top-4 w-24 h-24 bg-tertiary/5 rounded-full blur-3xl group-hover:bg-tertiary/10 transition-all"></div>
-<div class="flex justify-between items-start mb-4">
-<div class="p-2 bg-tertiary/10 rounded-lg">
+<div class="glass-card stat-card-hover p-7 rounded-2xl relative overflow-hidden group">
+<div class="absolute -right-8 -top-8 w-32 h-32 bg-tertiary/5 rounded-full blur-[40px]"></div>
+<div class="flex justify-between items-start mb-6">
+<div class="p-2.5 bg-tertiary/10 rounded-xl">
 <span class="material-symbols-outlined text-tertiary" data-icon="fact_check">fact_check</span>
 </div>
-<span class="text-xs font-bold text-tertiary flex items-center gap-1">
+<span class="text-xs font-bold text-tertiary flex items-center gap-1 bg-tertiary/5 px-2 py-1 rounded-full">
 <span class="material-symbols-outlined text-[14px]" data-icon="trending_down">trending_down</span> -1
-                        </span>
+                    </span>
 </div>
-<p class="text-3xl font-extrabold text-white font-headline">3</p>
-<p class="text-xs text-on-surface-variant font-label uppercase tracking-wider mt-1">Sopralluoghi in Corso</p>
-<div class="mt-4 flex gap-1 items-end h-8">
-<div class="flex-1 bg-tertiary h-full rounded-sm"></div>
-<div class="flex-1 bg-tertiary/50 h-3/4 rounded-sm"></div>
-<div class="flex-1 bg-tertiary/30 h-1/2 rounded-sm"></div>
-<div class="flex-1 bg-tertiary/20 h-1/4 rounded-sm"></div>
-<div class="flex-1 bg-tertiary/40 h-2/3 rounded-sm"></div>
+<p class="text-[2.5rem] font-extrabold text-white font-headline tabular-nums leading-none">3</p>
+<p class="text-[10px] text-on-surface-variant font-label uppercase tracking-[0.15em] mt-2">Sopralluoghi In Corso</p>
+<div class="mt-6 flex gap-1.5 items-end h-8">
+<div class="flex-1 bg-tertiary h-full rounded-sm bar-chunk"></div>
+<div class="flex-1 bg-tertiary/50 h-3/4 rounded-sm bar-chunk"></div>
+<div class="flex-1 bg-tertiary/30 h-1/2 rounded-sm bar-chunk"></div>
+<div class="flex-1 bg-tertiary/20 h-1/4 rounded-sm bar-chunk"></div>
+<div class="flex-1 bg-tertiary/40 h-2/3 rounded-sm bar-chunk"></div>
 </div>
 </div>
 <!-- Card 4 -->
-<div class="surface-container-high p-6 rounded-2xl border border-outline-variant/10 shadow-lg relative overflow-hidden group">
-<div class="absolute -right-4 -top-4 w-24 h-24 bg-primary/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-all"></div>
-<div class="flex justify-between items-start mb-4">
-<div class="p-2 bg-primary/10 rounded-lg">
+<div class="glass-card stat-card-hover p-7 rounded-2xl relative overflow-hidden group">
+<div class="absolute -right-8 -top-8 w-32 h-32 bg-primary/5 rounded-full blur-[40px]"></div>
+<div class="flex justify-between items-start mb-6">
+<div class="p-2.5 bg-primary/10 rounded-xl">
 <span class="material-symbols-outlined text-primary" data-icon="science">science</span>
 </div>
-<span class="text-xs font-bold text-primary flex items-center gap-1">
+<span class="text-xs font-bold text-primary flex items-center gap-1 bg-primary/5 px-2 py-1 rounded-full">
 <span class="material-symbols-outlined text-[14px]" data-icon="trending_up">trending_up</span> +12
-                        </span>
+                    </span>
 </div>
-<p class="text-3xl font-extrabold text-white font-headline">127</p>
-<p class="text-xs text-on-surface-variant font-label uppercase tracking-wider mt-1">SDS Estratte</p>
-<div class="mt-4 flex gap-1 items-end h-8">
-<div class="flex-1 bg-primary/30 h-1/2 rounded-sm"></div>
-<div class="flex-1 bg-primary h-full rounded-sm"></div>
-<div class="flex-1 bg-primary/40 h-2/3 rounded-sm"></div>
-<div class="flex-1 bg-primary/60 h-3/4 rounded-sm"></div>
-<div class="flex-1 bg-primary/20 h-1/4 rounded-sm"></div>
+<p class="text-[2.5rem] font-extrabold text-white font-headline tabular-nums leading-none">127</p>
+<p class="text-[10px] text-on-surface-variant font-label uppercase tracking-[0.15em] mt-2">SDS Estratte</p>
+<div class="mt-6 flex gap-1.5 items-end h-8">
+<div class="flex-1 bg-primary/30 h-1/2 rounded-sm bar-chunk"></div>
+<div class="flex-1 bg-primary h-full rounded-sm bar-chunk"></div>
+<div class="flex-1 bg-primary/40 h-2/3 rounded-sm bar-chunk"></div>
+<div class="flex-1 bg-primary/60 h-3/4 rounded-sm bar-chunk"></div>
+<div class="flex-1 bg-primary/20 h-1/4 rounded-sm bar-chunk"></div>
 </div>
 </div>
 </div>
 <!-- Main Dashboard Layout -->
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-20">
-<!-- Recent Companies Table (2/3 width) -->
-<div class="lg:col-span-2 surface-container-low rounded-3xl p-8 border border-outline-variant/5 shadow-2xl">
-<div class="flex items-center justify-between mb-8">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-10 mb-24">
+<!-- Recent Companies Table -->
+<div class="lg:col-span-2 glass-card rounded-3xl p-8 min-h-[500px]">
+<div class="flex items-center justify-between mb-10">
 <div>
 <h3 class="text-xl font-bold text-white font-headline">Aziende Recenti</h3>
-<p class="text-xs text-on-surface-variant font-body">Ultimi aggiornamenti DVR e compliance</p>
+<p class="text-xs text-on-surface-variant/60 font-body mt-1">Ultimi aggiornamenti DVR e compliance</p>
 </div>
-<button class="text-primary hover:bg-primary/10 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2">
-                            Vedi tutte <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+<button class="text-primary hover:bg-primary/10 px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-primary/10 hover:border-primary/30">
+                        Vedi tutte <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
 </button>
 </div>
 <div class="overflow-x-auto">
 <table class="w-full text-left">
 <thead>
-<tr class="border-b border-outline-variant/10">
-<th class="pb-4 font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Nome Azienda</th>
-<th class="pb-4 font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Settore ATECO</th>
-<th class="pb-4 font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Stato DVR</th>
-<th class="pb-4 font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Data</th>
-<th class="pb-4 font-label text-[10px] uppercase tracking-widest text-on-surface-variant text-right">Azioni</th>
+<tr class="border-b border-white/5">
+<th class="pb-5 font-label text-[0.625rem] uppercase tracking-[0.15em] text-on-surface-variant/50">Nome Azienda</th>
+<th class="pb-5 font-label text-[0.625rem] uppercase tracking-[0.15em] text-on-surface-variant/50">Settore ATECO</th>
+<th class="pb-5 font-label text-[0.625rem] uppercase tracking-[0.15em] text-on-surface-variant/50">Stato DVR</th>
+<th class="pb-5 font-label text-[0.625rem] uppercase tracking-[0.15em] text-on-surface-variant/50">Data</th>
+<th class="pb-5 font-label text-[0.625rem] uppercase tracking-[0.15em] text-on-surface-variant/50 text-right">Azioni</th>
 </tr>
 </thead>
-<tbody class="divide-y divide-outline-variant/5">
-<tr class="hover:bg-surface-container-high/30 transition-all group">
-<td class="py-5">
-<div class="flex items-center gap-3">
-<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary font-bold text-xs">RC</div>
-<span class="text-sm font-medium text-white">Rossi Costruzioni SRL</span>
+<tbody class="divide-y divide-white/5">
+<tr class="table-row-hover group">
+<td class="py-6">
+<div class="flex items-center gap-3 pl-2">
+<div class="w-9 h-9 rounded-xl bg-surface-container-high/60 flex items-center justify-center text-primary font-bold text-xs border border-white/5">RC</div>
+<span class="text-sm font-semibold text-white">Rossi Costruzioni SRL</span>
 </div>
 </td>
-<td class="py-5 text-sm text-on-surface-variant font-body">41.2 (Edilizia)</td>
-<td class="py-5">
-<span class="px-2.5 py-1 rounded-full text-[10px] font-bold border border-primary/20 text-primary uppercase">Completato</span>
+<td class="py-6 text-sm text-on-surface-variant/70 font-body">41.2 (Edilizia)</td>
+<td class="py-6">
+<span class="px-3 py-1 rounded-full text-[10px] font-bold border border-primary/20 text-primary uppercase bg-primary/5">Completato</span>
 </td>
-<td class="py-5 text-sm text-on-surface-variant font-body">14 Ott 2023</td>
-<td class="py-5 text-right">
-<button class="w-8 h-8 rounded-lg hover:bg-primary/20 transition-all text-on-surface-variant hover:text-primary">
+<td class="py-6 text-sm text-on-surface-variant/70 font-body">14 Ott 2023</td>
+<td class="py-6 text-right pr-2">
+<button class="w-9 h-9 rounded-xl hover:bg-primary/20 text-on-surface-variant hover:text-primary border border-transparent hover:border-primary/20">
 <span class="material-symbols-outlined text-lg" data-icon="more_vert">more_vert</span>
 </button>
 </td>
 </tr>
-<tr class="hover:bg-surface-container-high/30 transition-all group">
-<td class="py-5">
-<div class="flex items-center gap-3">
-<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary font-bold text-xs">SM</div>
-<span class="text-sm font-medium text-white">Smart Logistics SpA</span>
+<tr class="table-row-hover group">
+<td class="py-6">
+<div class="flex items-center gap-3 pl-2">
+<div class="w-9 h-9 rounded-xl bg-surface-container-high/60 flex items-center justify-center text-primary font-bold text-xs border border-white/5">SM</div>
+<span class="text-sm font-semibold text-white">Smart Logistics SpA</span>
 </div>
 </td>
-<td class="py-5 text-sm text-on-surface-variant font-body">52.1 (Logistica)</td>
-<td class="py-5">
-<span class="px-2.5 py-1 rounded-full text-[10px] font-bold border border-tertiary/20 text-tertiary uppercase">In Corso</span>
+<td class="py-6 text-sm text-on-surface-variant/70 font-body">52.1 (Logistica)</td>
+<td class="py-6">
+<span class="px-3 py-1 rounded-full text-[10px] font-bold border border-tertiary/20 text-tertiary uppercase bg-tertiary/5">In Corso</span>
 </td>
-<td class="py-5 text-sm text-on-surface-variant font-body">12 Ott 2023</td>
-<td class="py-5 text-right">
-<button class="w-8 h-8 rounded-lg hover:bg-primary/20 transition-all text-on-surface-variant hover:text-primary">
+<td class="py-6 text-sm text-on-surface-variant/70 font-body">12 Ott 2023</td>
+<td class="py-6 text-right pr-2">
+<button class="w-9 h-9 rounded-xl hover:bg-primary/20 text-on-surface-variant hover:text-primary border border-transparent hover:border-primary/20">
 <span class="material-symbols-outlined text-lg" data-icon="more_vert">more_vert</span>
 </button>
 </td>
 </tr>
-<tr class="hover:bg-surface-container-high/30 transition-all group">
-<td class="py-5">
-<div class="flex items-center gap-3">
-<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary font-bold text-xs">GF</div>
-<span class="text-sm font-medium text-white">Green Factory Co.</span>
+<tr class="table-row-hover group">
+<td class="py-6">
+<div class="flex items-center gap-3 pl-2">
+<div class="w-9 h-9 rounded-xl bg-surface-container-high/60 flex items-center justify-center text-primary font-bold text-xs border border-white/5">GF</div>
+<span class="text-sm font-semibold text-white">Green Factory Co.</span>
 </div>
 </td>
-<td class="py-5 text-sm text-on-surface-variant font-body">10.3 (Alimentare)</td>
-<td class="py-5">
-<span class="px-2.5 py-1 rounded-full text-[10px] font-bold border border-outline/20 text-on-surface-variant uppercase">Bozza</span>
+<td class="py-6 text-sm text-on-surface-variant/70 font-body">10.3 (Alimentare)</td>
+<td class="py-6">
+<span class="px-3 py-1 rounded-full text-[10px] font-bold border border-white/10 text-on-surface-variant/60 uppercase bg-white/5">Bozza</span>
 </td>
-<td class="py-5 text-sm text-on-surface-variant font-body">10 Ott 2023</td>
-<td class="py-5 text-right">
-<button class="w-8 h-8 rounded-lg hover:bg-primary/20 transition-all text-on-surface-variant hover:text-primary">
+<td class="py-6 text-sm text-on-surface-variant/70 font-body">10 Ott 2023</td>
+<td class="py-6 text-right pr-2">
+<button class="w-9 h-9 rounded-xl hover:bg-primary/20 text-on-surface-variant hover:text-primary border border-transparent hover:border-primary/20">
 <span class="material-symbols-outlined text-lg" data-icon="more_vert">more_vert</span>
 </button>
 </td>
 </tr>
-<tr class="hover:bg-surface-container-high/30 transition-all group">
-<td class="py-5">
-<div class="flex items-center gap-3">
-<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary font-bold text-xs">MB</div>
-<span class="text-sm font-medium text-white">Medica Blue Clinic</span>
+<tr class="table-row-hover group">
+<td class="py-6">
+<div class="flex items-center gap-3 pl-2">
+<div class="w-9 h-9 rounded-xl bg-surface-container-high/60 flex items-center justify-center text-primary font-bold text-xs border border-white/5">MB</div>
+<span class="text-sm font-semibold text-white">Medica Blue Clinic</span>
 </div>
 </td>
-<td class="py-5 text-sm text-on-surface-variant font-body">86.1 (Sanità)</td>
-<td class="py-5">
-<span class="px-2.5 py-1 rounded-full text-[10px] font-bold border border-primary/20 text-primary uppercase">Completato</span>
+<td class="py-6 text-sm text-on-surface-variant/70 font-body">86.1 (Sanità)</td>
+<td class="py-6">
+<span class="px-3 py-1 rounded-full text-[10px] font-bold border border-primary/20 text-primary uppercase bg-primary/5">Completato</span>
 </td>
-<td class="py-5 text-sm text-on-surface-variant font-body">08 Ott 2023</td>
-<td class="py-5 text-right">
-<button class="w-8 h-8 rounded-lg hover:bg-primary/20 transition-all text-on-surface-variant hover:text-primary">
+<td class="py-6 text-sm text-on-surface-variant/70 font-body">08 Ott 2023</td>
+<td class="py-6 text-right pr-2">
+<button class="w-9 h-9 rounded-xl hover:bg-primary/20 text-on-surface-variant hover:text-primary border border-transparent hover:border-primary/20">
 <span class="material-symbols-outlined text-lg" data-icon="more_vert">more_vert</span>
 </button>
 </td>
@@ -358,76 +449,86 @@
 </table>
 </div>
 </div>
-<!-- Donut Chart "Documenti per Tipo" (1/3 width) -->
-<div class="surface-container-low rounded-3xl p-8 border border-outline-variant/5 shadow-2xl flex flex-col">
-<h3 class="text-xl font-bold text-white font-headline mb-8">Documenti per Tipo</h3>
+<!-- Donut Chart -->
+<div class="glass-card rounded-3xl p-8 flex flex-col relative overflow-hidden">
+<div class="absolute inset-0 bg-primary/5 blur-[80px] pointer-events-none"></div>
+<h3 class="text-xl font-bold text-white font-headline mb-10 relative">Documenti per Tipo</h3>
 <div class="relative flex-1 flex items-center justify-center">
-<!-- Custom SVG Donut -->
-<svg class="w-48 h-48 transform -rotate-90">
-<circle class="text-surface-container-high" cx="96" cy="96" fill="transparent" r="80" stroke="currentColor" stroke-width="14"></circle>
-<circle class="text-primary" cx="96" cy="96" fill="transparent" r="80" stroke="currentColor" stroke-dasharray="502" stroke-dashoffset="120" stroke-width="14"></circle>
-<circle class="text-tertiary-container" cx="96" cy="96" fill="transparent" r="80" stroke="currentColor" stroke-dasharray="502" stroke-dashoffset="350" stroke-width="14"></circle>
-<circle class="text-primary-container" cx="96" cy="96" fill="transparent" r="80" stroke="currentColor" stroke-dasharray="502" stroke-dashoffset="450" stroke-width="14"></circle>
+<svg class="w-52 h-52 transform -rotate-90 relative">
+<circle class="text-white/5" cx="104" cy="104" fill="transparent" r="84" stroke="currentColor" stroke-width="16"></circle>
+<circle class="text-primary donut-glow" cx="104" cy="104" fill="transparent" r="84" stroke="currentColor" stroke-dasharray="527" stroke-dashoffset="140" stroke-linecap="round" stroke-width="16"></circle>
+<circle class="text-tertiary/40" cx="104" cy="104" fill="transparent" r="84" stroke="currentColor" stroke-dasharray="527" stroke-dashoffset="380" stroke-linecap="round" stroke-width="16"></circle>
+<circle class="text-primary-container/60" cx="104" cy="104" fill="transparent" r="84" stroke="currentColor" stroke-dasharray="527" stroke-dashoffset="480" stroke-linecap="round" stroke-width="16"></circle>
 </svg>
 <div class="absolute inset-0 flex flex-col items-center justify-center">
-<span class="text-3xl font-extrabold text-white">48</span>
-<span class="text-[10px] text-on-surface-variant uppercase tracking-widest">Totali</span>
+<span class="text-4xl font-extrabold text-white tabular-nums">48</span>
+<span class="text-[10px] text-on-surface-variant/60 uppercase tracking-[0.2em] font-bold">Totali</span>
 </div>
 </div>
-<div class="grid grid-cols-2 gap-4 mt-8">
-<div class="flex items-center gap-2">
-<span class="w-2 h-2 rounded-full bg-primary"></span>
-<span class="text-xs text-on-surface-variant font-label">DVR Master</span>
+<div class="grid grid-cols-2 gap-5 mt-10 relative">
+<div class="flex items-center gap-3">
+<span class="w-2.5 h-2.5 rounded-full bg-primary shadow-[0_0_8px_rgba(165,200,255,0.4)]"></span>
+<span class="text-xs text-on-surface-variant/80 font-label">DVR Master</span>
 </div>
-<div class="flex items-center gap-2">
-<span class="w-2 h-2 rounded-full bg-tertiary-container"></span>
-<span class="text-xs text-on-surface-variant font-label">Allegati MMC</span>
+<div class="flex items-center gap-3">
+<span class="w-2.5 h-2.5 rounded-full bg-tertiary/40"></span>
+<span class="text-xs text-on-surface-variant/80 font-label">Allegati MMC</span>
 </div>
-<div class="flex items-center gap-2">
-<span class="w-2 h-2 rounded-full bg-primary-container"></span>
-<span class="text-xs text-on-surface-variant font-label">Stress/VDT</span>
+<div class="flex items-center gap-3">
+<span class="w-2.5 h-2.5 rounded-full bg-primary-container/60"></span>
+<span class="text-xs text-on-surface-variant/80 font-label">Stress/VDT</span>
 </div>
-<div class="flex items-center gap-2">
-<span class="w-2 h-2 rounded-full bg-surface-tint"></span>
-<span class="text-xs text-on-surface-variant font-label">PEE/HACCP</span>
-</div>
-</div>
-<button class="w-full mt-auto bg-surface-container-highest/50 py-3 rounded-xl border border-outline-variant/10 text-xs font-bold text-white hover:bg-surface-container-highest transition-all mt-8">
-                        Scarica Report Mensile
-                    </button>
+<div class="flex items-center gap-3">
+<span class="w-2.5 h-2.5 rounded-full bg-white/20"></span>
+<span class="text-xs text-on-surface-variant/80 font-label">Altro</span>
 </div>
 </div>
+<button class="w-full mt-10 bg-white/5 border border-white/5 py-3.5 rounded-xl text-xs font-bold text-white hover:bg-white/10 transition-all relative">
+                    Scarica Report Mensile
+                </button>
 </div>
-<!-- Footer / Timeline (Authority: JSON & Design System) -->
-<footer class="fixed bottom-0 right-0 w-[calc(100%-16rem)] h-12 bg-[#0b1842]/80 backdrop-blur-lg flex items-center justify-start px-8 gap-6 overflow-hidden z-40 border-t border-white/5">
-<span class="font-['Roboto'] text-[10px] uppercase tracking-widest text-[#a5c8ff] flex items-center gap-2 shrink-0">
+</div>
+</div>
+<!-- Footer / Timeline -->
+<footer class="fixed bottom-0 right-0 w-[calc(100%-16rem)] h-12 bg-[#060d2e]/90 backdrop-blur-xl flex items-center justify-start px-8 gap-8 overflow-hidden z-40 border-t border-white/5">
+<span class="font-label text-[10px] uppercase tracking-[0.2em] text-[#a5c8ff] flex items-center gap-3 shrink-0 font-bold">
 <span class="relative flex h-2 w-2">
 <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
 <span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
 </span>
-                LIVE UPDATES:
-            </span>
-<div class="flex items-center gap-8 animate-scroll">
-<div class="flex items-center gap-2 hover:text-[#a5c8ff] cursor-pointer transition-all">
-<span class="material-symbols-outlined text-[14px]" data-icon="description">description</span>
-<span class="font-['Roboto'] text-[10px] uppercase tracking-widest text-[#c2c6d2]">DVR generato per Rossi Costruzioni SRL</span>
+            LIVE UPDATES:
+        </span>
+<div class="flex items-center gap-12 animate-scroll whitespace-nowrap">
+<div class="flex items-center gap-3 hover:text-primary cursor-pointer transition-all">
+<span class="material-symbols-outlined text-[16px]" data-icon="description">description</span>
+<span class="font-body text-[10px] uppercase tracking-widest text-on-surface-variant/70">DVR generato per Rossi Costruzioni SRL</span>
 </div>
-<div class="flex items-center gap-2 hover:text-[#a5c8ff] cursor-pointer transition-all">
-<span class="material-symbols-outlined text-[14px]" data-icon="science">science</span>
-<span class="font-['Roboto'] text-[10px] uppercase tracking-widest text-[#c2c6d2]">Nuova SDS Chimica caricata</span>
+<div class="flex items-center gap-3 hover:text-primary cursor-pointer transition-all">
+<span class="material-symbols-outlined text-[16px]" data-icon="science">science</span>
+<span class="font-body text-[10px] uppercase tracking-widest text-on-surface-variant/70">Nuova SDS Chimica caricata: Smart Logistics</span>
 </div>
-<div class="flex items-center gap-2 hover:text-[#a5c8ff] cursor-pointer transition-all">
-<span class="material-symbols-outlined text-[14px]" data-icon="event">event</span>
-<span class="font-['Roboto'] text-[10px] uppercase tracking-widest text-[#c2c6d2]">Sopralluogo programmato: Smart Logistics</span>
+<div class="flex items-center gap-3 hover:text-primary cursor-pointer transition-all">
+<span class="material-symbols-outlined text-[16px]" data-icon="event">event</span>
+<span class="font-body text-[10px] uppercase tracking-widest text-on-surface-variant/70">Sopralluogo programmato: Green Factory Co.</span>
+</div>
+<!-- Duplicate for infinite scroll feel -->
+<div class="flex items-center gap-3 hover:text-primary cursor-pointer transition-all">
+<span class="material-symbols-outlined text-[16px]" data-icon="description">description</span>
+<span class="font-body text-[10px] uppercase tracking-widest text-on-surface-variant/70">DVR generato per Rossi Costruzioni SRL</span>
 </div>
 </div>
 </footer>
-<!-- Floating Action Button (Contextual Support) -->
-<button class="fixed bottom-20 right-10 w-16 h-16 bg-gradient-to-tr from-primary-container to-primary rounded-2xl flex items-center justify-center shadow-2xl shadow-primary/40 hover:scale-105 transition-transform group">
+<!-- Floating Action Button -->
+<div class="fixed bottom-20 right-10 group">
+<div class="fab-container">
+<div class="fab-beam"></div>
+<button class="relative w-16 h-16 bg-gradient-to-tr from-primary-container to-primary rounded-2xl flex items-center justify-center shadow-2xl shadow-primary/40 group-hover:scale-105 transition-transform">
 <span class="material-symbols-outlined text-3xl text-on-primary font-bold" data-icon="add">add</span>
-<div class="absolute right-20 bg-white text-surface py-2 px-4 rounded-xl text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-xl">
-                Nuovo Documento DVR
-            </div>
 </button>
+</div>
+<div class="absolute right-20 top-1/2 -translate-y-1/2 bg-white text-surface py-2.5 px-5 rounded-xl text-xs font-bold opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0 whitespace-nowrap pointer-events-none shadow-2xl">
+            Nuovo Documento DVR
+        </div>
+</div>
 </main>
 </body></html>
