@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="it"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>N2O × Niuexa — Analisi del Brand</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@700;800&amp;family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300;1,9..144,500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed": "#ffdcc3",
+                        "on-error-container": "#ffdad6",
+                        "on-primary-container": "#a9caff",
+                        "surface": "#131319",
+                        "error": "#ffb4ab",
+                        "surface-container": "#1f1f25",
+                        "on-tertiary-container": "#ffbb85",
+                        "on-surface-variant": "#c2c6d2",
+                        "on-surface": "#e4e1ea",
+                        "on-error": "#690005",
+                        "inverse-primary": "#295f9f",
+                        "secondary-fixed-dim": "#a5c8ff",
+                        "on-tertiary": "#4d2600",
+                        "inverse-on-surface": "#303036",
+                        "surface-dim": "#131319",
+                        "primary-container": "#1b5594",
+                        "secondary": "#a5c8ff",
+                        "primary": "#a5c8ff",
+                        "error-container": "#93000a",
+                        "surface-container-lowest": "#0e0e13",
+                        "surface-container-highest": "#35343b",
+                        "on-primary": "#00315e",
+                        "surface-container-high": "#2a2930",
+                        "on-primary-fixed": "#001c3a",
+                        "surface-variant": "#35343b",
+                        "background": "#131319",
+                        "on-secondary-fixed": "#001c3a",
+                        "on-secondary-container": "#94b7ed",
+                        "secondary-container": "#214877",
+                        "outline": "#8c919b",
+                        "tertiary-fixed-dim": "#ffb77e",
+                        "secondary-fixed": "#d4e3ff",
+                        "primary-fixed": "#d4e3ff",
+                        "tertiary-container": "#7b4819",
+                        "surface-container-low": "#1b1b21",
+                        "primary-fixed-dim": "#a5c8ff",
+                        "on-secondary-fixed-variant": "#214877",
+                        "surface-bright": "#39383f",
+                        "on-secondary": "#00315f",
+                        "on-tertiary-fixed": "#2f1500",
+                        "surface-tint": "#a5c8ff",
+                        "on-background": "#e4e1ea",
+                        "on-primary-fixed-variant": "#004785",
+                        "on-tertiary-fixed-variant": "#6b3b0b",
+                        "outline-variant": "#424750",
+                        "inverse-surface": "#e4e1ea",
+                        "tertiary": "#ffb77e"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Plus Jakarta Sans"],
+                        "body": ["Inter"],
+                        "label": ["Inter"],
+                        "editorial": ["Fraunces"],
+                        "mono": ["JetBrains Mono"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { background-color: #06060b; color: #e4e1ea; font-family: 'Inter', sans-serif; }
+        .headline { font-family: 'Plus Jakarta Sans', sans-serif; letter-spacing: -0.04em; }
+        .editorial { font-family: 'Fraunces', serif; font-optical-sizing: auto; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .glass { backdrop-filter: blur(24px); background: rgba(6, 6, 11, 0.6); }
+        .ghost-border { border: 1px solid rgba(255, 255, 255, 0.06); }
+        .ghost-border-strong { border: 1px solid rgba(255, 255, 255, 0.1); }
+        .text-gradient { background: linear-gradient(135deg, #a5c8ff 0%, #ffb77e 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .text-gradient-subtle { background: linear-gradient(180deg, #ffffff 0%, #c2c6d2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .ambient-glow { filter: blur(140px); background: radial-gradient(circle, rgba(27, 85, 148, 0.18) 0%, transparent 70%); }
+        .ambient-glow-warm { filter: blur(140px); background: radial-gradient(circle, rgba(255, 183, 126, 0.08) 0%, transparent 70%); }
+
+        .grid-bg {
+            background-image:
+                linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+            background-size: 72px 72px;
+            mask-image: radial-gradient(ellipse at center, black 40%, transparent 85%);
+            -webkit-mask-image: radial-gradient(ellipse at center, black 40%, transparent 85%);
+        }
+
+        .section-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 14px;
+            font-size: 10px;
+            letter-spacing: 0.24em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+        .section-label::before {
+            content: "";
+            width: 32px;
+            height: 1px;
+            background: linear-gradient(to right, transparent, rgba(165, 200, 255, 0.6));
+        }
+
+        .section-number {
+            font-family: 'Fraunces', serif;
+            font-style: italic;
+            font-weight: 300;
+            font-size: 120px;
+            line-height: 0.85;
+            background: linear-gradient(180deg, rgba(165, 200, 255, 0.28) 0%, rgba(165, 200, 255, 0) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            user-select: none;
+        }
+
+        .hairline { height: 1px; background: linear-gradient(to right, transparent, rgba(255,255,255,0.12), transparent); }
+
+        .swatch-card {
+            position: relative;
+            overflow: hidden;
+            border-radius: 0.75rem;
+            border: 1px solid rgba(255,255,255,0.06);
+            background: rgba(14,14,19,0.6);
+            backdrop-filter: blur(20px);
+            transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1), border-color 400ms;
+        }
+        .swatch-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(255,255,255,0.12);
+        }
+        .swatch-card:hover .swatch-pillar {
+            transform: scaleY(1.04);
+        }
+
+        .swatch-pillar {
+            transform-origin: bottom;
+            transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .type-specimen {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-weight: 800;
+            letter-spacing: -0.055em;
+            line-height: 0.85;
+            background: linear-gradient(180deg, #ffffff 0%, rgba(165, 200, 255, 0.4) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .mood-card {
+            position: relative;
+            overflow: hidden;
+            border-radius: 0.75rem;
+            border: 1px solid rgba(255,255,255,0.06);
+            aspect-ratio: 4 / 5;
+            transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .mood-card:hover { transform: translateY(-6px) scale(1.01); }
+
+        .mood-1 {
+            background:
+                radial-gradient(ellipse at top, rgba(27, 85, 148, 0.45) 0%, transparent 60%),
+                linear-gradient(180deg, #0a1636 0%, #040811 100%);
+        }
+        .mood-2 {
+            background:
+                radial-gradient(ellipse at top left, rgba(165, 200, 255, 0.25) 0%, transparent 55%),
+                linear-gradient(165deg, #131319 0%, #1f2a3f 100%);
+        }
+        .mood-3 {
+            background:
+                radial-gradient(ellipse at bottom right, rgba(255, 183, 126, 0.25) 0%, transparent 55%),
+                linear-gradient(200deg, #0e0e13 0%, #2a1f18 100%);
+        }
+        .mood-4 {
+            background:
+                linear-gradient(180deg, #0e0e13 0%, #0e0e13 60%, #1b5594 130%);
+        }
+
+        .value-card {
+            position: relative;
+            padding: 32px;
+            border-radius: 0.75rem;
+            background: rgba(14,14,19,0.4);
+            border: 1px solid rgba(255,255,255,0.06);
+            transition: all 500ms cubic-bezier(0.22, 1, 0.36, 1);
+            overflow: hidden;
+        }
+        .value-card::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(to right, transparent, rgba(165, 200, 255, 0.3), transparent);
+            opacity: 0;
+            transition: opacity 500ms;
+        }
+        .value-card:hover {
+            transform: translateY(-3px);
+            border-color: rgba(165, 200, 255, 0.18);
+            background: rgba(14,14,19,0.7);
+        }
+        .value-card:hover::before { opacity: 1; }
+
+        .do-row { border-left: 2px solid rgba(165, 200, 255, 0.6); }
+        .dont-row { border-left: 2px solid rgba(255, 120, 120, 0.4); }
+
+        @keyframes fade-up {
+            from { opacity: 0; transform: translateY(24px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-up { animation: fade-up 900ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .delay-1 { animation-delay: 80ms; }
+        .delay-2 { animation-delay: 160ms; }
+        .delay-3 { animation-delay: 240ms; }
+        .delay-4 { animation-delay: 320ms; }
+        .delay-5 { animation-delay: 400ms; }
+        .delay-6 { animation-delay: 480ms; }
+
+        .scroll-ticker {
+            mask-image: linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%);
+        }
+        @keyframes marquee {
+            from { transform: translateX(0); }
+            to { transform: translateX(-50%); }
+        }
+        .marquee-track { animation: marquee 60s linear infinite; }
+    </style>
+</head>
+<body class="overflow-x-hidden antialiased">
+
+<!-- Top Navigation Bar -->
+<nav class="fixed top-0 w-full z-50 bg-[#06060b]/60 backdrop-blur-xl">
+<div class="flex justify-between items-center px-12 py-6 w-full max-w-screen-2xl mx-auto">
+<a class="flex items-center" href="index.html">
+<img alt="N2O Sicurezza" class="h-8 opacity-90" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD207_VYISgg0KHJ3aa-OVpQ_LO0adwmVYyzERUCOp6LGYnG9HbM220pCS7YU26bFyxZhlndxUp5-9yQKf9xaBLJVdbLt6uihZhxv9g2TZywEvQ9ceVRhglLSaSSeildmpm2K1A_kJey0AMrl-nkMWoP75uIWIycoH_9qJfnv-jQpmcRjgtFnXIt1vZg_9cuoYQyLQboFUIZqjOpQED4LB9NFdWWgy3dy18_5Y657K3siyZkSmGkLyVhHV2aY2qNh2os7srAZfGUVs"/>
+</a>
+<div class="hidden md:flex gap-12 items-center">
+<a class="text-[#e4e1ea]/40 font-medium hover:text-[#a5c8ff] transition-all duration-500" href="index.html">DESIGN PROPOSALS</a>
+<a class="text-[#a5c8ff] font-bold border-b border-[#a5c8ff]/30 pb-1 hover:text-[#a5c8ff] transition-all duration-500" href="brand-analysis.html">BRAND ANALYSIS</a>
+</div>
+<button class="material-symbols-outlined text-[#e4e1ea]/40 md:hidden">menu</button>
+</div>
+</nav>
+
+<main class="relative pt-32 pb-24">
+
+<!-- Ambient glows -->
+<div class="absolute top-0 left-1/2 -translate-x-1/2 w-[1200px] h-[800px] ambient-glow pointer-events-none -z-10"></div>
+<div class="absolute top-[1200px] right-0 w-[600px] h-[600px] ambient-glow-warm pointer-events-none -z-10"></div>
+
+<!-- HERO SECTION -->
+<section class="relative max-w-7xl mx-auto px-8 mb-40">
+<div class="absolute inset-0 grid-bg pointer-events-none -z-10"></div>
+
+<div class="flex items-center justify-between mb-16 fade-up">
+<span class="section-label text-[#a5c8ff]">Brand Foundations · 2026</span>
+<span class="hidden md:block mono text-[10px] text-on-surface-variant/40 tracking-widest">DOC 00 / 09</span>
+</div>
+
+<div class="max-w-5xl fade-up delay-1">
+<h1 class="headline text-[72px] md:text-[128px] font-extrabold leading-[0.88] mb-10">
+<span class="text-gradient-subtle">Analisi del</span><br/>
+<span class="text-gradient">Brand N2O</span><span class="editorial italic font-light text-tertiary text-[56px] md:text-[96px] align-top">.</span>
+</h1>
+<p class="editorial italic text-2xl md:text-3xl font-light text-on-surface-variant max-w-3xl leading-snug mb-12">
+«Prima di disegnare una piattaforma, abbiamo ascoltato il brand. Questo documento è la trascrizione di quell'ascolto.»
+</p>
+
+<div class="hairline mb-8"></div>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-8 text-[11px]">
+<div>
+<div class="text-on-surface-variant/40 uppercase tracking-widest mb-2">Cliente</div>
+<div class="text-on-surface font-bold">N2O SRL</div>
+<div class="text-on-surface-variant/60 text-[10px] mt-0.5">Consulenza Sicurezza Lavoro</div>
+</div>
+<div>
+<div class="text-on-surface-variant/40 uppercase tracking-widest mb-2">Fonte Analisi</div>
+<div class="text-on-surface font-bold mono">n2o-sicurezza.it</div>
+<div class="text-on-surface-variant/60 text-[10px] mt-0.5">Sito corporate attuale</div>
+</div>
+<div>
+<div class="text-on-surface-variant/40 uppercase tracking-widest mb-2">Metodo</div>
+<div class="text-on-surface font-bold">Visual DNA Extraction</div>
+<div class="text-on-surface-variant/60 text-[10px] mt-0.5">4 fasi · framework Niuexa</div>
+</div>
+<div>
+<div class="text-on-surface-variant/40 uppercase tracking-widest mb-2">Redatto da</div>
+<div class="text-on-surface font-bold">Niuexa Studio</div>
+<div class="text-on-surface-variant/60 text-[10px] mt-0.5">Aprile 2026</div>
+</div>
+</div>
+</div>
+
+<!-- Intro body -->
+<div class="mt-32 max-w-3xl fade-up delay-2">
+<div class="flex gap-8">
+<div class="editorial italic text-[80px] leading-[0.85] text-[#a5c8ff]/30 font-light select-none">¶</div>
+<p class="text-lg text-on-surface-variant leading-relaxed">
+Questo documento non è un esercizio di stile. È la fondamenta su cui poggiano le quattro proposte di design che troverete nella sezione <span class="text-on-surface font-medium">Design Proposals</span>. Ogni scelta cromatica, ogni peso tipografico, ogni spaziatura nasce da una lettura attenta di <span class="mono text-[14px] text-[#a5c8ff]">n2o-sicurezza.it</span> e dei valori che N2O porta avanti da anni nel territorio. Il nostro obiettivo: tradurre in pixel ciò che già esiste come reputazione.
+</p>
+</div>
+</div>
+</section>
+
+<!-- Brand keywords marquee -->
+<section class="mb-40 scroll-ticker">
+<div class="flex gap-16 marquee-track whitespace-nowrap py-4 opacity-30 hover:opacity-60 transition-opacity duration-700">
+<span class="editorial italic text-5xl md:text-7xl font-light text-[#e4e1ea]">Competenza</span>
+<span class="material-symbols-outlined text-5xl md:text-7xl text-[#a5c8ff] self-center">circle</span>
+<span class="editorial italic text-5xl md:text-7xl font-light text-[#e4e1ea]">Rigore</span>
+<span class="material-symbols-outlined text-5xl md:text-7xl text-[#ffb77e] self-center">circle</span>
+<span class="editorial italic text-5xl md:text-7xl font-light text-[#e4e1ea]">Protezione</span>
+<span class="material-symbols-outlined text-5xl md:text-7xl text-[#a5c8ff] self-center">circle</span>
+<span class="editorial italic text-5xl md:text-7xl font-light text-[#e4e1ea]">Vigilanza</span>
+<span class="material-symbols-outlined text-5xl md:text-7xl text-[#ffb77e] self-center">circle</span>
+<span class="editorial italic text-5xl md:text-7xl font-light text-[#e4e1ea]">Conformità</span>
+<span class="material-symbols-outlined text-5xl md:text-7xl text-[#a5c8ff] self-center">circle</span>
+<span class="editorial italic text-5xl md:text-7xl font-light text-[#e4e1ea]">Esperienza</span>
+<span class="material-symbols-outlined text-5xl md:text-7xl text-[#ffb77e] self-center">circle</span>
+<!-- Duplicate for seamless loop -->
+<span class="editorial italic text-5xl md:text-7xl font-light text-[#e4e1ea]">Competenza</span>
+<span class="material-symbols-outlined text-5xl md:text-7xl text-[#a5c8ff] self-center">circle</span>
+<span class="editorial italic text-5xl md:text-7xl font-light text-[#e4e1ea]">Rigore</span>
+<span class="material-symbols-outlined text-5xl md:text-7xl text-[#ffb77e] self-center">circle</span>
+<span class="editorial italic text-5xl md:text-7xl font-light text-[#e4e1ea]">Protezione</span>
+<span class="material-symbols-outlined text-5xl md:text-7xl text-[#a5c8ff] self-center">circle</span>
+<span class="editorial italic text-5xl md:text-7xl font-light text-[#e4e1ea]">Vigilanza</span>
+<span class="material-symbols-outlined text-5xl md:text-7xl text-[#ffb77e] self-center">circle</span>
+<span class="editorial italic text-5xl md:text-7xl font-light text-[#e4e1ea]">Conformità</span>
+<span class="material-symbols-outlined text-5xl md:text-7xl text-[#a5c8ff] self-center">circle</span>
+<span class="editorial italic text-5xl md:text-7xl font-light text-[#e4e1ea]">Esperienza</span>
+<span class="material-symbols-outlined text-5xl md:text-7xl text-[#ffb77e] self-center">circle</span>
+</div>
+</section>
+
+<!-- 01 — METODOLOGIA -->
+<section class="relative max-w-7xl mx-auto px-8 mb-40">
+<div class="grid grid-cols-12 gap-8 mb-16">
+<div class="col-span-12 md:col-span-3">
+<div class="section-number">01</div>
+<div class="section-label text-[#a5c8ff] mt-2">Metodologia</div>
+</div>
+<div class="col-span-12 md:col-span-9">
+<h2 class="headline text-4xl md:text-5xl font-extrabold leading-[1.05] mb-6">Come leggiamo un brand esistente.</h2>
+<p class="text-on-surface-variant text-base leading-relaxed max-w-3xl">
+Un brand ha un DNA, anche quando non è stato formalmente codificato. Il nostro metodo consiste nell'estrarre quel DNA attraverso quattro fasi sequenziali, passando dall'osservazione del sito sorgente alla traduzione operativa in sistema di design. Ogni fase produce artefatti riutilizzabili.
+</p>
+</div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+<div class="value-card">
+<div class="flex items-center gap-3 mb-6">
+<div class="mono text-[10px] text-[#a5c8ff] tracking-widest">FASE 01</div>
+<div class="flex-1 h-px bg-white/5"></div>
+</div>
+<span class="material-symbols-outlined text-3xl text-[#a5c8ff] mb-4 block" style="font-variation-settings: 'FILL' 0, 'wght' 300;">visibility</span>
+<h3 class="headline text-xl font-bold mb-3">Osservazione</h3>
+<p class="text-[13px] text-on-surface-variant/70 leading-relaxed">
+Scansione visiva e strutturale del sito sorgente. Gerarchie, ricorrenze cromatiche, composizione, microcopy, immagini. Registriamo tutto senza giudicare.
+</p>
+</div>
+
+<div class="value-card">
+<div class="flex items-center gap-3 mb-6">
+<div class="mono text-[10px] text-[#a5c8ff] tracking-widest">FASE 02</div>
+<div class="flex-1 h-px bg-white/5"></div>
+</div>
+<span class="material-symbols-outlined text-3xl text-[#a5c8ff] mb-4 block" style="font-variation-settings: 'FILL' 0, 'wght' 300;">colorize</span>
+<h3 class="headline text-xl font-bold mb-3">Estrazione</h3>
+<p class="text-[13px] text-on-surface-variant/70 leading-relaxed">
+Isoliamo gli elementi fondativi — palette, tipografia, tono di voce, tic visivi ricorrenti — e li convertiamo in token riutilizzabili.
+</p>
+</div>
+
+<div class="value-card">
+<div class="flex items-center gap-3 mb-6">
+<div class="mono text-[10px] text-[#a5c8ff] tracking-widest">FASE 03</div>
+<div class="flex-1 h-px bg-white/5"></div>
+</div>
+<span class="material-symbols-outlined text-3xl text-[#a5c8ff] mb-4 block" style="font-variation-settings: 'FILL' 0, 'wght' 300;">hub</span>
+<h3 class="headline text-xl font-bold mb-3">Sintesi</h3>
+<p class="text-[13px] text-on-surface-variant/70 leading-relaxed">
+Codifichiamo il DNA del brand in principi applicabili — non in regole rigide. I principi reggono decisioni future, le regole invecchiano.
+</p>
+</div>
+
+<div class="value-card">
+<div class="flex items-center gap-3 mb-6">
+<div class="mono text-[10px] text-tertiary tracking-widest">FASE 04</div>
+<div class="flex-1 h-px bg-white/5"></div>
+</div>
+<span class="material-symbols-outlined text-3xl text-tertiary mb-4 block" style="font-variation-settings: 'FILL' 0, 'wght' 300;">design_services</span>
+<h3 class="headline text-xl font-bold mb-3">Traduzione</h3>
+<p class="text-[13px] text-on-surface-variant/70 leading-relaxed">
+Applichiamo i principi a quattro direzioni creative distinte, per esplorare lo spettro espressivo possibile senza tradire l'identità.
+</p>
+</div>
+</div>
+</section>
+
+<!-- 02 — POSIZIONAMENTO -->
+<section class="relative max-w-7xl mx-auto px-8 mb-40">
+<div class="grid grid-cols-12 gap-8 mb-16">
+<div class="col-span-12 md:col-span-3">
+<div class="section-number">02</div>
+<div class="section-label text-[#a5c8ff] mt-2">Posizionamento</div>
+</div>
+<div class="col-span-12 md:col-span-9">
+<h2 class="headline text-4xl md:text-5xl font-extrabold leading-[1.05] mb-6">Chi è N2O, davvero.</h2>
+<p class="text-on-surface-variant text-base leading-relaxed max-w-3xl">
+Il posizionamento non è uno slogan. È la descrizione onesta di quale ruolo il brand occupa nella testa del cliente e del lavoratore protetto. Abbiamo distillato l'essenza di N2O in un'unica frase che guida tutte le scelte visive successive.
+</p>
+</div>
+</div>
+
+<div class="relative max-w-5xl mx-auto">
+<!-- Decorative corners -->
+<div class="absolute -top-4 -left-4 w-12 h-12 border-t border-l border-[#a5c8ff]/30"></div>
+<div class="absolute -bottom-4 -right-4 w-12 h-12 border-b border-r border-[#a5c8ff]/30"></div>
+
+<div class="glass ghost-border-strong rounded-xl p-16 md:p-20 relative overflow-hidden">
+<div class="absolute top-8 left-8 editorial italic text-[120px] leading-none text-[#a5c8ff]/10 select-none">"</div>
+
+<blockquote class="editorial italic text-2xl md:text-4xl font-light leading-[1.25] text-on-surface relative z-10">
+N2O è una <span class="text-gradient not-italic font-medium headline">sentinella tecnica</span>: presenza discreta, competenza istituzionale, responsabilità silenziosa verso il lavoratore. Non grida — certifica.
+</blockquote>
+
+<div class="hairline my-10"></div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8 text-[13px]">
+<div>
+<div class="text-[10px] uppercase tracking-widest text-[#a5c8ff] font-bold mb-2">Non è</div>
+<p class="text-on-surface-variant/80 leading-relaxed">Un fornitore di servizi burocratici da commodity.</p>
+</div>
+<div>
+<div class="text-[10px] uppercase tracking-widest text-[#a5c8ff] font-bold mb-2">È</div>
+<p class="text-on-surface-variant/80 leading-relaxed">Un partner tecnico che risponde in sede ispettiva per voi.</p>
+</div>
+<div>
+<div class="text-[10px] uppercase tracking-widest text-[#a5c8ff] font-bold mb-2">Vuole essere</div>
+<p class="text-on-surface-variant/80 leading-relaxed">Il riferimento silenzioso che le aziende chiamano prima che succeda.</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- 03 — SISTEMA CROMATICO -->
+<section class="relative max-w-7xl mx-auto px-8 mb-40">
+<div class="grid grid-cols-12 gap-8 mb-16">
+<div class="col-span-12 md:col-span-3">
+<div class="section-number">03</div>
+<div class="section-label text-[#a5c8ff] mt-2">Sistema Cromatico</div>
+</div>
+<div class="col-span-12 md:col-span-9">
+<h2 class="headline text-4xl md:text-5xl font-extrabold leading-[1.05] mb-6">Cinque colori. Nessuno casuale.</h2>
+<p class="text-on-surface-variant text-base leading-relaxed max-w-3xl">
+Il sito attuale di N2O utilizza una palette ristretta e controllata — cinque colori, ciascuno con una funzione specifica. Questa economia cromatica è un punto di forza: segnala maturità e disciplina. L'abbiamo preservata e codificata.
+</p>
+</div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-12">
+
+<!-- Navy -->
+<div class="swatch-card p-6">
+<div class="swatch-pillar h-56 rounded-lg mb-6 ring-1 ring-white/5" style="background:#18244E;"></div>
+<div class="flex items-start justify-between mb-4">
+<div>
+<div class="text-[9px] uppercase tracking-widest text-on-surface-variant/40 mb-1">Primario 01</div>
+<div class="headline text-lg font-bold">Notte Istituzionale</div>
+</div>
+<div class="mono text-[10px] text-[#a5c8ff]">45%</div>
+</div>
+<div class="mono text-[11px] text-on-surface-variant/60 mb-4 border-t border-white/5 pt-3">#18244E</div>
+<p class="text-[11px] text-on-surface-variant/70 leading-relaxed">
+Il colore della vigilanza notturna e delle uniformi di protezione civile. Evoca rigore istituzionale e stabilità pluriennale. Fondamento visivo, mai decorazione.
+</p>
+</div>
+
+<!-- Blu -->
+<div class="swatch-card p-6">
+<div class="swatch-pillar h-56 rounded-lg mb-6 ring-1 ring-white/5" style="background:#1B5594;"></div>
+<div class="flex items-start justify-between mb-4">
+<div>
+<div class="text-[9px] uppercase tracking-widest text-on-surface-variant/40 mb-1">Primario 02</div>
+<div class="headline text-lg font-bold">Blu Competenza</div>
+</div>
+<div class="mono text-[10px] text-[#a5c8ff]">25%</div>
+</div>
+<div class="mono text-[11px] text-on-surface-variant/60 mb-4 border-t border-white/5 pt-3">#1B5594</div>
+<p class="text-[11px] text-on-surface-variant/70 leading-relaxed">
+Un blu vivo ma maturo, privo di tendenze pop. È il colore del tecnico che sa. Trasmette fiducia attiva senza scivolare nella freddezza corporate generica.
+</p>
+</div>
+
+<!-- Viola -->
+<div class="swatch-card p-6">
+<div class="swatch-pillar h-56 rounded-lg mb-6 ring-1 ring-white/5" style="background:#50485B;"></div>
+<div class="flex items-start justify-between mb-4">
+<div>
+<div class="text-[9px] uppercase tracking-widest text-on-surface-variant/40 mb-1">Secondario</div>
+<div class="headline text-lg font-bold">Grigio Meditativo</div>
+</div>
+<div class="mono text-[10px] text-[#a5c8ff]">10%</div>
+</div>
+<div class="mono text-[11px] text-on-surface-variant/60 mb-4 border-t border-white/5 pt-3">#50485B</div>
+<p class="text-[11px] text-on-surface-variant/70 leading-relaxed">
+Un viola desaturato che tende al grigio — l'unica concessione poetica del sistema. Introduce profondità senza rompere la serietà. Uso parsimonioso.
+</p>
+</div>
+
+<!-- Bianco -->
+<div class="swatch-card p-6">
+<div class="swatch-pillar h-56 rounded-lg mb-6 ring-1 ring-white/10" style="background:#FFFFFF;"></div>
+<div class="flex items-start justify-between mb-4">
+<div>
+<div class="text-[9px] uppercase tracking-widest text-on-surface-variant/40 mb-1">Superficie</div>
+<div class="headline text-lg font-bold">Trasparenza Operativa</div>
+</div>
+<div class="mono text-[10px] text-[#a5c8ff]">15%</div>
+</div>
+<div class="mono text-[11px] text-on-surface-variant/60 mb-4 border-t border-white/5 pt-3">#FFFFFF</div>
+<p class="text-[11px] text-on-surface-variant/70 leading-relaxed">
+Non decorativo: funzionale. È l'aria pulita del documento ufficiale, lo spazio in cui il contenuto tecnico può essere letto senza fatica cognitiva.
+</p>
+</div>
+
+<!-- Testo -->
+<div class="swatch-card p-6">
+<div class="swatch-pillar h-56 rounded-lg mb-6 ring-1 ring-white/5" style="background:#333333;"></div>
+<div class="flex items-start justify-between mb-4">
+<div>
+<div class="text-[9px] uppercase tracking-widest text-on-surface-variant/40 mb-1">Testo</div>
+<div class="headline text-lg font-bold">Grigio Ancora</div>
+</div>
+<div class="mono text-[10px] text-[#a5c8ff]">5%</div>
+</div>
+<div class="mono text-[11px] text-on-surface-variant/60 mb-4 border-t border-white/5 pt-3">#333333</div>
+<p class="text-[11px] text-on-surface-variant/70 leading-relaxed">
+Un nero ammorbidito, meno aggressivo del puro. Pensato per sessioni di lettura lunghe su documenti tecnici complessi. Non distrae, non affatica.
+</p>
+</div>
+</div>
+
+<!-- Distribution bar -->
+<div class="glass ghost-border rounded-xl p-8">
+<div class="flex items-center justify-between mb-4">
+<div class="text-[10px] uppercase tracking-widest text-on-surface-variant/50 font-bold">Distribuzione indicativa</div>
+<div class="text-[10px] text-on-surface-variant/40 mono">estratto da n2o-sicurezza.it</div>
+</div>
+<div class="flex h-3 rounded-full overflow-hidden ring-1 ring-white/5">
+<div class="h-full" style="background:#18244E; width:45%;" title="Navy"></div>
+<div class="h-full" style="background:#1B5594; width:25%;" title="Blu"></div>
+<div class="h-full" style="background:#FFFFFF; width:15%;" title="Bianco"></div>
+<div class="h-full" style="background:#50485B; width:10%;" title="Viola"></div>
+<div class="h-full" style="background:#333333; width:5%;" title="Testo"></div>
+</div>
+<div class="flex justify-between text-[9px] text-on-surface-variant/50 mono mt-3">
+<span>45% Navy</span>
+<span>25% Blu</span>
+<span>15% Bianco</span>
+<span>10% Viola</span>
+<span>5% Testo</span>
+</div>
+</div>
+</section>
+
+<!-- 04 — TIPOGRAFIA -->
+<section class="relative max-w-7xl mx-auto px-8 mb-40">
+<div class="grid grid-cols-12 gap-8 mb-16">
+<div class="col-span-12 md:col-span-3">
+<div class="section-number">04</div>
+<div class="section-label text-[#a5c8ff] mt-2">Tipografia</div>
+</div>
+<div class="col-span-12 md:col-span-9">
+<h2 class="headline text-4xl md:text-5xl font-extrabold leading-[1.05] mb-6">La voce scritta del brand.</h2>
+<p class="text-on-surface-variant text-base leading-relaxed max-w-3xl">
+Il sito attuale utilizza un sans-serif di sistema — una scelta neutra ma non distintiva. La gerarchia tipografica è funzionale, ma non trasmette il livello di expertise che N2O realmente possiede. Proponiamo un'evoluzione, non una rivoluzione.
+</p>
+</div>
+</div>
+
+<!-- Main type specimen -->
+<div class="relative glass ghost-border rounded-xl p-10 md:p-16 mb-8 overflow-hidden">
+<div class="absolute top-6 right-6 flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-[#a5c8ff] animate-pulse"></div>
+<span class="mono text-[10px] text-[#a5c8ff] tracking-widest">PRIMARY · DISPLAY</span>
+</div>
+
+<div class="type-specimen text-[100px] md:text-[180px] mb-8">Sicurezza</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8 pt-8 border-t border-white/5">
+<div>
+<div class="text-[10px] uppercase tracking-widest text-on-surface-variant/40 font-bold mb-2">Font Display</div>
+<div class="headline text-2xl font-extrabold mb-2">Plus Jakarta Sans</div>
+<div class="mono text-[10px] text-on-surface-variant/50">Extra Bold · 800</div>
+</div>
+<div class="md:col-span-2">
+<div class="text-[10px] uppercase tracking-widest text-on-surface-variant/40 font-bold mb-2">Razionale</div>
+<p class="text-[13px] text-on-surface-variant/80 leading-relaxed">
+Geometria moderna con umanismo calcolato. Le lettere hanno tagli decisi ma terminali aperti: trasmettono precisione tecnica senza sembrare fredde. Il peso Extra Bold crea titoli che si imprimono nella memoria del lettore, supportando l'autorevolezza istituzionale di N2O.
+</p>
+</div>
+</div>
+</div>
+
+<!-- Body type specimen -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="glass ghost-border rounded-xl p-10">
+<div class="flex items-center justify-between mb-6">
+<div class="text-[10px] uppercase tracking-widest text-on-surface-variant/40 font-bold">Body · Inter</div>
+<span class="mono text-[10px] text-[#a5c8ff]">400–600</span>
+</div>
+<div style="font-family: Inter, sans-serif;" class="text-4xl font-semibold mb-2 text-on-surface">Il DVR è un documento vivo.</div>
+<p class="text-sm text-on-surface-variant/80 leading-relaxed mb-6" style="font-family: Inter, sans-serif;">
+Ogni valutazione del rischio accompagna l'evoluzione dell'azienda. Il nostro lavoro è garantire che quel documento resti sempre aderente alla realtà operativa, non solo al giorno della stesura.
+</p>
+<div class="text-[11px] text-on-surface-variant/50 leading-relaxed border-t border-white/5 pt-4">
+<span class="font-semibold text-on-surface/70">Perché Inter.</span> Ottimizzato per schermi, eccellente nelle dimensioni ridotte. Garantisce leggibilità su tabelle, form, documenti generati. La sua neutralità intelligente permette al contenuto di essere protagonista.
+</div>
+</div>
+
+<div class="glass ghost-border rounded-xl p-10">
+<div class="flex items-center justify-between mb-6">
+<div class="text-[10px] uppercase tracking-widest text-on-surface-variant/40 font-bold">Editoriale · Fraunces</div>
+<span class="mono text-[10px] text-tertiary">Italic · 300</span>
+</div>
+<div class="editorial italic text-4xl font-light mb-2 text-on-surface">«Protezione è un gesto quotidiano.»</div>
+<p class="text-sm text-on-surface-variant/80 leading-relaxed mb-6 editorial italic font-light">
+Un accento editoriale riservato ai momenti in cui il brand parla con voce umana — citazioni, principi, dichiarazioni di valore. Non è font primario: è ornamento calcolato.
+</p>
+<div class="text-[11px] text-on-surface-variant/50 leading-relaxed border-t border-white/5 pt-4" style="font-family: Inter, sans-serif;">
+<span class="font-semibold text-on-surface/70">Perché Fraunces.</span> Un serif variabile contemporaneo con riferimenti alle grazie classiche italiane. Porta calore e carattere editoriale senza scadere nel retrò. Uso selettivo.
+</div>
+</div>
+</div>
+</section>
+
+<!-- 05 — VALORI -->
+<section class="relative max-w-7xl mx-auto px-8 mb-40">
+<div class="grid grid-cols-12 gap-8 mb-16">
+<div class="col-span-12 md:col-span-3">
+<div class="section-number">05</div>
+<div class="section-label text-[#a5c8ff] mt-2">Valori</div>
+</div>
+<div class="col-span-12 md:col-span-9">
+<h2 class="headline text-4xl md:text-5xl font-extrabold leading-[1.05] mb-6">Sei pilastri, una bussola.</h2>
+<p class="text-on-surface-variant text-base leading-relaxed max-w-3xl">
+I valori non sono aggettivi per la homepage — sono criteri decisionali. Quando dovremo scegliere tra due soluzioni di interfaccia, tra due toni di voce, tra due gerarchie, questi sei pilastri ci diranno qual è la risposta corretta per N2O.
+</p>
+</div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+<div class="value-card">
+<div class="flex items-start justify-between mb-6">
+<span class="material-symbols-outlined text-2xl text-[#a5c8ff]" style="font-variation-settings: 'FILL' 0, 'wght' 300;">gavel</span>
+<span class="mono text-[9px] text-on-surface-variant/40">I</span>
+</div>
+<h3 class="headline text-xl font-bold mb-3">Competenza Normativa</h3>
+<p class="text-[13px] text-on-surface-variant/70 leading-relaxed">
+Conoscenza approfondita del D.Lgs. 81/2008 e aggiornamento continuo sulla legislazione. La precisione tecnica è il nostro vantaggio non replicabile.
+</p>
+</div>
+
+<div class="value-card">
+<div class="flex items-start justify-between mb-6">
+<span class="material-symbols-outlined text-2xl text-[#a5c8ff]" style="font-variation-settings: 'FILL' 0, 'wght' 300;">verified</span>
+<span class="mono text-[9px] text-on-surface-variant/40">II</span>
+</div>
+<h3 class="headline text-xl font-bold mb-3">Rigore Operativo</h3>
+<p class="text-[13px] text-on-surface-variant/70 leading-relaxed">
+Ogni documento prodotto è conforme, verificato, difendibile in sede ispettiva. Nessuna scorciatoia, nessun copia-incolla standardizzato.
+</p>
+</div>
+
+<div class="value-card">
+<div class="flex items-start justify-between mb-6">
+<span class="material-symbols-outlined text-2xl text-tertiary" style="font-variation-settings: 'FILL' 0, 'wght' 300;">diversity_3</span>
+<span class="mono text-[9px] text-on-surface-variant/40">III</span>
+</div>
+<h3 class="headline text-xl font-bold mb-3">Tutela Umana</h3>
+<p class="text-[13px] text-on-surface-variant/70 leading-relaxed">
+Dietro ogni analisi di rischio c'è una persona da proteggere. Questa è la bussola che distingue l'adempimento dalla cura reale del lavoratore.
+</p>
+</div>
+
+<div class="value-card">
+<div class="flex items-start justify-between mb-6">
+<span class="material-symbols-outlined text-2xl text-[#a5c8ff]" style="font-variation-settings: 'FILL' 0, 'wght' 300;">history_edu</span>
+<span class="mono text-[9px] text-on-surface-variant/40">IV</span>
+</div>
+<h3 class="headline text-xl font-bold mb-3">Affidabilità Storica</h3>
+<p class="text-[13px] text-on-surface-variant/70 leading-relaxed">
+Anni di casi trattati, un archivio di esperienza che informa ogni nuova valutazione. Non siamo arrivati ieri, e si vede.
+</p>
+</div>
+
+<div class="value-card">
+<div class="flex items-start justify-between mb-6">
+<span class="material-symbols-outlined text-2xl text-[#a5c8ff]" style="font-variation-settings: 'FILL' 0, 'wght' 300;">school</span>
+<span class="mono text-[9px] text-on-surface-variant/40">V</span>
+</div>
+<h3 class="headline text-xl font-bold mb-3">Chiarezza Pedagogica</h3>
+<p class="text-[13px] text-on-surface-variant/70 leading-relaxed">
+Tradurre la complessità normativa in strumenti operativi comprensibili per l'imprenditore e per chi lavora in campo. Se non si capisce, non funziona.
+</p>
+</div>
+
+<div class="value-card">
+<div class="flex items-start justify-between mb-6">
+<span class="material-symbols-outlined text-2xl text-tertiary" style="font-variation-settings: 'FILL' 0, 'wght' 300;">shield_moon</span>
+<span class="mono text-[9px] text-on-surface-variant/40">VI</span>
+</div>
+<h3 class="headline text-xl font-bold mb-3">Presenza Discreta</h3>
+<p class="text-[13px] text-on-surface-variant/70 leading-relaxed">
+Partner di fondo, non fornitore rumoroso. Agiamo prima che il problema diventi incidente. Il miglior risultato è quello di cui nessuno si accorge.
+</p>
+</div>
+</div>
+</section>
+
+<!-- 06 — TONO DI VOCE -->
+<section class="relative max-w-7xl mx-auto px-8 mb-40">
+<div class="grid grid-cols-12 gap-8 mb-16">
+<div class="col-span-12 md:col-span-3">
+<div class="section-number">06</div>
+<div class="section-label text-[#a5c8ff] mt-2">Tono di Voce</div>
+</div>
+<div class="col-span-12 md:col-span-9">
+<h2 class="headline text-4xl md:text-5xl font-extrabold leading-[1.05] mb-6">Come parla N2O.</h2>
+<p class="text-on-surface-variant text-base leading-relaxed max-w-3xl">
+Il tono di voce è l'unica cosa che rimane quando il logo sparisce. Abbiamo definito quattro polarità che descrivono come N2O comunica — e, per renderle operative, abbiamo scritto gli esempi concreti di cosa dire e cosa evitare.
+</p>
+</div>
+</div>
+
+<!-- Four polarities -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+
+<div class="glass ghost-border rounded-xl p-8">
+<div class="flex items-baseline justify-between mb-6">
+<div class="editorial italic text-4xl font-light text-[#a5c8ff]">Formale</div>
+<div class="text-[10px] mono text-on-surface-variant/40">ma non distante</div>
+</div>
+<p class="text-[13px] text-on-surface-variant/70 leading-relaxed">
+Usiamo il «Voi» istituzionale, ma parliamo di persone — non di codici fiscali né di numeri di pratica. La formalità è rispetto, non freddezza burocratica.
+</p>
+</div>
+
+<div class="glass ghost-border rounded-xl p-8">
+<div class="flex items-baseline justify-between mb-6">
+<div class="editorial italic text-4xl font-light text-[#a5c8ff]">Tecnico</div>
+<div class="text-[10px] mono text-on-surface-variant/40">ma accessibile</div>
+</div>
+<p class="text-[13px] text-on-surface-variant/70 leading-relaxed">
+Citiamo gli articoli di legge con precisione chirurgica, poi spieghiamo cosa significano nella pratica quotidiana dell'officina, del cantiere, dell'ufficio.
+</p>
+</div>
+
+<div class="glass ghost-border rounded-xl p-8">
+<div class="flex items-baseline justify-between mb-6">
+<div class="editorial italic text-4xl font-light text-tertiary">Rassicurante</div>
+<div class="text-[10px] mono text-on-surface-variant/40">ma fattuale</div>
+</div>
+<p class="text-[13px] text-on-surface-variant/70 leading-relaxed">
+Non minimizziamo il rischio. Lo nominiamo, lo valutiamo, lo mitighiamo. La vera rassicurazione nasce dall'aver visto il problema in faccia, non dall'averlo nascosto.
+</p>
+</div>
+
+<div class="glass ghost-border rounded-xl p-8">
+<div class="flex items-baseline justify-between mb-6">
+<div class="editorial italic text-4xl font-light text-tertiary">Autorevole</div>
+<div class="text-[10px] mono text-on-surface-variant/40">ma non paternalistico</div>
+</div>
+<p class="text-[13px] text-on-surface-variant/70 leading-relaxed">
+La nostra esperienza è un servizio, non una lezione dall'alto. Non diciamo «noi sappiamo, voi no». Diciamo «mettiamo a disposizione ciò che abbiamo imparato».
+</p>
+</div>
+</div>
+
+<!-- Do vs Don't -->
+<div class="glass ghost-border rounded-xl p-10">
+<div class="flex items-center gap-4 mb-8">
+<div class="text-[10px] uppercase tracking-widest text-on-surface-variant/40 font-bold">Esempi operativi</div>
+<div class="flex-1 h-px bg-white/5"></div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+<!-- DO -->
+<div>
+<div class="flex items-center gap-3 mb-6">
+<div class="w-8 h-8 rounded-full bg-[#a5c8ff]/10 ring-1 ring-[#a5c8ff]/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm text-[#a5c8ff]">check</span>
+</div>
+<div class="text-[11px] uppercase tracking-widest text-[#a5c8ff] font-bold">Diciamo così</div>
+</div>
+<div class="space-y-5">
+<div class="do-row pl-5">
+<p class="text-[14px] text-on-surface leading-relaxed mb-1">«Abbiamo mappato 47 rischi nella vostra struttura produttiva. 12 richiedono intervento immediato.»</p>
+<p class="text-[10px] text-on-surface-variant/50 italic">→ Dati concreti, gerarchia chiara, azione implicita.</p>
+</div>
+<div class="do-row pl-5">
+<p class="text-[14px] text-on-surface leading-relaxed mb-1">«Il DVR è un documento vivo che accompagna l'evoluzione dell'azienda.»</p>
+<p class="text-[10px] text-on-surface-variant/50 italic">→ Metafora tecnica, non commerciale.</p>
+</div>
+<div class="do-row pl-5">
+<p class="text-[14px] text-on-surface leading-relaxed mb-1">«L'articolo 28 del D.Lgs. 81/2008 richiede la valutazione di tutti i rischi. Nessuna esclusione.»</p>
+<p class="text-[10px] text-on-surface-variant/50 italic">→ Citazione normativa + traduzione diretta.</p>
+</div>
+</div>
+</div>
+
+<!-- DON'T -->
+<div>
+<div class="flex items-center gap-3 mb-6">
+<div class="w-8 h-8 rounded-full bg-error/10 ring-1 ring-error/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm text-error">close</span>
+</div>
+<div class="text-[11px] uppercase tracking-widest text-error font-bold">Evitiamo</div>
+</div>
+<div class="space-y-5">
+<div class="dont-row pl-5">
+<p class="text-[14px] text-on-surface/50 leading-relaxed mb-1 line-through decoration-error/40">«Non preoccupatevi, vediamo di sistemare tutto con calma.»</p>
+<p class="text-[10px] text-on-surface-variant/50 italic">→ Minimizza, non rassicura. Suona dilettantistico.</p>
+</div>
+<div class="dont-row pl-5">
+<p class="text-[14px] text-on-surface/50 leading-relaxed mb-1 line-through decoration-error/40">«Il DVR è un obbligo burocratico da chiudere in fretta.»</p>
+<p class="text-[10px] text-on-surface-variant/50 italic">→ Tradisce la nostra missione fondamentale.</p>
+</div>
+<div class="dont-row pl-5">
+<p class="text-[14px] text-on-surface/50 leading-relaxed mb-1 line-through decoration-error/40">«La nostra soluzione innovativa rivoluziona la sicurezza!»</p>
+<p class="text-[10px] text-on-surface-variant/50 italic">→ Linguaggio da startup, incompatibile con la nostra gravitas.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- 07 — ATMOSFERA VISIVA -->
+<section class="relative max-w-7xl mx-auto px-8 mb-40">
+<div class="grid grid-cols-12 gap-8 mb-16">
+<div class="col-span-12 md:col-span-3">
+<div class="section-number">07</div>
+<div class="section-label text-[#a5c8ff] mt-2">Atmosfera</div>
+</div>
+<div class="col-span-12 md:col-span-9">
+<h2 class="headline text-4xl md:text-5xl font-extrabold leading-[1.05] mb-6">Quattro sensazioni-guida.</h2>
+<p class="text-on-surface-variant text-base leading-relaxed max-w-3xl">
+Prima di pensare ai pixel, abbiamo scelto quattro atmosfere che il brand N2O deve evocare. Sono sensazioni — non regole grafiche — ma ogni scelta di layout, ombra, transizione deve poter essere ricondotta ad almeno una di queste quattro.
+</p>
+</div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+
+<div class="mood-card mood-1 p-8 flex flex-col justify-between">
+<div>
+<div class="mono text-[10px] text-[#a5c8ff]/60 tracking-widest mb-4">ATMOSFERA · I</div>
+<div class="editorial italic text-3xl font-light text-white leading-[1.1] mb-3">Vigilanza<br/>Silenziosa</div>
+</div>
+<div>
+<div class="hairline mb-4" style="background: linear-gradient(to right, rgba(165, 200, 255, 0.3), transparent);"></div>
+<p class="text-[11px] text-white/60 leading-relaxed">L'estetica del corpo di guardia che non dorme. Dark, profondo, sempre attivo.</p>
+</div>
+</div>
+
+<div class="mood-card mood-2 p-8 flex flex-col justify-between">
+<div>
+<div class="mono text-[10px] text-[#a5c8ff]/60 tracking-widest mb-4">ATMOSFERA · II</div>
+<div class="editorial italic text-3xl font-light text-white leading-[1.1] mb-3">Precisione<br/>Clinica</div>
+</div>
+<div>
+<div class="hairline mb-4" style="background: linear-gradient(to right, rgba(165, 200, 255, 0.3), transparent);"></div>
+<p class="text-[11px] text-white/60 leading-relaxed">La pulizia del referto, la chiarezza del dato. Ordine, griglia, leggibilità estrema.</p>
+</div>
+</div>
+
+<div class="mood-card mood-3 p-8 flex flex-col justify-between">
+<div>
+<div class="mono text-[10px] text-tertiary/70 tracking-widest mb-4">ATMOSFERA · III</div>
+<div class="editorial italic text-3xl font-light text-white leading-[1.1] mb-3">Esperienza<br/>Stratificata</div>
+</div>
+<div>
+<div class="hairline mb-4" style="background: linear-gradient(to right, rgba(255, 183, 126, 0.3), transparent);"></div>
+<p class="text-[11px] text-white/60 leading-relaxed">Il calore discreto di chi ha visto molti cantieri. Accenti caldi, materiali, profondità.</p>
+</div>
+</div>
+
+<div class="mood-card mood-4 p-8 flex flex-col justify-between">
+<div>
+<div class="mono text-[10px] text-[#a5c8ff]/60 tracking-widest mb-4">ATMOSFERA · IV</div>
+<div class="editorial italic text-3xl font-light text-white leading-[1.1] mb-3">Infrastruttura<br/>Moderna</div>
+</div>
+<div>
+<div class="hairline mb-4" style="background: linear-gradient(to right, rgba(165, 200, 255, 0.3), transparent);"></div>
+<p class="text-[11px] text-white/60 leading-relaxed">La solidità delle istituzioni del ventunesimo secolo. Architettonica, strutturata, duratura.</p>
+</div>
+</div>
+</div>
+</section>
+
+<!-- 08 — TRADUZIONE NEL PRODOTTO -->
+<section class="relative max-w-7xl mx-auto px-8 mb-32">
+<div class="grid grid-cols-12 gap-8 mb-16">
+<div class="col-span-12 md:col-span-3">
+<div class="section-number">08</div>
+<div class="section-label text-[#a5c8ff] mt-2">Traduzione</div>
+</div>
+<div class="col-span-12 md:col-span-9">
+<h2 class="headline text-4xl md:text-5xl font-extrabold leading-[1.05] mb-6">Dall'analisi al pixel.</h2>
+<p class="text-on-surface-variant text-base leading-relaxed max-w-3xl">
+Ogni concept di design che troverete nella sezione Design Proposals è una lente diversa sullo stesso DNA. Non quattro brand diversi, ma quattro modi legittimi di raccontare lo stesso N2O. Scegliere uno significa scegliere quale lato del brand enfatizzare per primo.
+</p>
+</div>
+</div>
+
+<div class="space-y-4">
+
+<!-- Mapping row 1 -->
+<div class="glass ghost-border rounded-xl p-6 md:p-8 flex flex-col md:flex-row md:items-center gap-6 hover:border-[#a5c8ff]/20 transition-all duration-500 group">
+<div class="mono text-[10px] text-[#a5c8ff] tracking-widest md:w-24 flex-shrink-0">CONCEPT 01</div>
+<div class="md:w-64 flex-shrink-0">
+<div class="headline text-2xl font-bold">Digital Vault</div>
+<div class="text-[11px] text-on-surface-variant/50 mono">Cassaforte digitale</div>
+</div>
+<div class="flex-1 text-[13px] text-on-surface-variant/80 leading-relaxed">
+Enfatizza <span class="text-[#a5c8ff] font-semibold">Vigilanza Silenziosa</span> + <span class="text-[#a5c8ff] font-semibold">Presenza Discreta</span>. Glass-morphism profondo e gradienti notturni traducono l'idea di protezione inviolabile.
+</div>
+<a href="digital-vault.html" class="text-[#a5c8ff] text-[11px] font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">ESPLORA →</a>
+</div>
+
+<!-- Mapping row 2 -->
+<div class="glass ghost-border rounded-xl p-6 md:p-8 flex flex-col md:flex-row md:items-center gap-6 hover:border-[#a5c8ff]/20 transition-all duration-500 group">
+<div class="mono text-[10px] text-tertiary tracking-widest md:w-24 flex-shrink-0">CONCEPT 02</div>
+<div class="md:w-64 flex-shrink-0">
+<div class="headline text-2xl font-bold">Sentinel DVR</div>
+<div class="text-[11px] text-on-surface-variant/50 mono">Centro di comando</div>
+</div>
+<div class="flex-1 text-[13px] text-on-surface-variant/80 leading-relaxed">
+Enfatizza <span class="text-tertiary font-semibold">Precisione Clinica</span> + <span class="text-tertiary font-semibold">Rigore Operativo</span>. Badge di stato dinamici e densità controllata evocano un pannello di monitoraggio istituzionale.
+</div>
+<a href="sentinel-dvr.html" class="text-tertiary text-[11px] font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">ESPLORA →</a>
+</div>
+
+<!-- Mapping row 3 -->
+<div class="glass ghost-border rounded-xl p-6 md:p-8 flex flex-col md:flex-row md:items-center gap-6 hover:border-[#a5c8ff]/20 transition-all duration-500 group">
+<div class="mono text-[10px] text-[#a5c8ff] tracking-widest md:w-24 flex-shrink-0">CONCEPT 03</div>
+<div class="md:w-64 flex-shrink-0">
+<div class="headline text-2xl font-bold">Digital Guardian</div>
+<div class="text-[11px] text-on-surface-variant/50 mono">Sicurezza editoriale</div>
+</div>
+<div class="flex-1 text-[13px] text-on-surface-variant/80 leading-relaxed">
+Enfatizza <span class="text-[#a5c8ff] font-semibold">Chiarezza Pedagogica</span> + <span class="text-[#a5c8ff] font-semibold">Esperienza Stratificata</span>. Layout light-mode con sidebar navy privilegia la leggibilità dei contenuti normativi complessi.
+</div>
+<a href="digital-guardian.html" class="text-[#a5c8ff] text-[11px] font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">ESPLORA →</a>
+</div>
+
+<!-- Mapping row 4 -->
+<div class="glass ghost-border rounded-xl p-6 md:p-8 flex flex-col md:flex-row md:items-center gap-6 hover:border-[#a5c8ff]/20 transition-all duration-500 group">
+<div class="mono text-[10px] text-emerald-400 tracking-widest md:w-24 flex-shrink-0">CONCEPT 04</div>
+<div class="md:w-64 flex-shrink-0">
+<div class="headline text-2xl font-bold">Vigilant Curator</div>
+<div class="text-[11px] text-on-surface-variant/50 mono">Minimalismo funzionale</div>
+</div>
+<div class="flex-1 text-[13px] text-on-surface-variant/80 leading-relaxed">
+Enfatizza <span class="text-emerald-400 font-semibold">Tutela Umana</span> + <span class="text-emerald-400 font-semibold">Infrastruttura Moderna</span>. Approccio organico e accenti verdi portano l'attenzione sul benessere del lavoratore come esito finale.
+</div>
+<a href="vigilant-curator.html" class="text-emerald-400 text-[11px] font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">ESPLORA →</a>
+</div>
+</div>
+
+<!-- CTA -->
+<div class="mt-20 text-center">
+<div class="inline-flex flex-col items-center">
+<div class="editorial italic text-xl text-on-surface-variant/60 mb-6">Adesso che conoscete il DNA,</div>
+<a href="index.html" class="group inline-flex items-center gap-4 px-10 py-5 rounded-full bg-gradient-to-r from-[#1B5594] to-[#18244E] ghost-border-strong hover:from-[#1B5594]/90 hover:to-[#18244E]/90 transition-all duration-500 hover:scale-[1.02]">
+<span class="headline text-lg font-bold text-white">Esplora le quattro proposte</span>
+<span class="material-symbols-outlined text-white group-hover:translate-x-1 transition-transform duration-500">arrow_forward</span>
+</a>
+</div>
+</div>
+</section>
+
+</main>
+
+<!-- Footer -->
+<footer class="w-full py-16 px-8 mt-24 border-t border-white/5 bg-[#06060b]">
+<div class="max-w-7xl mx-auto flex flex-col items-center text-center">
+<div class="flex items-center gap-3 mb-6">
+<img alt="N2O Sicurezza" class="h-6" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCE2_LdMG6RsByX5_PUDiVWK3GC59fTu5sS_9PQk8CnHNAoMux4FFSEKDoIfvwZF0cczPHrItmgLUbUcr6BE1KLOYq2tpd1zmORYGz7a7klnitBhghbdP4NT3MMOFYxYrUqHhEd3_d8kR6Fcg_ukUXSBaZaA1TcTlUP0SUkiKitqyKOgqgj8tVFyMlW2hCgc1_45rD8QrZv5Z3NHQAHHBx5fxDNeAsO_xRqwLbKCPusem1boNbN-I3Jz6Uv9KHa0jT5R7p51dfLRVA"/>
+<span class="text-on-surface-variant/40 font-light text-xl">x</span>
+<span class="text-lg font-bold text-[#e4e1ea] headline">Niuexa</span>
+</div>
+<div class="text-sm font-medium text-[#e4e1ea]/60 mb-8">
+                Analisi del brand · Documento riservato — Aprile 2026
+            </div>
+<div class="max-w-3xl">
+<p class="text-[11px] font-body text-[#e4e1ea]/30 italic leading-relaxed">
+                    Nota: le presenti sono proposte di design visivo. Menu, grafici, tabelle e dati mostrati sono puramente illustrativi e non rappresentano il contenuto finale della piattaforma.
+                </p>
+</div>
+</div>
+</footer>
+
+</body></html>
