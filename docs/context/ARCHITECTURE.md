@@ -26,13 +26,13 @@
         │              │               │
    ┌────▼────┐   ┌────▼────┐   ┌─────▼─────┐
    │ Postgres │   │  Redis  │   │  OpenAI   │
-   │ Supabase │   │ Render  │   │ GPT-4.1   │
+   │ Render   │   │ Render  │   │ GPT-4.1   │
    └─────────┘   └─────────┘   └───────────┘
         │
    ┌────▼──────────┐
-   │ Supabase       │
-   │ Storage        │
-   │ (SDS, photos)  │
+   │ Render Disk    │
+   │ (SDS, photos,  │
+   │  generated docs)│
    └───────┬───────┘
            │
    ┌───────▼───────┐
@@ -65,8 +65,8 @@
 | Data tables | **TanStack Table v8** | Headless table logic — sorting, filtering, pagination, column visibility for risk assessment tables |
 | Charts | **Recharts** | Risk level visualizations, dashboard KPIs, NIOSH zone charts |
 | Forms | **React Hook Form + Zod** | Performant form handling with schema validation — critical for the multi-step survey |
-| Theme | **Dark/Light + Custom** | CSS variables-based theming with shadcn/ui, user preference saved |
-| Fonts | **Inter + JetBrains Mono** | Clean sans-serif for UI, monospace for data/codes |
+| Theme | **"Digital Guardian" Light (default) + Dark toggle** | Light mode: #F8F9FC background, #003D74 navy primary, #A5C8FF accent. CSS variables via shadcn/ui, user preference saved. Tonal layering (no hard borders), gradient CTAs, ambient whisper shadows, glassmorphism for modals |
+| Fonts | **Plus Jakarta Sans + Inter** | Plus Jakarta Sans for headings (600-700 weight), Inter for body/labels/data (400-500 weight). JetBrains Mono only for code snippets if needed |
 
 ### Key UI Patterns
 
@@ -137,7 +137,7 @@ app/
 | Migrations | **Alembic** | Industry standard for SQLAlchemy schema migrations |
 | Task queue | **Celery + Redis** | Document generation runs async (187-page .docx takes time) |
 | Validation | **Pydantic v2** | Native FastAPI integration, JSON Schema generation, ~5x faster than v1 |
-| Auth | **JWT + OAuth2** | FastAPI security utilities, Supabase Auth integration |
+| Auth | **NextAuth.js v5 + JWT** | Auth.js handles login/session on frontend, FastAPI verifies JWT |
 | CORS | **FastAPI CORS middleware** | Allow frontend origin (Vercel) |
 
 ### API Structure
@@ -274,23 +274,34 @@ Reference Data
   GET    /api/v1/reference/risks/{env_type}       # Risk library by environment
   GET    /api/v1/reference/equipment/{env_type}    # Equipment checklists
   GET    /api/v1/reference/niosh-tables            # NIOSH lookup tables
+
+Settings & Admin
+  GET    /api/v1/settings/profile                  # Current user profile
+  PUT    /api/v1/settings/profile                  # Update profile (name, password)
+  GET    /api/v1/settings/preferences              # Theme, language preferences
+  PUT    /api/v1/settings/preferences              # Save theme/language
+  GET    /api/v1/admin/users                       # List users (admin only)
+  POST   /api/v1/admin/users/invite                # Invite new user (admin only)
+  PUT    /api/v1/admin/users/{uid}/role             # Change user role (admin only)
+  DELETE /api/v1/admin/users/{uid}                  # Remove user (admin only)
+  CRUD   /api/v1/admin/risk-library                 # Manage standard risk items
+  CRUD   /api/v1/admin/templates                    # Manage document templates
+  GET    /api/v1/admin/ai-prompts                   # View AI system prompts
+  PUT    /api/v1/admin/ai-prompts                   # Edit AI system prompts
 ```
 
 ---
 
-## 3. Database — PostgreSQL (Supabase)
+## 3. Database — PostgreSQL (Render)
 
-### Why Supabase
+### Why Render Postgres
 
 | Feature | Benefit for this project |
 |---------|------------------------|
-| Hosted PostgreSQL | No DB admin, automatic backups, EU region available |
-| Auth | Built-in JWT auth with email/password + Google OAuth |
-| Storage | S3-compatible buckets for SDS PDFs, photos, generated docs |
-| Row Level Security | Multi-tenant data isolation per client company |
-| Realtime | WebSocket subscriptions for document generation progress |
-| Dashboard | Visual data browser for debugging and support |
-| Edge Functions | Optional serverless for webhooks |
+| Hosted PostgreSQL | Managed DB on Render, automatic backups, same platform as backend |
+| Co-location | DB + backend + Redis + Disk all on Render — low latency, simple networking |
+| Alembic migrations | Full migration control via SQLAlchemy + Alembic |
+| Dashboard | Render dashboard for metrics, logs, and management |
 
 ### Schema Design (Key Tables)
 
@@ -425,7 +436,7 @@ CREATE TABLE documenti_generati (
     tipo_documento TEXT NOT NULL,         -- 'dvr_master', 'allegato_mmc', etc.
     versione INTEGER DEFAULT 1,
     status TEXT DEFAULT 'pending',        -- pending/generating/ready/error
-    file_path TEXT,                       -- Supabase Storage path
+    file_path TEXT,                       -- Render Disk path
     gdrive_file_id TEXT,                 -- Google Drive file ID (after upload)
     generation_started_at TIMESTAMPTZ,
     generation_completed_at TIMESTAMPTZ,
@@ -434,19 +445,16 @@ CREATE TABLE documenti_generati (
 );
 ```
 
-### Row Level Security (Multi-Tenant)
+### Multi-Tenant Data Isolation
 
-```sql
--- Users can only see data belonging to their organization
-ALTER TABLE aziende ENABLE ROW LEVEL SECURITY;
+```python
+# All DB queries scoped to user's organization via SQLAlchemy
+# FastAPI dependency extracts organization_id from JWT claims
+async def get_current_org(user: User = Depends(get_current_user)) -> UUID:
+    return user.organization_id
 
-CREATE POLICY "Users see own org data" ON aziende
-    FOR ALL
-    USING (organization_id = (
-        SELECT organization_id FROM users WHERE id = auth.uid()
-    ));
-
--- Same pattern applied to all tables via azienda_id chain
+# Applied to all CRUD operations as a filter
+query = select(Azienda).where(Azienda.organization_id == org_id)
 ```
 
 ---
@@ -561,7 +569,7 @@ Document Generator Pipeline:
          │
          ▼
   ┌─────────────┐
-  │ Output       │  ← Save to Supabase Storage
+  │ Output       │  ← Save to Render Disk
   │ .docx file   │     Upload to Google Drive
   └─────────────┘     Update status in documenti_generati
 ```
@@ -581,9 +589,9 @@ Document Generator Pipeline:
 
 | File Type | Storage | Lifecycle |
 |-----------|---------|-----------|
-| SDS PDFs (uploaded) | Supabase Storage `/sds/{azienda_id}/` | Permanent — reference material |
-| Site photos (uploaded) | Supabase Storage `/photos/{azienda_id}/` | Permanent — embedded in docs |
-| Generated .docx | Supabase Storage `/documents/{azienda_id}/` | Versioned — keep all versions |
+| SDS PDFs (uploaded) | Render Disk `/data/sds/{azienda_id}/` | Permanent — reference material |
+| Site photos (uploaded) | Render Disk `/data/photos/{azienda_id}/` | Permanent — embedded in docs |
+| Generated .docx | Render Disk `/data/documents/{azienda_id}/` | Versioned — keep all versions |
 | Final delivery | Google Drive (client folder) | Uploaded after operator approval |
 | Document templates | Git repo `/templates/` | Version controlled |
 
@@ -591,22 +599,30 @@ Document Generator Pipeline:
 
 ## 7. Authentication & Authorization
 
-### Strategy: Supabase Auth + FastAPI JWT Verification
+### Strategy: NextAuth.js v5 (Auth.js) + FastAPI JWT Verification
 
 ```
 ┌──────────┐     ┌──────────┐     ┌──────────┐
-│ Frontend  │────▶│ Supabase │────▶│ FastAPI   │
-│ Next.js   │     │ Auth     │     │ Verify    │
+│ Frontend  │────▶│ NextAuth │────▶│ FastAPI   │
+│ Next.js   │     │ Auth.js  │     │ Verify    │
 │           │◀────│ JWT      │     │ JWT       │
 └──────────┘     └──────────┘     └──────────┘
 ```
 
-1. User logs in via Supabase Auth (email/password or Google OAuth)
-2. Frontend receives JWT access + refresh tokens
-3. Frontend sends JWT in `Authorization: Bearer` header
-4. FastAPI middleware verifies JWT signature with Supabase public key
+1. User logs in via NextAuth.js (email/password with Credentials provider, or Google OAuth)
+2. NextAuth issues JWT session token (stored in HTTP-only cookie)
+3. Frontend sends JWT in `Authorization: Bearer` header to API calls
+4. FastAPI middleware verifies JWT signature with shared `AUTH_SECRET`
 5. User's `organization_id` extracted from JWT claims
 6. All DB queries scoped to that organization
+
+### NextAuth Configuration
+
+- **Session strategy**: JWT (stateless, no session table needed)
+- **Providers**: Credentials (email/password with bcrypt), Google OAuth
+- **Database adapter**: Drizzle or Prisma adapter for user/account tables in Render Postgres
+- **JWT callback**: Enriches token with `organization_id` and `role` claims
+- **Packages**: `next-auth@5`, `@auth/core`
 
 ### Roles
 
@@ -642,19 +658,16 @@ Document Generator Pipeline:
 │  │ Web Service       │  │ Background       │        │
 │  │ (auto-scale)      │  │ Service          │        │
 │  └──────────────────┘  └──────────────────┘        │
+│  ┌──────────────────┐  ┌──────────────────┐        │
+│  │ PostgreSQL        │  │ Redis            │        │
+│  │ Database          │  │ (task queue +    │        │
+│  │                   │  │  caching)        │        │
+│  └──────────────────┘  └──────────────────┘        │
 │  ┌──────────────────┐                               │
-│  │ Redis             │                               │
-│  │ (task queue +     │                               │
-│  │  caching)         │                               │
+│  │ Render Disk       │                               │
+│  │ (file uploads +   │                               │
+│  │  generated docs)  │                               │
 │  └──────────────────┘                               │
-└─────────────────────────────────────────────────────┘
-                        │
-┌─────────────────────────────────────────────────────┐
-│                   Supabase (EU Region)               │
-│  ┌──────────────┐ ┌───────────┐ ┌────────────┐     │
-│  │ PostgreSQL   │ │ Auth      │ │ Storage    │     │
-│  │ Database     │ │ (JWT)     │ │ (S3-compat)│     │
-│  └──────────────┘ └───────────┘ └────────────┘     │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -663,9 +676,7 @@ Document Generator Pipeline:
 ```bash
 # Backend (.env)
 DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/dbname
-SUPABASE_URL=https://xxxxx.supabase.co
-SUPABASE_KEY=eyJ...
-SUPABASE_JWT_SECRET=your-jwt-secret
+AUTH_SECRET=your-shared-jwt-secret        # Shared with NextAuth for JWT verification
 
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL_EXTRACTION=gpt-4.1
@@ -677,11 +688,13 @@ GOOGLE_DRIVE_FOLDER_ID=13aHCy8D78JwJzgffxYbqe7Nmyed84may
 
 REDIS_URL=redis://...
 CORS_ORIGINS=["https://n2o-dvr.vercel.app"]
+FILE_STORAGE_PATH=/data                   # Render Disk mount path
 
 # Frontend (.env.local)
 NEXT_PUBLIC_API_URL=https://n2o-dvr-api.onrender.com
-NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+AUTH_SECRET=your-shared-jwt-secret        # NextAuth.js secret (same as backend)
+AUTH_GOOGLE_ID=501670694075-...
+AUTH_GOOGLE_SECRET=...
 ```
 
 ---
@@ -702,9 +715,10 @@ cd frontend
 npm install
 npm run dev    # → http://localhost:3000
 
-# Database
-# Use Supabase local dev (supabase CLI)
-supabase start
+# Database (local Postgres via Docker)
+docker run -d --name n2o-postgres -e POSTGRES_DB=n2o -e POSTGRES_PASSWORD=dev -p 5432:5432 postgres:16
+# Run migrations
+cd backend && alembic upgrade head
 ```
 
 ### Git Branching
@@ -760,8 +774,7 @@ httpx>=0.27.0
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "typescript": "^5.5.0",
-    "@supabase/supabase-js": "^2.45.0",
-    "@supabase/ssr": "^0.4.0",
+    "next-auth": "^5.0.0",
     "next-intl": "^4.0.0",
     "@tanstack/react-table": "^8.20.0",
     "react-hook-form": "^7.52.0",

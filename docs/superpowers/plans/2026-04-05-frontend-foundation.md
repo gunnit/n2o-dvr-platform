@@ -1,4 +1,16 @@
-# Frontend Foundation Implementation Plan
+# ⚠️ DEPRECATED — DO NOT EXECUTE
+
+> **STALE PLAN — CONTAINS INCORRECT INFRASTRUCTURE REFERENCES**
+> 
+> This plan references **Supabase Auth** throughout (Task 4, middleware, env vars). The actual infrastructure is:
+> - **Database**: PostgreSQL on Render.com (NOT Supabase)
+> - **Auth**: NextAuth.js v5 (Auth.js) with email/password + Google OAuth (NOT Supabase Auth)
+> - **Storage**: Render Disk (NOT Supabase Storage)
+> - **Design System**: "Digital Guardian" light mode with Plus Jakarta Sans + Inter (NOT Inter + JetBrains Mono dark theme)
+> 
+> **A new plan must be generated before any frontend development begins.**
+
+# Frontend Foundation Implementation Plan (STALE — DO NOT USE)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

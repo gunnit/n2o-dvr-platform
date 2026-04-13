@@ -34,12 +34,14 @@
 
 **Sidebar**:
 - App logo at top
-- Nav items with Lucide icons + Italian labels:
-  - Dashboard
-  - Sopralluogo (Survey)
-  - Valutazione Rischi (Risk Scoring)
-  - Documenti (Documents)
-  - Impostazioni (Settings)
+- Nav items with Lucide thin-stroke icons + Italian labels:
+  - Dashboard (LayoutDashboard) → `/[lang]/dashboard`
+  - Sopralluogo (ClipboardList) → `/[lang]/survey/[aziendaId]` — badge: active survey count
+  - Valutazione Rischi (ShieldAlert) → `/[lang]/risk-scoring/[aziendaId]`
+  - Documenti (FileStack) → `/[lang]/documents/[aziendaId]` — badge: ready doc count
+  - Valutazioni (FlaskConical) → `/[lang]/assessments/[aziendaId]` — Phase 3 assessments
+  - Impostazioni (Settings) → `/[lang]/settings`
+- **Sidebar state**: Company-specific routes (Sopralluogo through Valutazioni) are disabled/hidden until a company is selected from Dashboard. On company selection, sidebar activates with the current `aziendaId` context.
 - Active state: highlighted background + semibold (600) text
 - Responsive:
   - <1024px: collapses to icon-only (64px)
@@ -60,38 +62,40 @@
 
 ### 1.3 Color System (Semantic Tokens)
 
-Exact hex values deferred to design phase. Spec defines tokens and usage:
+Resolved via "Digital Guardian" Stitch design system (April 2026). Hex values and semantic mapping:
 
-| Token | Usage |
-|-------|-------|
-| `--color-primary` | Brand accent, active nav, links, primary buttons |
-| `--color-surface` | Card/panel backgrounds |
-| `--color-background` | Page background |
-| `--color-border` | Card borders, dividers |
-| `--color-text` | Primary text (4.5:1 min contrast per WCAG AA) |
-| `--color-text-secondary` | Labels, help text, placeholders (4.5:1 min) |
-| `--color-success` | Completato badge, Accettabile risk, save confirmation |
-| `--color-warning` | In Corso badge, Modesto risk, modification banner |
-| `--color-danger` | Errors, required asterisk, Gravissimo risk |
-| `--color-info` | Generating badge, active processing |
-| `--color-risk-green` | Risk I=3-4 (Accettabile), NIOSH IR ≤0.75 |
-| `--color-risk-yellow` | Risk I=5-6 (Modesto), NIOSH IR 0.75-1.0 |
-| `--color-risk-orange` | Risk I=7-8 (Grave) |
-| `--color-risk-red` | Risk I=9-12 (Gravissimo), NIOSH IR >1.0 |
+| Token | Hex Value | Usage |
+|-------|-----------|-------|
+| `--color-primary` | `#003D74` | Brand accent, active nav, links, primary buttons (gradient to `#1B5594`) |
+| `--color-primary-light` | `#A5C8FF` | Highlights, focus rings, subtle accents |
+| `--color-surface` | `#FFFFFF` | Card/panel backgrounds (surface-container-lowest) |
+| `--color-surface-low` | `#F2F3F6` | Input backgrounds, secondary sections |
+| `--color-background` | `#F8F9FC` | Page background |
+| `--color-border` | `#C2C6D2` at 15% | Ghost borders only — "No-Line" rule: use tonal shifts instead of borders |
+| `--color-text` | `#191C1E` | Primary text (never pure #000) |
+| `--color-text-secondary` | `#424750` | Labels, help text, placeholders |
+| `--color-success` | `#22C55E` | Completato badge, Accettabile risk, save confirmation |
+| `--color-warning` | `#F59E0B` | In Corso badge, Modesto risk, modification banner |
+| `--color-danger` | `#BA1A1A` | Errors, required asterisk, Gravissimo risk |
+| `--color-info` | `#1B5594` | Generating badge, active processing |
+| `--color-risk-green` | `#22C55E` | Risk I=3-4 (Accettabile), NIOSH IR ≤0.75 |
+| `--color-risk-yellow` | `#F59E0B` | Risk I=5-6 (Modesto), NIOSH IR 0.75-1.0 |
+| `--color-risk-orange` | `#F97316` | Risk I=7-8 (Grave) |
+| `--color-risk-red` | `#EF4444` | Risk I=9-12 (Gravissimo), NIOSH IR >1.0 |
 
-**Rules**: 60-30-10 color distribution. Max 3 primary hues. Never pure #000 on #FFF.
+**Rules**: 60-30-10 color distribution. Max 3 primary hues. Never pure #000 on #FFF. **"No-Line" Rule**: No 1px solid borders for sectioning. Define boundaries via tonal surface shifts (#FFFFFF cards on #F2F3F6 backgrounds). Ghost borders (outline-variant at 15% opacity) only as accessibility fallback. Depth via tonal layering, not drop shadows. Ambient whisper shadows only for floating elements (blur 24-48px, on-surface at 4-6% opacity).
 
-### 1.4 Typography
+### 1.4 Typography — "Digital Guardian" Design System
 
-- **Headings**: Inter, weights 600-700, tracking -0.02em
-- **Body**: Inter, weight 400, line-height 1.5
-- **Data/Codes**: JetBrains Mono, weight 400
+- **Headings**: Plus Jakarta Sans, weights 600-700, tracking -0.02em
+- **Body/Labels**: Inter, weight 400-500, line-height 1.5
+- **Data/Codes**: JetBrains Mono (fallback), weight 400 — used only for code snippets, not general data
 - **Size scale** (max 5 sizes per view):
-  - Page title: 1.5rem (24px)
-  - Section heading: 1.25rem (20px)
-  - Body: 1rem (16px)
-  - Label: 0.875rem (14px)
-  - Caption: 0.75rem (12px)
+  - Display/Hero: 3.5rem (56px) — Plus Jakarta Sans 700 (KPI numbers, hero headlines)
+  - Page title: 1.75rem (28px) — Plus Jakarta Sans 600
+  - Section heading: 1.125rem (18px) — Inter 500
+  - Body: 0.875rem (14px) — Inter 400
+  - Label/Caption: 0.6875rem (11px) — Inter 600, uppercase with 0.05em tracking
 
 ### 1.5 Form Patterns
 
@@ -829,7 +833,7 @@ If prerequisites not met: "Genera" button shows tooltip: "Completa prima: [missi
 | 10 | Risk Scoring | `/[lang]/risk-scoring/[aziendaId]` | Specified |
 | 11 | Document Generation | `/[lang]/documents/[aziendaId]` | Specified |
 | 12 | Settings | `/[lang]/settings` | Phase 5 (deferred) |
-| 13 | Login | `/[lang]/login` | Standard Supabase Auth UI |
+| 13 | Login | `/[lang]/login` | NextAuth.js v5 login (email/password + Google OAuth) |
 
 ---
 

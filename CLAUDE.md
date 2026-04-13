@@ -99,7 +99,7 @@ All project docs are branded with Niuexa header/footer, version 1.0, April 2026.
 
 | Document | What's Inside | When to Reference |
 |----------|--------------|-------------------|
-| `ARCHITECTURE.md` | Full tech stack (Next.js 16 + FastAPI + Supabase), DB schema with SQL, all API endpoints, deployment diagram, project folder structure, library versions, auth flow, config options | **Every coding session** — this is the system blueprint |
+| `ARCHITECTURE.md` | Full tech stack (Next.js 16 + FastAPI + Render Postgres), DB schema with SQL, all API endpoints, deployment diagram, project folder structure, library versions, auth flow, config options | **Every coding session** — this is the system blueprint |
 | `DATA_MODEL.md` | All entities (Azienda, Persona, Ambiente, Attrezzatura, SostanzaChimica) with field-level detail, types, privacy flags, cross-document usage, assessment entities (MMC, VDT, Stress, Incendio, Microclima) | Writing ORM models, building forms, API schemas |
 | `DVR_TEMPLATE_MAPPING.md` | Structural analysis of DVR Master .docx — 111 tables cataloged, 2,445 paragraphs, 4 document parts with exact boundaries, environment risk block pattern (7 envs × identical structure), 41 dynamic/36 static/13 mixed tables, 269 dynamic cells mapped to data fields | **Building the DVR generation engine (Module 2)** — this IS the spec |
 
@@ -165,14 +165,14 @@ All project docs are branded with Niuexa header/footer, version 1.0, April 2026.
 
 ## Tech Stack
 
-- **Frontend**: Next.js 16 (App Router) + shadcn/ui + Tailwind CSS 4 + Framer Motion + TanStack Table
+- **Frontend**: Next.js 16 (App Router) + shadcn/ui + Tailwind CSS 4 + Framer Motion + TanStack Table + Plus Jakarta Sans + Inter
 - **Backend**: FastAPI (Python 3.12+) + Pydantic v2 + SQLAlchemy 2.0 Async + Celery + Redis
-- **Database**: PostgreSQL on Supabase (EU region) with Row Level Security
+- **Database**: PostgreSQL on Render.com
 - **AI**: OpenAI GPT-4.1 (SDS extraction via vision/structured outputs) + GPT-4.1-mini (descriptions, suggestions)
 - **Document generation**: python-docx + pythermalcomfort (PMV/PPD, PHS calculations)
-- **Storage**: Supabase Storage (uploads) + Google Drive (final delivery)
-- **Auth**: Supabase Auth (JWT) verified by FastAPI
-- **Deployment**: Vercel (frontend) + Render.com (backend + workers)
+- **Storage**: Render Disk (uploads) + Google Drive (final delivery)
+- **Auth**: NextAuth.js v5 (Auth.js) with email/password + Google OAuth, sessions in Postgres
+- **Deployment**: Vercel (frontend) + Render.com (backend + workers + Postgres + Redis)
 - **Google APIs**: Drive, Docs, Sheets, Gmail, Calendar (OAuth tokens in `credentials/`)
 
 ## Analysis Spreadsheet
