@@ -1,6 +1,8 @@
 from fastapi import APIRouter
 
 from app.schemas.calculation import (
+    FireRiskRequest,
+    FireRiskResponse,
     NioshRequest,
     NioshResponse,
     RiskIndexRequest,
@@ -9,6 +11,7 @@ from app.schemas.calculation import (
     StressAssessmentResponse,
     StressIndicatorsResponse,
 )
+from app.services.risk_calculator import calculate_fire_risk
 from app.services.stress_calculator import (
     INDICATORS as STRESS_INDICATORS,
     calculate_stress,
@@ -110,3 +113,48 @@ async def calculate_stress_assessment(body: StressAssessmentRequest):
     result = calculate_stress(body.answers)
     misure = get_default_measures(result["livello"])
     return StressAssessmentResponse(**result, misure=misure)
+
+
+_FIRE_AZIONE = {
+    "Basso": (
+        "Rischio incendio basso: mantenere in efficienza le misure di prevenzione e "
+        "protezione esistenti, verificare periodicamente estintori, vie di esodo e "
+        "segnaletica, e aggiornare la formazione antincendio del personale."
+    ),
+    "Medio": (
+        "Rischio incendio medio: adottare misure aggiuntive di prevenzione e protezione "
+        "(rilevazione automatica, compartimentazione, controllo sorgenti di innesco), "
+        "designare e formare gli addetti alla gestione dell'emergenza e aggiornare il "
+        "piano di emergenza ed evacuazione."
+    ),
+    "Alto": (
+        "Rischio incendio alto: attivare immediatamente misure straordinarie di prevenzione "
+        "e protezione, coinvolgere il professionista antincendio, presentare SCIA ai VV.F. "
+        "ove dovuta, adottare impianti di rilevazione e spegnimento automatici e garantire "
+        "formazione di livello 3 agli addetti all'emergenza."
+    ),
+}
+
+
+@router.post("/fire-risk", response_model=FireRiskResponse)
+async def calculate_fire_risk_endpoint(body: FireRiskRequest):
+    """Calculate composite fire risk level (D.M. 03/09/2021).
+
+    Formula: Livello = INF + SI + PI, where each component is scored 1-3.
+
+    Parameters:
+      - INF: Infiammabilita (flammability of substances present)
+      - SI:  Sorgenti di Innesco (ignition sources)
+      - PI:  Propagazione Incendio (fire propagation likelihood)
+
+    Bands:
+      3-4 = Basso
+      5-7 = Medio
+      8-9 = Alto
+
+    Returns per-component scores, total, risk level, and the recommended
+    action text in Italian for the level.
+    """
+    result = calculate_fire_risk(body.inf, body.si, body.pi)
+    azione = _FIRE_AZIONE.get(result["livello"], "")
+    return FireRiskResponse(**result, azione=azione)

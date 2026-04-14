@@ -30,6 +30,21 @@ class NioshResponse(BaseModel):
     livello: str
 
 
+class FireRiskRequest(BaseModel):
+    inf: int = Field(..., ge=1, le=3, description="Infiammabilita (flammability) score 1-3")
+    si: int = Field(..., ge=1, le=3, description="Sorgenti di Innesco (ignition sources) score 1-3")
+    pi: int = Field(..., ge=1, le=3, description="Propagazione Incendio (fire propagation) score 1-3")
+
+
+class FireRiskResponse(BaseModel):
+    inf: int
+    si: int
+    pi: int
+    totale: int
+    livello: str
+    azione: str
+
+
 class StressIndicator(BaseModel):
     id: str
     area: str
