@@ -1,0 +1,26 @@
+import uuid
+from datetime import datetime
+
+from sqlalchemy import ForeignKey, Numeric, String, Text, func
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+from app.models.persone_ambienti import persone_ambienti
+
+
+class Ambiente(Base):
+    __tablename__ = "ambienti"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    azienda_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("aziende.id", ondelete="CASCADE"))
+    nome: Mapped[str] = mapped_column(String, nullable=False)
+    tipo: Mapped[str] = mapped_column(String, nullable=False)
+    superficie_mq: Mapped[float | None] = mapped_column(Numeric)
+    preposto_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("persone.id"))
+    descrizione_attivita: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    azienda: Mapped["Azienda"] = relationship(back_populates="ambienti")
+    persone: Mapped[list["Persona"]] = relationship(secondary=persone_ambienti, back_populates="ambienti")
+    valutazioni_rischio: Mapped[list["ValutazioneRischio"]] = relationship(back_populates="ambiente", cascade="all, delete-orphan")

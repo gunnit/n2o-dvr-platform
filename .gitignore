@@ -58,3 +58,11 @@ npm-debug.log*
 tmp/
 *.tmp
 .superpowers/
+
+# Disposable test screenshots (root only)
+/e2e-*.png
+/test-*.png
+/final-*.png
+
+# Session continuation notes (working doc, regenerated each session)
+/CONTINUE.md

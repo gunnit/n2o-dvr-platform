@@ -1,0 +1,40 @@
+databases:
+  - name: n2o-dvr-db
+    plan: starter
+    databaseName: n2o
+    user: n2o_user
+
+services:
+  - type: web
+    name: n2o-dvr-api
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: n2o-dvr-db
+          property: connectionString
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          name: n2o-dvr-redis
+          type: redis
+          property: connectionString
+      - key: CORS_ORIGINS
+        value: '["https://n2o-dvr.vercel.app"]'
+      - key: FILE_STORAGE_PATH
+        value: /data
+    disk:
+      name: n2o-data
+      mountPath: /data
+      sizeGB: 1
+
+  - type: redis
+    name: n2o-dvr-redis
+    plan: starter
+    maxmemoryPolicy: noeviction
