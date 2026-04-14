@@ -1,6 +1,19 @@
 from fastapi import APIRouter
 
-from app.schemas.calculation import NioshRequest, NioshResponse, RiskIndexRequest, RiskIndexResponse
+from app.schemas.calculation import (
+    NioshRequest,
+    NioshResponse,
+    RiskIndexRequest,
+    RiskIndexResponse,
+    StressAssessmentRequest,
+    StressAssessmentResponse,
+    StressIndicatorsResponse,
+)
+from app.services.stress_calculator import (
+    INDICATORS as STRESS_INDICATORS,
+    calculate_stress,
+    get_default_measures,
+)
 
 router = APIRouter(prefix="/calculate", tags=["calculations"])
 
@@ -73,3 +86,27 @@ async def calculate_niosh(body: NioshRequest):
         ir=round(ir, 4),
         livello=_niosh_level(ir),
     )
+
+
+@router.get("/stress/indicators", response_model=StressIndicatorsResponse)
+async def list_stress_indicators():
+    """Return the full INAIL stress indicator catalog.
+
+    The frontend uses this to render the checklist. Each indicator carries
+    its area (A, B1..C4), Italian text, scoring mode, and an operator note.
+    """
+    return StressIndicatorsResponse(indicators=list(STRESS_INDICATORS))
+
+
+@router.post("/stress", response_model=StressAssessmentResponse)
+async def calculate_stress_assessment(body: StressAssessmentRequest):
+    """Score an INAIL stress lavoro-correlato assessment.
+
+    Returns per-area sub-totals, area totals, overall band (BASSO/MEDIO/ALTO),
+    the recommended action text, and a suggested list of corrective measures.
+    Unanswered indicator ids are reported so the caller can flag incomplete
+    assessments without blocking the computation.
+    """
+    result = calculate_stress(body.answers)
+    misure = get_default_measures(result["livello"])
+    return StressAssessmentResponse(**result, misure=misure)

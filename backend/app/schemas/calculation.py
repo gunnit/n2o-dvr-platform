@@ -28,3 +28,49 @@ class NioshResponse(BaseModel):
     plr: float
     ir: float
     livello: str
+
+
+class StressIndicator(BaseModel):
+    id: str
+    area: str
+    text: str
+    scoring: str
+    note: str
+
+
+class StressIndicatorsResponse(BaseModel):
+    indicators: list[StressIndicator]
+
+
+class StressAssessmentRequest(BaseModel):
+    answers: dict[str, str] = Field(
+        ...,
+        description=(
+            "Mapping of indicator id to answer. "
+            "Expected values: 'DIMINUITO'|'INALTERATO'|'AUMENTATO' for tripartite, "
+            "'SI'|'NO' for binary/binary_inverted/binary_heavy."
+        ),
+    )
+
+
+class StressSubAreaResult(BaseModel):
+    score: int
+    max: int
+    livello: str
+
+
+class StressAssessmentResponse(BaseModel):
+    area_a_raw: int
+    area_a_converted: int
+    area_a_livello: str
+    sub_areas_b: dict[str, StressSubAreaResult]
+    area_b_total: int
+    area_b_livello: str
+    sub_areas_c: dict[str, StressSubAreaResult]
+    area_c_total: int
+    area_c_livello: str
+    totale: int
+    livello: str
+    azione: str
+    misure: list[str]
+    unanswered: list[str]
