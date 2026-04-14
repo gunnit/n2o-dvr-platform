@@ -11,7 +11,7 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 
 ---
 
-## Progress Summary (as of 2026-04-13)
+## Progress Summary (as of 2026-04-14)
 
 | Epic | Stories | Done | Partial | Not Started | Progress |
 |------|---------|------|---------|-------------|----------|
@@ -21,6 +21,8 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 | 4 — Complementary Docs | 8 | 0 | 0 | 8 | 0% |
 | 5 — Cross-cutting | 4 | 0 | 3 | 1 | 25% |
 | **TOTAL** | **46** | **6** | **13** | **27** | **24%** |
+
+Tier A (2026-04-14): US-1.5 (contextual risk filtering + summary bar), US-2.3 (default scoring matrix + Reset button), US-2.8 (Part II + logo embed + versioned filename), US-2.9 (version history Sheet) — all four stories advanced within their PARTIAL status toward DONE.
 
 ### Status Legend
 - `DONE` — All acceptance criteria met
@@ -97,8 +99,8 @@ As a field operator, I want to register employees with their roles, assignments 
 #### US-1.5 `PARTIAL`
 As a field operator, I want a contextualized risk list (not the full generic decree list) so I can quickly mark applicable risks per environment.
 
-> **Built**: Step 5 "Rischi" with 11 risk categories per environment, applicabile toggle, P/D sliders, real-time I=2D+P calculation, color-coded levels (Accettabile/Modesto/Grave/Gravissimo).
-> **Missing**: No contextual filtering based on declared environments/equipment. Shows same 11 categories for all environments. No "X rischi selezionati" summary bar. No "Ambienti modificati" banner when returning after changes.
+> **Built**: Step 5 "Rischi" with 11 risk categories per environment, applicabile toggle, P/D sliders, real-time I=2D+P calculation, color-coded levels (Accettabile/Modesto/Grave/Gravissimo). Contextual filtering per ambiente.tipo (8 environment types with tailored subsets — e.g., ufficio shows 7 categories hiding Macchine/Chimici/Biologici/Cancerogeni). "Mostra tutti i rischi" override checkbox. Summary bar "X di Y rischi selezionati" with breakdown "N Gravissimo / N Grave / N Modesto / N Accettabile" using matching badge colors.
+> **Missing**: Attrezzature-driven override skipped (wizard props plumbing would touch forbidden file). No "Ambienti modificati - rivedi le selezioni" banner when returning from Step 3.
 
 **Acceptance Criteria:**
 
@@ -200,8 +202,8 @@ As an office operator, I want territorial context (seismic zone, local regulatio
 #### US-2.3 `PARTIAL`
 As an office operator, I want risk tables pre-populated per environment with contextualized severity scores that I can review and adjust.
 
-> **Built**: Risk assessment table in survey Step 5 with P/D sliders, real-time I=2D+P calculation, color-coded levels. DVR generator renders risk tables per environment.
-> **Missing**: No default scoring matrix pre-fill. No "Reset al default" per-row. No AI-suggested scores. Risk scoring is in survey context only, not a separate "Risk Scoring Interface" for document review.
+> **Built**: Risk assessment table in survey Step 5 with P/D sliders, real-time I=2D+P calculation, color-coded levels. DVR generator renders risk tables per environment. Default scoring matrix (88 entries: 8 environment types × 11 categories) in `reference_data.py` with `get_default_scores()` / `get_default_risk_matrix()` helpers. Frontend embeds the same matrix for instant reset. "Reset al default" per-ambiente button with confirmation Dialog ("Sei sicuro? I valori P/D correnti verranno sovrascritti."). Backend helper `apply_default_scores_to_valutazioni()` only overwrites initial 1/1 rows.
+> **Missing**: Matrix is applied on explicit reset, not pre-filled automatically when the risk step first loads (could be added by seeding defaults at valutazione init). No AI-suggested scores. No separate "Risk Scoring Interface" for document review (scoring stays in survey context).
 
 **Acceptance Criteria:**
 
@@ -262,8 +264,8 @@ As an office operator, I want to set P (probability) and D (damage) scores for e
 #### US-2.8 `PARTIAL`
 As an office operator, I want the final DVR output as a professionally formatted .docx with cover page, logo, and table of contents.
 
-> **Built**: DVR Master generator (`dvr_master.py`) produces .docx with: cover page (logo placeholder + ragione sociale + date), TOC placeholder, Part I (anagrafica, figure sicurezza, elenco lavoratori, attrezzature), Part III (risk tables per environment with color-coded P/D/I), Part IV (improvement measures placeholder + signature block). Version numbering. Status tracking (pending/generating/ready/error). Download endpoint. Documents page with per-type generate/download.
-> **Missing**: Not all 111 template tables generated. No real logo embedding. No desktop notification. No versioned filename format `DVR_<ragione_sociale>_<YYYYMMDD>_v<N>.docx`. No error rollback to "Bozza". Part II (descrizione attivita) missing entirely.
+> **Built**: DVR Master generator (`dvr_master.py`) produces .docx with: cover page (real logo embedded from `backend/app/assets/logo.png` with italic text fallback if missing + ragione sociale + date), TOC placeholder, Part I (anagrafica, figure sicurezza, elenco lavoratori, attrezzature), **Part II (descrizione attivita / contesto territoriale, metodologia I=2D+P with color-coded livello table, scale P 1-4, scale D 1-4)**, Part III (risk tables per environment with color-coded P/D/I), Part IV (improvement measures placeholder + signature block). Versioned filename with slugified ragione sociale: `dvr_master_{slug}_v{N}.docx`. Status tracking (pending/generating/ready/error). Download endpoint. Documents page with per-type generate/download.
+> **Missing**: Not all 111 template tables generated (acceptance requires full parity). No desktop notification on completion. No error rollback to "Bozza" status on partial failure. Filename format differs from spec — current `dvr_master_{slug}_v{N}.docx` vs spec `DVR_<ragione_sociale>_<YYYYMMDD>_v<N>.docx` (no date component).
 
 **Acceptance Criteria:**
 
@@ -274,8 +276,8 @@ As an office operator, I want the final DVR output as a professionally formatted
 #### US-2.9 `PARTIAL`
 As an office operator, I want version tracking for document revisions so I can audit changes over time.
 
-> **Built**: Backend tracks version number per document type per azienda. Documents page shows version and date per generated document.
-> **Missing**: No Version History panel UI. No diff/comparison view. No "Ripristina versione" restore flow.
+> **Built**: Backend tracks version number per document type per azienda. Documents page shows version and date per generated document. **Version History Sheet (slide-in drawer)** reachable via "Cronologia (vN)" button in each document card footer. Timeline view with current-version accent, per-entry date (it-IT locale), status badge, per-version "Scarica" button, and simple diff summary ("+{gap} da v{N-1}" with time-gap auto-scaling minuti/ore/giorni + optional status-transition note). New component `components/documents/version-history.tsx` (Sheet primitive).
+> **Missing**: No side-by-side "Differenze" diff viewer (current summary is time-gap + status only, not content-level). No "Ripristina versione" restore flow creating a new version from an historical snapshot. No user attribution in the timeline (would need backend to expose created_by).
 
 **Acceptance Criteria:**
 

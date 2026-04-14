@@ -10,6 +10,15 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -40,7 +49,201 @@ const CATEGORIE_RISCHIO = [
   "Organizzazione",
   "Psicologici",
   "Ergonomici",
-];
+] as const;
+
+type CategoriaRischio = (typeof CATEGORIE_RISCHIO)[number];
+
+// ---------------------------------------------------------------------------
+// Contextual filtering per ambiente.tipo (US-1.5)
+// Lowercase ambiente.tipo keys matching survey options.
+// ---------------------------------------------------------------------------
+const RISCHI_PER_AMBIENTE: Record<string, CategoriaRischio[]> = {
+  ufficio: [
+    "Strutture",
+    "Elettrici",
+    "Incendio",
+    "Fisici",
+    "Organizzazione",
+    "Psicologici",
+    "Ergonomici",
+  ],
+  magazzino: [
+    "Strutture",
+    "Macchine",
+    "Elettrici",
+    "Incendio",
+    "Fisici",
+    "Ergonomici",
+    "Organizzazione",
+  ],
+  cucina: [
+    "Strutture",
+    "Macchine",
+    "Elettrici",
+    "Incendio",
+    "Chimici",
+    "Fisici",
+    "Biologici",
+    "Ergonomici",
+    "Organizzazione",
+  ],
+  produzione: [
+    "Strutture",
+    "Macchine",
+    "Elettrici",
+    "Incendio",
+    "Chimici",
+    "Fisici",
+    "Biologici",
+    "Cancerogeni",
+    "Organizzazione",
+    "Ergonomici",
+  ],
+  laboratorio: [...CATEGORIE_RISCHIO],
+  esterno: [
+    "Strutture",
+    "Fisici",
+    "Organizzazione",
+    "Ergonomici",
+    "Incendio",
+  ],
+  negozio: [
+    "Strutture",
+    "Elettrici",
+    "Incendio",
+    "Ergonomici",
+    "Organizzazione",
+  ],
+  altro: [...CATEGORIE_RISCHIO],
+};
+
+function getCategorieForTipo(tipo: string | undefined | null): CategoriaRischio[] {
+  if (!tipo) return [...CATEGORIE_RISCHIO];
+  const filtered = RISCHI_PER_AMBIENTE[tipo.toLowerCase()];
+  return filtered ?? [...CATEGORIE_RISCHIO];
+}
+
+// ---------------------------------------------------------------------------
+// Default risk scoring matrix (US-2.3)
+// Mirrors backend/app/services/reference_data.py DEFAULT_RISK_SCORES.
+// Keep shapes identical between Python and TS.
+// ---------------------------------------------------------------------------
+const DEFAULT_RISK_SCORES: Record<string, Record<CategoriaRischio, [number, number]>> = {
+  ufficio: {
+    Strutture: [1, 2],
+    Macchine: [1, 1],
+    Elettrici: [1, 2],
+    Incendio: [1, 2],
+    Chimici: [1, 1],
+    Fisici: [1, 2],
+    Biologici: [1, 1],
+    Cancerogeni: [1, 1],
+    Organizzazione: [1, 1],
+    Psicologici: [2, 2],
+    Ergonomici: [2, 2],
+  },
+  magazzino: {
+    Strutture: [2, 2],
+    Macchine: [2, 3],
+    Elettrici: [1, 2],
+    Incendio: [2, 3],
+    Chimici: [1, 2],
+    Fisici: [2, 2],
+    Biologici: [1, 1],
+    Cancerogeni: [1, 1],
+    Organizzazione: [2, 2],
+    Psicologici: [1, 1],
+    Ergonomici: [2, 3],
+  },
+  produzione: {
+    Strutture: [2, 2],
+    Macchine: [2, 3],
+    Elettrici: [2, 3],
+    Incendio: [2, 3],
+    Chimici: [2, 3],
+    Fisici: [2, 3],
+    Biologici: [1, 2],
+    Cancerogeni: [1, 3],
+    Organizzazione: [2, 2],
+    Psicologici: [1, 2],
+    Ergonomici: [2, 3],
+  },
+  cucina: {
+    Strutture: [2, 2],
+    Macchine: [2, 2],
+    Elettrici: [2, 2],
+    Incendio: [2, 3],
+    Chimici: [2, 2],
+    Fisici: [2, 2],
+    Biologici: [2, 2],
+    Cancerogeni: [1, 1],
+    Organizzazione: [2, 2],
+    Psicologici: [2, 2],
+    Ergonomici: [2, 2],
+  },
+  laboratorio: {
+    Strutture: [2, 2],
+    Macchine: [2, 3],
+    Elettrici: [2, 3],
+    Incendio: [2, 3],
+    Chimici: [2, 3],
+    Fisici: [2, 2],
+    Biologici: [2, 3],
+    Cancerogeni: [2, 3],
+    Organizzazione: [2, 2],
+    Psicologici: [1, 2],
+    Ergonomici: [2, 2],
+  },
+  esterno: {
+    Strutture: [2, 2],
+    Macchine: [1, 2],
+    Elettrici: [1, 2],
+    Incendio: [2, 2],
+    Chimici: [1, 1],
+    Fisici: [2, 3],
+    Biologici: [1, 2],
+    Cancerogeni: [1, 1],
+    Organizzazione: [2, 2],
+    Psicologici: [1, 1],
+    Ergonomici: [2, 3],
+  },
+  negozio: {
+    Strutture: [1, 2],
+    Macchine: [1, 1],
+    Elettrici: [1, 2],
+    Incendio: [2, 2],
+    Chimici: [1, 1],
+    Fisici: [1, 2],
+    Biologici: [1, 1],
+    Cancerogeni: [1, 1],
+    Organizzazione: [1, 2],
+    Psicologici: [1, 2],
+    Ergonomici: [2, 2],
+  },
+  altro: {
+    Strutture: [1, 2],
+    Macchine: [1, 2],
+    Elettrici: [1, 2],
+    Incendio: [1, 2],
+    Chimici: [1, 2],
+    Fisici: [1, 2],
+    Biologici: [1, 2],
+    Cancerogeni: [1, 2],
+    Organizzazione: [1, 2],
+    Psicologici: [1, 2],
+    Ergonomici: [1, 2],
+  },
+};
+
+function getDefaultScores(
+  tipo: string | undefined | null,
+  categoria: CategoriaRischio
+): [number, number] {
+  const key = (tipo ?? "").toLowerCase();
+  const matrix = DEFAULT_RISK_SCORES[key];
+  if (!matrix) return [1, 1];
+  return matrix[categoria] ?? [1, 1];
+}
 
 function calcIndice(p: number, d: number): number {
   return 2 * d + p;
@@ -118,6 +321,8 @@ export function StepRischi({
   onChange,
 }: StepRischiProps) {
   const [selectedAmbienteIndex, setSelectedAmbienteIndex] = useState(0);
+  const [mostraTutti, setMostraTutti] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
   const selectedAmbiente = ambienti[selectedAmbienteIndex];
 
@@ -140,6 +345,43 @@ export function StepRischi({
     [allValutazioni, selectedAmbiente]
   );
 
+  // Compute the subset of categories shown for this ambiente.tipo.
+  const categorieVisibili = useMemo<CategoriaRischio[]>(() => {
+    if (mostraTutti) return [...CATEGORIE_RISCHIO];
+    return getCategorieForTipo(selectedAmbiente?.tipo);
+  }, [mostraTutti, selectedAmbiente?.tipo]);
+
+  const visibleValutazioni = useMemo(() => {
+    const setVis = new Set<string>(categorieVisibili);
+    return currentValutazioni.filter((v) =>
+      setVis.has(v.categoria_rischio as CategoriaRischio)
+    );
+  }, [currentValutazioni, categorieVisibili]);
+
+  // Summary counts over the currently visible rows.
+  const summary = useMemo(() => {
+    const applicabiliRows = visibleValutazioni.filter((v) => v.applicabile);
+    const total = visibleValutazioni.length;
+    const selected = applicabiliRows.length;
+
+    let gravissimo = 0;
+    let grave = 0;
+    let modesto = 0;
+    let accettabile = 0;
+
+    for (const v of applicabiliRows) {
+      const p = v.probabilita_p ?? 1;
+      const d = v.danno_d ?? 1;
+      const livello = getLivello(calcIndice(p, d));
+      if (livello === "GRAVISSIMO") gravissimo += 1;
+      else if (livello === "GRAVE") grave += 1;
+      else if (livello === "MODESTO") modesto += 1;
+      else accettabile += 1;
+    }
+
+    return { total, selected, gravissimo, grave, modesto, accettabile };
+  }, [visibleValutazioni]);
+
   const updateValutazione = useCallback(
     (valId: string, fields: Partial<ValutazioneRischio>) => {
       const updated = allValutazioni.map((v) => {
@@ -161,6 +403,27 @@ export function StepRischi({
     },
     [allValutazioni, onChange]
   );
+
+  // Apply default scoring matrix to every row of the selected ambiente.
+  const applyDefaults = useCallback(() => {
+    if (!selectedAmbiente) return;
+    const updated = allValutazioni.map((v) => {
+      if (v.ambiente_id !== selectedAmbiente.id) return v;
+      const [p, d] = getDefaultScores(
+        selectedAmbiente.tipo,
+        v.categoria_rischio as CategoriaRischio
+      );
+      const indice = calcIndice(p, d);
+      return {
+        ...v,
+        probabilita_p: p,
+        danno_d: d,
+        indice_i: indice,
+        livello_rischio: getLivello(indice),
+      };
+    });
+    onChange(updated);
+  }, [allValutazioni, onChange, selectedAmbiente]);
 
   if (ambienti.length === 0) {
     return (
@@ -211,15 +474,86 @@ export function StepRischi({
 
       {/* Risk table */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            {selectedAmbiente?.nome || "Ambiente"}
-            {selectedAmbiente?.tipo
-              ? ` (${selectedAmbiente.tipo})`
-              : ""}
-          </CardTitle>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1">
+            <CardTitle className="text-base">
+              {selectedAmbiente?.nome || "Ambiente"}
+              {selectedAmbiente?.tipo
+                ? ` (${selectedAmbiente.tipo})`
+                : ""}
+            </CardTitle>
+            <CardDescription>
+              {mostraTutti
+                ? "Stai vedendo tutte le 11 categorie di rischio."
+                : `Categorie filtrate per tipo "${selectedAmbiente?.tipo ?? "altro"}".`}
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={mostraTutti}
+                onChange={(e) => setMostraTutti(e.target.checked)}
+                className="h-4 w-4 accent-primary"
+              />
+              Mostra tutti i rischi
+            </label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setResetDialogOpen(true)}
+            >
+              Reset al default
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
+          {/* Summary bar */}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 px-3 py-2 text-xs">
+            <div className="font-medium">
+              {summary.selected} di {summary.total} rischi selezionati
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                variant="outline"
+                className={cn(
+                  "font-semibold",
+                  getLivelloStyle("GRAVISSIMO")
+                )}
+              >
+                {summary.gravissimo} Gravissimo
+              </Badge>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "font-semibold",
+                  getLivelloStyle("GRAVE")
+                )}
+              >
+                {summary.grave} Grave
+              </Badge>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "font-semibold",
+                  getLivelloStyle("MODESTO")
+                )}
+              >
+                {summary.modesto} Modesto
+              </Badge>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "font-semibold",
+                  getLivelloStyle("ACCETTABILE")
+                )}
+              >
+                {summary.accettabile} Accettabile
+              </Badge>
+            </div>
+          </div>
+
           <Table>
             <TableHeader>
               <TableRow>
@@ -244,7 +578,7 @@ export function StepRischi({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {currentValutazioni.map((val) => {
+              {visibleValutazioni.map((val) => {
                 const p = val.probabilita_p ?? 1;
                 const d = val.danno_d ?? 1;
                 const indice = calcIndice(p, d);
@@ -404,6 +738,41 @@ export function StepRischi({
           </div>
         </CardContent>
       </Card>
+
+      {/* Reset confirmation dialog */}
+      <Dialog
+        open={resetDialogOpen}
+        onOpenChange={(open) => setResetDialogOpen(open)}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Reset al default</DialogTitle>
+            <DialogDescription>
+              Sei sicuro? I valori P/D correnti verranno sovrascritti con i
+              valori predefiniti per il tipo
+              {selectedAmbiente?.tipo
+                ? ` "${selectedAmbiente.tipo}"`
+                : ""}.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setResetDialogOpen(false)}
+            >
+              Annulla
+            </Button>
+            <Button
+              onClick={() => {
+                applyDefaults();
+                setResetDialogOpen(false);
+              }}
+            >
+              Conferma Reset
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

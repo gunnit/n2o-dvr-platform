@@ -530,3 +530,172 @@ def get_default_pd(categoria: str) -> tuple[int, int]:
             f"Valid categories: {RISK_CATEGORY_NAMES}"
         )
     return _DEFAULT_PD[categoria]
+
+
+# ---------------------------------------------------------------------------
+# Default risk scoring matrix (US-2.3)
+# Maps (ambiente_tipo, categoria_rischio) -> (p_default, d_default).
+# Keys use the short category names exposed in the survey wizard
+# (Strutture, Macchine, Elettrici, Incendio, Chimici, Fisici, Biologici,
+# Cancerogeni, Organizzazione, Psicologici, Ergonomici) and the lowercase
+# environment tipo values ("ufficio", "magazzino", "produzione", "cucina",
+# "laboratorio", "esterno", "negozio", "altro"). This shape is intentionally
+# mirrored in the frontend (step-rischi.tsx) as a static lookup.
+# Values reflect conservative Italian-safety-consultant defaults: offices low
+# (P=1, D=1-2), kitchens/production medium (P=2, D=2), hazardous categories
+# in risky environments higher (P=2, D=3).
+# ---------------------------------------------------------------------------
+
+DEFAULT_RISK_CATEGORIES: list[str] = [
+    "Strutture",
+    "Macchine",
+    "Elettrici",
+    "Incendio",
+    "Chimici",
+    "Fisici",
+    "Biologici",
+    "Cancerogeni",
+    "Organizzazione",
+    "Psicologici",
+    "Ergonomici",
+]
+
+DEFAULT_ENVIRONMENT_TIPI: list[str] = [
+    "ufficio",
+    "magazzino",
+    "produzione",
+    "cucina",
+    "laboratorio",
+    "esterno",
+    "negozio",
+    "altro",
+]
+
+DEFAULT_RISK_SCORES: dict[tuple[str, str], tuple[int, int]] = {
+    # Ufficio -- low-risk indoor environment
+    ("ufficio", "Strutture"): (1, 2),
+    ("ufficio", "Macchine"): (1, 1),
+    ("ufficio", "Elettrici"): (1, 2),
+    ("ufficio", "Incendio"): (1, 2),
+    ("ufficio", "Chimici"): (1, 1),
+    ("ufficio", "Fisici"): (1, 2),
+    ("ufficio", "Biologici"): (1, 1),
+    ("ufficio", "Cancerogeni"): (1, 1),
+    ("ufficio", "Organizzazione"): (1, 1),
+    ("ufficio", "Psicologici"): (2, 2),
+    ("ufficio", "Ergonomici"): (2, 2),
+    # Magazzino -- storage, manual handling, forklifts
+    ("magazzino", "Strutture"): (2, 2),
+    ("magazzino", "Macchine"): (2, 3),
+    ("magazzino", "Elettrici"): (1, 2),
+    ("magazzino", "Incendio"): (2, 3),
+    ("magazzino", "Chimici"): (1, 2),
+    ("magazzino", "Fisici"): (2, 2),
+    ("magazzino", "Biologici"): (1, 1),
+    ("magazzino", "Cancerogeni"): (1, 1),
+    ("magazzino", "Organizzazione"): (2, 2),
+    ("magazzino", "Psicologici"): (1, 1),
+    ("magazzino", "Ergonomici"): (2, 3),
+    # Produzione -- manufacturing floor
+    ("produzione", "Strutture"): (2, 2),
+    ("produzione", "Macchine"): (2, 3),
+    ("produzione", "Elettrici"): (2, 3),
+    ("produzione", "Incendio"): (2, 3),
+    ("produzione", "Chimici"): (2, 3),
+    ("produzione", "Fisici"): (2, 3),
+    ("produzione", "Biologici"): (1, 2),
+    ("produzione", "Cancerogeni"): (1, 3),
+    ("produzione", "Organizzazione"): (2, 2),
+    ("produzione", "Psicologici"): (1, 2),
+    ("produzione", "Ergonomici"): (2, 3),
+    # Cucina -- food preparation
+    ("cucina", "Strutture"): (2, 2),
+    ("cucina", "Macchine"): (2, 2),
+    ("cucina", "Elettrici"): (2, 2),
+    ("cucina", "Incendio"): (2, 3),
+    ("cucina", "Chimici"): (2, 2),
+    ("cucina", "Fisici"): (2, 2),
+    ("cucina", "Biologici"): (2, 2),
+    ("cucina", "Cancerogeni"): (1, 1),
+    ("cucina", "Organizzazione"): (2, 2),
+    ("cucina", "Psicologici"): (2, 2),
+    ("cucina", "Ergonomici"): (2, 2),
+    # Laboratorio -- chemical/biological lab work
+    ("laboratorio", "Strutture"): (2, 2),
+    ("laboratorio", "Macchine"): (2, 3),
+    ("laboratorio", "Elettrici"): (2, 3),
+    ("laboratorio", "Incendio"): (2, 3),
+    ("laboratorio", "Chimici"): (2, 3),
+    ("laboratorio", "Fisici"): (2, 2),
+    ("laboratorio", "Biologici"): (2, 3),
+    ("laboratorio", "Cancerogeni"): (2, 3),
+    ("laboratorio", "Organizzazione"): (2, 2),
+    ("laboratorio", "Psicologici"): (1, 2),
+    ("laboratorio", "Ergonomici"): (2, 2),
+    # Esterno -- outdoor work
+    ("esterno", "Strutture"): (2, 2),
+    ("esterno", "Macchine"): (1, 2),
+    ("esterno", "Elettrici"): (1, 2),
+    ("esterno", "Incendio"): (2, 2),
+    ("esterno", "Chimici"): (1, 1),
+    ("esterno", "Fisici"): (2, 3),
+    ("esterno", "Biologici"): (1, 2),
+    ("esterno", "Cancerogeni"): (1, 1),
+    ("esterno", "Organizzazione"): (2, 2),
+    ("esterno", "Psicologici"): (1, 1),
+    ("esterno", "Ergonomici"): (2, 3),
+    # Negozio -- retail shop
+    ("negozio", "Strutture"): (1, 2),
+    ("negozio", "Macchine"): (1, 1),
+    ("negozio", "Elettrici"): (1, 2),
+    ("negozio", "Incendio"): (2, 2),
+    ("negozio", "Chimici"): (1, 1),
+    ("negozio", "Fisici"): (1, 2),
+    ("negozio", "Biologici"): (1, 1),
+    ("negozio", "Cancerogeni"): (1, 1),
+    ("negozio", "Organizzazione"): (1, 2),
+    ("negozio", "Psicologici"): (1, 2),
+    ("negozio", "Ergonomici"): (2, 2),
+    # Altro -- generic fallback
+    ("altro", "Strutture"): (1, 2),
+    ("altro", "Macchine"): (1, 2),
+    ("altro", "Elettrici"): (1, 2),
+    ("altro", "Incendio"): (1, 2),
+    ("altro", "Chimici"): (1, 2),
+    ("altro", "Fisici"): (1, 2),
+    ("altro", "Biologici"): (1, 2),
+    ("altro", "Cancerogeni"): (1, 2),
+    ("altro", "Organizzazione"): (1, 2),
+    ("altro", "Psicologici"): (1, 2),
+    ("altro", "Ergonomici"): (1, 2),
+}
+
+
+def get_default_scores(
+    ambiente_tipo: str, categoria: str
+) -> tuple[int, int]:
+    """Return default (P, D) scores for a given environment tipo and category.
+
+    Looks up the DEFAULT_RISK_SCORES matrix by the lowercase ambiente tipo
+    and short risk category name. Falls back to (1, 1) for unknown pairs
+    so callers always receive a valid low-risk baseline.
+
+    Args:
+        ambiente_tipo: Environment tipo (e.g. "ufficio", "magazzino").
+        categoria: Short risk category name (e.g. "Strutture", "Macchine").
+
+    Returns:
+        Tuple of (P, D) integers. Defaults to (1, 1) on miss.
+    """
+    key = (ambiente_tipo.lower() if isinstance(ambiente_tipo, str) else "", categoria)
+    return DEFAULT_RISK_SCORES.get(key, (1, 1))
+
+
+def get_default_risk_matrix() -> dict[tuple[str, str], tuple[int, int]]:
+    """Return the full default risk scoring matrix.
+
+    Exposes the lookup table as a plain dict so callers (or a future API
+    endpoint) can serialize it for the frontend if needed. The frontend
+    currently embeds the same shape client-side to avoid a runtime fetch.
+    """
+    return dict(DEFAULT_RISK_SCORES)

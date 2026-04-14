@@ -13,8 +13,10 @@ Output: A .docx file with professional formatting including:
 """
 
 import os
+import re
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 from docx import Document
 from docx.enum.section import WD_ORIENT
@@ -25,6 +27,56 @@ from docx.shared import Cm, Inches, Mm, Pt, RGBColor
 
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.risk_calculator import calculate_risk_index
+
+
+# ---------------------------------------------------------------------------
+# Logo asset path (embedded on cover page when present)
+# ---------------------------------------------------------------------------
+
+_LOGO_PATH = Path(__file__).resolve().parents[3] / "assets" / "logo.png"
+
+
+# ---------------------------------------------------------------------------
+# Part II static boilerplate content (extracted to keep the file lean)
+# ---------------------------------------------------------------------------
+
+_METODOLOGIA_INTRO_1 = (
+    "La presente valutazione dei rischi e redatta ai sensi dell'art. 28 del "
+    "D.Lgs. 9 aprile 2008, n. 81 e s.m.i., che impone al Datore di Lavoro la "
+    "valutazione di tutti i rischi per la sicurezza e la salute dei lavoratori, "
+    "tenendo conto della specificita delle mansioni, delle attrezzature e degli "
+    "ambienti di lavoro."
+)
+
+_METODOLOGIA_INTRO_2 = (
+    "Il metodo adottato si fonda sulla stima dell'Indice di Rischio (I) "
+    "calcolato attraverso la formula I = 2 x D + P, dove P rappresenta la "
+    "Probabilita di accadimento dell'evento dannoso (scala 1-4) e D il Danno "
+    "atteso per il lavoratore esposto (scala 1-4). L'indice risultante, "
+    "compreso nell'intervallo 3-12, e associato a un livello di rischio e a "
+    "una relativa priorita di intervento."
+)
+
+_RISK_LEVEL_TABLE_ROWS = [
+    ("3-4", "ACCETTABILE", "Monitoraggio", "Continuo"),
+    ("5-6", "MODESTO", "Strumenti di minimizzazione", "1 anno"),
+    ("7-8", "GRAVE", "Sensibilizzazione + controllo", "6 mesi"),
+    ("9-12", "GRAVISSIMO", "Ricerca urgente misure", "Immediatamente"),
+]
+
+_PROBABILITA_TABLE_ROWS = [
+    ("1", "Bassa", "Raramente accade"),
+    ("2", "Medio-Bassa", "Plausibile in certe condizioni"),
+    ("3", "Medio-Alta", "Accade con una certa frequenza"),
+    ("4", "Elevata", "Accade sistematicamente"),
+]
+
+_DANNO_TABLE_ROWS = [
+    ("1", "Trascurabile", "Lesioni lievi reversibili"),
+    ("2", "Modesto", "Inabilita temporanea reversibile"),
+    ("3", "Notevole", "Lesioni permanenti parziali"),
+    ("4", "Ingente", "Inabilita totale o decesso"),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -62,17 +114,34 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         self._add_cover_page(doc, azienda, data["generated_at"])
         self._add_table_of_contents(doc)
         self._add_part_i(doc, azienda, data["persone"], data["attrezzature"])
+        self._add_part_ii(doc, azienda)
         self._add_part_iii(doc, data["ambienti"])
         self._add_part_iv(doc)
 
-        # Determine version and save
+        # Determine version and save with slugified filename
         version = await self._get_next_version()
         output_dir = self._get_output_dir()
-        filename = f"dvr_master_v{version}.docx"
+        slug = self._slugify(azienda.ragione_sociale or "azienda")
+        filename = f"dvr_master_{slug}_v{version}.docx"
         filepath = os.path.join(output_dir, filename)
 
         doc.save(filepath)
         return filepath
+
+    @staticmethod
+    def _slugify(text: str, max_length: int = 40) -> str:
+        """Produce a filesystem-safe slug from a free-form label.
+
+        Lowercases the input, replaces any non-alphanumeric character with
+        an underscore, collapses repeated underscores and trims them from
+        the edges, then truncates to ``max_length`` characters.
+        """
+        lowered = (text or "").lower()
+        replaced = re.sub(r"[^a-z0-9]+", "_", lowered)
+        collapsed = re.sub(r"_+", "_", replaced).strip("_")
+        if not collapsed:
+            collapsed = "azienda"
+        return collapsed[:max_length].rstrip("_") or "azienda"
 
     async def _get_next_version(self) -> int:
         """Determine the next version number for this azienda's DVR."""
@@ -124,13 +193,28 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         for _ in range(6):
             doc.add_paragraph("")
 
-        # Logo placeholder
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run("[LOGO AZIENDALE]")
-        run.font.size = Pt(14)
-        run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-        run.font.italic = True
+        # Logo: embed from assets/logo.png if available, otherwise fall back
+        # to an italic gray text placeholder so generation never breaks.
+        if _LOGO_PATH.exists():
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = p.add_run()
+            try:
+                run.add_picture(str(_LOGO_PATH), width=Inches(2.0))
+            except Exception:
+                # Any image-loading issue degrades gracefully to the text
+                # placeholder below (e.g. corrupt file).
+                run.text = "[LOGO AZIENDALE]"
+                run.font.size = Pt(14)
+                run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+                run.font.italic = True
+        else:
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = p.add_run("[LOGO AZIENDALE]")
+            run.font.size = Pt(14)
+            run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+            run.font.italic = True
 
         doc.add_paragraph("")
 
@@ -302,6 +386,131 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             p.runs[0].font.italic = True
 
         doc.add_page_break()
+
+    # ------------------------------------------------------------------
+    # Part II — Activity description and risk assessment methodology
+    # ------------------------------------------------------------------
+
+    def _add_part_ii(self, doc: Document, azienda) -> None:
+        """Add Part II: activity description and risk methodology.
+
+        Renders four sub-sections:
+          2.1 Descrizione dell'Attivita (from azienda fields, with placeholder
+              fallback when the survey field is empty).
+          2.2 Metodologia di Valutazione dei Rischi (static boilerplate with
+              a color-coded risk-level lookup table).
+          2.3 Scala di Probabilita (P).
+          2.4 Scala del Danno (D).
+        """
+        doc.add_heading(
+            "PARTE II — DESCRIZIONE DELL'ATTIVITA E METODOLOGIA DI VALUTAZIONE",
+            level=1,
+        )
+
+        # 2.1 — Activity description
+        doc.add_heading("2.1 Descrizione dell'Attivita", level=2)
+
+        descrizione = (azienda.descrizione_attivita or "").strip()
+        if descrizione:
+            p = doc.add_paragraph()
+            run = p.add_run(descrizione)
+            run.font.size = Pt(10)
+        else:
+            p = doc.add_paragraph()
+            run = p.add_run(
+                "[Descrizione dell'attivita da compilare durante la revisione]"
+            )
+            run.font.size = Pt(10)
+            run.font.italic = True
+            run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+
+        contesto = (getattr(azienda, "contesto_territoriale", None) or "").strip()
+        if contesto:
+            p = doc.add_paragraph()
+            run = p.add_run(f"Contesto territoriale: {contesto}")
+            run.font.size = Pt(10)
+
+        doc.add_paragraph("")
+
+        # 2.2 — Risk assessment methodology
+        doc.add_heading("2.2 Metodologia di Valutazione dei Rischi", level=2)
+
+        p = doc.add_paragraph()
+        run = p.add_run(_METODOLOGIA_INTRO_1)
+        run.font.size = Pt(10)
+
+        p = doc.add_paragraph()
+        run = p.add_run(_METODOLOGIA_INTRO_2)
+        run.font.size = Pt(10)
+
+        doc.add_paragraph("")
+        self._add_risk_level_table(doc)
+        doc.add_paragraph("")
+
+        # 2.3 — Probability scale
+        doc.add_heading("2.3 Scala di Probabilita (P)", level=2)
+        self._add_data_table(
+            doc,
+            headers=["P", "Descrizione", "Esempio"],
+            rows=[list(row) for row in _PROBABILITA_TABLE_ROWS],
+        )
+        doc.add_paragraph("")
+
+        # 2.4 — Damage scale
+        doc.add_heading("2.4 Scala del Danno (D)", level=2)
+        self._add_data_table(
+            doc,
+            headers=["D", "Descrizione", "Effetto"],
+            rows=[list(row) for row in _DANNO_TABLE_ROWS],
+        )
+
+        doc.add_page_break()
+
+    def _add_risk_level_table(self, doc: Document) -> None:
+        """Render the I-range -> Livello/Azione/Tempistica lookup table.
+
+        The ``Livello`` column is shaded with the same ``_RISK_COLORS``
+        palette used by Part III so the reader sees a consistent color
+        language across the document.
+        """
+        headers = ["I", "Livello", "Azione", "Tempistica"]
+        table = doc.add_table(rows=1, cols=len(headers))
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.style = "Table Grid"
+
+        # Header row
+        header_row = table.rows[0]
+        for i, text in enumerate(headers):
+            cell = header_row.cells[i]
+            cell.text = ""
+            p = cell.paragraphs[0]
+            run = p.add_run(text)
+            run.bold = True
+            run.font.size = Pt(9)
+            run.font.color.rgb = _HEADER_TEXT
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            self._set_cell_bg(cell, _HEADER_BG)
+
+        # Data rows
+        for i_range, livello, azione, tempistica in _RISK_LEVEL_TABLE_ROWS:
+            row = table.add_row()
+            values = [i_range, livello, azione, tempistica]
+            for col_idx, text in enumerate(values):
+                cell = row.cells[col_idx]
+                cell.text = ""
+                p = cell.paragraphs[0]
+                run = p.add_run(text)
+                run.font.size = Pt(9)
+
+                if col_idx in (0, 3):
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+                # Color the Livello cell (white bold text on palette color)
+                if col_idx == 1 and livello in _RISK_COLORS:
+                    self._set_cell_bg(cell, _RISK_COLORS[livello])
+                    run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+                    run.bold = True
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     # ------------------------------------------------------------------
     # Part III — Risk assessment per environment

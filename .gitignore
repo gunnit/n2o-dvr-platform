@@ -63,6 +63,9 @@ tmp/
 /e2e-*.png
 /test-*.png
 /final-*.png
+/tierA-*.png
+/tierB-*.png
+/tierC-*.png
 
 # Session continuation notes (working doc, regenerated each session)
 /CONTINUE.md

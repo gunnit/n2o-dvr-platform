@@ -7,6 +7,13 @@ Implements the following calculation methods:
 - Fire Risk: INF + SI + PI composite scoring
 """
 
+from typing import Any
+
+from app.services.reference_data import (
+    DEFAULT_RISK_SCORES,
+    get_default_scores,
+)
+
 
 def calculate_risk_index(p: int, d: int) -> dict:
     """Calculate the DVR risk index using the formula I = 2*D + P.
@@ -205,3 +212,48 @@ def calculate_fire_risk(inf: int, si: int, pi: int) -> dict:
         "totale": totale,
         "livello": livello,
     }
+
+
+def get_default_risk_matrix() -> dict[tuple[str, str], tuple[int, int]]:
+    """Return the full default (ambiente_tipo, categoria) -> (P, D) matrix.
+
+    Thin wrapper over the reference_data lookup so callers that already
+    import risk_calculator do not need a second import.
+    """
+    return dict(DEFAULT_RISK_SCORES)
+
+
+def apply_default_scores_to_valutazioni(
+    ambiente_tipo: str, valutazioni: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Apply default P/D scores to valutazioni that still carry the initial 1/1.
+
+    Iterates over the list, and for every valutazione where both probabilita_p
+    and danno_d are 1 (the wizard's initial value), overwrites them with the
+    matrix default for the given (ambiente_tipo, categoria_rischio) pair and
+    recomputes indice_i / livello_rischio. Other rows are left untouched so
+    operator edits are preserved.
+
+    Args:
+        ambiente_tipo: Environment tipo (e.g. "ufficio").
+        valutazioni: List of dicts with at least keys "categoria_rischio",
+            "probabilita_p", "danno_d".
+
+    Returns:
+        A new list with the updated dicts (input list is not mutated).
+    """
+    updated: list[dict[str, Any]] = []
+    for val in valutazioni:
+        new_val = dict(val)
+        current_p = new_val.get("probabilita_p") or 1
+        current_d = new_val.get("danno_d") or 1
+        if current_p == 1 and current_d == 1:
+            categoria = new_val.get("categoria_rischio", "")
+            p_def, d_def = get_default_scores(ambiente_tipo, categoria)
+            new_val["probabilita_p"] = p_def
+            new_val["danno_d"] = d_def
+            computed = calculate_risk_index(p_def, d_def)
+            new_val["indice_i"] = computed["indice_i"]
+            new_val["livello_rischio"] = computed["livello_rischio"]
+        updated.append(new_val)
+    return updated

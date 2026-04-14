@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { VersionHistory } from "@/components/documents/version-history";
 import type { Azienda, DocumentoGenerato } from "@/types";
 import { apiCall } from "@/lib/api-client";
 
@@ -52,6 +53,7 @@ export default function DocumentsPage() {
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
   const [generatingTypes, setGeneratingTypes] = useState<Set<string>>(new Set());
+  const [historyTipo, setHistoryTipo] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch aziende list
@@ -229,6 +231,9 @@ export default function DocumentsPage() {
               const isGenerating = generatingTypes.has(docType.key);
               const status = existing?.status;
               const config = status ? statusConfig[status] : null;
+              const versionCount = documenti.filter(
+                (d) => d.tipo_documento === docType.key
+              ).length;
 
               return (
                 <Card key={docType.key}>
@@ -289,6 +294,15 @@ export default function DocumentsPage() {
                         Scarica
                       </Button>
                     )}
+                    {versionCount > 0 && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setHistoryTipo(docType.key)}
+                      >
+                        Cronologia (v{versionCount})
+                      </Button>
+                    )}
                   </CardFooter>
                 </Card>
               );
@@ -296,6 +310,26 @@ export default function DocumentsPage() {
           </div>
         </>
       )}
+
+      <VersionHistory
+        open={historyTipo !== null}
+        onOpenChange={(open) => {
+          if (!open) setHistoryTipo(null);
+        }}
+        tipoDocumento={historyTipo ?? ""}
+        tipoDocumentoLabel={
+          (historyTipo && documentTypes.find((d) => d.key === historyTipo)?.name) ||
+          ""
+        }
+        aziendaLabel={selectedAzienda?.ragione_sociale ?? ""}
+        versions={
+          historyTipo
+            ? documenti
+                .filter((d) => d.tipo_documento === historyTipo)
+                .sort((a, b) => b.versione - a.versione)
+            : []
+        }
+      />
     </div>
   );
 }
