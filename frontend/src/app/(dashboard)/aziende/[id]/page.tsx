@@ -13,6 +13,9 @@ import {
   Warehouse,
   Wrench,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  ShieldAlert,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -39,8 +42,11 @@ import type {
   Ambiente,
   Attrezzatura,
   DocumentoGenerato,
+  ValutazioneRischio,
 } from "@/types";
 import { apiCall } from "@/lib/api-client";
+import { DescriptionEditor } from "@/components/ai/description-editor";
+import { MeasuresPanel } from "@/components/ai/measures-panel";
 
 const surveyStatusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-700",
@@ -109,24 +115,28 @@ export default function AziendaDetailPage() {
   const [persone, setPersone] = useState<Persona[]>([]);
   const [ambienti, setAmbienti] = useState<Ambiente[]>([]);
   const [attrezzature, setAttrezzature] = useState<Attrezzatura[]>([]);
+  const [rischi, setRischi] = useState<ValutazioneRischio[]>([]);
   const [documenti, setDocumenti] = useState<DocumentoGenerato[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [expandedRisk, setExpandedRisk] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [az, per, amb, att, doc] = await Promise.all([
+      const [az, per, amb, att, ris, doc] = await Promise.all([
         apiCall<Azienda>(`/api/v1/aziende/${id}`),
         apiCall<Persona[]>(`/api/v1/aziende/${id}/persone`).catch(() => []),
         apiCall<Ambiente[]>(`/api/v1/aziende/${id}/ambienti`).catch(() => []),
         apiCall<Attrezzatura[]>(`/api/v1/aziende/${id}/attrezzature`).catch(() => []),
+        apiCall<ValutazioneRischio[]>(`/api/v1/aziende/${id}/rischi`).catch(() => []),
         apiCall<DocumentoGenerato[]>(`/api/v1/aziende/${id}/documents`).catch(() => []),
       ]);
       setAzienda(az);
       setPersone(per);
       setAmbienti(amb);
       setAttrezzature(att);
+      setRischi(ris);
       setDocumenti(doc);
     } catch {
       setError("Errore nel caricamento dei dati");
@@ -150,7 +160,7 @@ export default function AziendaDetailPage() {
   if (error || !azienda) {
     return (
       <div className="space-y-6">
-        <Button variant="ghost" render={<Link href="/aziende" />}>
+        <Button variant="ghost" nativeButton={false} render={<Link href="/aziende" />}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Torna alle aziende
         </Button>
@@ -168,7 +178,7 @@ export default function AziendaDetailPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" render={<Link href="/aziende" />}>
+          <Button variant="ghost" size="icon" nativeButton={false} render={<Link href="/aziende" />}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -187,7 +197,7 @@ export default function AziendaDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" render={<Link href={`/survey/${id}`} />}>
+          <Button variant="outline" nativeButton={false} render={<Link href={`/survey/${id}`} />}>
             <ClipboardList className="mr-2 h-4 w-4" />
             Inizia Sopralluogo
           </Button>
@@ -240,6 +250,15 @@ export default function AziendaDetailPage() {
             {attrezzature.length > 0 && (
               <Badge variant="secondary" className="ml-1.5 text-[10px]">
                 {attrezzature.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="rischi">
+            <ShieldAlert className="mr-1.5 h-3.5 w-3.5" />
+            Rischi
+            {rischi.length > 0 && (
+              <Badge variant="secondary" className="ml-1.5 text-[10px]">
+                {rischi.length}
               </Badge>
             )}
           </TabsTrigger>
@@ -314,35 +333,42 @@ export default function AziendaDetailPage() {
               </CardContent>
             </Card>
 
-            {(azienda.descrizione_attivita || azienda.contesto_territoriale) && (
-              <Card className="md:col-span-2">
-                <CardHeader>
-                  <CardTitle className="text-sm">Descrizione</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {azienda.descrizione_attivita && (
-                    <div>
-                      <p className="mb-1 text-xs font-medium text-muted-foreground">
-                        Descrizione Attivit&agrave;
-                      </p>
-                      <p className="text-sm leading-relaxed">
-                        {azienda.descrizione_attivita}
-                      </p>
-                    </div>
-                  )}
-                  {azienda.contesto_territoriale && (
-                    <div>
-                      <p className="mb-1 text-xs font-medium text-muted-foreground">
-                        Contesto Territoriale
-                      </p>
-                      <p className="text-sm leading-relaxed">
-                        {azienda.contesto_territoriale}
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle className="text-sm">Descrizione</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <DescriptionEditor
+                  aziendaId={azienda.id}
+                  value={azienda.descrizione_attivita ?? ""}
+                  initialProvenance={
+                    azienda.descrizione_attivita ? "edited" : "none"
+                  }
+                  onChange={async (text) => {
+                    // Optimistic local update
+                    setAzienda({ ...azienda, descrizione_attivita: text });
+                    try {
+                      await apiCall<Azienda>(`/api/v1/aziende/${azienda.id}`, {
+                        method: "PUT",
+                        body: JSON.stringify({ descrizione_attivita: text }),
+                      });
+                    } catch {
+                      // ignore; user can retry
+                    }
+                  }}
+                />
+                {azienda.contesto_territoriale && (
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">
+                      Contesto Territoriale
+                    </p>
+                    <p className="text-sm leading-relaxed">
+                      {azienda.contesto_territoriale}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
@@ -482,6 +508,99 @@ export default function AziendaDetailPage() {
                     ))}
                   </TableBody>
                 </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Rischi Tab — AI measures panel per risk (US-2.6) */}
+        <TabsContent value="rischi">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">
+                Valutazioni del rischio
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {rischi.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  Nessun rischio registrato. Completa il sopralluogo per
+                  valutare i rischi.
+                </p>
+              ) : (
+                rischi
+                  .filter((r) => r.applicabile)
+                  .map((r) => {
+                    const isOpen = expandedRisk === r.id;
+                    return (
+                      <div
+                        key={r.id}
+                        className="rounded-lg border border-input"
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedRisk(isOpen ? null : r.id)
+                          }
+                          className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left hover:bg-muted/50"
+                        >
+                          <div className="flex flex-1 flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium">
+                              {r.categoria_rischio}
+                            </span>
+                            {r.pericolo && (
+                              <span className="text-xs text-muted-foreground">
+                                - {r.pericolo}
+                              </span>
+                            )}
+                            {r.livello_rischio && (
+                              <Badge
+                                variant="secondary"
+                                className={
+                                  r.livello_rischio === "ACCETTABILE"
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : r.livello_rischio === "MODESTO"
+                                    ? "bg-amber-100 text-amber-800"
+                                    : r.livello_rischio === "GRAVE"
+                                    ? "bg-orange-100 text-orange-800"
+                                    : "bg-red-100 text-red-800"
+                                }
+                              >
+                                {r.livello_rischio} (I={r.indice_i})
+                              </Badge>
+                            )}
+                          </div>
+                          {isOpen ? (
+                            <ChevronUp className="h-4 w-4 flex-shrink-0" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 flex-shrink-0" />
+                          )}
+                        </button>
+                        {isOpen && (
+                          <div className="border-t border-input p-4">
+                            <MeasuresPanel
+                              aziendaId={azienda.id}
+                              rischioId={r.id}
+                              initialText={r.misure_prevenzione ?? ""}
+                              onSave={async (text) => {
+                                await apiCall(
+                                  `/api/v1/aziende/${azienda.id}/ambienti/${r.ambiente_id}/rischi/${r.id}`,
+                                  {
+                                    method: "PUT",
+                                    body: JSON.stringify({
+                                      misure_prevenzione: text,
+                                    }),
+                                  }
+                                );
+                                // refresh so the new text shows under initialText
+                                fetchData();
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
               )}
             </CardContent>
           </Card>

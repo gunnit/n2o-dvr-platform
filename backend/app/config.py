@@ -17,8 +17,16 @@ class Settings(BaseSettings):
 
     # OpenAI
     OPENAI_API_KEY: str = ""
-    OPENAI_MODEL_EXTRACTION: str = "gpt-4.1"
-    OPENAI_MODEL_GENERATION: str = "gpt-4.1-mini"
+    # SDS PDF extraction — vision + structured outputs
+    OPENAI_MODEL_EXTRACTION: str = "gpt-5.4-mini"
+    # Short Italian boilerplate (company descriptions)
+    OPENAI_MODEL_GENERATION: str = "gpt-5-nano"
+    # Domain reasoning for improvement measures
+    OPENAI_MODEL_MEASURES: str = "gpt-5-mini"
+    # Optional "max quality" toggle for hard cases
+    OPENAI_MODEL_PREMIUM: str = "gpt-5.4"
+    # Request timeout in seconds (OpenAI default is 10 min, we tighten for UX)
+    OPENAI_TIMEOUT_SECONDS: float = 60.0
 
     # Google Drive
     GOOGLE_DRIVE_FOLDER_ID: str = "13aHCy8D78JwJzgffxYbqe7Nmyed84may"

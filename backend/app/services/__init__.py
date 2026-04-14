@@ -23,6 +23,12 @@ from app.services.document_generator import (
     BaseDocumentGenerator,
     DVRMasterGenerator,
 )
+from app.services.ai import (
+    extract_from_pdf,
+    generate_structured,
+    generate_text,
+    get_client,
+)
 
 __all__ = [
     # Risk calculator
@@ -47,4 +53,9 @@ __all__ = [
     # Document generators
     "BaseDocumentGenerator",
     "DVRMasterGenerator",
+    # AI client helpers
+    "get_client",
+    "generate_text",
+    "generate_structured",
+    "extract_from_pdf",
 ]

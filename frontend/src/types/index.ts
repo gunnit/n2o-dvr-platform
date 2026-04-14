@@ -79,6 +79,12 @@ export interface Attrezzatura {
   verifiche_periodiche: boolean;
 }
 
+export type ExtractionStatus =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed";
+
 export interface SostanzaChimica {
   id: string;
   azienda_id: string;
@@ -88,6 +94,36 @@ export interface SostanzaChimica {
   stato_miscela: string | null;
   frasi_h: string[];
   frasi_p: string[];
+  // AI extraction metadata (US-1.9, US-1.10) — optional for manual entries
+  ai_extracted?: boolean;
+  ai_confidence?: number | null;
+  extraction_status?: ExtractionStatus | null;
+  extraction_error?: string | null;
+  human_reviewed?: boolean;
+  sds_file_path?: string | null;
+}
+
+export interface BatchUploadFileResult {
+  filename: string;
+  sostanza_id: string | null;
+  status: "queued" | "failed";
+  reason: string | null;
+}
+
+export interface BatchUploadResponse {
+  results: BatchUploadFileResult[];
+}
+
+export interface BatchStatusItem {
+  sostanza_id: string;
+  nome_prodotto: string;
+  extraction_status: ExtractionStatus | null;
+  extraction_error: string | null;
+  ai_confidence: number | null;
+}
+
+export interface BatchStatusResponse {
+  items: BatchStatusItem[];
 }
 
 export type UserRole = "admin" | "operatore_ufficio" | "operatore_campo";

@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +12,11 @@ from app.models.ambiente import Ambiente
 from app.models.azienda import Azienda
 from app.models.valutazione_rischio import ValutazioneRischio
 from app.schemas.rischio import RischioCreate, RischioResponse, RischioUpdate
+from app.services.ai import MisuraSuggerita, suggest_measures
+
+
+class SuggestMeasuresResponse(BaseModel):
+    misure: list[MisuraSuggerita]
 
 router = APIRouter(prefix="/aziende/{azienda_id}", tags=["rischi"])
 
@@ -86,3 +92,36 @@ async def update_rischio(
     await db.commit()
     await db.refresh(rischio)
     return rischio
+
+
+@router.post(
+    "/rischi/{rischio_id}/suggerisci-misure",
+    response_model=SuggestMeasuresResponse,
+)
+async def suggerisci_misure(
+    azienda_id: uuid.UUID,
+    rischio_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate 2-5 AI-suggested improvement measures for a risk (US-2.6).
+
+    Returns the suggestions for the user to Accept / Modify / Reject in the
+    Risk Scoring Interface. Persistence of accepted measures is done via
+    PUT /ambienti/{a}/rischi/{r} with misure_prevenzione set by the frontend.
+    """
+    await _verify_azienda(azienda_id, org_id, db)
+    result = await db.execute(
+        select(ValutazioneRischio)
+        .join(Ambiente)
+        .where(
+            ValutazioneRischio.id == rischio_id,
+            Ambiente.azienda_id == azienda_id,
+        )
+    )
+    rischio = result.scalar_one_or_none()
+    if not rischio:
+        raise NotFoundError("Valutazione rischio not found")
+
+    misure = await suggest_measures(rischio)
+    return SuggestMeasuresResponse(misure=misure)

@@ -22,6 +22,9 @@ class SostanzaChimica(Base):
     frasi_p: Mapped[list[str] | None] = mapped_column(ARRAY(String))
     ai_extracted: Mapped[bool] = mapped_column(Boolean, default=False)
     ai_confidence: Mapped[float | None] = mapped_column(Numeric)
+    # Extraction lifecycle: None (manual) | pending | processing | completed | failed
+    extraction_status: Mapped[str | None] = mapped_column(String)
+    extraction_error: Mapped[str | None] = mapped_column(Text)
     human_reviewed: Mapped[bool] = mapped_column(Boolean, default=False)
     sds_file_path: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
