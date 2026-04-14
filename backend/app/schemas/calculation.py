@@ -89,3 +89,120 @@ class StressAssessmentResponse(BaseModel):
     azione: str
     misure: list[str]
     unanswered: list[str]
+
+
+# ---------------------------------------------------------------------------
+# VDT — Videoterminali (D.Lgs. 81/2008 Titolo VII)
+# ---------------------------------------------------------------------------
+
+
+class VdtWorkerInput(BaseModel):
+    id: str | None = Field(
+        default=None,
+        description="Optional stable identifier for the worker (client-generated).",
+    )
+    nome: str | None = Field(
+        default=None,
+        description="Optional display name. Privacy rules apply — do NOT send codice fiscale.",
+    )
+    ore_settimanali: float = Field(
+        ...,
+        ge=0,
+        le=168,
+        description="Weekly VDT usage in hours (0-168).",
+    )
+
+
+class VdtAssessmentRequest(BaseModel):
+    workers: list[VdtWorkerInput] = Field(
+        ...,
+        description="List of workers to classify by VDT exposure.",
+    )
+
+
+class VdtWorkerResult(BaseModel):
+    id: str | None = None
+    nome: str | None = None
+    ore_settimanali: float
+    esposizione: str
+    sorveglianza_sanitaria: bool
+
+
+class VdtAssessmentResponse(BaseModel):
+    workers: list[VdtWorkerResult]
+    total: int
+    esposti: int
+    non_esposti: int
+
+
+# ---------------------------------------------------------------------------
+# Microclima — PMV/PPD (ISO 7730) and PHS (ISO 7933)
+# ---------------------------------------------------------------------------
+
+
+class PmvPpdRequest(BaseModel):
+    air_temp: float = Field(
+        ..., ge=10, le=40, description="Dry bulb air temperature tdb [°C]"
+    )
+    mean_radiant_temp: float = Field(
+        ..., ge=10, le=40, description="Mean radiant temperature tr [°C]"
+    )
+    air_velocity: float = Field(
+        ..., ge=0, le=2, description="Relative air speed vr [m/s]"
+    )
+    humidity: float = Field(..., ge=0, le=100, description="Relative humidity rh [%]")
+    metabolic_rate: float = Field(
+        ..., ge=0.7, le=4.0, description="Metabolic rate met [met]"
+    )
+    clothing_insulation: float = Field(
+        ..., ge=0, le=2.0, description="Clothing insulation clo [clo]"
+    )
+
+
+class PmvPpdResponse(BaseModel):
+    pmv: float
+    ppd: float
+    sensation: str
+    category: str  # "A", "B", "C", or "FUORI_SOGLIA"
+    compliant: bool
+
+
+class PhsRequest(BaseModel):
+    air_temp: float = Field(
+        ..., ge=15, le=50, description="Dry bulb air temperature tdb [°C]"
+    )
+    mean_radiant_temp: float = Field(
+        ..., ge=15, le=60, description="Mean radiant temperature tr [°C]"
+    )
+    air_velocity: float = Field(..., ge=0, le=3, description="Air speed v [m/s]")
+    humidity: float = Field(..., ge=0, le=100, description="Relative humidity rh [%]")
+    metabolic_rate: float = Field(
+        ..., ge=1.0, le=7.5, description="Metabolic rate met [met]"
+    )
+    clothing_insulation: float = Field(
+        ..., ge=0.1, le=1.0, description="Clothing insulation clo [clo]"
+    )
+    posture: str = Field(
+        default="standing",
+        description="Posture: 'sitting' | 'standing' | 'crouching'.",
+    )
+    acclimatized: bool = Field(
+        default=True, description="Whether the worker is heat-acclimatized."
+    )
+    drink_free: bool = Field(
+        default=True, description="Whether workers can drink water freely."
+    )
+    duration_min: int = Field(
+        default=480, ge=1, le=480, description="Work sequence duration [minutes]."
+    )
+
+
+class PhsResponse(BaseModel):
+    t_re: float  # Final rectal temperature [°C]
+    t_sk: float  # Skin temperature [°C]
+    d_lim_t_re: float  # Max exposure time by core temp [min]
+    d_lim_loss_50: float  # Max exposure time by dehydration (50th percentile) [min]
+    d_lim_loss_95: float  # Max exposure time by dehydration (95th percentile) [min]
+    sweat_loss_g: float  # Total cumulative sweat loss [g]
+    d_lim: float  # Minimum of the three d_lim values — the binding limit [min]
+    livello: str  # "ACCETTABILE" | "LIMITE" | "CRITICO"
