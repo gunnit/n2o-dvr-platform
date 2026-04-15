@@ -27,14 +27,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { AlertTriangle, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Ambiente, ValutazioneRischio } from "@/types";
+import type { Ambiente, Attrezzatura, ValutazioneRischio } from "@/types";
 
 interface StepRischiProps {
   aziendaId: string;
   ambienti: Ambiente[];
+  attrezzature: Attrezzatura[];
   valutazioni: ValutazioneRischio[];
   onChange: (valutazioni: ValutazioneRischio[]) => void;
+  // US-1.5 AC3: signature of the ambienti list the operator last
+  // acknowledged on Step 5. Owned by the wizard so it survives Step 5
+  // unmount/remount under <AnimatePresence mode="wait">. When this
+  // diverges from the current ambienti sig the banner appears and
+  // clicking "Ho rivisto" calls onAcknowledgeAmbienti with the live sig.
+  acknowledgedAmbientiSig: string;
+  onAcknowledgeAmbienti: (sig: string) => void;
 }
 
 const CATEGORIE_RISCHIO = [
@@ -121,6 +130,135 @@ function getCategorieForTipo(tipo: string | undefined | null): CategoriaRischio[
   if (!tipo) return [...CATEGORIE_RISCHIO];
   const filtered = RISCHI_PER_AMBIENTE[tipo.toLowerCase()];
   return filtered ?? [...CATEGORIE_RISCHIO];
+}
+
+// ---------------------------------------------------------------------------
+// Attrezzature-driven risk override (US-1.5 AC1 — second half)
+//
+// When a declared attrezzatura implies a risk category that the ambiente
+// subset would normally hide (e.g., a "Saldatrice" in an Ufficio adds
+// Chimici / Cancerogeni / Incendio / Fisici that the ufficio filter
+// otherwise drops), surface that category anyway and tell the operator
+// which attrezzatura caused it. Keyword matching is case-insensitive
+// substring against the descrizione so custom variants like "Tornio CNC
+// 5 assi" still hit "tornio".
+// ---------------------------------------------------------------------------
+const EQUIPMENT_RISK_KEYWORDS: ReadonlyArray<{
+  keywords: readonly string[];
+  categorie: readonly CategoriaRischio[];
+}> = [
+  // Welding — fumes, UV/heat, fire, IARC-listed
+  {
+    keywords: ["saldatrice", "saldatura"],
+    categorie: ["Macchine", "Chimici", "Cancerogeni", "Fisici", "Incendio"],
+  },
+  // Industrial machine tools — moving parts, noise
+  {
+    keywords: [
+      "tornio",
+      "fresa",
+      "pressa",
+      "trapano a colonna",
+      "trapano colonna",
+      "carroponte",
+      "rettificatrice",
+    ],
+    categorie: ["Macchine", "Fisici"],
+  },
+  { keywords: ["nastro trasportatore"], categorie: ["Macchine"] },
+  // Forklift / pallet trucks — vehicle + noise/vibration
+  {
+    keywords: ["muletto", "carrello elevatore", "transpallet elettrico"],
+    categorie: ["Macchine", "Fisici"],
+  },
+  // Cooking heat sources — fire, burns
+  {
+    keywords: ["forno", "piano cottura", "fornello", "friggitrice"],
+    categorie: ["Incendio", "Fisici"],
+  },
+  // Cooking machinery — moving blades / mixers
+  {
+    keywords: ["affettatrice", "tritacarne", "impastatrice"],
+    categorie: ["Macchine"],
+  },
+  // Cooking ventilation — chemical fume control
+  {
+    keywords: ["cappa aspirante", "cappa estrazione"],
+    categorie: ["Chimici"],
+  },
+  // Lab fume hood
+  { keywords: ["cappa chimica"], categorie: ["Chimici", "Cancerogeni"] },
+  { keywords: ["centrifuga"], categorie: ["Macchine", "Fisici"] },
+  { keywords: ["autoclave"], categorie: ["Biologici", "Fisici"] },
+  // Working at height
+  {
+    keywords: ["ponteggio", "trabattello", "scala portatile"],
+    categorie: ["Strutture"],
+  },
+  // Heavy construction machinery
+  {
+    keywords: ["escavatore", "gru", "betoniera", "martello demolitore"],
+    categorie: ["Macchine", "Fisici", "Strutture"],
+  },
+  // Compressor — noise + pressure
+  { keywords: ["compressore"], categorie: ["Fisici", "Macchine"] },
+  // Industrial dishwasher — caustic detergents + heat
+  {
+    keywords: ["lavastoviglie industriale"],
+    categorie: ["Chimici", "Macchine"],
+  },
+  // Refrigeration — refrigerant gas + machinery
+  {
+    keywords: [
+      "frigorifero industriale",
+      "abbattitore",
+      "frigorifero espositore",
+    ],
+    categorie: ["Chimici", "Macchine"],
+  },
+] as const;
+
+/**
+ * Returns a map: categoria → list of attrezzatura descriptions that
+ * caused that categoria to surface. Empty map when no attrezzature match
+ * any keyword. Used by the visibility filter and the per-row reason chip.
+ */
+function categoriesImpliedByAttrezzature(
+  attrezzature: ReadonlyArray<Attrezzatura>
+): Map<CategoriaRischio, string[]> {
+  const result = new Map<CategoriaRischio, string[]>();
+  for (const att of attrezzature) {
+    const desc = (att.descrizione ?? "").toLowerCase();
+    if (!desc) continue;
+    for (const rule of EQUIPMENT_RISK_KEYWORDS) {
+      if (!rule.keywords.some((k) => desc.includes(k))) continue;
+      for (const cat of rule.categorie) {
+        const list = result.get(cat) ?? [];
+        if (!list.includes(att.descrizione)) list.push(att.descrizione);
+        result.set(cat, list);
+      }
+    }
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Ambienti-changed banner (US-1.5 AC3)
+//
+// When step 3 ambienti changed since the operator last reviewed step 5,
+// show an amber banner prompting them to reconfirm. Signature is
+// {id, tipo} sorted by id — only changes that actually move the visible
+// risk subset count (added/removed ambienti, or tipo edits) flip it.
+// Renames or surface-area edits do not trigger the banner.
+// ---------------------------------------------------------------------------
+export function ambientiSignature(
+  ambienti: ReadonlyArray<Ambiente>
+): string {
+  return JSON.stringify(
+    ambienti
+      .map((a) => ({ id: a.id, tipo: (a.tipo ?? "").toLowerCase() }))
+      .sort((x, y) => x.id.localeCompare(y.id))
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -325,12 +463,26 @@ function initValutazioni(
 
 export function StepRischi({
   ambienti,
+  attrezzature,
   valutazioni,
   onChange,
+  acknowledgedAmbientiSig,
+  onAcknowledgeAmbienti,
 }: StepRischiProps) {
   const [selectedAmbienteIndex, setSelectedAmbienteIndex] = useState(0);
   const [mostraTutti, setMostraTutti] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+
+  // US-1.5 AC3: ack-sig is owned by the wizard so it survives this
+  // component's unmount/remount across step navigation. A fresh
+  // page-load initialises the wizard's ack-sig from the initial
+  // ambienti, so the banner does NOT show until the operator actually
+  // edits Step 3 during this session.
+  const currentAmbientiSig = useMemo(
+    () => ambientiSignature(ambienti),
+    [ambienti]
+  );
+  const ambientiChanged = currentAmbientiSig !== acknowledgedAmbientiSig;
 
   const selectedAmbiente = ambienti[selectedAmbienteIndex];
 
@@ -355,11 +507,26 @@ export function StepRischi({
     [allValutazioni, selectedAmbiente]
   );
 
-  // Compute the subset of categories shown for this ambiente.tipo.
+  // US-1.5 AC1 second half: categories implied by the declared
+  // attrezzature (azienda-wide — equipment is shared across ambienti).
+  const impliedByAttrezzature = useMemo(
+    () => categoriesImpliedByAttrezzature(attrezzature),
+    [attrezzature]
+  );
+
+  // Compute the subset of categories shown for this ambiente.tipo,
+  // augmented by anything an attrezzatura implies.
   const categorieVisibili = useMemo<CategoriaRischio[]>(() => {
     if (mostraTutti) return [...CATEGORIE_RISCHIO];
-    return getCategorieForTipo(selectedAmbiente?.tipo);
-  }, [mostraTutti, selectedAmbiente?.tipo]);
+    const ambienteSubset = getCategorieForTipo(selectedAmbiente?.tipo);
+    const merged = new Set<CategoriaRischio>(ambienteSubset);
+    for (const cat of impliedByAttrezzature.keys()) {
+      merged.add(cat);
+    }
+    // Preserve canonical order of CATEGORIE_RISCHIO so the table doesn't
+    // reflow when a new attrezzatura surfaces a category mid-session.
+    return CATEGORIE_RISCHIO.filter((c) => merged.has(c));
+  }, [mostraTutti, selectedAmbiente?.tipo, impliedByAttrezzature]);
 
   const visibleValutazioni = useMemo(() => {
     const setVis = new Set<string>(categorieVisibili);
@@ -450,6 +617,35 @@ export function StepRischi({
 
   return (
     <div className="space-y-6">
+      {/* US-1.5 AC3: ambienti changed since last visit — prompt the
+          operator to reconfirm. Dismiss-only (acknowledgement, not a
+          mutation) — the row data is already up-to-date thanks to the
+          allValutazioni reseed, so no destructive action is offered. */}
+      {ambientiChanged && (
+        <div className="flex flex-col gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="font-medium">Ambienti modificati</p>
+              <p className="text-xs">
+                Hai modificato la lista degli ambienti dal passo 3.
+                Rivedi le selezioni di rischio per i nuovi ambienti o
+                quelli con tipologia cambiata.
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-amber-400 text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900/30"
+            onClick={() => onAcknowledgeAmbienti(currentAmbientiSig)}
+          >
+            Ho rivisto
+          </Button>
+        </div>
+      )}
+
       {/* Ambiente selector */}
       <Card>
         <CardHeader>
@@ -602,7 +798,29 @@ export function StepRischi({
                     )}
                   >
                     <TableCell className="font-medium">
-                      {val.categoria_rischio}
+                      <div className="flex flex-col gap-1">
+                        <span>{val.categoria_rischio}</span>
+                        {(() => {
+                          const reasons = impliedByAttrezzature.get(
+                            val.categoria_rischio as CategoriaRischio
+                          );
+                          if (!reasons || reasons.length === 0) return null;
+                          // Tooltip lists the matching attrezzatura
+                          // descrizioni so the operator knows why this
+                          // row is here even though the ambiente subset
+                          // would otherwise hide it.
+                          const tooltip = `Aggiunto perche hai dichiarato: ${reasons.join(", ")}`;
+                          return (
+                            <span
+                              title={tooltip}
+                              className="inline-flex w-fit items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200"
+                            >
+                              <Wrench className="h-3 w-3" />
+                              Suggerito da attrezzature
+                            </span>
+                          );
+                        })()}
+                      </div>
                     </TableCell>
 
                     {/* Applicabile toggle */}
