@@ -25,6 +25,8 @@ import {
   X,
 } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
+import { AIBadge } from "@/components/ai/ai-badge";
+import { AIContent, AIFilterToggle } from "@/components/ai/ai-filter-context";
 import type {
   BatchStatusResponse,
   BatchUploadFileResult,
@@ -596,11 +598,16 @@ export function StepSostanze({
 
       <Card>
         <CardHeader>
-          <CardTitle>Revisione sostanze</CardTitle>
-          <CardDescription>
-            Verifica e correggi i dati estratti dall&apos;AI. Le sostanze
-            inserite manualmente non hanno badge.
-          </CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle>Revisione sostanze</CardTitle>
+              <CardDescription>
+                Verifica e correggi i dati estratti dall&apos;AI. Le sostanze
+                inserite manualmente non hanno badge.
+              </CardDescription>
+            </div>
+            {sostanze.some((s) => s.ai_extracted) && <AIFilterToggle />}
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
           {sostanze.length === 0 && (
@@ -620,8 +627,23 @@ export function StepSostanze({
                 ? Math.round(sost.ai_confidence * 100)
                 : null;
 
+            // US-5.3 provenance mapping:
+            //   ai_extracted && !human_reviewed  -> "ai"      (violet)
+            //   ai_extracted &&  human_reviewed  -> "edited"  (sky)
+            //   !ai_extracted                    -> "manual"  (slate, hidden)
+            // "Estrazione fallita" keeps its destructive chip because it is
+            // a lifecycle state, not a provenance — the row is usable as a
+            // manual fallback once the operator fills it in.
+            const provenance = sost.ai_extracted
+              ? sost.human_reviewed
+                ? "edited"
+                : "ai"
+              : "manual";
+            const showAiBadge = provenance !== "manual";
+            const isAiBlock = provenance === "ai";
+
             return (
-              <div key={sost.id}>
+              <AIContent key={sost.id} isAI={isAiBlock}>
                 {index > 0 && <Separator className="mb-6" />}
                 <div className="space-y-4">
                   <div className="flex items-start justify-between gap-2">
@@ -630,23 +652,18 @@ export function StepSostanze({
                         Sostanza {index + 1}
                         {sost.nome_prodotto ? ` - ${sost.nome_prodotto}` : ""}
                       </h3>
-                      {sost.ai_extracted && !sost.human_reviewed && (
-                        <Badge
-                          variant="secondary"
-                          className="bg-violet-100 text-violet-800 hover:bg-violet-100"
-                        >
-                          <Sparkles className="mr-1 h-3 w-3" />
-                          AI{confidencePct !== null && ` ${confidencePct}%`}
-                        </Badge>
-                      )}
-                      {sost.human_reviewed && (
-                        <Badge
-                          variant="secondary"
-                          className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
-                        >
-                          <CheckCircle2 className="mr-1 h-3 w-3" />
-                          Revisionato
-                        </Badge>
+                      {showAiBadge && (
+                        <AIBadge
+                          provenance={provenance}
+                          timestamp={sost.created_at}
+                          label={
+                            provenance === "ai" && confidencePct !== null
+                              ? `AI ${confidencePct}%`
+                              : provenance === "edited"
+                              ? "Revisionato"
+                              : undefined
+                          }
+                        />
                       )}
                       {hasFailed && (
                         <Badge variant="destructive">
@@ -783,7 +800,7 @@ export function StepSostanze({
                     placeholder="Es. P264, P280"
                   />
                 </div>
-              </div>
+              </AIContent>
             );
           })}
 

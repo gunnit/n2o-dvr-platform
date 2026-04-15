@@ -110,6 +110,9 @@ export interface SostanzaChimica {
   extraction_error?: string | null;
   human_reviewed?: boolean;
   sds_file_path?: string | null;
+  // Present on server-persisted rows; absent on locally-minted (pre-save)
+  // manual entries. Used as the AI-provenance timestamp in the Revisione UI.
+  created_at?: string;
 }
 
 export interface BatchUploadFileResult {
