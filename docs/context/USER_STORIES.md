@@ -13,12 +13,16 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 
 ## 🔒 Active Agent Claims (2026-04-15)
 
-Stories below are being worked on by a parallel agent. **Do not pick these up if you are a fresh agent.** Look for free PARTIAL stories instead (e.g. US-2.1, US-2.8, US-4.7, US-5.2).
+Stories below are being worked on by a parallel agent. **Do not pick these up if you are a fresh agent.** Free PARTIAL pool right now: **US-2.8** (DVR 111-table parity + desktop notification) and **US-4.7** (POS phase-builder UI, drag/drop, per-phase NIOSH/noise/vibration, dependencies). Pick one of those.
+
+**Agent-E (2026-04-15 session)** claimed US-2.1 + US-5.2 — backend description_revisions + visura upload (US-2.1 AC1/AC2) and cross-cutting stale-snapshot warning + field dependency tooltip + survey-change auto-propagation banner (US-5.2 AC1/AC2/AC3). Do NOT pick these up.
 
 **Agent-C (2026-04-15 session)** closed US-1.6 + US-4.3 — see the claim rows below. Free PARTIAL pool narrowed accordingly.
 
 | Story | Claimed by | Timestamp | Scope |
 |-------|-----------|-----------|-------|
+| US-2.1 | Agent-E | 2026-04-15 | **IN PROGRESS** — visura PDF upload path (AC1) + `description_revisions` table so AI draft is retained when operator edits → "Modificato dall'utente" badge + history list (AC2); AC3 retry already shipped, leaving it intact |
+| US-5.2 | Agent-E | 2026-04-15 | **IN PROGRESS** — `survey_snapshot_hash` on documents + stale-snapshot banner when survey changes during an in-flight generation (AC2); field-dependency catalog + tooltip listing downstream documents (AC3); regenerate-propagation smoke covered by integration test (AC1) |
 | ~~US-1.5~~ | Agent-D | 2026-04-15 | **CLOSED → DONE** (attrezzature-driven risk-category union + "Ambienti modificati" banner with wizard-scoped acknowledgement state shipped) |
 | ~~US-5.3~~ | Agent-D | 2026-04-15 | **CLOSED → DONE** (version-history snapshot diff tags AI-originated paragraphs from azienda description + rischi misure + violet ring + AIFilterToggle in dialog header; admin AI feedback panel at `/admin/ai-feedback` with summary cards + recent rejections table backed by new `/admin/summary` + `/admin/recent` admin-gated endpoints; 10 new tests on the admin endpoints + context preview helper) |
 | ~~US-1.6~~ | Agent-C | 2026-04-15 | **CLOSED → DONE** (signature PNG persisted + server timestamp + firmato lock + Apri revisione shipped) |
@@ -200,7 +204,7 @@ As an operator, I want to review and correct AI-extracted chemical data in a tab
 
 ## Epic 2: DVR Master Generation
 
-#### US-2.1 `PARTIAL`
+#### US-2.1 `PARTIAL` 🔒 claimed by Agent-E (2026-04-15) — see Active Agent Claims table at top of file
 As an office operator, I want the system to auto-generate the company description from survey data + visura + website using AI so I don't have to write boilerplate.
 
 > **Built**: `backend/app/services/ai/company_description.py:70-88` generates 200-400 word Italian description. API wired at `backend/app/api/v1/aziende.py:101-125`. Edit tracking fields support "Modificato dall'utente" badge flow. Generation failures surface with an inline "Riprova" button (AC3) via the shared AI badge + error card in `frontend/src/components/ai/description-editor.tsx`.
@@ -619,7 +623,7 @@ As an admin, I want to manage multiple client companies and their document packa
 - **Given** I type into the dashboard search box, **When** I enter at least 2 characters, **Then** the table filters in real time matching against ragione sociale, partita IVA, and comune
 - **Given** I am a non-admin user, **When** I try to access the "Aggiungi cliente" or "Elimina cliente" actions, **Then** the actions are hidden and the API returns 403 if accessed directly
 
-#### US-5.2 `PARTIAL`
+#### US-5.2 `PARTIAL` 🔒 claimed by Agent-E (2026-04-15) — see Active Agent Claims table at top of file
 As any user, I want all documents generated from the same shared data (enter once, use everywhere).
 
 > **Built**: Backend data model is fully shared — survey data (azienda, persone, ambienti, attrezzature, rischi, sostanze) feeds into DVR generation. Single source of truth via `load_data()`.
