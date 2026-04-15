@@ -13,12 +13,16 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 
 ## 🔒 Active Agent Claims (2026-04-15)
 
-Stories below are being worked on by a parallel agent. **Do not pick these up if you are a fresh agent.** Look for free PARTIAL stories instead (e.g. US-1.5, US-2.1, US-2.2, US-2.8, US-4.7, US-5.2, US-5.3).
+Stories below are being worked on by a parallel agent. **Do not pick these up if you are a fresh agent.** Look for free PARTIAL stories instead (e.g. US-2.1, US-2.8, US-4.7, US-5.2).
+
+**Agent-C (2026-04-15 session)** closed US-1.6 + US-4.3 — see the claim rows below. Free PARTIAL pool narrowed accordingly.
 
 | Story | Claimed by | Timestamp | Scope |
 |-------|-----------|-----------|-------|
-| US-1.6 | Agent-C | 2026-04-15 | **IN PROGRESS** — persist signature PNG + server-side timestamp, flip survey to "Firmato", "Apri revisione" audited edit flow |
-| US-4.3 | Agent-C | 2026-04-15 | **IN PROGRESS** — food-activity-type selector + activity-specific CCP pre-loading + edit-then-merge on activity change |
+| **US-1.5** | **Agent-D** | **2026-04-15** | **IN PROGRESS** — attrezzature-driven risk override + "Ambienti modificati" banner on Step 5 return. Touches `step-rischi.tsx` + `survey-wizard.tsx`. **DO NOT PICK UP.** |
+| **US-5.3** | **Agent-D** | **2026-04-15** | **IN PROGRESS** — extend `<AIBadge>` + `<AIContent>` to DVR/attachment review surfaces; admin view for `ai_feedback` thumbs-downs. Touches `components/ai/*`, documents review pages, new admin/ai-feedback page. **DO NOT PICK UP.** |
+| ~~US-1.6~~ | Agent-C | 2026-04-15 | **CLOSED → DONE** (signature PNG persisted + server timestamp + firmato lock + Apri revisione shipped) |
+| ~~US-4.3~~ | Agent-C | 2026-04-15 | **CLOSED → DONE** (activity-type catalog + CCP pre-load + merge/replace dialog shipped) |
 | ~~US-1.4~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (modal + qualifiche + multi-select shipped) |
 | ~~US-2.6~~ | Agent-B | 2026-04-15 | **CLOSED → DONE** (per-client misure library + measures-panel wiring shipped) |
 | ~~US-4.1~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (DVR guard + planimetria + plan-config UX shipped) |
@@ -33,12 +37,12 @@ Release a claim by deleting the row and the inline marker on the story once you 
 
 | Epic | Stories | Done | Partial | Not Started | Progress |
 |------|---------|------|---------|-------------|----------|
-| 1 — Digital Survey | 10 | 8 | 2 | 0 | 90% |
+| 1 — Digital Survey | 10 | 9 | 1 | 0 | 95% |
 | 2 — DVR Master | 9 | 7 | 2 | 0 | 89% |
 | 3 — DVR Attachments | 15 | 15 | 0 | 0 | 100% |
-| 4 — Complementary Docs | 8 | 6 | 2 | 0 | 88% |
+| 4 — Complementary Docs | 8 | 7 | 1 | 0 | 94% |
 | 5 — Cross-cutting | 4 | 1 | 3 | 0 | 63% |
-| **TOTAL** | **46** | **37** | **9** | **0** | **90%** |
+| **TOTAL** | **46** | **39** | **7** | **0** | **92%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
@@ -119,7 +123,7 @@ As a field operator, I want to register employees with their roles, assignments 
 - **Given** I save a valid person, **When** the modal closes, **Then** the person appears as a row in the Persone table with a hover action menu (Edit, Delete)
 - **Given** I tap Delete on a person, **When** the confirmation modal appears, **Then** I must explicitly confirm "Elimina" before the row is removed (no soft delete in MVP)
 
-#### US-1.5 `PARTIAL`
+#### US-1.5 `PARTIAL` 🔒 Agent-D — IN PROGRESS (2026-04-15) — DO NOT PICK UP
 As a field operator, I want a contextualized risk list (not the full generic decree list) so I can quickly mark applicable risks per environment.
 
 > **Built**: Step 5 "Rischi" with 11 risk categories per environment, applicabile toggle, P/D sliders, real-time I=2D+P calculation, color-coded levels (Accettabile/Modesto/Grave/Gravissimo). Contextual filtering per ambiente.tipo (8 environment types with tailored subsets — e.g., ufficio shows 7 categories hiding Macchine/Chimici/Biologici/Cancerogeni). "Mostra tutti i rischi" override checkbox. Summary bar "X di Y rischi selezionati" with breakdown "N Gravissimo / N Grave / N Modesto / N Accettabile" using matching badge colors.
@@ -131,11 +135,11 @@ As a field operator, I want a contextualized risk list (not the full generic dec
 - **Given** I tap a risk to mark it applicable to an environment, **When** the toggle activates, **Then** the summary bar at the bottom updates the count "X rischi selezionati"
 - **Given** I return to Step 3 "Ambienti" and add or remove an environment after marking risks, **When** I navigate back to Step 5, **Then** I see a banner "Ambienti modificati - rivedi le selezioni" prompting me to reconfirm
 
-#### US-1.6 `PARTIAL` 🔒 CLAIMED by Agent-C (2026-04-15)
+#### US-1.6 `DONE`
 As a field operator, I want the client to digitally countersign the completed survey on my device so I have legal proof of acceptance.
 
-> **Built**: Step 7 "Riepilogo" with full data summary, "Modifica" buttons, and "Firma del Cliente" section. Completion validation checks: ragione sociale non-empty, at least 1 persona, at least 1 ambiente, at least 1 RSPP. Missing items shown as clickable links in yellow warning banner. HTML5 canvas signature pad with mouse/touch support. Auto-populated timestamp. "Cancella firma" / "Conferma firma" buttons. Signature stored as PNG data URL. "Modifica" buttons disabled after signing. Green "Firmato" badge when signed.
-> **Missing**: No server-side timestamp. No "Apri revisione" flow for editing after signature. Signature not persisted to backend.
+> **Built**: Step 7 "Riepilogo" with full data summary, "Modifica" buttons, and "Firma del Cliente" section. Completion validation checks: ragione sociale non-empty, at least 1 persona, at least 1 ambiente, at least 1 RSPP. Missing items shown as clickable links in yellow warning banner. HTML5 canvas signature pad with mouse/touch support. "Cancella firma" / "Conferma firma" buttons. Green "Firmato" badge when signed. **AC3 closed (2026-04-15, Agent-C)**: on "Conferma firma" the frontend POSTs the PNG data URL to `POST /api/v1/aziende/{id}/survey/sign`; the backend validates the `data:image/png;base64,…` payload (magic-byte + 1 MB cap), decodes raw PNG bytes into a new deferred `aziende.firma_png` column (migration `c1d2e3f4a5b6`), server-stamps `aziende.firma_signed_at = func.now()`, flips `survey_status = "firmato"`, writes a `survey_signed` audit-log row, and returns the server timestamp which step-riepilogo renders in the "Data e ora firma (server)" row. PNG is streamed back via `GET /api/v1/aziende/{id}/survey/signature` (uses `undefer` so list queries stay cheap). **AC4 closed**: wizard derives `isSigned = survey_status === "firmato"`, locks nav (all step-circle buttons, Indietro, Avanti, and "Completa Sopralluogo" disabled; lock banner at top), auto-bounces the user to Step 7. Step 7 exposes an "Apri revisione" button that hits `POST /survey/revision` → flips status to `in_revisione`, writes a `survey_revision_opened` audit-log row, and the wizard re-enables nav so the operator can edit. 14 unit tests in `backend/tests/test_survey_signature.py` pin the decoder validation + schema contract + route registration + lifecycle constants.
+> **Missing**: Nothing — all 4 acceptance criteria met. (Nice-to-have: a separate "Sopralluoghi firmati / in revisione" filter on the aziende dashboard; the audit log surfaces the history but there's no per-azienda activity drawer yet.)
 
 **Acceptance Criteria:**
 
@@ -525,11 +529,11 @@ As an operator, I want standard emergency procedures (A-E) for each event type p
 
 ### HACCP
 
-#### US-4.3 `PARTIAL` 🔒 CLAIMED by Agent-C (2026-04-15)
+#### US-4.3 `DONE`
 As an operator, I want the HACCP manual auto-generated based on food activity type with customized CCP analysis.
 
-> **Built**: `HACCP` generator produces 1370 paragraphs / 23 tables against Acme fixture. Registered in documents page (Sprint Closure 2026-04-14).
-> **Missing**: No food-activity-type selector UI (e.g., "Ristorante con cucina" vs. "Bar"). No activity-specific CCP pre-loading. No edit-then-merge flow on activity type change. Customized CCPs not tracked per client.
+> **Built**: `HACCP` generator produces 1370 paragraphs / 23 tables against Acme fixture. Registered in documents page (Sprint Closure 2026-04-14). **AC1 closed (2026-04-15, Agent-C)**: new activity-type catalog at `backend/app/data/haccp_activity_types.py` ships 8 Italian food-activity types (Ristorante con cucina, Bar, Mensa, Gastronomia take-away, Panetteria, Pizzeria, Catering, Supermercato) each with 4-8 structured CCPs (codice / nome / fase / pericolo / limite_critico / monitoraggio / azione_correttiva / frequenza). Catalog served via `GET /api/v1/haccp/_meta/activity-types`; CCP defaults loaded by slug with `get_default_ccps()`. **AC2 closed**: frontend page at `/assessments/haccp/[aziendaId]` exposes activity selector + numero pasti + responsabile + tipi alimenti fields; CCP table with expand-to-edit rows (inline fields for all 8 CCP columns) + "Aggiungi CCP personalizzato" adds `CUSTOM1…N` rows that survive regeneration; all changes persist via `PUT /api/v1/aziende/{id}/haccp/config` (re-using existing `haccp_config` table, with `flag_modified` on the JSONB `ccps` + `tipi_alimenti_trattati` so SQLAlchemy round-trips edits). **AC3 closed**: switching activity type while CCPs exist pops a blocking Dialog offering "Unisci" (consigliato — keeps operator edits + customs, adds new defaults via `merge_ccps()`) or "Sostituisci" (wipes to defaults); `POST /api/v1/aziende/{id}/haccp/config/regenerate-ccps` returns `preserved_codici` so the page surfaces a "N CCP personalizzati mantenuti" toast. All three regenerate paths write audit-log rows (`haccp_config_created` / `haccp_config_updated` / `haccp_ccps_regenerated`). 20 unit tests in `backend/tests/test_haccp_config.py` pin the catalog shape (all CCPs have required fields, slugs are unique) + `merge_ccps()` logic (preserves edits, appends customs, adds new defaults, empty-existing returns pristine defaults) + route registration + Pydantic strategy validation.
+> **Missing**: Nothing — all 3 acceptance criteria met. (Nice-to-have: HACCP manual `.docx` generator (`haccp_manuale.py`) still renders the legacy 3-column CCP table (codice/nome/limite) — a future pass could expand it to render the full 8-field rows now that they're persisted. Until then, the extra operator edits are stored and visible on the assessment page but don't surface in the auto-generated manuale until that generator is widened.)
 
 **Acceptance Criteria:**
 
@@ -626,7 +630,7 @@ As any user, I want all documents generated from the same shared data (enter onc
 - **Given** survey data is changed while a generation job is in flight, **When** the job completes, **Then** I receive a warning that the snapshot may be stale and I can choose to regenerate
 - **Given** I want to know which documents currently consume a specific data field, **When** I open the field's tooltip, **Then** a list of dependent documents is shown
 
-#### US-5.3 `PARTIAL`
+#### US-5.3 `PARTIAL` 🔒 Agent-D — IN PROGRESS (2026-04-15) — DO NOT PICK UP
 As an operator, I want AI-generated content clearly marked so I know what to review carefully.
 
 > **Built**: Shared `<AIBadge>` component (`frontend/src/components/ai/ai-badge.tsx`) with variants `ai` / `edited` / `manual`, native-title tooltip carrying the "Generato da AI - revisiona prima della pubblicazione" prompt + optional `toLocaleString("it-IT")` timestamp (AC1 + AC2). Global `<AIFilterProvider>` wired into dashboard layout via `providers.tsx`; `<AIFilterToggle>` button in the header flips a page-level "Mostra solo contenuto AI" state that the `<AIContent>` wrapper uses to dim non-AI blocks and accent AI blocks with a violet ring (AC3). Description editor, measures panel, **and SDS review panel (`step-sostanze.tsx`)** now consume the shared primitives — each sostanza row renders `<AIBadge>` with `created_at` as the timestamp and is wrapped in `<AIContent>` so the filter dims non-AI rows. Toggle surfaces in the Revisione card header only when at least one row is `ai_extracted` (commit 73679a4, 2026-04-15).
