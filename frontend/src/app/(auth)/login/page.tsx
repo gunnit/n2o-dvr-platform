@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { Shield } from "lucide-react";
+import { CheckCircle2, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const justRegistered = searchParams.get("registered") === "1";
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -47,6 +49,12 @@ export default function LoginPage() {
           <p className="text-sm text-muted-foreground">Accedi al sistema di gestione documentale</p>
         </CardHeader>
         <CardContent>
+          {justRegistered && (
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>Registrazione completata. Accedi con le tue credenziali per iniziare.</p>
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>

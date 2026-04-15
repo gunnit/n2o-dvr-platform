@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Building2,
@@ -109,6 +109,7 @@ function PersonaRoleBadges({ persona }: { persona: Persona }) {
 
 export default function AziendaDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
 
   const [azienda, setAzienda] = useState<Azienda | null>(null);
@@ -197,7 +198,7 @@ export default function AziendaDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" nativeButton={false} render={<Link href={`/survey/${id}`} />}>
+          <Button variant="outline" onClick={() => router.push(`/survey/${id}`)}>
             <ClipboardList className="mr-2 h-4 w-4" />
             Inizia Sopralluogo
           </Button>
