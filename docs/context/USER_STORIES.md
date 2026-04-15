@@ -17,16 +17,16 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 |------|---------|------|---------|-------------|----------|
 | 1 — Digital Survey | 10 | 6 | 3 | 1 | 75% |
 | 2 — DVR Master | 9 | 3 | 6 | 0 | 67% |
-| 3 — DVR Attachments | 15 | 11 | 4 | 0 | 87% |
+| 3 — DVR Attachments | 15 | 12 | 3 | 0 | 90% |
 | 4 — Complementary Docs | 8 | 3 | 4 | 1 | 63% |
 | 5 — Cross-cutting | 4 | 0 | 4 | 0 | 50% |
-| **TOTAL** | **46** | **23** | **21** | **2** | **73%** |
+| **TOTAL** | **46** | **24** | **20** | **2** | **74%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
-> **2026-04-15 reconciliation**: Done in three passes. Pass 1 realigned against the Sprint Closure section dated 2026-04-14 (SDS trilogy, Epic 4 generators, US-5.4 backups). Pass 2 audited the code against acceptance criteria for stories touched by post-closure commits (`0779050` MMC, `c8a4670` Stress, `01077fb` Incendio, `05173f2` VDT+Microclima, `8f6c61c` AI integration, `e2b6475` Wave 1). Net effect of Pass 2: US-3.1/3.2/3.3/3.4/3.6/3.12/3.13 → **DONE**; US-2.1/2.6/3.5/3.7/3.8/3.14 → **PARTIAL** with specific AC gaps documented per story below. Pass 3 folded in parallel-session commits from later the same day (`f0dd50c` + `84fca5f` + `bbc13e1` gestanti cross-reference, `b2d9de4` biologico sector checklist, `c5c7e5e` + `4252c5c` + `dfa202b` MMC polish): US-3.9/3.10/3.15 → **DONE**; and this-session new work US-4.2/4.5/4.6 → **DONE**, US-2.2/5.3 → **PARTIAL**.
+> **2026-04-15 reconciliation**: Done in three passes. Pass 1 realigned against the Sprint Closure section dated 2026-04-14 (SDS trilogy, Epic 4 generators, US-5.4 backups). Pass 2 audited the code against acceptance criteria for stories touched by post-closure commits (`0779050` MMC, `c8a4670` Stress, `01077fb` Incendio, `05173f2` VDT+Microclima, `8f6c61c` AI integration, `e2b6475` Wave 1). Net effect of Pass 2: US-3.1/3.2/3.3/3.4/3.6/3.12/3.13 → **DONE**; US-2.1/2.6/3.5/3.7/3.8/3.14 → **PARTIAL** with specific AC gaps documented per story below. Pass 3 folded in parallel-session commits from later the same day (`f0dd50c` + `84fca5f` + `bbc13e1` gestanti cross-reference, `b2d9de4` biologico sector checklist, `c5c7e5e` + `4252c5c` + `dfa202b` MMC polish): US-3.9/3.10/3.15 → **DONE**; and this-session new work US-4.2/4.5/4.6 → **DONE**, US-2.2/5.3 → **PARTIAL**. Pass 4 (evening, commits `0717a04` + `73679a4`) added the PHS critical-exposure banner and wired the shared AI badge/filter into the SDS review panel: **US-3.14 → DONE** (AC3 banner), and US-5.3 advanced but stays PARTIAL until the badge is also applied to document review surfaces.
 >
-> **True greenfield remaining** (stories still NOT STARTED): US-1.3 photo uploads, US-4.8 POS role×phase DPI matrix. (US-4.5 → DONE 2026-04-15 — DUVRI CRUD + committente sync banner. US-4.6 → DONE 2026-04-15 — 15-rule interference engine with Accetta/Rifiuta sheet. US-5.3 → PARTIAL 2026-04-15 — AI badge + filter wired. US-4.2 → DONE 2026-04-15 — A-E procedures with per-client overrides. US-2.2 → PARTIAL 2026-04-15 — seismic zone auto-fill from 154-comune lookup; regional regulations half still open.)
+> **True greenfield remaining** (stories still NOT STARTED): US-1.3 photo uploads, US-4.8 POS role×phase DPI matrix. (US-4.5 → DONE 2026-04-15 — DUVRI CRUD + committente sync banner. US-4.6 → DONE 2026-04-15 — 15-rule interference engine with Accetta/Rifiuta sheet. US-5.3 → PARTIAL 2026-04-15 — AI badge + filter wired across Azienda description, measures panel, **and SDS review**. US-4.2 → DONE 2026-04-15 — A-E procedures with per-client overrides. US-2.2 → PARTIAL 2026-04-15 — seismic zone auto-fill from 154-comune lookup; regional regulations half still open. US-3.14 → DONE 2026-04-15 — PHS Dlim < 30 min red banner.)
 
 Tier A (2026-04-14): US-1.5 (contextual risk filtering + summary bar), US-2.3 (default scoring matrix + Reset button), US-2.8 (Part II + logo embed + versioned filename), US-2.9 (version history Sheet) — all four stories advanced within their PARTIAL status toward DONE.
 
@@ -452,11 +452,10 @@ As an operator, I want to input 6 environmental parameters and get automatic PMV
 - **Given** any of the 6 parameters is outside its valid physical range, **When** the field loses focus, **Then** a validation error explains the range and calculation is paused
 - **Given** I have multiple environments, **When** I save, **Then** PMV/PPD is computed and stored per environment independently
 
-#### US-3.14 `PARTIAL`
+#### US-3.14 `DONE`
 For severe heat environments, I want PHS calculation with maximum exposure time (Dlim).
 
-> **Built**: PHS-mode form section at `frontend/src/components/assessments/microclima-form.tsx:509-800` (activates when "Calore severo" is selected) with ISO 7933 parameters. Backend PHS calc at `backend/app/api/v1/calculations.py:248-281` returns Dlim, core temperature estimate, and water loss.
-> **Missing**: Explicit red "Esposizione critica - misure obbligatorie" banner when Dlim < 30 min is not confirmed in the PHS result UI (backend provides the data; frontend banner rendering needs verification/implementation).
+> **Built**: PHS-mode form section at `frontend/src/components/assessments/microclima-form.tsx` (activates when "Calore severo" is selected) with ISO 7933 parameters. Backend PHS calc at `backend/app/api/v1/calculations.py:248-281` returns Dlim, core temperature estimate, and water loss. Red `AlertTriangle` banner rendered above the sticky result card when `result.d_lim < PHS_CRITICAL_DLIM_MIN` (30 minutes) with copy *"Esposizione critica – misure obbligatorie"* plus a reference to art. 181 D.Lgs. 81/2008 for mandatory sorveglianza sanitaria (AC3 satisfied 2026-04-15, commit 0717a04).
 
 **Acceptance Criteria:**
 
@@ -614,8 +613,8 @@ As any user, I want all documents generated from the same shared data (enter onc
 #### US-5.3 `PARTIAL`
 As an operator, I want AI-generated content clearly marked so I know what to review carefully.
 
-> **Built**: Shared `<AIBadge>` component (`frontend/src/components/ai/ai-badge.tsx`) with variants `ai` / `edited` / `manual`, native-title tooltip carrying the "Generato da AI - revisiona prima della pubblicazione" prompt + optional `toLocaleString("it-IT")` timestamp (AC1 + AC2). Global `<AIFilterProvider>` wired into dashboard layout via `providers.tsx`; `<AIFilterToggle>` button in the header flips a page-level "Mostra solo contenuto AI" state that the `<AIContent>` wrapper uses to dim non-AI blocks and accent AI blocks with a violet ring (AC3). Description editor + measures panel refactored to consume the shared primitives.
-> **Missing**: Badge system not yet applied to SDS extraction review panel (`step-sostanze.tsx`) or document review surfaces — only Azienda description + improvement measures consume it so far. Thumbs-down signals logged but no admin view.
+> **Built**: Shared `<AIBadge>` component (`frontend/src/components/ai/ai-badge.tsx`) with variants `ai` / `edited` / `manual`, native-title tooltip carrying the "Generato da AI - revisiona prima della pubblicazione" prompt + optional `toLocaleString("it-IT")` timestamp (AC1 + AC2). Global `<AIFilterProvider>` wired into dashboard layout via `providers.tsx`; `<AIFilterToggle>` button in the header flips a page-level "Mostra solo contenuto AI" state that the `<AIContent>` wrapper uses to dim non-AI blocks and accent AI blocks with a violet ring (AC3). Description editor, measures panel, **and SDS review panel (`step-sostanze.tsx`)** now consume the shared primitives — each sostanza row renders `<AIBadge>` with `created_at` as the timestamp and is wrapped in `<AIContent>` so the filter dims non-AI rows. Toggle surfaces in the Revisione card header only when at least one row is `ai_extracted` (commit 73679a4, 2026-04-15).
+> **Missing**: Badge system not yet applied to document review surfaces (regenerated-by-AI section tags on DVR/attachment review). Thumbs-down signals logged but no admin view.
 
 **Acceptance Criteria:**
 
