@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import type { Azienda } from "@/types";
 import { useApi } from "@/hooks/use-api";
+import { SurveillanceAlerts } from "@/components/dashboard/surveillance-alerts";
 
 const statusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-700",
@@ -142,6 +143,10 @@ export default function DashboardPage() {
               </Card>
             ))}
           </div>
+
+          {/* VDT health-surveillance alerts (US-3.5). Self-hides when
+              there's nothing to flag — no empty-state clutter. */}
+          <SurveillanceAlerts />
 
           <Card>
             <CardHeader>

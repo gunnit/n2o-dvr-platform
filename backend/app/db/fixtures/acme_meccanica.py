@@ -293,14 +293,37 @@ async def seed_acme(session: AsyncSession) -> Azienda:
         livello_rischio="VERDE",
     ))
 
-    # 10. VDT (4 postazioni)
-    vdt_workers = ["Elena Colombo", "Sara Ferrari", "Laura Galli", "Valentina Rinaldi"]
-    for i, name in enumerate(vdt_workers, 1):
+    # 10. VDT (4 postazioni) — each worker seeded with a different
+    # surveillance cadence so the US-3.5 "Visite in scadenza" / "Visite
+    # scadute" dashboard widgets have demonstrable content out of the box.
+    # Dates are anchored against date.today() so the fixture stays
+    # relevant whenever it is re-seeded.
+    from datetime import timedelta as _td
+    today = date.today()
+    vdt_seed = [
+        # (name, over_50, last_visit offset from today, postazione)
+        ("Elena Colombo", False, _td(days=-365 * 5 - 20), "Ufficio 1"),   # 5y+20d ago -> 20d SCADUTA
+        ("Sara Ferrari", False, _td(days=-365 * 5 + 45), "Ufficio 2"),    # 5y-45d ago -> 45d IN_SCADENZA
+        ("Laura Galli", True, _td(days=-365 * 2 + 15), "Ufficio 3"),      # 50+, 2y-15d -> 15d IN_SCADENZA
+        ("Valentina Rinaldi", False, _td(days=-30), "Ufficio 4"),         # just had visit -> FUTURE
+    ]
+    for name, over_50, last_offset, postazione in vdt_seed:
+        last_visit = today + last_offset
+        cadence_years = 2 if over_50 else 5
+        # Clamp Feb 29 to Feb 28 for non-leap destinations.
+        try:
+            next_visit = last_visit.replace(year=last_visit.year + cadence_years)
+        except ValueError:
+            next_visit = last_visit.replace(year=last_visit.year + cadence_years, day=28)
         session.add(VdtValutazione(
             azienda_id=az.id, persona_id=persone[name].id, ambiente_id=ufficio.id,
-            postazione=f"Ufficio {i}",
+            postazione=postazione,
             ore_settimanali=32.0, esposto=True,
-            idoneita_visiva="idoneo", periodicita_sorveglianza="quinquennale",
+            idoneita_visiva="idoneo",
+            periodicita_sorveglianza="biennale" if over_50 else "quinquennale",
+            data_ultima_visita=last_visit,
+            data_prossima_visita=next_visit,
+            eta_50_plus=over_50,
         ))
 
     # 11. Stress — INAIL (computed later, but store the area payloads)

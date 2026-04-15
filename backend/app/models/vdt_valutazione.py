@@ -5,9 +5,9 @@ One row per workstation/worker.
 """
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, ForeignKey, Numeric, String, Text, func
+from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -36,5 +36,11 @@ class VdtValutazione(Base):
     # Outcome
     idoneita_visiva: Mapped[str | None] = mapped_column(String)  # idoneo / con prescrizioni / non idoneo
     periodicita_sorveglianza: Mapped[str | None] = mapped_column(String)  # biennale / quinquennale
+    # Health-surveillance scheduling (US-3.5). 5y under 50, 2y for 50+;
+    # data_prossima_visita is materialised so the dashboard widgets can do
+    # a single indexed range-scan on the whole org.
+    data_ultima_visita: Mapped[date | None] = mapped_column(Date)
+    data_prossima_visita: Mapped[date | None] = mapped_column(Date, index=True)
+    eta_50_plus: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
