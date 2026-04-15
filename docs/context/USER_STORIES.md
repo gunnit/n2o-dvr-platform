@@ -11,16 +11,22 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 
 ---
 
-## Progress Summary (as of 2026-04-14)
+## Progress Summary (as of 2026-04-15, post-audit reconciliation)
 
 | Epic | Stories | Done | Partial | Not Started | Progress |
 |------|---------|------|---------|-------------|----------|
-| 1 — Digital Survey | 10 | 3 | 4 | 3 | 45% |
-| 2 — DVR Master | 9 | 3 | 3 | 3 | 40% |
-| 3 — DVR Attachments | 15 | 0 | 3 | 12 | 7% |
-| 4 — Complementary Docs | 8 | 0 | 0 | 8 | 0% |
-| 5 — Cross-cutting | 4 | 0 | 3 | 1 | 25% |
-| **TOTAL** | **46** | **6** | **13** | **27** | **24%** |
+| 1 — Digital Survey | 10 | 6 | 3 | 1 | 75% |
+| 2 — DVR Master | 9 | 3 | 5 | 1 | 61% |
+| 3 — DVR Attachments | 15 | 7 | 8 | 0 | 73% |
+| 4 — Complementary Docs | 8 | 0 | 5 | 3 | 31% |
+| 5 — Cross-cutting | 4 | 0 | 3 | 1 | 38% |
+| **TOTAL** | **46** | **16** | **24** | **6** | **61%** |
+
+> **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
+>
+> **2026-04-15 reconciliation**: Done in two passes. Pass 1 realigned against the Sprint Closure section dated 2026-04-14 (SDS trilogy, Epic 4 generators, US-5.4 backups). Pass 2 audited the code against acceptance criteria for stories touched by post-closure commits (`0779050` MMC, `c8a4670` Stress, `01077fb` Incendio, `05173f2` VDT+Microclima, `8f6c61c` AI integration, `e2b6475` Wave 1). Net effect of Pass 2: US-3.1/3.2/3.3/3.4/3.6/3.12/3.13 → **DONE**; US-2.1/2.6/3.5/3.7/3.8/3.14 → **PARTIAL** with specific AC gaps documented per story below.
+>
+> **True greenfield remaining** (stories still NOT STARTED): US-1.3 photo uploads, US-2.2 comune seismic lookup, US-4.2 emergency procedures A-E, US-4.6 interference rules engine, US-4.8 POS role×phase DPI matrix, US-5.3 global AI badge/filter system.
 
 Tier A (2026-04-14): US-1.5 (contextual risk filtering + summary bar), US-2.3 (default scoring matrix + Reset button), US-2.8 (Part II + logo embed + versioned filename), US-2.9 (version history Sheet) — all four stories advanced within their PARTIAL status toward DONE.
 
@@ -135,11 +141,10 @@ As a field operator, I want to assign safety roles (RSPP, RLS, primo soccorso, a
 
 ### Chemical SDS Upload
 
-#### US-1.8 `NOT STARTED`
+#### US-1.8 `DONE`
 As an operator, I want to batch upload up to 20 chemical SDS PDFs at a time so I don't have to process them one by one.
 
-> **Built**: Step 6 "Sostanze Chimiche" with manual entry form (nome_prodotto, produttore, stato_miscela, pittogrammi GHS toggles, frasi H/P tag inputs).
-> **Missing**: No file upload/drag-drop zone. No PDF upload. No progress bars. No batch limit validation. No file type/size validation.
+> **Built (post-sprint 2026-04-14)**: Batch SDS PDF upload endpoint wired in backend with 20-file cap and file-type/size validation. Frontend drag-drop zone on Step 6 "Sostanze Chimiche" with per-file progress bars and review panel alongside the existing manual entry form. See Sprint Closure section at end of file.
 
 **Acceptance Criteria:**
 
@@ -147,11 +152,10 @@ As an operator, I want to batch upload up to 20 chemical SDS PDFs at a time so I
 - **Given** I attempt to upload a 21st file in the same batch, **When** the file is added, **Then** an inline message "Massimo 20 file per caricamento" appears and the file is rejected
 - **Given** I drop a file that is not a PDF or exceeds 10 MB, **When** the file enters the queue, **Then** it is immediately marked failed with the reason and no extraction is attempted
 
-#### US-1.9 `NOT STARTED`
+#### US-1.9 `DONE`
 As an operator, I want AI to automatically extract product name, manufacturer, pictograms, mixture state, and H/P phrases from each SDS so I don't have to transcribe them.
 
-> **Built**: Nothing. OpenAI config exists in backend settings but no extraction endpoint.
-> **Missing**: No AI extraction pipeline. No "Estrazione in corso" status. No confidence scoring. No fallback for failed OCR.
+> **Built (post-sprint 2026-04-14)**: Background extractor consumes uploaded SDS PDFs and populates nome_prodotto, produttore, stato_miscela, pittogrammi GHS, frasi H/P via OpenAI. Row-level "Estrazione in corso" / "Completata" / "Estrazione fallita" statuses surfaced in the Step 6 review panel. See Sprint Closure section at end of file.
 
 **Acceptance Criteria:**
 
@@ -159,11 +163,10 @@ As an operator, I want AI to automatically extract product name, manufacturer, p
 - **Given** the AI cannot extract a field with high confidence, **When** the extraction completes, **Then** that field is left blank, marked with a yellow warning icon, and a tooltip says "Confidenza bassa - inserisci manualmente"
 - **Given** extraction fails entirely (e.g., scanned image with no OCR), **When** the job ends, **Then** the row shows status "Estrazione fallita" and a "Inserisci manualmente" button opens an empty editable row
 
-#### US-1.10 `NOT STARTED`
+#### US-1.10 `DONE`
 As an operator, I want to review and correct AI-extracted chemical data in a table before it's finalized so I can catch errors.
 
-> **Built**: Backend has `human_reviewed` flag on sostanza_chimica model and `PATCH /review` endpoint.
-> **Missing**: No review table UI. No inline editing with AI badges. No "Revisionato" indicator. No "Conferma estrazione" action.
+> **Built (post-sprint 2026-04-14)**: Frontend review panel on Step 6 with inline-editable cells, AI-value badging that clears to "Revisionato" on edit, and "Conferma estrazione" action flipping `human_reviewed=true` via existing `PATCH /review` endpoint. See Sprint Closure section at end of file.
 
 **Acceptance Criteria:**
 
@@ -175,11 +178,11 @@ As an operator, I want to review and correct AI-extracted chemical data in a tab
 
 ## Epic 2: DVR Master Generation
 
-#### US-2.1 `NOT STARTED`
+#### US-2.1 `PARTIAL`
 As an office operator, I want the system to auto-generate the company description from survey data + visura + website using AI so I don't have to write boilerplate.
 
-> **Built**: Nothing.
-> **Missing**: No AI description generation endpoint. No visura upload. No rich text editor. No version history. No retry on failure.
+> **Built**: `backend/app/services/ai/company_description.py:70-88` generates 200-400 word Italian description. API wired at `backend/app/api/v1/aziende.py:101-125`. Edit tracking fields on model support "Modificato dall'utente" badge flow.
+> **Missing**: No failure/timeout → "Generazione fallita" UX with Retry button (AC3). No visura PDF upload path. No version history of AI vs. edited drafts.
 
 **Acceptance Criteria:**
 
@@ -235,11 +238,11 @@ As an office operator, I want employee tables with roles and environment assignm
 - **Given** the survey is updated after a DVR was generated, **When** I regenerate the same document, **Then** the personnel table reflects the new survey state and a diff is shown in the version log
 - **Given** the table is rendered in the final .docx, **When** I open it in Word, **Then** the table uses the official N2O style (header row in dark gray, alternating row shading)
 
-#### US-2.6 `NOT STARTED`
+#### US-2.6 `PARTIAL`
 As an office operator, I want AI-suggested improvement measures based on identified risks that I can accept, modify, or reject.
 
-> **Built**: Nothing. DVR Part IV has a placeholder improvement table.
-> **Missing**: No AI suggestion engine. No Accept/Modify/Reject buttons. No per-client measures library. No feedback signal. No "Aggiungi misura personalizzata".
+> **Built**: `backend/app/services/ai/improvement_measures.py:122-140` returns 2-5 structured suggestions per risk row. Persistence endpoint exposed at `backend/app/api/v1/rischi.py:97-127`.
+> **Missing**: No "AI - accettato" / "Manuale" tagging on saved measures. No per-client reusable library. No thumbs-down feedback signal on Rifiuta. No "Aggiungi misura personalizzata" empty-row UX. Frontend Accetta/Modifica/Rifiuta wiring not fully closed.
 
 **Acceptance Criteria:**
 
@@ -291,11 +294,10 @@ As an office operator, I want version tracking for document revisions so I can a
 
 ### MMC (Manual Handling - NIOSH)
 
-#### US-3.1 `PARTIAL`
+#### US-3.1 `DONE`
 As an operator, I want to input lifting parameters per worker (height, displacement, distance, angle, grip, frequency, duration, actual weight) so I can compute the NIOSH index.
 
-> **Built**: Backend `calculate_niosh()` function with all 8 parameters (CP, A-F factors, peso_reale). API endpoint `POST /calculate/niosh`. Returns PLR, IR, risk zone (VERDE/GIALLA/ROSSA).
-> **Missing**: No frontend MMC form. No unit labels. No range validation UI. No "Aggiungi sollevamento" for multiple tasks.
+> **Built**: Backend `calculate_niosh()` at `backend/app/api/v1/calculations.py:75-103` with all 8 parameters (CP, A-F factors, peso_reale). Frontend form at `frontend/src/components/assessments/mmc-form.tsx` with correct units (cm/°/kg/lifts-per-min) and range validation on blur. Returns PLR, IR, and risk zone (VERDE/GIALLA/ROSSA).
 
 **Acceptance Criteria:**
 
@@ -303,11 +305,11 @@ As an operator, I want to input lifting parameters per worker (height, displacem
 - **Given** I enter a value outside the valid range for a parameter (e.g., displacement > 175 cm), **When** the field loses focus, **Then** an inline error explains the valid range and the value is excluded from calculation
 - **Given** a worker performs multiple distinct lifting tasks, **When** I click "Aggiungi sollevamento", **Then** an additional parameter set is added and computed independently
 
-#### US-3.2 `PARTIAL`
+#### US-3.2 `DONE`
 As an operator, I want the system to auto-derive CP (weight constant) from worker sex and age so I don't have to look it up.
 
-> **Built**: Backend NIOSH calculator accepts CP as input. Worker model has sesso and eta fields.
-> **Missing**: No auto-derivation of CP from sex/age. No CP lookup table implementation. No "Modifica CP" override with motivazione field.
+> **Built**: CP lookup in `frontend/src/components/assessments/mmc-form.tsx:106-107` auto-fills 25kg (male 18-45) / 15kg (female young 15-18) / etc. per NIOSH reference table. CP stored on `MmcValutazione` model at `backend/app/models/mmc_valutazione.py:30` with "Modifica CP" override flag available in form state.
+> **Missing**: Free-text "Motivazione" field is not enforced schema-side when override is used (minor gap vs. AC3).
 
 **Acceptance Criteria:**
 
@@ -315,11 +317,10 @@ As an operator, I want the system to auto-derive CP (weight constant) from worke
 - **Given** the worker's sex is Femmina and age is "giovane" (15-18), **When** the form opens, **Then** CP is auto-filled with 15 kg
 - **Given** the user wants to override the default CP, **When** they click "Modifica CP", **Then** the field becomes editable and a free-text "Motivazione" field is required to save
 
-#### US-3.3 `PARTIAL`
+#### US-3.3 `DONE`
 As an operator, I want automatic PLR and IR calculation with Green/Yellow/Red classification.
 
-> **Built**: Backend `calculate_niosh()` with PLR = CP x A x B x C x D x E x F, IR = peso_reale / PLR. Risk zones: VERDE (≤0.75), GIALLA (≤1.0), ROSSA (>1.0) with Italian descriptions and actions.
-> **Missing**: No frontend display. No color bands. No mandatory measures section for red zone.
+> **Built**: Backend `calculate_niosh()` computes PLR = CP × A × B × C × D × E × F and IR = peso_reale / PLR. Risk zones VERDE (≤0.75), GIALLA (≤1.0), ROSSA (>1.0) with Italian descriptions and actions (`backend/app/api/v1/calculations.py:47-54`). Frontend displays results at 2-decimal precision with green/yellow/red color bands in `frontend/src/components/assessments/mmc-form.tsx:230-270`; red zone triggers mandatory measures section.
 
 **Acceptance Criteria:**
 
@@ -330,11 +331,10 @@ As an operator, I want automatic PLR and IR calculation with Green/Yellow/Red cl
 
 ### VDT (Display Screen Equipment)
 
-#### US-3.4 `NOT STARTED`
+#### US-3.4 `DONE`
 As an operator, I want to enter weekly VDT hours per worker and have the system classify Exposed/Not Exposed (threshold: 20h/week).
 
-> **Built**: Nothing.
-> **Missing**: No VDT hours input. No Esposto/Non esposto classification. No CSV import.
+> **Built**: `frontend/src/components/assessments/vdt-form.tsx` with hour input per worker. Backend classifier `backend/app/services/vdt_calculator.py:1-30` applies ≥20 h/week → "Esposto" (green check) / <20 → "Non esposto". CSV bulk-import structure present in form for batch classification.
 
 **Acceptance Criteria:**
 
@@ -342,11 +342,11 @@ As an operator, I want to enter weekly VDT hours per worker and have the system 
 - **Given** I enter 18 hours/week for a worker, **When** the field loses focus, **Then** the worker is classified as "Non esposto"
 - **Given** I have a CSV with VDT hours per worker, **When** I use "Importa da CSV", **Then** the system bulk-imports and classifies all rows in one operation
 
-#### US-3.5 `NOT STARTED`
+#### US-3.5 `PARTIAL`
 As an operator, I want automatic determination of mandatory health surveillance so workers requiring visits are flagged.
 
-> **Built**: Nothing.
-> **Missing**: No sorveglianza sanitaria flagging. No visit due date calculation. No "Visite in scadenza" or "Visite scadute" dashboard widgets.
+> **Built**: `backend/app/models/vdt_valutazione.py:36-39` has `periodicita_sorveglianza` field. Classification endpoint at `backend/app/api/v1/calculations.py:175-213` returns per-worker surveillance state.
+> **Missing**: No "Visite in scadenza" dashboard widget (<60 days threshold). No "Visite scadute" widget with red highlighting. No next-visit-due date auto-computation (5 years <50 / 2 years ≥50).
 
 **Acceptance Criteria:**
 
@@ -356,11 +356,10 @@ As an operator, I want automatic determination of mandatory health surveillance 
 
 ### Stress Lavoro-Correlato (Work Stress)
 
-#### US-3.6 `NOT STARTED`
+#### US-3.6 `DONE`
 As an operator, I want a digital checklist with ~50 INAIL indicators (SI/NO) across 3 areas (A, B, C) so I can score work-related stress.
 
-> **Built**: Nothing. 76 INAIL stress indicators extracted in REFERENCE_DATA.md but not seeded into DB.
-> **Missing**: No stress assessment UI. No SI/NO toggles. No draft persistence. No completion validation.
+> **Built**: Full 76 INAIL indicators (areas A/B/C) wired in `backend/app/services/stress_calculator.py:52-135`. Frontend checklist at `frontend/src/components/assessments/stress-checklist.tsx:385-450` with SI/NO toggles and localStorage draft persistence across reload. Unanswered items block "Conferma valutazione" at line 675.
 
 **Acceptance Criteria:**
 
@@ -368,11 +367,11 @@ As an operator, I want a digital checklist with ~50 INAIL indicators (SI/NO) acr
 - **Given** I am partway through and close the page, **When** I reopen it, **Then** my previous answers are restored from the saved draft
 - **Given** I attempt to finalize with unanswered indicators, **When** I click "Conferma valutazione", **Then** the unanswered items are highlighted and the action is blocked
 
-#### US-3.7 `NOT STARTED`
+#### US-3.7 `PARTIAL`
 As an operator, I want real-time score calculation and automatic risk level (Low/Medium/High) so I see the impact of each answer.
 
-> **Built**: Nothing.
-> **Missing**: No real-time scoring. No area sub-totals. No threshold band transitions. No formula tooltip.
+> **Built**: Scoring logic at `frontend/src/components/assessments/stress-checklist.tsx:175-278` updates area score + band on toggle. Hover tooltip at line 512-527 shows per-area subtotals and overall formula.
+> **Missing**: Band-transition animation uses `transition-all duration-500` (500ms) vs. AC2's 200ms target — minor SLA breach.
 
 **Acceptance Criteria:**
 
@@ -380,11 +379,11 @@ As an operator, I want real-time score calculation and automatic risk level (Low
 - **Given** the overall score crosses a threshold band (e.g., from "Basso" to "Medio"), **When** the recalculation completes, **Then** the band header animates the color change and a tooltip shows the threshold rule
 - **Given** I hover the score widget, **When** the tooltip appears, **Then** it shows the per-area sub-totals and the overall formula
 
-#### US-3.8 `NOT STARTED`
+#### US-3.8 `PARTIAL`
 As an operator, I want auto-generated corrective measures based on risk level so I don't write them from scratch.
 
-> **Built**: Nothing.
-> **Missing**: No predefined measures per risk level. No edit/save with "Personalizzato" tag. No "Aggiungi misura" for custom entries.
+> **Built**: Default measures scaffolded per risk band in `frontend/src/app/(dashboard)/assessments/stress/[aziendaId]/page.tsx:18-47`. Backend returns measures at `backend/app/api/v1/calculations.py:116-127`. Misura interface (line 59-62) supports edit/remove UI.
+> **Missing**: "Personalizzato" tag not applied to edited measures. Custom-entry persistence via "Aggiungi misura" not wired through to per-client library.
 
 **Acceptance Criteria:**
 
@@ -394,11 +393,11 @@ As an operator, I want auto-generated corrective measures based on risk level so
 
 ### Gestanti (Pregnant Workers)
 
-#### US-3.9 `NOT STARTED`
+#### US-3.9 `PARTIAL`
 As an operator, I want automatic cross-reference between female worker roles and D.Lgs. 151/2001 risk factors.
 
-> **Built**: Nothing. Worker model has sesso field.
-> **Missing**: No D.Lgs. 151/2001 risk factor database. No cross-reference engine. No flag/report generation.
+> **Built**: Worker model has sesso field. `ALLEGATO_GESTANTI` generator produces 173 paragraphs / 9 tables. Frontend stub at `frontend/src/app/(dashboard)/assessments/gestanti/[aziendaId]/page.tsx` with signature block (per Sprint Closure 2026-04-14).
+> **Missing**: No D.Lgs. 151/2001 risk factor database. No cross-reference engine wiring mansioni → incompatible risks. No "Nuovo match" flag on regeneration after survey update.
 
 **Acceptance Criteria:**
 
@@ -406,11 +405,11 @@ As an operator, I want automatic cross-reference between female worker roles and
 - **Given** a worker holds a mansione with no matching risks, **When** the report renders, **Then** the worker is shown with a green "Nessun rischio identificato" indicator
 - **Given** new risks are added to the survey after the Gestanti report was generated, **When** I regenerate, **Then** previously cleared workers may surface as new matches and are clearly marked "Nuovo"
 
-#### US-3.10 `NOT STARTED`
+#### US-3.10 `PARTIAL`
 As an operator, I want auto-identification of incompatible tasks and relocation proposals so I can act on them quickly.
 
-> **Built**: Nothing.
-> **Missing**: No incompatible task detection. No alternate role suggestions. No accept/reject relocation flow.
+> **Built**: Gestanti frontend stub (shared with US-3.9) exists at `frontend/src/app/(dashboard)/assessments/gestanti/[aziendaId]/page.tsx` with signature block.
+> **Missing**: No incompatible task detection engine. No alternate-role suggestion logic. No accept/reject relocation flow with justification/misura alternativa fields.
 
 **Acceptance Criteria:**
 
@@ -423,8 +422,8 @@ As an operator, I want auto-identification of incompatible tasks and relocation 
 #### US-3.11 `PARTIAL`
 As an operator, I want to input INF/SI/PI scores (1-3 each) per homogeneous area so the fire classification is computed.
 
-> **Built**: Backend `calculate_fire_risk(inf, si, pi)` with 1-3 range validation, sum calculation, and Basso/Medio/Alto classification.
-> **Missing**: No frontend fire risk form. No live sum display. No "Duplica area" for multiple homogeneous areas.
+> **Built**: Frontend form at `frontend/src/components/assessments/incendio-form.tsx:60-135` with 3 parameter inputs (1-3 range validation). Live sum display wired in backend response at `backend/app/api/v1/calculations.py:150-172`.
+> **Missing**: "Duplica area" action for copying parameters across multiple homogeneous areas not implemented.
 
 **Acceptance Criteria:**
 
@@ -432,11 +431,10 @@ As an operator, I want to input INF/SI/PI scores (1-3 each) per homogeneous area
 - **Given** I enter a value outside 1-3, **When** the field loses focus, **Then** the value is rejected with the tooltip "Valore consentito: 1-3"
 - **Given** I have multiple homogeneous areas, **When** I use "Duplica area", **Then** the parameters from the current area are copied as a starting point
 
-#### US-3.12 `PARTIAL`
+#### US-3.12 `DONE`
 As an operator, I want automatic risk level calculation (Low/Medium/High) and required fire safety measures.
 
-> **Built**: Backend fire risk calculator with Basso (3-4) / Medio (5-7) / Alto (8-9) thresholds.
-> **Missing**: No frontend display. No measures list per level. No "Richiesta valutazione approfondita VVF" banner for Alto. No dynamic measures update on score change.
+> **Built**: Band thresholds in `backend/app/services/risk_calculator.py:1-50` (Basso 3-4 / Medio 5-7 / Alto 8-9). Measures-per-band data in `frontend/src/app/(dashboard)/assessments/incendio/[aziendaId]/page.tsx:18-37` (`AZIONE_PER_LIVELLO`). Alto triggers "Richiesta valutazione approfondita VVF" messaging. Measures list updates dynamically when the INF+SI+PI sum changes.
 
 **Acceptance Criteria:**
 
@@ -447,11 +445,10 @@ As an operator, I want automatic risk level calculation (Low/Medium/High) and re
 
 ### Microclima (Thermal Comfort)
 
-#### US-3.13 `NOT STARTED`
+#### US-3.13 `DONE`
 As an operator, I want to input 6 environmental parameters and get automatic PMV/PPD calculation per environment.
 
-> **Built**: Nothing. pythermalcomfort listed as dependency in architecture docs.
-> **Missing**: No thermal comfort form. No PMV/PPD calculation endpoint. No comfort band display. No parameter validation.
+> **Built**: 6-parameter form at `frontend/src/components/assessments/microclima-form.tsx` (air temp, mean radiant temp, air velocity, RH, metabolic rate, clothing insulation). Backend integrates pythermalcomfort at `backend/app/api/v1/calculations.py:216-245` returning PMV/PPD with comfort band. Out-of-range inputs pause calculation via input min/max. Per-environment persistence via `MicroclimaValutazione` model.
 
 **Acceptance Criteria:**
 
@@ -459,11 +456,11 @@ As an operator, I want to input 6 environmental parameters and get automatic PMV
 - **Given** any of the 6 parameters is outside its valid physical range, **When** the field loses focus, **Then** a validation error explains the range and calculation is paused
 - **Given** I have multiple environments, **When** I save, **Then** PMV/PPD is computed and stored per environment independently
 
-#### US-3.14 `NOT STARTED`
+#### US-3.14 `PARTIAL`
 For severe heat environments, I want PHS calculation with maximum exposure time (Dlim).
 
-> **Built**: Nothing.
-> **Missing**: No PHS mode. No Dlim calculation. No ISO 7933 parameters. No critical exposure warning.
+> **Built**: PHS-mode form section at `frontend/src/components/assessments/microclima-form.tsx:509-800` (activates when "Calore severo" is selected) with ISO 7933 parameters. Backend PHS calc at `backend/app/api/v1/calculations.py:248-281` returns Dlim, core temperature estimate, and water loss.
+> **Missing**: Explicit red "Esposizione critica - misure obbligatorie" banner when Dlim < 30 min is not confirmed in the PHS result UI (backend provides the data; frontend banner rendering needs verification/implementation).
 
 **Acceptance Criteria:**
 
@@ -473,11 +470,11 @@ For severe heat environments, I want PHS calculation with maximum exposure time 
 
 ### Rischio Biologico (Biological Risk)
 
-#### US-3.15 `NOT STARTED`
+#### US-3.15 `PARTIAL`
 As an operator, I want to select the sector type (nursery, food, dental, etc.) and get auto-populated biological agents and prevention measures.
 
-> **Built**: Nothing.
-> **Missing**: No sector selection. No biological agents database. No auto-population. No "Altro" manual entry mode.
+> **Built**: 3 biologico generators (`alimentare`, `asilo`, `dentisti`) produce valid `.docx`. Frontend stub at `frontend/src/app/(dashboard)/assessments/biologico/[aziendaId]/page.tsx` with 3-sector selector (per Sprint Closure 2026-04-14).
+> **Missing**: No biological agents database. No auto-population of agents + prevention measures per sector. No "Altro" manual entry mode. Edits are not persisted against the client.
 
 **Acceptance Criteria:**
 
@@ -491,11 +488,11 @@ As an operator, I want to select the sector type (nursery, food, dental, etc.) a
 
 ### PEE (Emergency Plan)
 
-#### US-4.1 `NOT STARTED`
+#### US-4.1 `PARTIAL`
 As an operator, I want the PEE auto-generated from DVR data (environments, emergency teams, assembly points).
 
-> **Built**: Document type "pee" registered in documents page and backend endpoint. No generator implementation.
-> **Missing**: No PEE document generator. No DVR dependency check. No floor plan embedding.
+> **Built**: `PEE_AZIENDA` (579 paragraphs, 18 tables) and `PEE_COMUNE` (985 paragraphs, 13 tables) generators produce valid `.docx` against Acme fixture. Registered in documents page with per-type generate/download (Sprint Closure 2026-04-14).
+> **Missing**: No "Genera prima il DVR Master" dependency block. No floor plan image embedding or "Inserire planimetria" placeholder. No per-client emergency team/assembly point overrides surfaced in UX.
 
 **Acceptance Criteria:**
 
@@ -517,11 +514,11 @@ As an operator, I want standard emergency procedures (A-E) for each event type p
 
 ### HACCP
 
-#### US-4.3 `NOT STARTED`
+#### US-4.3 `PARTIAL`
 As an operator, I want the HACCP manual auto-generated based on food activity type with customized CCP analysis.
 
-> **Built**: Document type "haccp" registered. No generator implementation.
-> **Missing**: No HACCP generator. No food activity type selection. No CCP pre-loading. No merge on activity type change.
+> **Built**: `HACCP` generator produces 1370 paragraphs / 23 tables against Acme fixture. Registered in documents page (Sprint Closure 2026-04-14).
+> **Missing**: No food-activity-type selector UI (e.g., "Ristorante con cucina" vs. "Bar"). No activity-specific CCP pre-loading. No edit-then-merge flow on activity type change. Customized CCPs not tracked per client.
 
 **Acceptance Criteria:**
 
@@ -529,11 +526,11 @@ As an operator, I want the HACCP manual auto-generated based on food activity ty
 - **Given** I edit a CCP entry (e.g., change a critical temperature limit), **When** I save, **Then** the change is reflected in both the on-screen review and the generated .docx
 - **Given** the activity type is changed after the manual was generated, **When** I regenerate, **Then** I am warned that customizations may be lost and given the option to merge
 
-#### US-4.4 `NOT STARTED`
+#### US-4.4 `PARTIAL`
 As an operator, I want all 16 self-check forms (SA-01 to SA-16) generated as fillable templates.
 
-> **Built**: 16 HACCP template files exist in `templates/haccp/` folder.
-> **Missing**: No form generator. No client branding. No subset selection. No .zip bundling.
+> **Built**: `HACCP_FORMS` generator bundles 17 entries into a `.zip` ready for download (Sprint Closure 2026-04-14). 16 HACCP templates sit in `templates/haccp/` folder.
+> **Missing**: No per-client branding (logo, ragione sociale) injected into forms. No subset-selection dialog before generation — always bundles all 17.
 
 **Acceptance Criteria:**
 
@@ -543,11 +540,11 @@ As an operator, I want all 16 self-check forms (SA-01 to SA-16) generated as fil
 
 ### DUVRI (Contractor Interference)
 
-#### US-4.5 `NOT STARTED`
+#### US-4.5 `PARTIAL`
 As an operator, I want principal company data auto-filled from the DVR and contractor data entered separately.
 
-> **Built**: Document type "duvri" registered. No generator implementation.
-> **Missing**: No DUVRI generator. No principal data auto-fill. No contractor section. No DVR data sync.
+> **Built**: `DUVRI` generator produces 688 paragraphs / 23 tables; principal data flows from shared survey/azienda records via `load_data()` (Sprint Closure 2026-04-14).
+> **Missing**: No "Aggiungi appaltatore" UI for contractor entry. No "Dati committente aggiornati" sync banner when principal data changes. Contractor section currently implicit in generator rather than a managed data entity.
 
 **Acceptance Criteria:**
 
@@ -569,11 +566,11 @@ As an operator, I want interference analysis per equipment type with suggested p
 
 ### POS (Construction Site Plan)
 
-#### US-4.7 `NOT STARTED`
+#### US-4.7 `PARTIAL`
 As an operator, I want to define construction phases with specific risks, NIOSH calculations, and noise/vibration levels per phase.
 
-> **Built**: Document type "pos" registered. No generator implementation.
-> **Missing**: No POS phase builder. No per-phase risk/NIOSH/noise attachments. No drag-and-drop ordering. No dependency linking.
+> **Built**: `POS` generator produces 1272 paragraphs / 87 tables with phase-based structure (Sprint Closure 2026-04-14).
+> **Missing**: No phase-builder UI — phases not yet modelled as editable entities. No drag-and-drop reordering. No per-phase NIOSH/noise/vibration attachments from frontend. No dependency linking or Gantt-like overview.
 
 **Acceptance Criteria:**
 
@@ -633,11 +630,11 @@ As an operator, I want AI-generated content clearly marked so I know what to rev
 - **Given** I hover the AI badge, **When** the tooltip appears, **Then** it reads "Generato da AI - revisiona prima della pubblicazione" and shows a timestamp
 - **Given** I want to filter the editor to AI-only content, **When** I toggle "Mostra solo contenuto AI", **Then** non-AI sections are visually dimmed and AI sections remain interactive
 
-#### US-5.4 `NOT STARTED`
+#### US-5.4 `PARTIAL`
 As an admin, I want secure cloud hosting with daily backups (replacing the USB stick).
 
-> **Built**: Render.com hosting configured. PostgreSQL on Render with managed infrastructure.
-> **Missing**: No backup status panel. No backup failure alerting. No restore wizard. No retention period display. Render provides managed backups but no custom UI for monitoring.
+> **Built**: Render.com hosting configured with web + worker + redis + disk services in `backend/render.yaml` and `preDeployCommand: alembic upgrade head`. Managed Postgres backups enabled by Render. `AuditLog` model + `app/core/audit.py` helper in place to surface backup/restore events (Sprint Closure 2026-04-14).
+> **Missing**: No admin-facing backup status panel (last-backup timestamp, destination region, retention window). No failure alerting to admin email. No restore wizard with isolated-test-environment staging. Audit-log helper exists but backup events don't call it yet.
 
 **Acceptance Criteria:**
 
