@@ -231,3 +231,181 @@ def test_fire_measures_endpoint_invalid():
     client = TestClient(app)
     r = client.get("/api/v1/calculate/fire-measures", params={"livello": "Estremo"})
     assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Biologico sector checklist (Agent A4 — Biologico, US-3.15)
+# Source: D.Lgs. 81/2008 Titolo X, Reg. CE 852/2004, ISS guidelines.
+# ---------------------------------------------------------------------------
+
+
+from app.services.document_generator.reference_data_biologico import (
+    ALIMENTARE_CHECKLIST,
+    ASILO_CHECKLIST,
+    DENTISTI_CHECKLIST,
+    classify_biologico,
+    get_checklist,
+)
+
+
+def test_biologico_checklist_shape_alimentare():
+    items = get_checklist("alimentare")
+    assert 10 <= len(items) <= 12
+    for it in items:
+        assert set(it.keys()) >= {"id", "descrizione", "criticita"}
+        assert it["criticita"] in {"alta", "media", "bassa"}
+    ids = [it["id"] for it in items]
+    assert len(ids) == len(set(ids))
+
+
+def test_biologico_checklist_shape_asilo():
+    items = get_checklist("asilo")
+    assert 10 <= len(items) <= 12
+    assert all(it["id"].startswith("AS.") for it in items)
+
+
+def test_biologico_checklist_shape_dentisti():
+    items = get_checklist("dentisti")
+    assert 10 <= len(items) <= 12
+    assert all(it["id"].startswith("DE.") for it in items)
+
+
+def test_biologico_checklist_constants_exposed():
+    assert len(ALIMENTARE_CHECKLIST) >= 10
+    assert len(ASILO_CHECKLIST) >= 10
+    assert len(DENTISTI_CHECKLIST) >= 10
+
+
+def test_biologico_checklist_unknown_sector():
+    import pytest
+    with pytest.raises(ValueError):
+        get_checklist("aerospaziale")
+
+
+def test_biologico_checklist_case_insensitive():
+    # Accept "ALIMENTARE" / " Alimentare " the same as "alimentare".
+    assert get_checklist("ALIMENTARE") == ALIMENTARE_CHECKLIST
+    assert get_checklist(" Asilo ") == ASILO_CHECKLIST
+
+
+def test_biologico_classify_all_si_is_basso():
+    risposte = [{"id": it["id"], "risposta": "SI"} for it in ALIMENTARE_CHECKLIST]
+    r = classify_biologico("alimentare", risposte)
+    assert r["livello"] == "BASSO"
+    assert r["no_weight"] == 0
+    assert r["unanswered"] == []
+    assert r["settore"] == "alimentare"
+
+
+def test_biologico_classify_all_no_is_alto():
+    risposte = [{"id": it["id"], "risposta": "NO"} for it in DENTISTI_CHECKLIST]
+    r = classify_biologico("dentisti", risposte)
+    assert r["livello"] == "ALTO"
+    assert r["ratio"] == 1.0
+
+
+def test_biologico_classify_na_excludes_from_denominator():
+    # All items marked NA -> ratio is 0/0 -> BASSO (ratio 0.0)
+    risposte = [{"id": it["id"], "risposta": "NA"} for it in ASILO_CHECKLIST]
+    r = classify_biologico("asilo", risposte)
+    assert r["max_weight"] == 0
+    assert r["no_weight"] == 0
+    assert r["ratio"] == 0.0
+    assert r["livello"] == "BASSO"
+
+
+def test_biologico_classify_medio_band():
+    catalog = ALIMENTARE_CHECKLIST
+    weights = {"alta": 3, "media": 2, "bassa": 1}
+    total = sum(weights[it["criticita"]] for it in catalog)
+    risposte: list[dict] = []
+    accumulated_no = 0
+    # Target ratio ~0.25 -> inside the MEDIO band (0.15..0.40)
+    target = total * 0.25
+    for it in catalog:
+        w = weights[it["criticita"]]
+        if accumulated_no + w <= target:
+            risposte.append({"id": it["id"], "risposta": "NO"})
+            accumulated_no += w
+        else:
+            risposte.append({"id": it["id"], "risposta": "SI"})
+    r = classify_biologico("alimentare", risposte)
+    assert r["livello"] == "MEDIO", f"expected MEDIO, got {r}"
+
+
+def test_biologico_classify_high_criticity_alta_drives_alto():
+    # NO on every "alta" item + SI on the rest -> ALTO (alta items dominate).
+    risposte = []
+    for it in DENTISTI_CHECKLIST:
+        ans = "NO" if it["criticita"] == "alta" else "SI"
+        risposte.append({"id": it["id"], "risposta": ans})
+    r = classify_biologico("dentisti", risposte)
+    assert r["livello"] == "ALTO"
+
+
+def test_biologico_classify_unanswered_items_tracked():
+    risposte = [{"id": ASILO_CHECKLIST[0]["id"], "risposta": "SI"}]
+    r = classify_biologico("asilo", risposte)
+    assert len(r["unanswered"]) == len(ASILO_CHECKLIST) - 1
+    assert r["livello"] == "BASSO"
+
+
+def test_biologico_classify_invalid_answer_ignored():
+    risposte = [{"id": ALIMENTARE_CHECKLIST[0]["id"], "risposta": "FORSE"}]
+    r = classify_biologico("alimentare", risposte)
+    assert ALIMENTARE_CHECKLIST[0]["id"] in r["unanswered"]
+
+
+def test_biologico_checklist_endpoint_alimentare():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    r = client.get(
+        "/api/v1/calculate/biologico-checklist", params={"settore": "alimentare"}
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["settore"] == "alimentare"
+    assert 10 <= len(body["items"]) <= 12
+    first = body["items"][0]
+    assert set(first.keys()) >= {"id", "descrizione", "criticita"}
+
+
+def test_biologico_checklist_endpoint_asilo():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    r = client.get(
+        "/api/v1/calculate/biologico-checklist", params={"settore": "asilo"}
+    )
+    assert r.status_code == 200
+    assert r.json()["settore"] == "asilo"
+
+
+def test_biologico_checklist_endpoint_dentisti():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    r = client.get(
+        "/api/v1/calculate/biologico-checklist", params={"settore": "dentisti"}
+    )
+    assert r.status_code == 200
+    assert r.json()["settore"] == "dentisti"
+
+
+def test_biologico_checklist_endpoint_invalid_sector():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    r = client.get(
+        "/api/v1/calculate/biologico-checklist", params={"settore": "bizantino"}
+    )
+    assert r.status_code == 422
