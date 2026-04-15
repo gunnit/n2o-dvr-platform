@@ -308,8 +308,7 @@ As an operator, I want to input lifting parameters per worker (height, displacem
 #### US-3.2 `DONE`
 As an operator, I want the system to auto-derive CP (weight constant) from worker sex and age so I don't have to look it up.
 
-> **Built**: CP lookup in `frontend/src/components/assessments/mmc-form.tsx:106-107` auto-fills 25kg (male 18-45) / 15kg (female young 15-18) / etc. per NIOSH reference table. CP stored on `MmcValutazione` model at `backend/app/models/mmc_valutazione.py:30` with "Modifica CP" override flag available in form state.
-> **Missing**: Free-text "Motivazione" field is not enforced schema-side when override is used (minor gap vs. AC3).
+> **Built**: Backend CP lookup `backend/app/data/niosh_cp.py` exposed via `GET /api/v1/calculate/niosh-cp?sesso=M&eta=30` auto-fills 25kg (male 18-45) / 15kg (female young 15-18) / etc. per NIOSH reference table (D.Lgs. 81/2008 Allegato XXXIII, ISO 11228-1). Frontend `frontend/src/components/assessments/mmc/mmc-cp-override.tsx` shows an "Auto" badge by default. "Modifica CP" unlocks a numeric input plus a required "Motivazione" textarea enforced by the form schema (min 5 chars via `validateCpOverride` + `form.setError`) — submission is blocked when missing.
 
 **Acceptance Criteria:**
 
