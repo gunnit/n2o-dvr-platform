@@ -5,6 +5,7 @@ import os
 from docx import Document
 from sqlalchemy import func, select
 
+from app.data.pee_procedures import merge_with_overrides
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_pee
@@ -68,13 +69,22 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
             add_paragraph(doc, pee.vie_fuga or "Vie di fuga indicate dalla segnaletica di sicurezza UNI EN ISO 7010.")
             add_paragraph(doc, f"Punto di raccolta: {pee.punto_raccolta or '—'}")
 
-            add_heading(doc, "Scenari di emergenza", level=2)
-            for s in (pee.scenari or []):
-                add_heading(doc, f"Scenario {s.get('codice', '')} - {s.get('titolo', '')}", level=3)
-                add_paragraph(doc, s.get("procedura", ""))
-
-        add_heading(doc, "Procedure generali di evacuazione", level=2)
-        add_paragraph(doc, "1. Mantenere la calma. 2. Avvisare chiunque si trovi in difficolta. 3. Non utilizzare ascensori. 4. Dirigersi ordinatamente verso il punto di raccolta seguendo la segnaletica. 5. Non rientrare negli ambienti fino al cessato allarme.")
+        # Structured A-E procedures per event type (US-4.2). Standard procedures
+        # from app.data.pee_procedures are merged with per-client overrides
+        # persisted in pee.scenari. We always render the full 5×5 grid so the
+        # operator gets consistent coverage even when no overrides exist.
+        add_heading(doc, "Procedure di emergenza per scenario", level=2)
+        merged_events = merge_with_overrides(pee.scenari if pee else None)
+        for event in merged_events:
+            add_heading(doc, event["titolo"], level=3)
+            for proc in event["procedure"]:
+                suffix = " (personalizzata)" if proc.get("personalizzata") else ""
+                add_paragraph(
+                    doc,
+                    f"{proc['lettera']}. {proc['titolo']}{suffix}",
+                    bold=True,
+                )
+                add_paragraph(doc, proc["testo"])
 
         add_heading(doc, "Formazione e prove di evacuazione", level=2)
         add_paragraph(doc, "La squadra di emergenza riceve formazione specifica (primo soccorso D.M. 388/2003 e antincendio D.M. 02/09/2021). Prove di evacuazione con cadenza almeno annuale con registrazione dell'esito.")

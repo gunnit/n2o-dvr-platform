@@ -18,15 +18,15 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 | 1 — Digital Survey | 10 | 6 | 3 | 1 | 75% |
 | 2 — DVR Master | 9 | 3 | 5 | 1 | 61% |
 | 3 — DVR Attachments | 15 | 7 | 8 | 0 | 73% |
-| 4 — Complementary Docs | 8 | 0 | 5 | 3 | 31% |
+| 4 — Complementary Docs | 8 | 1 | 5 | 2 | 38% |
 | 5 — Cross-cutting | 4 | 0 | 4 | 0 | 50% |
-| **TOTAL** | **46** | **16** | **25** | **5** | **62%** |
+| **TOTAL** | **46** | **17** | **25** | **4** | **64%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
 > **2026-04-15 reconciliation**: Done in two passes. Pass 1 realigned against the Sprint Closure section dated 2026-04-14 (SDS trilogy, Epic 4 generators, US-5.4 backups). Pass 2 audited the code against acceptance criteria for stories touched by post-closure commits (`0779050` MMC, `c8a4670` Stress, `01077fb` Incendio, `05173f2` VDT+Microclima, `8f6c61c` AI integration, `e2b6475` Wave 1). Net effect of Pass 2: US-3.1/3.2/3.3/3.4/3.6/3.12/3.13 → **DONE**; US-2.1/2.6/3.5/3.7/3.8/3.14 → **PARTIAL** with specific AC gaps documented per story below.
 >
-> **True greenfield remaining** (stories still NOT STARTED): US-1.3 photo uploads, US-2.2 comune seismic lookup, US-4.2 emergency procedures A-E, US-4.6 interference rules engine, US-4.8 POS role×phase DPI matrix. (US-5.3 moved to PARTIAL on 2026-04-15 — shared AI badge + filter wired; still needs SDS extraction panel adoption.)
+> **True greenfield remaining** (stories still NOT STARTED): US-1.3 photo uploads, US-2.2 comune seismic lookup, US-4.6 interference rules engine, US-4.8 POS role×phase DPI matrix. (US-5.3 moved to PARTIAL on 2026-04-15 — shared AI badge + filter wired; still needs SDS extraction panel adoption. US-4.2 moved to DONE on 2026-04-15 — standard A-E procedures with per-client overrides + reset dialog shipped.)
 
 Tier A (2026-04-14): US-1.5 (contextual risk filtering + summary bar), US-2.3 (default scoring matrix + Reset button), US-2.8 (Part II + logo embed + versioned filename), US-2.9 (version history Sheet) — all four stories advanced within their PARTIAL status toward DONE.
 
@@ -500,11 +500,10 @@ As an operator, I want the PEE auto-generated from DVR data (environments, emerg
 - **Given** no DVR exists yet, **When** I attempt to generate the PEE, **Then** the action is blocked with the message "Genera prima il DVR Master"
 - **Given** the floor plan image was uploaded with the DVR, **When** the PEE is generated, **Then** it is embedded in the document at the designated section; otherwise a placeholder "Inserire planimetria" is shown
 
-#### US-4.2 `NOT STARTED`
+#### US-4.2 `DONE`
 As an operator, I want standard emergency procedures (A-E) for each event type pre-filled.
 
-> **Built**: Nothing.
-> **Missing**: No emergency procedure templates. No per-client customization. No "Reset alle procedure standard" flow.
+> **Built**: Standard A-E procedures per event (incendio, terremoto, allagamento, fuga_gas, evacuazione_generale) in `backend/app/data/pee_procedures.py` — 5×5 grid, Italian text grounded in D.M. 02/09/2021 + D.Lgs. 81/2008 art. 46. CRUD endpoints at `backend/app/api/v1/pee_procedures.py`: `GET /aziende/{id}/pee/procedure` returns the merged (standard + overrides) grid; `PUT /procedure/{evento}/{lettera}` persists a per-client override into `pee_plans.scenari` (JSONB); `DELETE /procedure/{evento}/{lettera}` drops the override and returns the restored standard. Frontend review page at `frontend/src/app/(dashboard)/assessments/pee/[aziendaId]/page.tsx` renders the grid as five event cards with inline edit, "Personalizzata" badges, and a Dialog-gated "Ripristina standard" action. PEE generator (`pee_azienda.py`) now renders the structured A-E sections using `merge_with_overrides()` so customizations flow through to the `.docx`.
 
 **Acceptance Criteria:**
 

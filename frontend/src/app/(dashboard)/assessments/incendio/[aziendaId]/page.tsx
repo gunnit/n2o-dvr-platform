@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+
 import {
   Card,
   CardContent,
@@ -13,14 +14,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
+  BAND_CLASS,
   IncendioForm,
-  computeFireRisk,
+  useIncendioForm,
+  type IncendioResult,
   type FireLivello,
-  type FireResult,
-} from "@/components/assessments/incendio-form";
+} from "@/components/assessments/incendio/incendio-form";
+import { IncendioVvfBanner } from "@/components/assessments/incendio/incendio-vvf-banner";
 import type { Azienda } from "@/types";
 
-// Italian action text per livello (mirrors backend/app/api/v1/calculations.py::_FIRE_AZIONE).
+// Italian action text per livello (kept for the "Azione consigliata" summary
+// card — the per-area checklist lives inside `IncendioMeasures`).
 const AZIONE_PER_LIVELLO: Record<FireLivello, string> = {
   Basso:
     "Rischio incendio basso: mantenere in efficienza le misure di prevenzione e protezione esistenti, verificare periodicamente estintori, vie di esodo e segnaletica, e aggiornare la formazione antincendio del personale.",
@@ -28,14 +32,6 @@ const AZIONE_PER_LIVELLO: Record<FireLivello, string> = {
     "Rischio incendio medio: adottare misure aggiuntive di prevenzione e protezione (rilevazione automatica, compartimentazione, controllo sorgenti di innesco), designare e formare gli addetti alla gestione dell'emergenza e aggiornare il piano di emergenza ed evacuazione.",
   Alto:
     "Rischio incendio alto: attivare immediatamente misure straordinarie di prevenzione e protezione, coinvolgere il professionista antincendio, presentare SCIA ai VV.F. ove dovuta, adottare impianti di rilevazione e spegnimento automatici e garantire formazione di livello 3 agli addetti all'emergenza.",
-};
-
-const BAND_CLASS: Record<FireLivello, string> = {
-  Basso:
-    "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-400",
-  Medio:
-    "bg-amber-500/15 text-amber-800 ring-amber-500/30 dark:text-amber-300",
-  Alto: "bg-rose-500/15 text-rose-700 ring-rose-500/30 dark:text-rose-400",
 };
 
 // ---------------------------------------------------------------------------
@@ -46,16 +42,29 @@ export default function IncendioAssessmentPage() {
 
   const [azienda, setAzienda] = useState<Azienda | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [result, setResult] = useState<FireResult>(() => computeFireRisk({}));
-  const [finalizing, setFinalizing] = useState(false);
-  const [finalizeMessage, setFinalizeMessage] = useState<string | null>(null);
+  const form = useIncendioForm();
+  const [result, setResult] = useState<IncendioResult>({
+    areas: [],
+    maxLivello: null,
+    allComplete: false,
+  });
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
 
-  // Load azienda metadata (best-effort — mirrors stress page pattern).
+  // Track dirty state from RHF.
+  useEffect(() => {
+    const subscription = form.watch(() => setDirty(form.formState.isDirty));
+    return () => subscription.unsubscribe();
+  }, [form]);
+
+  // Load azienda metadata (best-effort — mirrors stress/mmc page pattern).
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const apiUrl =
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         let token: string | null = null;
         try {
           const s = await fetch("/api/auth/session");
@@ -66,7 +75,10 @@ export default function IncendioAssessmentPage() {
         }
         const res = await fetch(`${apiUrl}/api/v1/aziende/${aziendaId}`, {
           headers: token
-            ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
+            ? {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              }
             : { "Content-Type": "application/json" },
         });
         if (!res.ok) throw new Error(`Errore ${res.status}`);
@@ -75,7 +87,9 @@ export default function IncendioAssessmentPage() {
       } catch (err) {
         if (!cancelled) {
           setLoadError(
-            err instanceof Error ? err.message : "Impossibile caricare l'azienda",
+            err instanceof Error
+              ? err.message
+              : "Impossibile caricare l'azienda",
           );
         }
       }
@@ -86,14 +100,13 @@ export default function IncendioAssessmentPage() {
     };
   }, [aziendaId]);
 
-  const finalize = useCallback(async () => {
-    if (!result.complete || result.inf === undefined || result.si === undefined || result.pi === undefined) {
-      return;
-    }
-    setFinalizing(true);
-    setFinalizeMessage(null);
+  const save = useCallback(async () => {
+    if (!result.allComplete || result.areas.length === 0) return;
+    setSaving(true);
+    setSaveMessage(null);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const apiUrl =
+        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       let token: string | null = null;
       try {
         const s = await fetch("/api/auth/session");
@@ -103,40 +116,59 @@ export default function IncendioAssessmentPage() {
         /* noop */
       }
 
+      // Cross-check with backend for the worst-case (max livello) area —
+      // ensures the front-end calculation matches the server's band logic.
+      const worst = result.areas.reduce((acc, cur) =>
+        (cur.totale ?? 0) > (acc.totale ?? 0) ? cur : acc,
+      );
+      if (
+        worst.inf === undefined ||
+        worst.si === undefined ||
+        worst.pi === undefined
+      )
+        return;
+
       const res = await fetch(`${apiUrl}/api/v1/calculate/fire-risk`, {
         method: "POST",
         headers: token
-          ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
+          ? {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            }
           : { "Content-Type": "application/json" },
         body: JSON.stringify({
-          inf: result.inf,
-          si: result.si,
-          pi: result.pi,
+          inf: worst.inf,
+          si: worst.si,
+          pi: worst.pi,
         }),
       });
       if (!res.ok) throw new Error(`API error ${res.status}`);
-      const data = await res.json();
+      const data = (await res.json()) as {
+        totale: number;
+        livello: FireLivello;
+      };
 
-      // Confirm backend matches local computation
-      if (data.totale !== result.totale || data.livello !== result.livello) {
+      if (data.totale !== worst.totale || data.livello !== worst.livello) {
         throw new Error(
-          `Discrepanza: locale ${result.totale}/${result.livello}, server ${data.totale}/${data.livello}`,
+          `Discrepanza: locale ${worst.totale}/${worst.livello}, server ${data.totale}/${data.livello}`,
         );
       }
 
-      setFinalizeMessage(
-        `Valutazione archiviata: totale ${data.totale} — livello ${data.livello}.`,
+      setSaveMessage(
+        `Valutazione archiviata: ${result.areas.length} area/e · livello massimo ${result.maxLivello}.`,
       );
+      form.reset(form.getValues()); // marks RHF as pristine
+      setDirty(false);
     } catch (err) {
-      setFinalizeMessage(
+      setSaveMessage(
         err instanceof Error
-          ? `Errore conferma: ${err.message}`
-          : "Errore conferma sconosciuto",
+          ? `Errore salvataggio: ${err.message}`
+          : "Errore salvataggio sconosciuto",
       );
     } finally {
-      setFinalizing(false);
+      setSaving(false);
     }
-  }, [result]);
+  }, [result, form]);
 
   const pageSubtitle = useMemo(() => {
     if (loadError) return `Azienda ${aziendaId} (metadati non disponibili)`;
@@ -144,8 +176,12 @@ export default function IncendioAssessmentPage() {
     return "Caricamento…";
   }, [azienda, aziendaId, loadError]);
 
+  const vvfVisible = result.maxLivello === "Alto";
+
   return (
     <div className="space-y-6">
+      <IncendioVvfBanner visible={vvfVisible} />
+
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
@@ -157,34 +193,44 @@ export default function IncendioAssessmentPage() {
           </h1>
           <p className="text-sm text-muted-foreground">{pageSubtitle}</p>
         </div>
+        {dirty && (
+          <Badge
+            variant="outline"
+            className="border-amber-400/60 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+          >
+            Modifiche non salvate
+          </Badge>
+        )}
       </div>
 
-      <IncendioForm aziendaId={aziendaId} onResultChange={setResult} />
+      <IncendioForm form={form} onResultChange={setResult} />
 
-      {/* Recommended action */}
+      {/* Azione consigliata riepilogo (livello massimo) */}
       <Card>
         <CardHeader className="border-b">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <CardTitle className="text-sm">Azione consigliata</CardTitle>
+              <CardTitle className="text-sm">
+                Azione consigliata — livello massimo
+              </CardTitle>
               <CardDescription className="text-xs">
-                {result.livello
-                  ? AZIONE_PER_LIVELLO[result.livello]
-                  : "Completa i tre parametri per ottenere l'azione consigliata."}
+                {result.maxLivello
+                  ? AZIONE_PER_LIVELLO[result.maxLivello]
+                  : "Completa i tre parametri di almeno un'area per ottenere l'azione consigliata."}
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                livello attuale
+                livello max
               </span>
-              {result.livello ? (
+              {result.maxLivello ? (
                 <span
                   className={cn(
                     "inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium ring-1",
-                    BAND_CLASS[result.livello],
+                    BAND_CLASS[result.maxLivello],
                   )}
                 >
-                  {result.livello}
+                  {result.maxLivello}
                 </span>
               ) : (
                 <Badge variant="secondary">—</Badge>
@@ -194,44 +240,40 @@ export default function IncendioAssessmentPage() {
         </CardHeader>
       </Card>
 
-      {/* Finalize */}
+      {/* Save */}
       <Card className="border-primary/30 bg-primary/5">
         <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
           <div>
-            <p className="text-sm font-medium">Conferma valutazione</p>
+            <p className="text-sm font-medium">Salva valutazione</p>
             <p className="text-xs text-muted-foreground">
-              {result.complete
-                ? "Tutti i parametri compilati. La valutazione sarà archiviata nel fascicolo cliente."
-                : "Completa i tre parametri (INF, SI, PI) per confermare la valutazione."}
+              {result.allComplete
+                ? `Tutte le aree (${result.areas.length}) sono compilate. La valutazione sarà archiviata nel fascicolo cliente.`
+                : "Completa INF, SI e PI per ciascuna area per salvare la valutazione."}
             </p>
-            {finalizeMessage && (
+            {saveMessage && (
               <p
                 className={cn(
                   "mt-1 text-xs",
-                  finalizeMessage.startsWith("Errore") ||
-                    finalizeMessage.startsWith("Discrepanza")
+                  saveMessage.startsWith("Errore") ||
+                    saveMessage.startsWith("Discrepanza")
                     ? "text-destructive"
                     : "text-emerald-700 dark:text-emerald-400",
                 )}
               >
-                {finalizeMessage}
+                {saveMessage}
               </p>
             )}
           </div>
           <div className="flex gap-2">
             <Button
-              disabled={!result.complete || finalizing}
-              onClick={finalize}
+              disabled={!result.allComplete || saving}
+              onClick={save}
             >
-              {finalizing ? "Conferma in corso…" : "Conferma valutazione"}
+              {saving ? "Salvataggio in corso…" : "Salva valutazione"}
             </Button>
           </div>
         </CardContent>
       </Card>
-
-      <p className="text-[11px] text-muted-foreground">
-        Bozza salvata in locale (chiave: <code>incendio-draft-{aziendaId}</code>)
-      </p>
     </div>
   );
 }
