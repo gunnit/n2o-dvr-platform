@@ -162,6 +162,9 @@ async def generate_document(
         status="pending",
         generated_by=user.id,
         generation_started_at=datetime.utcnow(),
+        # US-4.4: persist the dialog-supplied options (e.g. HACCP forms
+        # selected_codes) so the async worker can read them back.
+        options=body.options,
     )
     db.add(doc)
     await db.commit()

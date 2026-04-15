@@ -59,8 +59,15 @@ async def _run_generation(document_id: uuid.UUID) -> None:
             doc.error_message = None  # clear any prior rollback note
             await db.commit()
 
-            # Dispatch to the right generator class
-            generator = get_generator_for(doc.tipo_documento, doc.azienda_id, db)
+            # Dispatch to the right generator class. Forward the per-row
+            # options dict (US-4.4) so generators like haccp_forms can pick
+            # up subset selections that were posted with the request.
+            generator = get_generator_for(
+                doc.tipo_documento,
+                doc.azienda_id,
+                db,
+                options=doc.options,
+            )
             output_path = await generator.generate()
 
             doc.status = "completed"

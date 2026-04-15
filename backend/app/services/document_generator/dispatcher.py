@@ -11,7 +11,12 @@ from app.services.document_generator.base import BaseDocumentGenerator
 
 
 # Lazy imports to keep import graph clean at module load time.
-def get_generator_for(tipo_documento: str, azienda_id: uuid.UUID, db: AsyncSession) -> BaseDocumentGenerator:
+def get_generator_for(
+    tipo_documento: str,
+    azienda_id: uuid.UUID,
+    db: AsyncSession,
+    options: dict | None = None,
+) -> BaseDocumentGenerator:
     """Return a generator instance for the given tipo_documento string.
 
     tipo_documento values match DOCUMENT_TYPES keys in reference_data.py:
@@ -20,6 +25,10 @@ def get_generator_for(tipo_documento: str, azienda_id: uuid.UUID, db: AsyncSessi
       ALLEGATO_BIOLOGICO_ALIMENTARE, ALLEGATO_BIOLOGICO_ASILO,
       ALLEGATO_BIOLOGICO_DENTISTI, PEE_AZIENDA, PEE_COMUNE, HACCP,
       HACCP_FORMS, DUVRI, POS.
+
+    The optional ``options`` dict is forwarded to the generator so per-run
+    config (e.g. HACCP forms ``selected_codes``) can flow from the API
+    request through the Celery task into the generator (US-4.4).
     """
     t = (tipo_documento or "").upper().replace("-", "_")
 
@@ -81,7 +90,8 @@ def get_generator_for(tipo_documento: str, azienda_id: uuid.UUID, db: AsyncSessi
 
     if t == "HACCP_FORMS":
         from app.services.document_generator.haccp_forms import HaccpFormsGenerator
-        return HaccpFormsGenerator(azienda_id, db)
+        # US-4.4: subset selection comes via options.selected_codes.
+        return HaccpFormsGenerator(azienda_id, db, options=options)
 
     if t == "DUVRI":
         from app.services.document_generator.duvri import DuvriGenerator

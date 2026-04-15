@@ -1,11 +1,16 @@
 import uuid
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DocumentGenerateRequest(BaseModel):
     tipo_documento: str
+    # US-4.4: optional per-generation config. For haccp_forms this carries
+    # {"selected_codes": ["SA-01", "SA-03", ...]} so the dialog-driven
+    # subset selection survives the async hop into the Celery worker.
+    options: dict[str, Any] | None = None
 
 
 class DocumentBatchRequest(BaseModel):

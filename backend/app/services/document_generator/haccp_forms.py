@@ -3,14 +3,22 @@
 Output: a single .docx per form, then all assembled into a .zip that is
 returned as the "file" for this doc type. If zip creation is not possible,
 returns the main index .docx.
+
+US-4.4: each form is pre-branded with the N2O letterhead logo (when
+``backend/app/assets/logo.png`` is present) and the client's
+ragione sociale, and the operator can pick a subset of forms via
+``options.selected_codes``.
 """
 
 import io
+import logging
 import os
 import zipfile
 from pathlib import Path
 
 from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Inches
 from sqlalchemy import func, select
 
 from app.models.documento_generato import DocumentoGenerato
@@ -27,8 +35,45 @@ from app.services.document_generator.docx_utils import (
     slugify,
 )
 
+logger = logging.getLogger(__name__)
+
 TIPO_DOC = "haccp_forms"
 HACCP_TEMPLATES_DIR = TEMPLATES_DIR / "haccp"
+# Reused convention from dvr_master.py — backend/app/assets/logo.png. When
+# the file is missing the form simply renders without a logo, matching the
+# DVR generator's degrade-gracefully behaviour.
+_LOGO_PATH = Path(__file__).resolve().parents[3] / "assets" / "logo.png"
+
+
+def _normalize_code(code: str) -> str:
+    """Compare codes ignoring case, hyphens and whitespace."""
+    return (code or "").upper().replace("-", "").replace(" ", "").strip()
+
+
+def _add_branding_header(doc, azienda) -> None:
+    """Stamp the consultancy logo + client ragione sociale at the top.
+
+    Used both for the bundled INDEX doc and every individual SA-* form so the
+    operator gets a uniformly branded packet (US-4.4 AC1). When the logo file
+    is missing the header degrades to a plain client-name line — matching the
+    DVR Master generator's degrade-gracefully behaviour.
+    """
+    if _LOGO_PATH.exists():
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.add_run()
+        try:
+            run.add_picture(str(_LOGO_PATH), width=Inches(1.6))
+        except Exception:
+            # Corrupt or unreadable image — drop the picture and let the
+            # client-name line below act as the brand mark.
+            logger.exception("HACCP form logo embed failed")
+    name = (azienda.ragione_sociale or "").strip()
+    if name:
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.add_run(name)
+        run.bold = True
 
 
 class HaccpFormsGenerator(BaseDocumentGenerator):
@@ -42,14 +87,27 @@ class HaccpFormsGenerator(BaseDocumentGenerator):
         slug = slugify(azienda.ragione_sociale or "azienda")
         version = await self._next_version()
 
+        # US-4.4 AC2: filter forms by the dialog-supplied selected_codes when
+        # provided. Codes are normalised so the dialog can pass either
+        # "SA-01" or "sa01"; missing/empty option means "all forms" so the
+        # legacy "Genera Tutti" behaviour is preserved.
+        selected_codes_raw = self.options.get("selected_codes")
+        if selected_codes_raw:
+            wanted = {_normalize_code(c) for c in selected_codes_raw}
+            selected_forms = [f for f in forms if _normalize_code(f.form_code) in wanted]
+        else:
+            selected_forms = list(forms)
+
         # Build individual forms
         form_paths: list[str] = []
-        for form in forms:
+        for form in selected_forms:
             form_path = self._build_single_form(output_dir, slug, version, form, azienda)
             form_paths.append(form_path)
 
-        # Build index document
+        # Build index document — also branded so the zip header sheet
+        # carries the same letterhead as the forms inside it.
         index_doc = Document()
+        _add_branding_header(index_doc, azienda)
         add_heading(index_doc, f"SCHEDE DI AUTOCONTROLLO HACCP - {azienda.ragione_sociale}", level=1)
         add_kv_table(index_doc, [
             ("Azienda", azienda.ragione_sociale or ""),
@@ -58,7 +116,11 @@ class HaccpFormsGenerator(BaseDocumentGenerator):
             ("Numero schede allegate", str(len(form_paths))),
         ])
         add_heading(index_doc, "Elenco schede", level=2)
-        add_data_table(index_doc, ["Codice", "Titolo"], [[f.form_code, f.form_title] for f in forms] or [["—", "—"]])
+        add_data_table(
+            index_doc,
+            ["Codice", "Titolo"],
+            [[f.form_code, f.form_title] for f in selected_forms] or [["—", "—"]],
+        )
 
         # Package all into a zip file
         zip_path = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.zip")
@@ -97,6 +159,10 @@ class HaccpFormsGenerator(BaseDocumentGenerator):
         else:
             doc = Document()
 
+        # US-4.4 AC1: consultancy letterhead + client ragione sociale on
+        # every form, regardless of whether the source template provided
+        # its own placeholders.
+        _add_branding_header(doc, azienda)
         page_break(doc)
         add_heading(doc, f"{code} - {form.form_title}", level=1)
         add_kv_table(doc, [

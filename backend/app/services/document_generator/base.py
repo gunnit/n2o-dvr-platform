@@ -30,15 +30,26 @@ class BaseDocumentGenerator(ABC):
     a .docx file and returns the file path.
     """
 
-    def __init__(self, azienda_id: uuid.UUID, db_session: AsyncSession):
+    def __init__(
+        self,
+        azienda_id: uuid.UUID,
+        db_session: AsyncSession,
+        options: dict | None = None,
+    ):
         """Initialize the generator.
 
         Args:
             azienda_id: UUID of the company to generate the document for.
             db_session: Async SQLAlchemy session for database access.
+            options: Optional per-generation config (e.g. HACCP forms
+                ``selected_codes``). ``None`` when not supplied.
         """
         self.azienda_id = azienda_id
         self.db = db_session
+        # US-4.4: options dict forwarded from the POST body via the
+        # DocumentoGenerato.options JSONB column. Generators that don't need
+        # per-run config can simply ignore this attribute.
+        self.options: dict = options or {}
 
     @abstractmethod
     async def generate(self) -> str:

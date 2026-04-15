@@ -20,7 +20,8 @@ Stories below are being worked on by a parallel agent. **Do not pick these up if
 | ~~US-1.4~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (modal + qualifiche + multi-select shipped) |
 | ~~US-2.6~~ | Agent-B | 2026-04-15 | **CLOSED → DONE** (per-client misure library + measures-panel wiring shipped) |
 | ~~US-4.1~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (DVR guard + planimetria + plan-config UX shipped) |
-| US-4.4 | Agent-A | 2026-04-15 | HACCP forms per-client branding + subset dialog |
+| US-2.3 | Agent-B | 2026-04-15 | Auto-seed default P/D matrix when valutazioni are first created per ambiente |
+| ~~US-4.4~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (letterhead + ragione sociale + subset dialog shipped) |
 | US-5.4 | Agent-A | 2026-04-15 | Admin backup status panel + failure alerting + audit wiring |
 
 Release a claim by deleting the row and the inline marker on the story once you DONE/PARTIAL-update it.
@@ -32,9 +33,9 @@ Release a claim by deleting the row and the inline marker on the story once you 
 | 1 — Digital Survey | 10 | 8 | 2 | 0 | 90% |
 | 2 — DVR Master | 9 | 5 | 4 | 0 | 78% |
 | 3 — DVR Attachments | 15 | 15 | 0 | 0 | 100% |
-| 4 — Complementary Docs | 8 | 5 | 3 | 0 | 81% |
+| 4 — Complementary Docs | 8 | 6 | 2 | 0 | 88% |
 | 5 — Cross-cutting | 4 | 1 | 3 | 0 | 63% |
-| **TOTAL** | **46** | **34** | **12** | **0** | **87%** |
+| **TOTAL** | **46** | **35** | **11** | **0** | **88%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
@@ -215,7 +216,7 @@ As an office operator, I want territorial context (seismic zone, local regulatio
 - **Given** the comune is not in the lookup table, **When** the lookup fails, **Then** the field is left blank with a warning "Comune non trovato - inserisci manualmente"
 - **Given** territorial data is auto-populated, **When** I view it in the editor, **Then** it is read-only by default with an "Override" button to enable manual edit
 
-#### US-2.3 `PARTIAL`
+#### US-2.3 `PARTIAL` 🔒 CLAIMED by Agent-B (2026-04-15) — other agents skip
 As an office operator, I want risk tables pre-populated per environment with contextualized severity scores that I can review and adjust.
 
 > **Built**: Risk assessment table in survey Step 5 with P/D sliders, real-time I=2D+P calculation, color-coded levels. DVR generator renders risk tables per environment. Default scoring matrix (88 entries: 8 environment types × 11 categories) in `reference_data.py` with `get_default_scores()` / `get_default_risk_matrix()` helpers. Frontend embeds the same matrix for instant reset. "Reset al default" per-ambiente button with confirmation Dialog ("Sei sicuro? I valori P/D correnti verranno sovrascritti."). Backend helper `apply_default_scores_to_valutazioni()` only overwrites initial 1/1 rows.
@@ -533,11 +534,10 @@ As an operator, I want the HACCP manual auto-generated based on food activity ty
 - **Given** I edit a CCP entry (e.g., change a critical temperature limit), **When** I save, **Then** the change is reflected in both the on-screen review and the generated .docx
 - **Given** the activity type is changed after the manual was generated, **When** I regenerate, **Then** I am warned that customizations may be lost and given the option to merge
 
-#### US-4.4 `PARTIAL` 🔒 CLAIMED by Agent-A (2026-04-15) — other agents skip
+#### US-4.4 `DONE`
 As an operator, I want all 16 self-check forms (SA-01 to SA-16) generated as fillable templates.
 
-> **Built**: `HACCP_FORMS` generator bundles 17 entries into a `.zip` ready for download (Sprint Closure 2026-04-14). 16 HACCP templates sit in `templates/haccp/` folder.
-> **Missing**: No per-client branding (logo, ragione sociale) injected into forms. No subset-selection dialog before generation — always bundles all 17.
+> **Built (2026-04-15)**: `HACCP_FORMS` generator bundles up to 17 entries (16 SA-* forms + INDEX) into a `.zip` ready for download. **Branding (AC1)**: new `_add_branding_header()` helper stamps the consultancy letterhead (`backend/app/assets/logo.png`, embedded via `add_picture(width=1.6")`) plus the bold client `ragione_sociale` at the top of every individual form .docx and the INDEX doc. Falls back to a plain client-name line if the logo file is missing — same degrade behaviour as the DVR Master generator. The "client logo" in the AC is interpreted as the consultancy's own letterhead since `Azienda` doesn't (yet) carry a per-client logo upload; per-azienda logos would be a follow-up. **Subset dialog (AC2)**: documents page now opens a `<Dialog>` when "Genera" is clicked on the HACCP forms card — checklist of all 16 codes (SA-01..SA-16) with titles, "Seleziona tutte" / "Deseleziona tutte" shortcuts, count badge, and a "Genera (N)" CTA disabled at zero selection. Selection flows through to the backend via the new `options.selected_codes` field on `DocumentGenerateRequest`, persisted onto a new nullable `documenti_generati.options` JSONB column (migration `b9c0d1e2f3a4`). `BaseDocumentGenerator.__init__` and `dispatcher.get_generator_for` accept an optional `options` kwarg; the Celery task forwards `doc.options` so the worker filters forms with `_normalize_code()` (case + hyphen + whitespace tolerant). The .zip output remains a single bundle (AC3) and falls back to all-forms when `selected_codes` is missing.
 
 **Acceptance Criteria:**
 

@@ -1,8 +1,9 @@
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -23,6 +24,11 @@ class DocumentoGenerato(Base):
     file_path: Mapped[str | None] = mapped_column(String)
     gdrive_file_id: Mapped[str | None] = mapped_column(String)
     error_message: Mapped[str | None] = mapped_column(Text)
+    # US-4.4: optional per-generation configuration dict. Currently used by
+    # the HACCP forms generator to pick a subset of SA-01..SA-16 forms via
+    # `{"selected_codes": [...]}`. Nullable/JSONB so other generators that
+    # don't need it stay unaffected.
+    options: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     generation_started_at: Mapped[datetime | None] = mapped_column()
     generation_completed_at: Mapped[datetime | None] = mapped_column()
     generated_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))

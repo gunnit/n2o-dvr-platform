@@ -16,6 +16,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { VersionHistory } from "@/components/documents/version-history";
 import type { Azienda, DocumentoGenerato } from "@/types";
 import { apiCall, downloadFile } from "@/lib/api-client";
@@ -144,25 +152,45 @@ export default function DocumentsPage() {
 
   const [generateError, setGenerateError] = useState<string | null>(null);
 
-  async function handleGenerate(typeKey: string) {
-    if (!selectedAziendaId) return;
-    // Short-circuit on DVR-dependent types so we surface the Italian message
-    // immediately without a round-trip. Backend guard is still authoritative.
-    if (DVR_DEPENDENT_TYPES.has(typeKey) && !dvrReady) {
-      setGenerateError("Genera prima il DVR Master");
-      return;
-    }
+  // US-4.4: HACCP forms subset selection dialog. Renders once when the
+  // operator clicks "Genera" on the haccp_forms card. Default = all 16
+  // selected so "OK" with no edits matches the legacy behaviour.
+  const HACCP_FORM_CODES: { code: string; title: string }[] = [
+    { code: "SA-01", title: "Pulizia e sanificazione" },
+    { code: "SA-02", title: "Controllo temperature frigoriferi" },
+    { code: "SA-03", title: "Controllo temperature congelatori" },
+    { code: "SA-04", title: "Controllo cottura alimenti" },
+    { code: "SA-05", title: "Controllo scongelamento" },
+    { code: "SA-06", title: "Controllo ricevimento merci" },
+    { code: "SA-07", title: "Conservazione e stoccaggio" },
+    { code: "SA-08", title: "Controllo derattizzazione e disinfestazione" },
+    { code: "SA-09", title: "Manutenzione attrezzature e impianti" },
+    { code: "SA-10", title: "Acqua potabile" },
+    { code: "SA-11", title: "Formazione del personale" },
+    { code: "SA-12", title: "Stato di salute degli operatori" },
+    { code: "SA-13", title: "Tracciabilità e rintracciabilità" },
+    { code: "SA-14", title: "Gestione non conformità" },
+    { code: "SA-15", title: "Allergeni" },
+    { code: "SA-16", title: "Riesame del piano HACCP" },
+  ];
+  const [haccpDialogOpen, setHaccpDialogOpen] = useState(false);
+  const [haccpSelected, setHaccpSelected] = useState<Set<string>>(
+    new Set(HACCP_FORM_CODES.map((f) => f.code)),
+  );
+
+  async function postGenerate(typeKey: string, options?: Record<string, unknown>) {
     setGenerateError(null);
     setGeneratingTypes((prev) => new Set(prev).add(typeKey));
     try {
       await apiCall(`/api/v1/aziende/${selectedAziendaId}/documents/generate`, {
         method: "POST",
-        body: JSON.stringify({ tipo_documento: typeKey }),
+        body: JSON.stringify({
+          tipo_documento: typeKey,
+          ...(options ? { options } : {}),
+        }),
       });
       await fetchDocumenti();
     } catch (err) {
-      // Surface the backend Italian error (e.g. "Genera prima il DVR Master")
-      // so the operator knows what to do next.
       setGenerateError(
         err instanceof Error ? err.message : "Generazione non riuscita",
       );
@@ -173,6 +201,46 @@ export default function DocumentsPage() {
         return next;
       });
     }
+  }
+
+  async function handleGenerate(typeKey: string) {
+    if (!selectedAziendaId) return;
+    // Short-circuit on DVR-dependent types so we surface the Italian message
+    // immediately without a round-trip. Backend guard is still authoritative.
+    if (DVR_DEPENDENT_TYPES.has(typeKey) && !dvrReady) {
+      setGenerateError("Genera prima il DVR Master");
+      return;
+    }
+    // US-4.4: open the subset dialog instead of firing immediately.
+    if (typeKey === "haccp_forms") {
+      // Default to all selected each time the dialog opens so the operator
+      // never starts in a "nothing selected" state by accident.
+      setHaccpSelected(new Set(HACCP_FORM_CODES.map((f) => f.code)));
+      setHaccpDialogOpen(true);
+      return;
+    }
+    await postGenerate(typeKey);
+  }
+
+  function toggleHaccpForm(code: string) {
+    setHaccpSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  }
+
+  async function confirmHaccpGenerate() {
+    const codes = HACCP_FORM_CODES
+      .map((f) => f.code)
+      .filter((c) => haccpSelected.has(c));
+    setHaccpDialogOpen(false);
+    if (codes.length === 0) {
+      setGenerateError("Seleziona almeno una scheda da generare");
+      return;
+    }
+    await postGenerate("haccp_forms", { selected_codes: codes });
   }
 
   async function handleGenerateAll() {
@@ -405,6 +473,79 @@ export default function DocumentsPage() {
           </div>
         </>
       )}
+
+      {/* US-4.4: HACCP forms subset selection. Defaults to all 16 + index. */}
+      <Dialog open={haccpDialogOpen} onOpenChange={setHaccpDialogOpen}>
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Schede HACCP da generare</DialogTitle>
+            <DialogDescription>
+              Seleziona le schede da includere nel pacchetto .zip. Tutte le
+              schede sono pre-selezionate; deseleziona quelle non necessarie.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                {haccpSelected.size} di {HACCP_FORM_CODES.length} selezionate
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    setHaccpSelected(
+                      new Set(HACCP_FORM_CODES.map((f) => f.code)),
+                    )
+                  }
+                >
+                  Seleziona tutte
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setHaccpSelected(new Set())}
+                >
+                  Deseleziona tutte
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {HACCP_FORM_CODES.map((f) => {
+                const checked = haccpSelected.has(f.code);
+                return (
+                  <label
+                    key={f.code}
+                    className="flex items-start gap-2 rounded-md border border-input p-2 text-xs transition-colors hover:bg-muted has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleHaccpForm(f.code)}
+                      className="mt-0.5 accent-primary"
+                    />
+                    <span>
+                      <span className="font-mono font-semibold">{f.code}</span>{" "}
+                      <span className="text-muted-foreground">— {f.title}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHaccpDialogOpen(false)}>
+              Annulla
+            </Button>
+            <Button
+              onClick={confirmHaccpGenerate}
+              disabled={haccpSelected.size === 0}
+            >
+              Genera ({haccpSelected.size})
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <VersionHistory
         open={historyTipo !== null}
