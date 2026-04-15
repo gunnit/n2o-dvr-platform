@@ -17,16 +17,16 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 |------|---------|------|---------|-------------|----------|
 | 1 — Digital Survey | 10 | 6 | 3 | 1 | 75% |
 | 2 — DVR Master | 9 | 3 | 6 | 0 | 67% |
-| 3 — DVR Attachments | 15 | 12 | 3 | 0 | 90% |
+| 3 — DVR Attachments | 15 | 13 | 2 | 0 | 93% |
 | 4 — Complementary Docs | 8 | 3 | 4 | 1 | 63% |
 | 5 — Cross-cutting | 4 | 0 | 4 | 0 | 50% |
-| **TOTAL** | **46** | **24** | **20** | **2** | **74%** |
+| **TOTAL** | **46** | **25** | **19** | **2** | **75%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
 > **2026-04-15 reconciliation**: Done in three passes. Pass 1 realigned against the Sprint Closure section dated 2026-04-14 (SDS trilogy, Epic 4 generators, US-5.4 backups). Pass 2 audited the code against acceptance criteria for stories touched by post-closure commits (`0779050` MMC, `c8a4670` Stress, `01077fb` Incendio, `05173f2` VDT+Microclima, `8f6c61c` AI integration, `e2b6475` Wave 1). Net effect of Pass 2: US-3.1/3.2/3.3/3.4/3.6/3.12/3.13 → **DONE**; US-2.1/2.6/3.5/3.7/3.8/3.14 → **PARTIAL** with specific AC gaps documented per story below. Pass 3 folded in parallel-session commits from later the same day (`f0dd50c` + `84fca5f` + `bbc13e1` gestanti cross-reference, `b2d9de4` biologico sector checklist, `c5c7e5e` + `4252c5c` + `dfa202b` MMC polish): US-3.9/3.10/3.15 → **DONE**; and this-session new work US-4.2/4.5/4.6 → **DONE**, US-2.2/5.3 → **PARTIAL**. Pass 4 (evening, commits `0717a04` + `73679a4`) added the PHS critical-exposure banner and wired the shared AI badge/filter into the SDS review panel: **US-3.14 → DONE** (AC3 banner), and US-5.3 advanced but stays PARTIAL until the badge is also applied to document review surfaces.
 >
-> **True greenfield remaining** (stories still NOT STARTED): US-1.3 photo uploads, US-4.8 POS role×phase DPI matrix. (US-4.5 → DONE 2026-04-15 — DUVRI CRUD + committente sync banner. US-4.6 → DONE 2026-04-15 — 15-rule interference engine with Accetta/Rifiuta sheet. US-5.3 → PARTIAL 2026-04-15 — AI badge + filter wired across Azienda description, measures panel, **and SDS review**. US-4.2 → DONE 2026-04-15 — A-E procedures with per-client overrides. US-2.2 → PARTIAL 2026-04-15 — seismic zone auto-fill from 154-comune lookup; regional regulations half still open. US-3.14 → DONE 2026-04-15 — PHS Dlim < 30 min red banner.)
+> **True greenfield remaining** (stories still NOT STARTED): US-1.3 photo uploads, US-4.8 POS role×phase DPI matrix. (US-4.5 → DONE 2026-04-15 — DUVRI CRUD + committente sync banner. US-4.6 → DONE 2026-04-15 — 15-rule interference engine with Accetta/Rifiuta sheet. US-5.3 → PARTIAL 2026-04-15 — AI badge + filter wired across Azienda description, measures panel, **and SDS review**. US-4.2 → DONE 2026-04-15 — A-E procedures with per-client overrides. US-2.2 → PARTIAL 2026-04-15 — seismic zone auto-fill from 154-comune lookup; regional regulations half still open. US-3.14 → DONE 2026-04-15 — PHS Dlim < 30 min red banner. US-3.5 → DONE 2026-04-15 — surveillance cadence helper + alerts endpoint + dashboard widgets.)
 
 Tier A (2026-04-14): US-1.5 (contextual risk filtering + summary bar), US-2.3 (default scoring matrix + Reset button), US-2.8 (Part II + logo embed + versioned filename), US-2.9 (version history Sheet) — all four stories advanced within their PARTIAL status toward DONE.
 
@@ -341,11 +341,12 @@ As an operator, I want to enter weekly VDT hours per worker and have the system 
 - **Given** I enter 18 hours/week for a worker, **When** the field loses focus, **Then** the worker is classified as "Non esposto"
 - **Given** I have a CSV with VDT hours per worker, **When** I use "Importa da CSV", **Then** the system bulk-imports and classifies all rows in one operation
 
-#### US-3.5 `PARTIAL`
+#### US-3.5 `DONE`
 As an operator, I want automatic determination of mandatory health surveillance so workers requiring visits are flagged.
 
-> **Built**: `backend/app/models/vdt_valutazione.py:36-39` has `periodicita_sorveglianza` field. Classification endpoint at `backend/app/api/v1/calculations.py:175-213` returns per-worker surveillance state.
-> **Missing**: No "Visite in scadenza" dashboard widget (<60 days threshold). No "Visite scadute" widget with red highlighting. No next-visit-due date auto-computation (5 years <50 / 2 years ≥50).
+> **Built**: `VdtValutazione` grew three surveillance columns via migration `a7b8c9d0e1f2`: `data_ultima_visita` (DATE), `data_prossima_visita` (DATE, indexed), `eta_50_plus` (BOOL). Cadence helper in `backend/app/services/vdt_surveillance.py` (`compute_next_visit`) applies the statutory intervals from art. 176 D.Lgs. 81/2008 — **5y under 50 / 2y for 50+** — and handles Feb-29 → Feb-28 clamping. `bucket_for()` categorises any date into `SCADUTE / IN_SCADENZA (<=60d) / FUTURE / NONE` with boundary-inclusive thresholds. New endpoint `GET /api/v1/sorveglianza/alerts` (see `backend/app/api/v1/sorveglianza.py`) returns `{in_scadenza, scadute}` lists across every azienda in the user's organization, eager-loads the azienda label, and side-loads persona names in one round-trip. Dashboard widgets at `frontend/src/components/dashboard/surveillance-alerts.tsx` render two cards side-by-side (rose for `scadute`, amber for `in_scadenza`) with per-row link to the azienda page, "scaduta da N giorni" / "tra N giorni" delta copy, and a `+altri N` overflow line after 5 entries. Self-hides when both buckets are empty. The existing "Sorveglianza sanitaria obbligatoria" banner in `components/assessments/vdt-form.tsx` satisfies AC1. 16 unit tests in `backend/tests/test_vdt_surveillance.py` cover cadence, leap-day, and boundary thresholds; fixture Acme seeds 4 VDT rows spanning all three buckets (1 scaduta, 2 in_scadenza including an over-50 biennale, 1 future) so the widgets have real content right after a fresh seed.
+>
+> **Follow-up (non-blocking)**: The VDT assessment form persists only to localStorage today; a dedicated "save VDT assessment" flow would let operators materialise `data_prossima_visita` from the UI in addition to the fixture/backend paths.
 
 **Acceptance Criteria:**
 
