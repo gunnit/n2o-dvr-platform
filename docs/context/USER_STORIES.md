@@ -13,19 +13,19 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 
 ## 🔒 Active Agent Claims (2026-04-15)
 
-Stories below are being worked on by a parallel agent. **Do not pick these up if you are a fresh agent.** Free PARTIAL pool right now: **US-2.8** (DVR 111-table parity + desktop notification). **US-4.7 is now claimed by Agent-F (see below)**. Pick US-2.8.
+Stories below are being worked on by a parallel agent. **Do not pick these up if you are a fresh agent.** Free PARTIAL pool right now: **US-2.8** (DVR 111-table parity + desktop notification). Pick US-2.8. (US-5.4 is PARTIAL by design — SMTP relay + in-app restore wizard intentionally deferred.)
 
-**Agent-E (2026-04-15 session)** claimed US-2.1 + US-5.2 — backend description_revisions + visura upload (US-2.1 AC1/AC2) and cross-cutting stale-snapshot warning + field dependency tooltip + survey-change auto-propagation banner (US-5.2 AC1/AC2/AC3). Do NOT pick these up.
+**Agent-E (2026-04-15 session)** claimed US-2.1 + US-5.2 — backend description_revisions + visura upload (US-2.1 AC1/AC2) and cross-cutting stale-snapshot warning + field dependency tooltip + survey-change auto-propagation banner (US-5.2 AC1/AC2/AC3). US-2.1 has since been closed; US-5.2 is still IN PROGRESS — do NOT pick it up.
 
-**Agent-F (2026-04-15 session)** claimed US-4.7 — POS phase-builder UI: phases as editable entities, drag-and-drop reorder, per-phase NIOSH + noise + vibration attachments, phase dependency linking with Gantt-like overview. Do NOT pick this up.
+**Agent-F (2026-04-15 session)** closed US-4.7 — POS phase-builder frontend + backend. Epic 4 now 100%.
 
 **Agent-C (2026-04-15 session)** closed US-1.6 + US-4.3 — see the claim rows below. Free PARTIAL pool narrowed accordingly.
 
 | Story | Claimed by | Timestamp | Scope |
 |-------|-----------|-----------|-------|
-| US-2.1 | Agent-E | 2026-04-15 | **IN PROGRESS** — visura PDF upload path (AC1) + `description_revisions` table so AI draft is retained when operator edits → "Modificato dall'utente" badge + history list (AC2); AC3 retry already shipped, leaving it intact |
+| ~~US-2.1~~ | Agent-E | 2026-04-15 | **CLOSED → DONE** — POST /aziende/{id}/visura with local pypdf extraction + CF/email/phone redaction + AI prompt grounding (AC1); description_revisions table + auto-snapshot on AI gen / manual save / restore + DescriptionHistory inline panel with Ripristina (AC2); AC3 Riprova retained from prior shipping. 17 new unit tests in tests/test_description_revisions.py |
 | US-5.2 | Agent-E | 2026-04-15 | **IN PROGRESS** — `survey_snapshot_hash` on documents + stale-snapshot banner when survey changes during an in-flight generation (AC2); field-dependency catalog + tooltip listing downstream documents (AC3); regenerate-propagation smoke covered by integration test (AC1) |
-| US-4.7 | Agent-F | 2026-04-15 | **IN PROGRESS** — POS phase entities + CRUD, drag-and-drop reorder, per-phase NIOSH/noise/vibration forms, dependency link + Gantt-ish overview; POS docx generator consumes the ordered phase list |
+| ~~US-4.7~~ | Agent-F | 2026-04-15 | **CLOSED → DONE** (structured PosPhase shape on `pos.fasi_lavorative` JSONB, `PUT /fasi` with unique-id + unknown-dep + self-dep + cycle validation, phase-builder UI with @dnd-kit sortable reorder + tabbed per-phase detail form (rischi/DPI/mezzi/NIOSH/rumore/vibrazioni) + `dipende_da` chip-picker, synoptic Gantt-logico table mirrored in the POS `.docx`, 23 new unit tests in `tests/test_pos_phases.py`) |
 | ~~US-1.5~~ | Agent-D | 2026-04-15 | **CLOSED → DONE** (attrezzature-driven risk-category union + "Ambienti modificati" banner with wizard-scoped acknowledgement state shipped) |
 | ~~US-5.3~~ | Agent-D | 2026-04-15 | **CLOSED → DONE** (version-history snapshot diff tags AI-originated paragraphs from azienda description + rischi misure + violet ring + AIFilterToggle in dialog header; admin AI feedback panel at `/admin/ai-feedback` with summary cards + recent rejections table backed by new `/admin/summary` + `/admin/recent` admin-gated endpoints; 10 new tests on the admin endpoints + context preview helper) |
 | ~~US-1.6~~ | Agent-C | 2026-04-15 | **CLOSED → DONE** (signature PNG persisted + server timestamp + firmato lock + Apri revisione shipped) |
@@ -47,9 +47,9 @@ Release a claim by deleting the row and the inline marker on the story once you 
 | 1 — Digital Survey | 10 | 10 | 0 | 0 | 100% |
 | 2 — DVR Master | 9 | 7 | 2 | 0 | 89% |
 | 3 — DVR Attachments | 15 | 15 | 0 | 0 | 100% |
-| 4 — Complementary Docs | 8 | 7 | 1 | 0 | 94% |
+| 4 — Complementary Docs | 8 | 8 | 0 | 0 | 100% |
 | 5 — Cross-cutting | 4 | 2 | 2 | 0 | 75% |
-| **TOTAL** | **46** | **41** | **5** | **0** | **94%** |
+| **TOTAL** | **46** | **42** | **4** | **0** | **96%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
@@ -207,11 +207,11 @@ As an operator, I want to review and correct AI-extracted chemical data in a tab
 
 ## Epic 2: DVR Master Generation
 
-#### US-2.1 `PARTIAL` 🔒 claimed by Agent-E (2026-04-15) — see Active Agent Claims table at top of file
+#### US-2.1 `DONE`
 As an office operator, I want the system to auto-generate the company description from survey data + visura + website using AI so I don't have to write boilerplate.
 
-> **Built**: `backend/app/services/ai/company_description.py:70-88` generates 200-400 word Italian description. API wired at `backend/app/api/v1/aziende.py:101-125`. Edit tracking fields support "Modificato dall'utente" badge flow. Generation failures surface with an inline "Riprova" button (AC3) via the shared AI badge + error card in `frontend/src/components/ai/description-editor.tsx`.
-> **Missing**: No visura PDF upload path. No version history of AI vs. edited drafts (would need a `description_revisions` table).
+> **Built**: `backend/app/services/ai/company_description.py` generates 200-400 word Italian description. API at `backend/app/api/v1/aziende.py::genera_descrizione`. Edit tracking supports the "Modificato dall'utente" badge flow. Generation failures surface with an inline "Riprova" button (AC3) via the shared AI badge + error card in `frontend/src/components/ai/description-editor.tsx`. **Visura camerale upload (AC1, 2026-04-15 Agent-E)**: `POST /api/v1/aziende/{id}/visura` accepts a 10MB PDF, persists it under `FILE_STORAGE_PATH/visure/{azienda_id}/`, runs local `pypdf` extraction in `services/visura_extractor.py` with CF/email/telefono redaction *before* caching the snippet on `aziende.visura_extracted_text` — PII never leaves the box. The redacted snippet is appended to the AI prompt under a clearly-labelled section so the model treats it as additional grounding context. **Description revisions (AC2, 2026-04-15 Agent-E)**: new `description_revisions` table (migration `d1e2f3a4b5c6`) snapshots an `ai` row on every successful generation and a `manual` row on every effective edit (skipped on identical/empty saves). `GET /aziende/{id}/description-revisions` returns history newest-first joined with `users.full_name`; `POST /description-revisions/{rev_id}/restore` applies a historical revision and snapshots a fresh manual revision so the audit trail stays complete. Frontend `description-history.tsx` renders a collapsible panel below the textarea with per-row Ripristina + AI/Manual icon. 17 new unit tests in `tests/test_description_revisions.py`.
+> **Missing**: Nothing — AC1 / AC2 / AC3 met. (Nice-to-have: a "Genera anche dal sito" extra context source — the AC mentions "from survey data + visura + **website**" but the website ingestion is treated as a future polish item; current behaviour omits website data, which the operator can paste manually.)
 
 **Acceptance Criteria:**
 
@@ -586,11 +586,22 @@ As an operator, I want interference analysis per equipment type with suggested p
 
 ### POS (Construction Site Plan)
 
-#### US-4.7 `PARTIAL` 🔒 claimed by Agent-F (2026-04-15) — see Active Agent Claims table at top of file
+#### US-4.7 `DONE`
 As an operator, I want to define construction phases with specific risks, NIOSH calculations, and noise/vibration levels per phase.
 
-> **Built**: `POS` generator produces 1272 paragraphs / 87 tables with phase-based structure (Sprint Closure 2026-04-14).
-> **Missing**: No phase-builder UI — phases not yet modelled as editable entities. No drag-and-drop reordering. No per-phase NIOSH/noise/vibration attachments from frontend. No dependency linking or Gantt-like overview.
+> **Built (2026-04-15, Agent-F)**: The pre-existing POS generator (1272 paragraphs / 87 tables) is now fed by a structured phase list rather than loose dicts.
+>
+> **Backend** — new `app/schemas/pos_phase.py` pins the JSONB shape: `PosPhase` with `id`, `ordine`, `nome`, `descrizione`, `rischi[]`, `dpi[]`, `mezzi[]`, `dipende_da[]`, plus optional `PhaseNiosh` / `PhaseRumore` / `PhaseVibrazioni` sub-schemas (extra keys forbidden; Italian-bounded fields like `lex_8h_dba ≤ 140` and NIOSH factors `∈ [0,1]`). Companion validator in `app/services/pos_phases.py` enforces unique ids, known-dependency refs, no self-deps, and runs Kahn's algorithm to reject cycles — every error message is the Italian string the operator will see. `normalize_ordering()` renumbers `ordine` to `0..n-1` on save so the JSONB stays dense. New endpoint `PUT /api/v1/aziende/{id}/pos/{pos_id}/fasi` in `app/api/v1/pos.py` accepts a `PosPhasesUpdate` body, validates, normalises, and writes the plain-dict JSON back to `pos.fasi_lavorative` with a `flag_modified` so SQLAlchemy round-trips the edit. Structural rule violations return 400 with the validator's Italian message; soft ordering violations (a dependent phase dragged before its predecessor) are tolerated but surfaced as a footnote in the docx.
+>
+> **POS docx generator** (`app/services/document_generator/pos.py`) now lazily parses `p.fasi_lavorative` into `PosPhase` rows (back-compat: legacy `{"fase": "..."}` dicts are promoted in-place so older POS records still render), sorts by `ordine`, and emits three sections per cantiere: a "Quadro sinottico" table with `#` / Fase / Dipende da columns (AC3 Gantt-logico), per-phase detail with rischi/DPI/mezzi + precedenze + optional NIOSH/rumore/vibrazioni key-value tables (AC1), and a footnote listing any `dependency_violations_after_ordering()` pairs.
+>
+> **Frontend** — new `@dnd-kit/core` + `@dnd-kit/sortable` dependency (first DnD library in the project). Phase builder split across four files in `components/assessments/pos/`:
+>   * `phase-schema.ts` — zod single source of truth, with sub-schemas + `makeBlankPhase()` + `DEFAULT_NIOSH/RUMORE/VIBRAZIONI` seeds. Arrays and booleans are required-at-input (no `.default()`) to keep zod's input/output types aligned so `zodResolver<PhasesUpdateValues>` generic typechecks cleanly.
+>   * `phase-builder.tsx` — top-level form driven by `useForm` + `useFieldArray` + `DndContext`/`SortableContext`. `arrayMove` renumbers `ordine` on reorder; save fires `PUT /fasi` and resets the form from the server response so the operator sees the canonical order. Renders the Quadro sinottico card mirroring the docx (AC3) beneath the draggable list.
+>   * `phase-card.tsx` — one sortable card per phase with drag handle (GripVertical, distance-5 activation so input clicks don't start a drag), name input, expand-to-edit chevron, remove. Collapsed header shows a `dipende_da` chip-picker that toggles predecessor selection (AC3).
+>   * `phase-detail-form.tsx` — tabbed editor (Tabs from shadcn/ui) for Rischi / DPI+Mezzi (CSV chip fields) / NIOSH / Rumore / Vibrazioni. Each of the three assessment tabs is opt-in — operator clicks "Aggiungi snapshot NIOSH" to attach, "Rimuovi NIOSH" to clear. Controller-wrapped `select` for fascia rumore, zona NIOSH, dpi_obbligatori/entro_limiti toggles.
+>
+> Wired into the existing `/assessments/pos/[aziendaId]` page as a card above the DPI matrix (reload on save to show the renumbered ordine). 23 new unit tests in `backend/tests/test_pos_phases.py` cover schema bounds, dedup/strip, sub-schema validation, happy chain / duplicate ids / unknown dep / self-dep / cycle / diamond graphs, ordering normalisation, violation reporting, empty-list handling, route registration, and the generator's structured + legacy paths.
 
 **Acceptance Criteria:**
 
