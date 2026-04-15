@@ -22,7 +22,7 @@ Stories below are being worked on by a parallel agent. **Do not pick these up if
 | ~~US-4.1~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (DVR guard + planimetria + plan-config UX shipped) |
 | ~~US-2.3~~ | Agent-B | 2026-04-15 | **CLOSED → DONE** (step-rischi seeds defaults from matrix on first load; operator reviews not enters) |
 | ~~US-4.4~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (letterhead + ragione sociale + subset dialog shipped) |
-| US-5.4 | Agent-A | 2026-04-15 | Admin backup status panel + failure alerting + audit wiring |
+| ~~US-5.4~~ | Agent-A | 2026-04-15 | **CLOSED → PARTIAL→PARTIAL** (panel + audit wiring + alert log shipped; AC2 SMTP + AC3 restore stay open by design) |
 
 Release a claim by deleting the row and the inline marker on the story once you DONE/PARTIAL-update it.
 
@@ -635,11 +635,11 @@ As an operator, I want AI-generated content clearly marked so I know what to rev
 - **Given** I hover the AI badge, **When** the tooltip appears, **Then** it reads "Generato da AI - revisiona prima della pubblicazione" and shows a timestamp
 - **Given** I want to filter the editor to AI-only content, **When** I toggle "Mostra solo contenuto AI", **Then** non-AI sections are visually dimmed and AI sections remain interactive
 
-#### US-5.4 `PARTIAL` 🔒 CLAIMED by Agent-A (2026-04-15) — other agents skip
+#### US-5.4 `PARTIAL`
 As an admin, I want secure cloud hosting with daily backups (replacing the USB stick).
 
-> **Built**: Render.com hosting configured with web + worker + redis + disk services in `backend/render.yaml` and `preDeployCommand: alembic upgrade head`. Managed Postgres backups enabled by Render. `AuditLog` model + `app/core/audit.py` helper in place to surface backup/restore events (Sprint Closure 2026-04-14).
-> **Missing**: No admin-facing backup status panel (last-backup timestamp, destination region, retention window). No failure alerting to admin email. No restore wizard with isolated-test-environment staging. Audit-log helper exists but backup events don't call it yet.
+> **Built (2026-04-15)**: Render.com hosting configured with web + worker + redis + disk services in `backend/render.yaml` and `preDeployCommand: alembic upgrade head`. Managed Postgres backups enabled by Render. **Admin status panel** (AC1) shipped at `frontend/src/app/(dashboard)/settings/backups/page.tsx` — admin-only (non-admin sessions bounce to `/dashboard`), shows provider / region / schedule / retention / alert email + last successful timestamp + an inline red banner whenever the most recent failure is within 24 h, plus a 30-event audit history. Linked from the main settings page for admins. **Backend**: new `/api/v1/admin/backups/status` (GET) and `/api/v1/admin/backups/event` (POST) endpoints in `app/api/v1/admin_backups.py`, both gated by `require_role("admin")`. Status reads metadata from new `BACKUP_*` settings (provider/region/schedule/retention/alert email) and queries `AuditLog` for actions in `{backup_completed, backup_failed}`. Event endpoint upserts via the existing `app.core.audit.log_audit` helper so backups surface in the same audit trail as everything else (AC2 audit-log half), and on `failed` it logs an `[BACKUP ALERT]` line addressed to the configured `BACKUP_ALERT_EMAIL` so the SMTP relay (or the existing Render email-on-failure) can pick it up.
+> **Missing**: SMTP/Slack relay for the alert path is still a `logger.error` placeholder — Render itself emails on managed-Postgres failures, so this is a polish item rather than a blocker. **AC3 restore wizard** intentionally not implemented in-app: Render's web UI is the authoritative point-in-time-recovery surface for managed Postgres, and proxying it would need a workspace-scoped Render API token. The status panel links out to `dashboard.render.com` and documents the isolated-test-restore expectation; a future story can wrap this if N2O wants the flow inside the app.
 
 **Acceptance Criteria:**
 

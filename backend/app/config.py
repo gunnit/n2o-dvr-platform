@@ -40,6 +40,17 @@ class Settings(BaseSettings):
     # File storage
     FILE_STORAGE_PATH: str = "/data"
 
+    # US-5.4 backups: surface the Render Postgres backup config in the admin
+    # status panel. These are pure presentation defaults — Render itself runs
+    # the backups; we don't manage the schedule from the app.
+    BACKUP_PROVIDER: str = "Render Managed Postgres"
+    BACKUP_REGION: str = "Frankfurt (EU)"
+    # Render Starter plan keeps 7 days of point-in-time backups; bump if N2O
+    # upgrades the plan.
+    BACKUP_RETENTION_DAYS: int = 7
+    BACKUP_SCHEDULE: str = "Daily 02:00 UTC"
+    BACKUP_ALERT_EMAIL: str = "ops@niuexa.ai"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

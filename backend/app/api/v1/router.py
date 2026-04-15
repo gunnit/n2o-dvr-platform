@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.v1.admin_backups import router as admin_backups_router
 from app.api.v1.ai_feedback import router as ai_feedback_router
 from app.api.v1.ambienti import router as ambienti_router
 from app.api.v1.attrezzature import router as attrezzature_router
@@ -42,3 +43,4 @@ api_router.include_router(duvri_router)
 api_router.include_router(sorveglianza_router)
 api_router.include_router(pos_router)
 api_router.include_router(stress_misure_router)
+api_router.include_router(admin_backups_router)
