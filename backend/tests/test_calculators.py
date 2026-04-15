@@ -71,3 +71,47 @@ def test_fire_risk_validates_range():
         calculate_fire_risk(0, 1, 1)
     with pytest.raises(ValueError):
         calculate_fire_risk(4, 1, 1)
+
+
+# ---------------------------------------------------------------------------
+# NIOSH CP lookup (Agent A1 — MMC, US-3.2)
+# ---------------------------------------------------------------------------
+
+
+from app.data.niosh_cp import get_default_cp
+
+
+def test_niosh_cp_male_adult():
+    assert get_default_cp("M", 30) == 25
+
+
+def test_niosh_cp_male_young():
+    assert get_default_cp("M", 17) == 20
+
+
+def test_niosh_cp_male_senior():
+    assert get_default_cp("M", 50) == 20
+
+
+def test_niosh_cp_female_adult():
+    assert get_default_cp("F", 30) == 20
+
+
+def test_niosh_cp_female_young():
+    assert get_default_cp("F", 16) == 15
+
+
+def test_niosh_cp_female_senior():
+    assert get_default_cp("F", 55) == 15
+
+
+def test_niosh_cp_invalid_sex():
+    import pytest
+    with pytest.raises(ValueError):
+        get_default_cp("X", 30)
+
+
+def test_niosh_cp_negative_age():
+    import pytest
+    with pytest.raises(ValueError):
+        get_default_cp("M", -1)
