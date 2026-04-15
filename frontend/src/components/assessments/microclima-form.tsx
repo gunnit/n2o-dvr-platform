@@ -18,7 +18,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/**
+ * Threshold (in minutes) below which PHS exposure triggers the mandatory-
+ * measures banner per US-3.14. The backend classifies `d_lim < 60` as
+ * CRITICO, but the acceptance criterion is stricter: at `d_lim < 30` the
+ * shift is physiologically unsustainable and a red banner must be surfaced
+ * above the result so the operator cannot overlook it.
+ */
+const PHS_CRITICAL_DLIM_MIN = 30;
 
 // ---------------------------------------------------------------------------
 // Types — mirrors backend PmvPpdRequest/PmvPpdResponse.
@@ -707,6 +717,25 @@ export function MicroclimaPhsForm({
           vetrerie). Per ambienti di comfort normale usare la scheda PMV/PPD.
         </p>
       </div>
+
+      {/* Critical-exposure banner (US-3.14 AC3): Dlim < 30 min */}
+      {result && result.d_lim < PHS_CRITICAL_DLIM_MIN && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-md border border-rose-400/60 bg-rose-50 p-3 text-rose-900 shadow-sm dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100"
+        >
+          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" aria-hidden="true" />
+          <div>
+            <p className="font-medium">Esposizione critica – misure obbligatorie</p>
+            <p className="text-sm">
+              Dlim = {result.d_lim.toFixed(0)}&prime; (&lt; {PHS_CRITICAL_DLIM_MIN}&prime;).
+              Interrompere l&apos;esposizione, predisporre rotazione/cicli di
+              recupero in area climatizzata e attivare la sorveglianza sanitaria
+              rinforzata ai sensi dell&apos;art. 181 D.Lgs. 81/2008.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Live result */}
       <Card className="sticky top-4 z-10 shadow-sm">
