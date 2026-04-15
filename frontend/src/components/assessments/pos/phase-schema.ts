@@ -40,14 +40,16 @@ export const phaseNioshSchema = z.object({
 export const phaseRumoreSchema = z.object({
   lex_8h_dba: z.number().min(0).max(140),
   fascia: z.enum(FASCIA_RUMORE_VALUES).nullable().optional(),
-  dpi_obbligatori: z.boolean().default(false),
+  // No .default() on these — they introduce input/output type drift that
+  // confuses zodResolver's generic. The frontend always supplies a value.
+  dpi_obbligatori: z.boolean(),
   note: z.string().max(500).nullable().optional(),
 });
 
 export const phaseVibrazioniSchema = z.object({
   a8_mano_braccio: z.number().min(0).max(30).nullable().optional(),
   a8_corpo_intero: z.number().min(0).max(30).nullable().optional(),
-  entro_limiti: z.boolean().default(true),
+  entro_limiti: z.boolean(),
   note: z.string().max(500).nullable().optional(),
 });
 
@@ -56,13 +58,15 @@ export const phaseSchema = z.object({
   ordine: z.number().int().min(0).max(10_000),
   nome: z.string().min(1, "Nome fase richiesto").max(200),
   descrizione: z.string().max(4000).nullable().optional(),
-  rischi: z.array(z.string()).default([]),
-  dpi: z.array(z.string()).default([]),
-  mezzi: z.array(z.string()).default([]),
+  // Same rationale as above: callers always provide arrays via
+  // makeBlankPhase / API responses, so we don't need .default([]).
+  rischi: z.array(z.string()),
+  dpi: z.array(z.string()),
+  mezzi: z.array(z.string()),
   niosh: phaseNioshSchema.nullable().optional(),
   rumore: phaseRumoreSchema.nullable().optional(),
   vibrazioni: phaseVibrazioniSchema.nullable().optional(),
-  dipende_da: z.array(z.string()).default([]),
+  dipende_da: z.array(z.string()),
 });
 
 export const phasesUpdateSchema = z.object({

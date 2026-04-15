@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/dialog";
 import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
+import { PhaseBuilder } from "@/components/assessments/pos/phase-builder";
+import type { PhaseValues } from "@/components/assessments/pos/phase-schema";
 
 /**
  * POS DPI matrix editor (US-4.8).
@@ -52,6 +54,10 @@ interface Pos {
   dpi_matrix: DpiMatrix;
   dpi_matrix_roles: string[];
   dpi_matrix_phases: string[];
+  // US-4.7: structured phase entries — read straight off the row, sent
+  // back via PUT /pos/{id}/fasi by <PhaseBuilder>. Optional so legacy
+  // rows still parse.
+  fasi_lavorative?: PhaseValues[];
 }
 
 // --- Italian labels for the role/phase keys returned by the backend.
@@ -255,14 +261,23 @@ export default function PosDpiMatrixPage() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Matrice DPI - POS</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">POS — Cantiere</h1>
         <p className="text-sm text-muted-foreground">
-          Seleziona ruoli e fasi, poi personalizza i DPI per ogni cella. Le modifiche
-          sono salvate automaticamente per questo cliente.
+          Costruisci le fasi lavorative del cantiere (US-4.7) e personalizza
+          la matrice DPI per ruolo / fase (US-4.8). Le modifiche al phase
+          builder vanno salvate manualmente; la matrice DPI è auto-salvata.
         </p>
       </header>
 
-      {/* Card 1 — Ruoli */}
+      {/* US-4.7 — Phase builder (rischi, NIOSH, rumore, vibrazioni, drag-drop, dipende_da) */}
+      <PhaseBuilder
+        aziendaId={aziendaId}
+        posId={pos.id}
+        initialPhases={(pos.fasi_lavorative ?? []) as PhaseValues[]}
+        onSaved={() => void load()}
+      />
+
+      {/* Card 1 — Ruoli (US-4.8 DPI matrix) */}
       <Card>
         <CardHeader>
           <CardTitle>Ruoli in cantiere</CardTitle>
@@ -294,13 +309,14 @@ export default function PosDpiMatrixPage() {
         </CardContent>
       </Card>
 
-      {/* Card 2 — Fasi */}
+      {/* Card 2 — Fasi (DPI matrix) */}
       <Card>
         <CardHeader>
-          <CardTitle>Fasi lavorative</CardTitle>
+          <CardTitle>Fasi per la matrice DPI</CardTitle>
           <CardDescription>
-            Seleziona le fasi previste nel POS. L'ordine riflette quello di default;
-            riorganizza nel documento generato se necessario.
+            Seleziona le fasi standard usate come colonne della matrice DPI
+            (sotto). Le fasi reali del cantiere si gestiscono nel
+            phase-builder in alto.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2" onBlur={persistSelection}>
