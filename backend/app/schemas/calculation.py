@@ -206,3 +206,17 @@ class PhsResponse(BaseModel):
     sweat_loss_g: float  # Total cumulative sweat loss [g]
     d_lim: float  # Minimum of the three d_lim values — the binding limit [min]
     livello: str  # "ACCETTABILE" | "LIMITE" | "CRITICO"
+
+
+# ---------------------------------------------------------------------------
+# NIOSH CP — default weight-constant lookup by sex/age (US-3.2)
+# ---------------------------------------------------------------------------
+
+from typing import Literal as _Literal
+
+
+class NioshCpResponse(BaseModel):
+    cp: int
+    sesso: _Literal["M", "F"]
+    eta: int
+    fascia: _Literal["giovane", "adulto", "anziano"]

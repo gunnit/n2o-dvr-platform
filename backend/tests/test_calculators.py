@@ -115,3 +115,119 @@ def test_niosh_cp_negative_age():
     import pytest
     with pytest.raises(ValueError):
         get_default_cp("M", -1)
+
+
+def test_niosh_cp_endpoint_happy():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    r = client.get("/api/v1/calculate/niosh-cp", params={"sesso": "M", "eta": 30})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["cp"] == 25
+    assert body["fascia"] == "adulto"
+
+
+def test_niosh_cp_endpoint_female_young():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    r = client.get("/api/v1/calculate/niosh-cp", params={"sesso": "F", "eta": 16})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["cp"] == 15
+    assert body["fascia"] == "giovane"
+
+
+def test_niosh_cp_endpoint_rejects_bad_sex():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    r = client.get("/api/v1/calculate/niosh-cp", params={"sesso": "Z", "eta": 30})
+    assert r.status_code == 422
+
+
+def test_niosh_cp_endpoint_rejects_bad_age():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    r = client.get("/api/v1/calculate/niosh-cp", params={"sesso": "M", "eta": 10})
+    assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Fire measures lookup (Agent A2 — Incendio, US-3.11/3.12)
+# Source: D.M. 03/09/2021, D.Lgs. 81/2008 art. 46.
+# ---------------------------------------------------------------------------
+
+
+from app.data.fire_measures import get_measures_for_level
+
+
+def test_fire_measures_basso_has_min_3():
+    measures = get_measures_for_level("Basso")
+    assert len(measures) >= 3
+    assert all(isinstance(m, str) and len(m) > 10 for m in measures)
+
+
+def test_fire_measures_medio():
+    measures = get_measures_for_level("Medio")
+    assert len(measures) >= 3
+    assert any(
+        "emergenza" in m.lower() or "rilevazione" in m.lower() for m in measures
+    )
+
+
+def test_fire_measures_alto():
+    measures = get_measures_for_level("Alto")
+    assert len(measures) >= 3
+    # VVF reference should appear for Alto
+    assert any(
+        "vvf" in m.lower() or "vv.f" in m.lower() or "antincendio" in m.lower()
+        for m in measures
+    )
+
+
+def test_fire_measures_invalid():
+    import pytest
+    with pytest.raises(ValueError):
+        get_measures_for_level("Estremo")
+
+
+def test_fire_measures_returns_fresh_copy():
+    """Mutating the returned list must not affect subsequent calls."""
+    first = get_measures_for_level("Basso")
+    first.append("mutated")
+    second = get_measures_for_level("Basso")
+    assert "mutated" not in second
+
+
+def test_fire_measures_endpoint():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    r = client.get("/api/v1/calculate/fire-measures", params={"livello": "Alto"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["livello"] == "Alto"
+    assert len(body["misure"]) >= 3
+
+
+def test_fire_measures_endpoint_invalid():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    r = client.get("/api/v1/calculate/fire-measures", params={"livello": "Estremo"})
+    assert r.status_code == 422

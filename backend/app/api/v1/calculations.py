@@ -1,8 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
+from app.data.niosh_cp import get_default_cp
 from app.schemas.calculation import (
     FireRiskRequest,
     FireRiskResponse,
+    NioshCpResponse,
     NioshRequest,
     NioshResponse,
     PhsRequest,
@@ -279,3 +281,24 @@ async def calculate_microclima_phs(body: PhsRequest):
             duration_min=body.duration_min,
         )
     )
+
+
+@router.get("/niosh-cp", response_model=NioshCpResponse)
+async def niosh_cp(sesso: str, eta: int) -> NioshCpResponse:
+    """Return the default NIOSH weight constant for a worker's sex+age.
+
+    Age bands: giovane (15-17), adulto (18-45), anziano (>45).
+    Per D.Lgs. 81/2008 Allegato XXXIII and ISO 11228-1.
+    """
+    try:
+        cp = get_default_cp(sesso, eta)  # type: ignore[arg-type]
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if eta <= 17:
+        fascia = "giovane"
+    elif eta <= 45:
+        fascia = "adulto"
+    else:
+        fascia = "anziano"
+    return NioshCpResponse(cp=cp, sesso=sesso, eta=eta, fascia=fascia)  # type: ignore[arg-type]
