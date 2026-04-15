@@ -181,7 +181,25 @@ export interface Pos {
   dpi_matrix: DpiMatrix;
   dpi_matrix_roles: string[];
   dpi_matrix_phases: string[];
+  // US-4.7: structured phase entries persisted as JSONB on the row.
+  // Frontend imports the canonical zod-derived type from
+  // `@/components/assessments/pos/phase-schema`; this `unknown[]` here keeps
+  // the shared interface dependency-free and forces consumers to narrow.
+  fasi_lavorative?: unknown[];
 }
+
+// US-4.7: re-export the zod-derived phase-builder types so consumers can
+// `import type { PhaseValues } from "@/types"` without reaching into the
+// component folder.
+export type {
+  PhaseValues,
+  PhaseNioshValues,
+  PhaseRumoreValues,
+  PhaseVibrazioniValues,
+  PhasesUpdateValues,
+  FasciaRumore,
+  ZonaNiosh,
+} from "@/components/assessments/pos/phase-schema";
 
 // US-3.8 stress per-client measures library
 export interface StressMisuraLibreria {
