@@ -18,9 +18,9 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 | 1 — Digital Survey | 10 | 6 | 3 | 1 | 75% |
 | 2 — DVR Master | 9 | 3 | 6 | 0 | 67% |
 | 3 — DVR Attachments | 15 | 8 | 7 | 0 | 77% |
-| 4 — Complementary Docs | 8 | 1 | 5 | 2 | 38% |
+| 4 — Complementary Docs | 8 | 2 | 4 | 2 | 50% |
 | 5 — Cross-cutting | 4 | 0 | 4 | 0 | 50% |
-| **TOTAL** | **46** | **18** | **25** | **3** | **67%** |
+| **TOTAL** | **46** | **19** | **24** | **3** | **67%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
@@ -535,11 +535,10 @@ As an operator, I want all 16 self-check forms (SA-01 to SA-16) generated as fil
 
 ### DUVRI (Contractor Interference)
 
-#### US-4.5 `PARTIAL`
+#### US-4.5 `DONE`
 As an operator, I want principal company data auto-filled from the DVR and contractor data entered separately.
 
-> **Built**: `DUVRI` generator produces 688 paragraphs / 23 tables; principal data flows from shared survey/azienda records via `load_data()` (Sprint Closure 2026-04-14).
-> **Missing**: No "Aggiungi appaltatore" UI for contractor entry. No "Dati committente aggiornati" sync banner when principal data changes. Contractor section currently implicit in generator rather than a managed data entity.
+> **Built**: `DUVRI` generator produces 688 paragraphs / 23 tables; principal data flows from shared survey/azienda records via `load_data()` (Sprint Closure 2026-04-14). Full CRUD endpoints at `backend/app/api/v1/duvri.py`: `GET/POST /aziende/{id}/duvri`, `GET/PATCH/DELETE /aziende/{id}/duvri/{duvri_id}`, with response payload always carrying a fresh `committente_snapshot` (read-only mirror of parent Azienda fields) plus a derived `committente_outdated` flag computed by comparing `Azienda.updated_at > Duvri.updated_at`. Frontend page at `frontend/src/app/(dashboard)/assessments/duvri/[aziendaId]/page.tsx` lists DUVRI cards, exposes "Aggiungi appaltatore" CTA opening a Dialog form (contractor + contract + interferenze inline list), supports edit/delete with confirmation, and renders the AC3 amber "Dati committente aggiornati" banner per stale card.
 
 **Acceptance Criteria:**
 

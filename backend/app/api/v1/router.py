@@ -8,6 +8,7 @@ from app.api.v1.aziende import router as aziende_router
 from app.api.v1.calculations import router as calculations_router
 from app.api.v1.documents import download_router as documents_download_router
 from app.api.v1.documents import router as documents_router
+from app.api.v1.duvri import router as duvri_router
 from app.api.v1.gestanti import router as gestanti_router
 from app.api.v1.lookups import router as lookups_router
 from app.api.v1.pee_procedures import router as pee_procedures_router
@@ -32,3 +33,4 @@ api_router.include_router(ai_feedback_router)
 api_router.include_router(gestanti_router)
 api_router.include_router(pee_procedures_router)
 api_router.include_router(lookups_router)
+api_router.include_router(duvri_router)
