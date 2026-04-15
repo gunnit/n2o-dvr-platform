@@ -13,9 +13,11 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 
 ## 🔒 Active Agent Claims (2026-04-15)
 
-Stories below are being worked on by a parallel agent. **Do not pick these up if you are a fresh agent.** Free PARTIAL pool right now: **US-2.8** (DVR 111-table parity + desktop notification) and **US-4.7** (POS phase-builder UI, drag/drop, per-phase NIOSH/noise/vibration, dependencies). Pick one of those.
+Stories below are being worked on by a parallel agent. **Do not pick these up if you are a fresh agent.** Free PARTIAL pool right now: **US-2.8** (DVR 111-table parity + desktop notification). **US-4.7 is now claimed by Agent-F (see below)**. Pick US-2.8.
 
 **Agent-E (2026-04-15 session)** claimed US-2.1 + US-5.2 — backend description_revisions + visura upload (US-2.1 AC1/AC2) and cross-cutting stale-snapshot warning + field dependency tooltip + survey-change auto-propagation banner (US-5.2 AC1/AC2/AC3). Do NOT pick these up.
+
+**Agent-F (2026-04-15 session)** claimed US-4.7 — POS phase-builder UI: phases as editable entities, drag-and-drop reorder, per-phase NIOSH + noise + vibration attachments, phase dependency linking with Gantt-like overview. Do NOT pick this up.
 
 **Agent-C (2026-04-15 session)** closed US-1.6 + US-4.3 — see the claim rows below. Free PARTIAL pool narrowed accordingly.
 
@@ -23,6 +25,7 @@ Stories below are being worked on by a parallel agent. **Do not pick these up if
 |-------|-----------|-----------|-------|
 | US-2.1 | Agent-E | 2026-04-15 | **IN PROGRESS** — visura PDF upload path (AC1) + `description_revisions` table so AI draft is retained when operator edits → "Modificato dall'utente" badge + history list (AC2); AC3 retry already shipped, leaving it intact |
 | US-5.2 | Agent-E | 2026-04-15 | **IN PROGRESS** — `survey_snapshot_hash` on documents + stale-snapshot banner when survey changes during an in-flight generation (AC2); field-dependency catalog + tooltip listing downstream documents (AC3); regenerate-propagation smoke covered by integration test (AC1) |
+| US-4.7 | Agent-F | 2026-04-15 | **IN PROGRESS** — POS phase entities + CRUD, drag-and-drop reorder, per-phase NIOSH/noise/vibration forms, dependency link + Gantt-ish overview; POS docx generator consumes the ordered phase list |
 | ~~US-1.5~~ | Agent-D | 2026-04-15 | **CLOSED → DONE** (attrezzature-driven risk-category union + "Ambienti modificati" banner with wizard-scoped acknowledgement state shipped) |
 | ~~US-5.3~~ | Agent-D | 2026-04-15 | **CLOSED → DONE** (version-history snapshot diff tags AI-originated paragraphs from azienda description + rischi misure + violet ring + AIFilterToggle in dialog header; admin AI feedback panel at `/admin/ai-feedback` with summary cards + recent rejections table backed by new `/admin/summary` + `/admin/recent` admin-gated endpoints; 10 new tests on the admin endpoints + context preview helper) |
 | ~~US-1.6~~ | Agent-C | 2026-04-15 | **CLOSED → DONE** (signature PNG persisted + server timestamp + firmato lock + Apri revisione shipped) |
@@ -583,7 +586,7 @@ As an operator, I want interference analysis per equipment type with suggested p
 
 ### POS (Construction Site Plan)
 
-#### US-4.7 `PARTIAL`
+#### US-4.7 `PARTIAL` 🔒 claimed by Agent-F (2026-04-15) — see Active Agent Claims table at top of file
 As an operator, I want to define construction phases with specific risks, NIOSH calculations, and noise/vibration levels per phase.
 
 > **Built**: `POS` generator produces 1272 paragraphs / 87 tables with phase-based structure (Sprint Closure 2026-04-14).
