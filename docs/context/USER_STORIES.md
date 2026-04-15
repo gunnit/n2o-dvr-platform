@@ -17,14 +17,14 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 |------|---------|------|---------|-------------|----------|
 | 1 — Digital Survey | 10 | 6 | 3 | 1 | 75% |
 | 2 — DVR Master | 9 | 3 | 6 | 0 | 67% |
-| 3 — DVR Attachments | 15 | 8 | 7 | 0 | 77% |
+| 3 — DVR Attachments | 15 | 11 | 4 | 0 | 87% |
 | 4 — Complementary Docs | 8 | 3 | 4 | 1 | 63% |
 | 5 — Cross-cutting | 4 | 0 | 4 | 0 | 50% |
-| **TOTAL** | **46** | **20** | **24** | **2** | **70%** |
+| **TOTAL** | **46** | **23** | **21** | **2** | **73%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
-> **2026-04-15 reconciliation**: Done in two passes. Pass 1 realigned against the Sprint Closure section dated 2026-04-14 (SDS trilogy, Epic 4 generators, US-5.4 backups). Pass 2 audited the code against acceptance criteria for stories touched by post-closure commits (`0779050` MMC, `c8a4670` Stress, `01077fb` Incendio, `05173f2` VDT+Microclima, `8f6c61c` AI integration, `e2b6475` Wave 1). Net effect of Pass 2: US-3.1/3.2/3.3/3.4/3.6/3.12/3.13 → **DONE**; US-2.1/2.6/3.5/3.7/3.8/3.14 → **PARTIAL** with specific AC gaps documented per story below.
+> **2026-04-15 reconciliation**: Done in three passes. Pass 1 realigned against the Sprint Closure section dated 2026-04-14 (SDS trilogy, Epic 4 generators, US-5.4 backups). Pass 2 audited the code against acceptance criteria for stories touched by post-closure commits (`0779050` MMC, `c8a4670` Stress, `01077fb` Incendio, `05173f2` VDT+Microclima, `8f6c61c` AI integration, `e2b6475` Wave 1). Net effect of Pass 2: US-3.1/3.2/3.3/3.4/3.6/3.12/3.13 → **DONE**; US-2.1/2.6/3.5/3.7/3.8/3.14 → **PARTIAL** with specific AC gaps documented per story below. Pass 3 folded in parallel-session commits from later the same day (`f0dd50c` + `84fca5f` + `bbc13e1` gestanti cross-reference, `b2d9de4` biologico sector checklist, `c5c7e5e` + `4252c5c` + `dfa202b` MMC polish): US-3.9/3.10/3.15 → **DONE**; and this-session new work US-4.2/4.5/4.6 → **DONE**, US-2.2/5.3 → **PARTIAL**.
 >
 > **True greenfield remaining** (stories still NOT STARTED): US-1.3 photo uploads, US-4.8 POS role×phase DPI matrix. (US-4.5 → DONE 2026-04-15 — DUVRI CRUD + committente sync banner. US-4.6 → DONE 2026-04-15 — 15-rule interference engine with Accetta/Rifiuta sheet. US-5.3 → PARTIAL 2026-04-15 — AI badge + filter wired. US-4.2 → DONE 2026-04-15 — A-E procedures with per-client overrides. US-2.2 → PARTIAL 2026-04-15 — seismic zone auto-fill from 154-comune lookup; regional regulations half still open.)
 
@@ -297,7 +297,7 @@ As an office operator, I want version tracking for document revisions so I can a
 #### US-3.1 `DONE`
 As an operator, I want to input lifting parameters per worker (height, displacement, distance, angle, grip, frequency, duration, actual weight) so I can compute the NIOSH index.
 
-> **Built**: Backend `calculate_niosh()` at `backend/app/api/v1/calculations.py:75-103` with all 8 parameters (CP, A-F factors, peso_reale). Frontend form at `frontend/src/components/assessments/mmc-form.tsx` with correct units (cm/°/kg/lifts-per-min) and range validation on blur. Returns PLR, IR, and risk zone (VERDE/GIALLA/ROSSA).
+> **Built**: Backend `calculate_niosh()` at `backend/app/api/v1/calculations.py:75-103` with all 8 parameters (CP, A-F factors, peso_reale). Frontend form at `frontend/src/components/assessments/mmc/mmc-form.tsx` with correct units (cm/°/kg/lifts-per-min) and range validation on blur. Returns PLR, IR, and risk zone (VERDE/GIALLA/ROSSA).
 
 **Acceptance Criteria:**
 
@@ -319,7 +319,7 @@ As an operator, I want the system to auto-derive CP (weight constant) from worke
 #### US-3.3 `DONE`
 As an operator, I want automatic PLR and IR calculation with Green/Yellow/Red classification.
 
-> **Built**: Backend `calculate_niosh()` computes PLR = CP × A × B × C × D × E × F and IR = peso_reale / PLR. Risk zones VERDE (≤0.75), GIALLA (≤1.0), ROSSA (>1.0) with Italian descriptions and actions (`backend/app/api/v1/calculations.py:47-54`). Frontend displays results at 2-decimal precision with green/yellow/red color bands in `frontend/src/components/assessments/mmc-form.tsx:230-270`; red zone triggers mandatory measures section.
+> **Built**: Backend `calculate_niosh()` computes PLR = CP × A × B × C × D × E × F and IR = peso_reale / PLR. Risk zones VERDE (≤0.75), GIALLA (≤1.0), ROSSA (>1.0) with Italian descriptions and actions (`backend/app/api/v1/calculations.py:47-54`). Frontend displays results at 2-decimal precision with green/yellow/red color bands in `frontend/src/components/assessments/mmc/mmc-form.tsx:230-270`; red zone triggers mandatory measures section.
 
 **Acceptance Criteria:**
 
