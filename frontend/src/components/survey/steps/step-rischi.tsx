@@ -290,14 +290,22 @@ function getIndiceBarColor(livello: string) {
 
 function initValutazioni(
   ambienteId: string,
+  ambienteTipo: string | null | undefined,
   existing: ValutazioneRischio[]
 ): ValutazioneRischio[] {
+  // US-2.3 AC1: when the Rischi step first loads, every row must be
+  // pre-populated with the default P/D from the scoring matrix — not
+  // the generic 1/1 placeholder — so the operator reviews, not enters.
+  // Rows that already exist in `existing` (loaded from the backend or
+  // authored in a previous session) are preserved as-is.
   return CATEGORIE_RISCHIO.map((cat) => {
     const found = existing.find(
       (v) =>
         v.ambiente_id === ambienteId && v.categoria_rischio === cat
     );
     if (found) return found;
+    const [p, d] = getDefaultScores(ambienteTipo, cat);
+    const indice = calcIndice(p, d);
     return {
       id: crypto.randomUUID(),
       ambiente_id: ambienteId,
@@ -307,10 +315,10 @@ function initValutazioni(
       condizioni_esposizione: null,
       rischio: null,
       misure_prevenzione: null,
-      probabilita_p: 1,
-      danno_d: 1,
-      indice_i: 3,
-      livello_rischio: "ACCETTABILE" as const,
+      probabilita_p: p,
+      danno_d: d,
+      indice_i: indice,
+      livello_rischio: getLivello(indice),
     };
   });
 }
@@ -326,11 +334,13 @@ export function StepRischi({
 
   const selectedAmbiente = ambienti[selectedAmbienteIndex];
 
-  // Ensure we have valutazioni for all ambienti
+  // Ensure we have valutazioni for all ambienti — seeded from the
+  // default P/D matrix so AC1 ("risks pre-filled from a default scoring
+  // matrix") holds the first time the step opens.
   const allValutazioni = useMemo(() => {
     const result: ValutazioneRischio[] = [];
     for (const amb of ambienti) {
-      result.push(...initValutazioni(amb.id, valutazioni));
+      result.push(...initValutazioni(amb.id, amb.tipo, valutazioni));
     }
     return result;
   }, [ambienti, valutazioni]);

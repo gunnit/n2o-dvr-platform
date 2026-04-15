@@ -20,7 +20,7 @@ Stories below are being worked on by a parallel agent. **Do not pick these up if
 | ~~US-1.4~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (modal + qualifiche + multi-select shipped) |
 | ~~US-2.6~~ | Agent-B | 2026-04-15 | **CLOSED → DONE** (per-client misure library + measures-panel wiring shipped) |
 | ~~US-4.1~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (DVR guard + planimetria + plan-config UX shipped) |
-| US-2.3 | Agent-B | 2026-04-15 | Auto-seed default P/D matrix when valutazioni are first created per ambiente |
+| ~~US-2.3~~ | Agent-B | 2026-04-15 | **CLOSED → DONE** (step-rischi seeds defaults from matrix on first load; operator reviews not enters) |
 | ~~US-4.4~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (letterhead + ragione sociale + subset dialog shipped) |
 | US-5.4 | Agent-A | 2026-04-15 | Admin backup status panel + failure alerting + audit wiring |
 
@@ -31,17 +31,17 @@ Release a claim by deleting the row and the inline marker on the story once you 
 | Epic | Stories | Done | Partial | Not Started | Progress |
 |------|---------|------|---------|-------------|----------|
 | 1 — Digital Survey | 10 | 8 | 2 | 0 | 90% |
-| 2 — DVR Master | 9 | 5 | 4 | 0 | 78% |
+| 2 — DVR Master | 9 | 6 | 3 | 0 | 83% |
 | 3 — DVR Attachments | 15 | 15 | 0 | 0 | 100% |
 | 4 — Complementary Docs | 8 | 6 | 2 | 0 | 88% |
 | 5 — Cross-cutting | 4 | 1 | 3 | 0 | 63% |
-| **TOTAL** | **46** | **35** | **11** | **0** | **88%** |
+| **TOTAL** | **46** | **36** | **10** | **0** | **89%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
 > **2026-04-15 reconciliation**: Done in three passes. Pass 1 realigned against the Sprint Closure section dated 2026-04-14 (SDS trilogy, Epic 4 generators, US-5.4 backups). Pass 2 audited the code against acceptance criteria for stories touched by post-closure commits (`0779050` MMC, `c8a4670` Stress, `01077fb` Incendio, `05173f2` VDT+Microclima, `8f6c61c` AI integration, `e2b6475` Wave 1). Net effect of Pass 2: US-3.1/3.2/3.3/3.4/3.6/3.12/3.13 → **DONE**; US-2.1/2.6/3.5/3.7/3.8/3.14 → **PARTIAL** with specific AC gaps documented per story below. Pass 3 folded in parallel-session commits from later the same day (`f0dd50c` + `84fca5f` + `bbc13e1` gestanti cross-reference, `b2d9de4` biologico sector checklist, `c5c7e5e` + `4252c5c` + `dfa202b` MMC polish): US-3.9/3.10/3.15 → **DONE**; and this-session new work US-4.2/4.5/4.6 → **DONE**, US-2.2/5.3 → **PARTIAL**. Pass 4 (evening, commits `0717a04` + `73679a4`) added the PHS critical-exposure banner and wired the shared AI badge/filter into the SDS review panel: **US-3.14 → DONE** (AC3 banner), and US-5.3 advanced but stays PARTIAL until the badge is also applied to document review surfaces.
 >
-> **True greenfield remaining** (stories still NOT STARTED): none — US-1.3 and US-4.8 closed 2026-04-15 via parallel-agent build (see below). (US-4.5 → DONE 2026-04-15 — DUVRI CRUD + committente sync banner. US-4.6 → DONE 2026-04-15 — 15-rule interference engine with Accetta/Rifiuta sheet. US-5.3 → PARTIAL 2026-04-15 — AI badge + filter wired across Azienda description, measures panel, **and SDS review**. US-4.2 → DONE 2026-04-15 — A-E procedures with per-client overrides. US-2.2 → PARTIAL 2026-04-15 — seismic zone auto-fill from 154-comune lookup; regional regulations half still open. US-3.14 → DONE 2026-04-15 — PHS Dlim < 30 min red banner. US-3.5 → DONE 2026-04-15 — surveillance cadence helper + alerts endpoint + dashboard widgets. **US-2.6 → DONE 2026-04-15 (Agent-B)** — per-client `rischi_misure_libreria` table + CRUD + measures-panel library section with Usa/Rimuovi actions; accepted/modified/manual measures auto-persisted keyed by azienda + categoria_rischio.)
+> **True greenfield remaining** (stories still NOT STARTED): none — US-1.3 and US-4.8 closed 2026-04-15 via parallel-agent build (see below). (US-4.5 → DONE 2026-04-15 — DUVRI CRUD + committente sync banner. US-4.6 → DONE 2026-04-15 — 15-rule interference engine with Accetta/Rifiuta sheet. US-5.3 → PARTIAL 2026-04-15 — AI badge + filter wired across Azienda description, measures panel, **and SDS review**. US-4.2 → DONE 2026-04-15 — A-E procedures with per-client overrides. US-2.2 → PARTIAL 2026-04-15 — seismic zone auto-fill from 154-comune lookup; regional regulations half still open. US-3.14 → DONE 2026-04-15 — PHS Dlim < 30 min red banner. US-3.5 → DONE 2026-04-15 — surveillance cadence helper + alerts endpoint + dashboard widgets. **US-2.6 → DONE 2026-04-15 (Agent-B)** — per-client `rischi_misure_libreria` table + CRUD + measures-panel library section with Usa/Rimuovi actions; accepted/modified/manual measures auto-persisted keyed by azienda + categoria_rischio. **US-2.3 → DONE 2026-04-15 (Agent-B)** — Step 5 seeds every fresh valutazione from the matrix on first load; operator reviews rather than enters; 7 new tests pin matrix shape + non-mutation guarantees.)
 
 Tier A (2026-04-14): US-1.5 (contextual risk filtering + summary bar), US-2.3 (default scoring matrix + Reset button), US-2.8 (Part II + logo embed + versioned filename), US-2.9 (version history Sheet) — all four stories advanced within their PARTIAL status toward DONE.
 
@@ -216,11 +216,11 @@ As an office operator, I want territorial context (seismic zone, local regulatio
 - **Given** the comune is not in the lookup table, **When** the lookup fails, **Then** the field is left blank with a warning "Comune non trovato - inserisci manualmente"
 - **Given** territorial data is auto-populated, **When** I view it in the editor, **Then** it is read-only by default with an "Override" button to enable manual edit
 
-#### US-2.3 `PARTIAL` 🔒 CLAIMED by Agent-B (2026-04-15) — other agents skip
+#### US-2.3 `DONE`
 As an office operator, I want risk tables pre-populated per environment with contextualized severity scores that I can review and adjust.
 
-> **Built**: Risk assessment table in survey Step 5 with P/D sliders, real-time I=2D+P calculation, color-coded levels. DVR generator renders risk tables per environment. Default scoring matrix (88 entries: 8 environment types × 11 categories) in `reference_data.py` with `get_default_scores()` / `get_default_risk_matrix()` helpers. Frontend embeds the same matrix for instant reset. "Reset al default" per-ambiente button with confirmation Dialog ("Sei sicuro? I valori P/D correnti verranno sovrascritti."). Backend helper `apply_default_scores_to_valutazioni()` only overwrites initial 1/1 rows.
-> **Missing**: Matrix is applied on explicit reset, not pre-filled automatically when the risk step first loads (could be added by seeding defaults at valutazione init). No AI-suggested scores. No separate "Risk Scoring Interface" for document review (scoring stays in survey context).
+> **Built**: Risk assessment table in survey Step 5 with P/D sliders, real-time I=2D+P calculation, color-coded levels. DVR generator renders risk tables per environment. Default scoring matrix (88 entries: 8 environment types × 11 categories) in `reference_data.py` with `get_default_scores()` / `get_default_risk_matrix()` helpers. Frontend embeds the same matrix. **AC1 closed**: `frontend/src/components/survey/steps/step-rischi.tsx:initValutazioni` now seeds every fresh valutazione from `getDefaultScores(amb.tipo, categoria)` instead of the 1/1 placeholder — when Step 5 opens for the first time, each ambiente's risks are already pre-filled with matrix defaults, color bands live, and the operator reviews rather than enters. Existing rows (loaded from backend) are preserved untouched. "Reset al default" per-ambiente button with confirmation Dialog ("Sei sicuro? I valori P/D correnti verranno sovrascritti."). Backend helper `apply_default_scores_to_valutazioni()` only overwrites initial 1/1 rows. 7 unit tests in `backend/tests/test_default_risk_scores.py` pin matrix shape + case-insensitive tipo lookup + fallback-to-(1,1) + non-mutation guarantees so the Italian P/D contract can't drift silently.
+> **Missing**: Nothing required by the ACs. (Nice-to-have: AI-suggested scores and a separate DVR-review scoring interface are not in scope for this story.)
 
 **Acceptance Criteria:**
 
