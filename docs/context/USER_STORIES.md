@@ -16,17 +16,17 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 | Epic | Stories | Done | Partial | Not Started | Progress |
 |------|---------|------|---------|-------------|----------|
 | 1 — Digital Survey | 10 | 6 | 3 | 1 | 75% |
-| 2 — DVR Master | 9 | 3 | 5 | 1 | 61% |
+| 2 — DVR Master | 9 | 3 | 6 | 0 | 67% |
 | 3 — DVR Attachments | 15 | 7 | 8 | 0 | 73% |
 | 4 — Complementary Docs | 8 | 1 | 5 | 2 | 38% |
 | 5 — Cross-cutting | 4 | 0 | 4 | 0 | 50% |
-| **TOTAL** | **46** | **17** | **25** | **4** | **64%** |
+| **TOTAL** | **46** | **17** | **26** | **3** | **65%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
 > **2026-04-15 reconciliation**: Done in two passes. Pass 1 realigned against the Sprint Closure section dated 2026-04-14 (SDS trilogy, Epic 4 generators, US-5.4 backups). Pass 2 audited the code against acceptance criteria for stories touched by post-closure commits (`0779050` MMC, `c8a4670` Stress, `01077fb` Incendio, `05173f2` VDT+Microclima, `8f6c61c` AI integration, `e2b6475` Wave 1). Net effect of Pass 2: US-3.1/3.2/3.3/3.4/3.6/3.12/3.13 → **DONE**; US-2.1/2.6/3.5/3.7/3.8/3.14 → **PARTIAL** with specific AC gaps documented per story below.
 >
-> **True greenfield remaining** (stories still NOT STARTED): US-1.3 photo uploads, US-2.2 comune seismic lookup, US-4.6 interference rules engine, US-4.8 POS role×phase DPI matrix. (US-5.3 moved to PARTIAL on 2026-04-15 — shared AI badge + filter wired; still needs SDS extraction panel adoption. US-4.2 moved to DONE on 2026-04-15 — standard A-E procedures with per-client overrides + reset dialog shipped.)
+> **True greenfield remaining** (stories still NOT STARTED): US-1.3 photo uploads, US-4.6 interference rules engine, US-4.8 POS role×phase DPI matrix. (US-5.3 → PARTIAL on 2026-04-15 — shared AI badge + filter wired. US-4.2 → DONE on 2026-04-15 — standard A-E procedures with per-client overrides + reset dialog. US-2.2 → PARTIAL on 2026-04-15 — seismic zone auto-fill from 154-comune lookup + override UX; regional regulations half still open.)
 
 Tier A (2026-04-14): US-1.5 (contextual risk filtering + summary bar), US-2.3 (default scoring matrix + Reset button), US-2.8 (Part II + logo embed + versioned filename), US-2.9 (version history Sheet) — all four stories advanced within their PARTIAL status toward DONE.
 
@@ -190,11 +190,11 @@ As an office operator, I want the system to auto-generate the company descriptio
 - **Given** I edit the generated text, **When** I save, **Then** the badge changes to "Modificato dall'utente" and the original AI version is retained in the version history
 - **Given** the AI call fails or times out (>30s), **When** the error surfaces, **Then** I see "Generazione fallita - riprova o inserisci manualmente" with a Retry button and the editor remains usable for manual entry
 
-#### US-2.2 `NOT STARTED`
+#### US-2.2 `PARTIAL`
 As an office operator, I want territorial context (seismic zone, local regulations) auto-populated so I don't have to look it up per municipality.
 
-> **Built**: Zona sismica field exists in azienda model (manual entry, 1-4).
-> **Missing**: No lookup table by comune. No auto-fetch of seismic zone or regional regulations. No "Comune non trovato" fallback. No read-only with override.
+> **Built**: `backend/app/data/seismic_zones.py` ships 154 Italian comuni (all regional capitals + major provincial cities) mapped to OPCM 3519/2006 zones 1-4, with casing/apostrophe-tolerant normalisation. `GET /api/v1/lookup/seismic-zone?comune={name}` returns `{zona, found, comune_matched, source}`. Frontend hook on `step-azienda.tsx` calls the endpoint on comune blur: if found, auto-fills `zona_sismica`, locks the select, shows an emerald "Auto" badge, and exposes a "Modifica manualmente" button (AC1 + AC3). Unmapped comuni surface "Comune non trovato - inserisci manualmente la zona sismica." (AC2). Sede legale takes precedence; sede operativa is used as a fallback source.
+> **Missing**: Regional regulation lookup (second half of AC1) not implemented — only seismic zones. Table coverage is the top ~150 comuni; long-tail comuni fall through to manual entry. Lookup is attached to Step 1 form only, not re-checked at DVR generation time.
 
 **Acceptance Criteria:**
 
@@ -393,11 +393,10 @@ As an operator, I want auto-generated corrective measures based on risk level so
 
 ### Gestanti (Pregnant Workers)
 
-#### US-3.9 `PARTIAL`
+#### US-3.9 `DONE`
 As an operator, I want automatic cross-reference between female worker roles and D.Lgs. 151/2001 risk factors.
 
-> **Built**: Worker model has sesso field. `ALLEGATO_GESTANTI` generator produces 173 paragraphs / 9 tables. Frontend stub at `frontend/src/app/(dashboard)/assessments/gestanti/[aziendaId]/page.tsx` with signature block (per Sprint Closure 2026-04-14).
-> **Missing**: No D.Lgs. 151/2001 risk factor database. No cross-reference engine wiring mansioni → incompatible risks. No "Nuovo match" flag on regeneration after survey update.
+> **Built**: Worker model has sesso field. `ALLEGATO_GESTANTI` generator produces 173 paragraphs / 9 tables. Risk catalog at `backend/app/data/dlgs_151_2001.py` (14 entries across Allegati A/B/C with keyword matcher). Cross-reference endpoint `POST /api/v1/aziende/{azienda_id}/gestanti/cross-reference` wired. Frontend page rewritten at `frontend/src/app/(dashboard)/assessments/gestanti/[aziendaId]/page.tsx` with worker selector, Allegato A/B/C badges (rose/amber/emerald), "Nuovo" badge when the match was absent from the previous persisted decision set, and green "Nessun rischio identificato" for cleared workers. 15 unit tests in `backend/tests/test_gestanti_cross_reference.py`.
 
 **Acceptance Criteria:**
 
@@ -405,11 +404,10 @@ As an operator, I want automatic cross-reference between female worker roles and
 - **Given** a worker holds a mansione with no matching risks, **When** the report renders, **Then** the worker is shown with a green "Nessun rischio identificato" indicator
 - **Given** new risks are added to the survey after the Gestanti report was generated, **When** I regenerate, **Then** previously cleared workers may surface as new matches and are clearly marked "Nuovo"
 
-#### US-3.10 `PARTIAL`
+#### US-3.10 `DONE`
 As an operator, I want auto-identification of incompatible tasks and relocation proposals so I can act on them quickly.
 
-> **Built**: Gestanti frontend stub (shared with US-3.9) exists at `frontend/src/app/(dashboard)/assessments/gestanti/[aziendaId]/page.tsx` with signature block.
-> **Missing**: No incompatible task detection engine. No alternate-role suggestion logic. No accept/reject relocation flow with justification/misura alternativa fields.
+> **Built**: Cross-reference response includes `suggested_alternative_mansione` picked from other workers in the same azienda with zero matches. Per-match accept / reject buttons open a dialog (`RelocationDialog`) that enforces >= 10 char `justification` (accept) or `misura_alternativa` (reject). Decisions persist to `GestantiValutazione.rischi_vietati` (JSONB) via `POST /api/v1/aziende/{azienda_id}/gestanti/{valutazione_id}/decision`. Pydantic validator in `backend/app/schemas/gestanti.py` mirrors the 10-char rule server-side.
 
 **Acceptance Criteria:**
 
