@@ -65,7 +65,16 @@ export interface DocumentoGenerato {
   azienda_id: string;
   tipo_documento: string;
   versione: number;
-  status: "pending" | "generating" | "ready" | "error";
+  // Backend emits these four; legacy "generating"/"ready"/"error" values are
+  // kept only for older records that may still be in the DB.
+  status:
+    | "pending"
+    | "in_progress"
+    | "completed"
+    | "failed"
+    | "generating"
+    | "ready"
+    | "error";
   file_path: string | null;
   gdrive_file_id: string | null;
   created_at: string;

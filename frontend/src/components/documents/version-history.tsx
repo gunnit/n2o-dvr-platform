@@ -12,6 +12,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { DocumentoGenerato } from "@/types";
+import { downloadFile } from "@/lib/api-client";
 
 interface VersionHistoryProps {
   open: boolean;
@@ -71,9 +72,12 @@ function buildDiffSummary(
   return parts.join(" \u00b7 ");
 }
 
-function downloadUrl(id: string): string {
-  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-  return `${base}/api/v1/documenti/${id}/download`;
+async function triggerDownload(id: string): Promise<void> {
+  try {
+    await downloadFile(`/api/v1/documenti/${id}/download`);
+  } catch (e) {
+    alert((e as Error).message || "Download fallito");
+  }
 }
 
 export function VersionHistory({
@@ -160,18 +164,19 @@ export function VersionHistory({
                         </p>
                       )}
 
-                      {version.status === "ready" && version.file_path && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            window.open(downloadUrl(version.id), "_blank");
-                          }}
-                        >
-                          <Download className="mr-1.5 h-3 w-3" />
-                          Scarica
-                        </Button>
-                      )}
+                      {(version.status === "ready" || version.status === "completed") &&
+                        version.file_path && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              void triggerDownload(version.id);
+                            }}
+                          >
+                            <Download className="mr-1.5 h-3 w-3" />
+                            Scarica
+                          </Button>
+                        )}
                     </div>
                   </li>
                 );

@@ -92,7 +92,7 @@ async def generate_document(
         versione=next_version,
         status="pending",
         generated_by=user.id,
-        generation_started_at=datetime.now(timezone.utc),
+        generation_started_at=datetime.utcnow(),
     )
     db.add(doc)
     await db.commit()
@@ -181,7 +181,7 @@ async def batch_generate_documents(
             versione=next_version,
             status="pending",
             generated_by=user.id,
-            generation_started_at=datetime.now(timezone.utc),
+            generation_started_at=datetime.utcnow(),
         )
         db.add(doc)
         created_docs.append(doc)

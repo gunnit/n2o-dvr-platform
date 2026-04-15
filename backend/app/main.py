@@ -12,6 +12,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Needed so the browser lets the frontend read Content-Disposition
+    # (otherwise authenticated downloads lose their server-provided filename).
+    expose_headers=["Content-Disposition"],
 )
 
 app.include_router(api_router)

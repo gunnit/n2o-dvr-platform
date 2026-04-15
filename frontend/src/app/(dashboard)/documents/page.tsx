@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { VersionHistory } from "@/components/documents/version-history";
 import type { Azienda, DocumentoGenerato } from "@/types";
-import { apiCall } from "@/lib/api-client";
+import { apiCall, downloadFile } from "@/lib/api-client";
 
 const documentTypes = [
   { key: "dvr_master", name: "DVR Master", pages: "~187", complexity: "Alta" },
@@ -295,11 +295,12 @@ export default function DocumentsPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => {
-                          window.open(
-                            `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/documenti/${existing.id}/download`,
-                            "_blank"
-                          );
+                        onClick={async () => {
+                          try {
+                            await downloadFile(`/api/v1/documenti/${existing.id}/download`);
+                          } catch (e) {
+                            alert((e as Error).message || "Download fallito");
+                          }
                         }}
                       >
                         <Download className="mr-1.5 h-3 w-3" />
