@@ -1,19 +1,32 @@
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.exceptions import NotFoundError
+from app.config import settings
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.db.session import get_db
 from app.dependencies import get_current_org, get_current_user
 from app.models.azienda import Azienda
+from app.models.description_revision import (
+    SOURCE_AI,
+    SOURCE_MANUAL,
+    DescriptionRevision,
+)
 from app.models.user import User
 from app.schemas.azienda import AziendaCreate, AziendaResponse, AziendaUpdate
+from app.schemas.description_revision import (
+    DescriptionRevisionResponse,
+    DescriptionRevisionRestoreResponse,
+    VisuraUploadResponse,
+)
 from app.services.ai import generate_company_description
+from app.services.visura_extractor import extract_visura_text
 
 
 class DescriptionResponse(BaseModel):
@@ -143,6 +156,7 @@ async def update_azienda(
     azienda_id: uuid.UUID,
     body: AziendaUpdate,
     org_id: uuid.UUID = Depends(get_current_org),
+    user: User | None = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -152,7 +166,30 @@ async def update_azienda(
     if not azienda:
         raise NotFoundError("Azienda not found")
 
-    for field, value in body.model_dump(exclude_unset=True).items():
+    payload = body.model_dump(exclude_unset=True)
+    # US-2.1 AC2 — snapshot a manual revision when the descrizione_attivita
+    # actually changes. We only snapshot non-empty new values to avoid
+    # filling the table with empty rows on incidental clears, and we skip
+    # the snapshot when the operator isn't actually editing the description
+    # (e.g. updating only ATECO + saving). Restored revisions skip this
+    # path because they POST to /restore and create their own row.
+    new_desc = payload.get("descrizione_attivita")
+    if (
+        "descrizione_attivita" in payload
+        and isinstance(new_desc, str)
+        and new_desc.strip()
+        and new_desc != (azienda.descrizione_attivita or "")
+    ):
+        db.add(
+            DescriptionRevision(
+                azienda_id=azienda.id,
+                source=SOURCE_MANUAL,
+                content=new_desc,
+                generated_by=getattr(user, "id", None),
+            )
+        )
+
+    for field, value in payload.items():
         setattr(azienda, field, value)
 
     await db.commit()
@@ -184,6 +221,7 @@ async def delete_azienda(
 async def genera_descrizione(
     azienda_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
+    user: User | None = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Generate an AI company description for DVR Part I (US-2.1).
@@ -191,6 +229,10 @@ async def genera_descrizione(
     Returns the generated text. The caller (frontend editor) is responsible
     for persisting it via PUT /aziende/{id} with descrizione_attivita set.
     This lets the user review/edit before committing.
+
+    Side effect (US-2.1 AC2): every successful AI generation snapshots a
+    ``DescriptionRevision`` row tagged ``source='ai'`` so the operator can
+    later see "what the AI suggested before I edited" and restore it.
     """
     result = await db.execute(
         select(Azienda)
@@ -205,4 +247,207 @@ async def genera_descrizione(
         raise NotFoundError("Azienda not found")
 
     description = await generate_company_description(azienda)
+
+    db.add(
+        DescriptionRevision(
+            azienda_id=azienda.id,
+            source=SOURCE_AI,
+            content=description,
+            generated_by=getattr(user, "id", None),
+        )
+    )
+    await db.commit()
     return DescriptionResponse(description=description)
+
+
+# ---------------------------------------------------------------------------
+# US-2.1 AC1 — Visura camerale upload
+# ---------------------------------------------------------------------------
+
+# Mirrors the SDS upload pattern in sostanze_chimiche.py: 10 MB cap, .pdf
+# only, content-type tolerant for browsers that send octet-stream.
+_VISURA_MAX_BYTES = 10 * 1024 * 1024
+
+
+@router.post("/{azienda_id}/visura", response_model=VisuraUploadResponse)
+async def upload_visura(
+    azienda_id: uuid.UUID,
+    file: UploadFile = File(...),
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a visura camerale PDF for an azienda (US-2.1 AC1).
+
+    The PDF is persisted under ``FILE_STORAGE_PATH/visure/{azienda_id}/`` and
+    a redacted text snippet is cached on the azienda row so the AI prompt
+    can use it without re-parsing on every Genera con AI click. PII (codice
+    fiscale, email, telefono) is stripped *before* the snippet is stored —
+    nothing PII-shaped ever ends up in the column or the AI request body.
+    """
+    result = await db.execute(
+        select(Azienda).where(Azienda.id == azienda_id, Azienda.organization_id == org_id)
+    )
+    azienda = result.scalar_one_or_none()
+    if not azienda:
+        raise NotFoundError("Azienda not found")
+
+    filename = file.filename or "visura.pdf"
+    is_pdf = (
+        file.content_type == "application/pdf"
+        or filename.lower().endswith(".pdf")
+    )
+    if not is_pdf:
+        raise BadRequestError("Solo file PDF ammessi")
+
+    content = await file.read()
+    if len(content) == 0:
+        raise BadRequestError("File vuoto")
+    if len(content) > _VISURA_MAX_BYTES:
+        raise BadRequestError(
+            f"Visura troppo grande (max {_VISURA_MAX_BYTES // (1024 * 1024)} MB)"
+        )
+
+    visure_dir = Path(settings.FILE_STORAGE_PATH) / "visure" / str(azienda_id)
+    visure_dir.mkdir(parents=True, exist_ok=True)
+    file_id = uuid.uuid4()
+    file_path = visure_dir / f"{file_id}.pdf"
+    file_path.write_bytes(content)
+
+    try:
+        extraction = extract_visura_text(file_path)
+    except ValueError as exc:
+        # Unreadable PDF — clean up the stored file and surface the
+        # operator-friendly Italian error.
+        try:
+            file_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise BadRequestError(str(exc)) from exc
+
+    azienda.visura_pdf_path = str(file_path)
+    azienda.visura_extracted_text = extraction.snippet
+    azienda.visura_uploaded_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(azienda)
+
+    return VisuraUploadResponse(
+        visura_uploaded_at=azienda.visura_uploaded_at,
+        extracted_chars=extraction.snippet_chars,
+        pages=extraction.pages,
+    )
+
+
+# ---------------------------------------------------------------------------
+# US-2.1 AC2 — Description revision history
+# ---------------------------------------------------------------------------
+
+
+async def _list_revisions(
+    azienda_id: uuid.UUID, org_id: uuid.UUID, db: AsyncSession
+) -> list[DescriptionRevisionResponse]:
+    """Shared helper — returns revisions joined with the operator name."""
+    # Tenancy guard: ensure the azienda belongs to the current org.
+    az_check = await db.execute(
+        select(Azienda.id).where(Azienda.id == azienda_id, Azienda.organization_id == org_id)
+    )
+    if az_check.scalar_one_or_none() is None:
+        raise NotFoundError("Azienda not found")
+
+    rows = await db.execute(
+        select(DescriptionRevision, User.full_name)
+        .outerjoin(User, User.id == DescriptionRevision.generated_by)
+        .where(DescriptionRevision.azienda_id == azienda_id)
+        .order_by(DescriptionRevision.created_at.desc())
+    )
+    out: list[DescriptionRevisionResponse] = []
+    for rev, name in rows.all():
+        out.append(
+            DescriptionRevisionResponse(
+                id=rev.id,
+                azienda_id=rev.azienda_id,
+                source=rev.source,
+                content=rev.content,
+                generated_by=rev.generated_by,
+                generated_by_name=name,
+                created_at=rev.created_at,
+            )
+        )
+    return out
+
+
+@router.get(
+    "/{azienda_id}/description-revisions",
+    response_model=list[DescriptionRevisionResponse],
+)
+async def list_description_revisions(
+    azienda_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """List the company-description history (US-2.1 AC2).
+
+    Returned newest-first. The frontend ``description-history.tsx`` renders
+    one row per revision with an Apri / Ripristina action and the AI/Manual
+    badge derived from ``source``.
+    """
+    return await _list_revisions(azienda_id, org_id, db)
+
+
+@router.post(
+    "/{azienda_id}/description-revisions/{revision_id}/restore",
+    response_model=DescriptionRevisionRestoreResponse,
+)
+async def restore_description_revision(
+    azienda_id: uuid.UUID,
+    revision_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    user: User | None = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Restore a historical revision into ``Azienda.descrizione_attivita``.
+
+    Snapshots a fresh ``manual`` revision so the restore itself is part of
+    the history (mirrors the US-2.9 document restore semantics — never
+    destroy what was there before).
+    """
+    az_result = await db.execute(
+        select(Azienda).where(Azienda.id == azienda_id, Azienda.organization_id == org_id)
+    )
+    azienda = az_result.scalar_one_or_none()
+    if not azienda:
+        raise NotFoundError("Azienda not found")
+
+    rev_result = await db.execute(
+        select(DescriptionRevision).where(
+            DescriptionRevision.id == revision_id,
+            DescriptionRevision.azienda_id == azienda_id,
+        )
+    )
+    source_rev = rev_result.scalar_one_or_none()
+    if not source_rev:
+        raise NotFoundError("Revisione non trovata")
+
+    azienda.descrizione_attivita = source_rev.content
+
+    new_rev = DescriptionRevision(
+        azienda_id=azienda.id,
+        source=SOURCE_MANUAL,
+        content=source_rev.content,
+        generated_by=getattr(user, "id", None),
+    )
+    db.add(new_rev)
+    await db.commit()
+    await db.refresh(new_rev)
+
+    return DescriptionRevisionRestoreResponse(
+        descrizione_attivita=source_rev.content,
+        revision=DescriptionRevisionResponse(
+            id=new_rev.id,
+            azienda_id=new_rev.azienda_id,
+            source=new_rev.source,
+            content=new_rev.content,
+            generated_by=new_rev.generated_by,
+            generated_by_name=getattr(user, "full_name", None),
+            created_at=new_rev.created_at,
+        ),
+    )

@@ -15,6 +15,11 @@ export interface Azienda {
   contesto_territoriale: string | null;
   data_scadenza_dvr: string | null;
   survey_status: "draft" | "in_progress" | "completed";
+  // US-2.1 AC1: ISO timestamp set when a visura camerale PDF is uploaded.
+  // The PDF + redacted snippet stay server-side; the frontend only uses
+  // this field to render the "visura caricata" hint above the description
+  // editor. Optional so older clients still type-check.
+  visura_uploaded_at?: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,6 +28,16 @@ class Azienda(Base):
     contesto_territoriale: Mapped[str | None] = mapped_column(Text)
     data_scadenza_dvr: Mapped[date | None] = mapped_column(Date)
     survey_status: Mapped[str] = mapped_column(String, default="draft")
+    # US-2.1 AC1 — visura camerale upload. The PDF is stored on the local
+    # disk (path) and a locally-extracted plaintext snippet is cached on the
+    # row so the AI prompt can use it without re-parsing the file. **PII
+    # never leaves the box** — only the snippet (which has CF/email/phone
+    # redacted by the extractor) is forwarded to the model.
+    # `visura_uploaded_at` doubles as a "visura present" signal for the
+    # frontend.
+    visura_pdf_path: Mapped[str | None] = mapped_column(Text)
+    visura_extracted_text: Mapped[str | None] = mapped_column(Text)
+    visura_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 

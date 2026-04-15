@@ -46,6 +46,11 @@ class AziendaUpdate(BaseModel):
 class AziendaResponse(AziendaBase):
     id: uuid.UUID
     survey_status: str
+    # US-2.1 AC1 — non-null when a visura camerale PDF has been uploaded.
+    # The path + extracted snippet stay server-side; the frontend uses the
+    # timestamp purely as a "visura present" indicator above the
+    # description editor.
+    visura_uploaded_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

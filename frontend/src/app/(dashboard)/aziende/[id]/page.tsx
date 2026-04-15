@@ -345,6 +345,7 @@ export default function AziendaDetailPage() {
                   initialProvenance={
                     azienda.descrizione_attivita ? "edited" : "none"
                   }
+                  visuraUploadedAt={azienda.visura_uploaded_at ?? null}
                   onChange={async (text) => {
                     // Optimistic local update
                     setAzienda({ ...azienda, descrizione_attivita: text });

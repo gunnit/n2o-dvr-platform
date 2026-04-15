@@ -48,6 +48,15 @@ def _build_context(azienda: Azienda) -> str:
     if azienda.zona_sismica:
         lines.append(f"Zona sismica: {azienda.zona_sismica}")
 
+    # US-2.1 AC1 — visura snippet. Only the redacted snippet from
+    # ``services.visura_extractor`` is persisted on the row; CF / email /
+    # telefono are stripped before storage so anything we forward to the AI
+    # is safe per the CLAUDE.md privacy contract.
+    visura_snippet = getattr(azienda, "visura_extracted_text", None)
+    if visura_snippet:
+        lines.append("Estratto visura camerale (PII redatta):")
+        lines.append(visura_snippet.strip())
+
     # Ambienti (if loaded) — names and types, no location specifics
     ambienti = getattr(azienda, "ambienti", None) or []
     if ambienti:

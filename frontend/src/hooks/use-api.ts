@@ -35,11 +35,21 @@ export function useApi() {
         tokenRef.current = token;
       }
 
-      const { headers, ...rest } = options;
+      const { headers, body, ...rest } = options;
+
+      // Multipart uploads must let the browser set Content-Type with the
+      // correct boundary. Forcing application/json (the JSON-RPC default
+      // for this hook) breaks FormData parsing on the FastAPI side.
+      const isFormData =
+        typeof FormData !== "undefined" && body instanceof FormData;
+      const baseHeaders: Record<string, string> = isFormData
+        ? {}
+        : { "Content-Type": "application/json" };
 
       const res = await fetch(`${API_URL}${path}`, {
+        body,
         headers: {
-          "Content-Type": "application/json",
+          ...baseHeaders,
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
           ...(headers as Record<string, string>),
         },
