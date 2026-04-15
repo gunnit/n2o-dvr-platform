@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
@@ -30,11 +30,17 @@ from app.schemas.pos import (
     PosResponse,
     PosUpdate,
 )
+from app.schemas.pos_phase import PosPhasesUpdate
 from app.services.dpi_rules import (
     DPI_CATALOG,
     PHASES_CONSTRUCTION,
     ROLES_CONSTRUCTION,
     build_default_matrix,
+)
+from app.services.pos_phases import (
+    PosPhaseError,
+    normalize_ordering,
+    validate_phases,
 )
 
 router = APIRouter(prefix="/aziende/{azienda_id}/pos", tags=["pos"])
@@ -199,6 +205,53 @@ async def update_dpi_matrix(
     flag_modified(pos, "dpi_matrix")
     flag_modified(pos, "dpi_matrix_roles")
     flag_modified(pos, "dpi_matrix_phases")
+
+    await db.commit()
+    await db.refresh(pos)
+    return pos
+
+
+# --- Phase-builder sub-resource (US-4.7) ---------------------------------
+
+
+@router.put("/{pos_id}/fasi", response_model=PosResponse)
+async def update_phases(
+    azienda_id: uuid.UUID,
+    pos_id: uuid.UUID,
+    body: PosPhasesUpdate,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+) -> Pos:
+    """Replace the POS phase list with a validated, ordered payload.
+
+    The frontend phase-builder (US-4.7) owns the full list — drag-drop
+    reorder, per-phase NIOSH/rumore/vibrazioni snapshots, and dependency
+    links. This endpoint is the single write surface for that state.
+
+    Structural rules live in ``services/pos_phases.py``:
+      * unique phase ids
+      * ``dipende_da`` references existing phases only
+      * no self-dependencies, no dependency cycles
+
+    On save we renumber ``ordine`` to ``0..n-1`` so the persisted JSONB
+    is dense and sorted. Soft inconsistencies (a dependency placed
+    *after* the phase that depends on it) are allowed — the generator
+    footnotes them — because blocking on soft violations would punish
+    iterative editing.
+    """
+    await _get_azienda(azienda_id, org_id, db)
+    pos = await _get_pos(pos_id, azienda_id, db)
+
+    try:
+        validate_phases(body.fasi)
+    except PosPhaseError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    normalized = normalize_ordering(body.fasi)
+    # Persist as plain dicts so the JSONB column stays provider-agnostic
+    # (same shape the generator reads back via ``f.get("...")``).
+    pos.fasi_lavorative = [p.model_dump(mode="json") for p in normalized]
+    flag_modified(pos, "fasi_lavorative")
 
     await db.commit()
     await db.refresh(pos)
