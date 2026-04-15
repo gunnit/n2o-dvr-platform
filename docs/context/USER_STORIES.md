@@ -15,18 +15,18 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 
 | Epic | Stories | Done | Partial | Not Started | Progress |
 |------|---------|------|---------|-------------|----------|
-| 1 — Digital Survey | 10 | 6 | 3 | 1 | 75% |
-| 2 — DVR Master | 9 | 3 | 6 | 0 | 67% |
-| 3 — DVR Attachments | 15 | 13 | 2 | 0 | 93% |
-| 4 — Complementary Docs | 8 | 3 | 4 | 1 | 63% |
-| 5 — Cross-cutting | 4 | 0 | 4 | 0 | 50% |
-| **TOTAL** | **46** | **25** | **19** | **2** | **75%** |
+| 1 — Digital Survey | 10 | 7 | 3 | 0 | 85% |
+| 2 — DVR Master | 9 | 4 | 5 | 0 | 72% |
+| 3 — DVR Attachments | 15 | 15 | 0 | 0 | 100% |
+| 4 — Complementary Docs | 8 | 4 | 4 | 0 | 75% |
+| 5 — Cross-cutting | 4 | 1 | 3 | 0 | 63% |
+| **TOTAL** | **46** | **31** | **15** | **0** | **84%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
 > **2026-04-15 reconciliation**: Done in three passes. Pass 1 realigned against the Sprint Closure section dated 2026-04-14 (SDS trilogy, Epic 4 generators, US-5.4 backups). Pass 2 audited the code against acceptance criteria for stories touched by post-closure commits (`0779050` MMC, `c8a4670` Stress, `01077fb` Incendio, `05173f2` VDT+Microclima, `8f6c61c` AI integration, `e2b6475` Wave 1). Net effect of Pass 2: US-3.1/3.2/3.3/3.4/3.6/3.12/3.13 → **DONE**; US-2.1/2.6/3.5/3.7/3.8/3.14 → **PARTIAL** with specific AC gaps documented per story below. Pass 3 folded in parallel-session commits from later the same day (`f0dd50c` + `84fca5f` + `bbc13e1` gestanti cross-reference, `b2d9de4` biologico sector checklist, `c5c7e5e` + `4252c5c` + `dfa202b` MMC polish): US-3.9/3.10/3.15 → **DONE**; and this-session new work US-4.2/4.5/4.6 → **DONE**, US-2.2/5.3 → **PARTIAL**. Pass 4 (evening, commits `0717a04` + `73679a4`) added the PHS critical-exposure banner and wired the shared AI badge/filter into the SDS review panel: **US-3.14 → DONE** (AC3 banner), and US-5.3 advanced but stays PARTIAL until the badge is also applied to document review surfaces.
 >
-> **True greenfield remaining** (stories still NOT STARTED): US-1.3 photo uploads, US-4.8 POS role×phase DPI matrix. (US-4.5 → DONE 2026-04-15 — DUVRI CRUD + committente sync banner. US-4.6 → DONE 2026-04-15 — 15-rule interference engine with Accetta/Rifiuta sheet. US-5.3 → PARTIAL 2026-04-15 — AI badge + filter wired across Azienda description, measures panel, **and SDS review**. US-4.2 → DONE 2026-04-15 — A-E procedures with per-client overrides. US-2.2 → PARTIAL 2026-04-15 — seismic zone auto-fill from 154-comune lookup; regional regulations half still open. US-3.14 → DONE 2026-04-15 — PHS Dlim < 30 min red banner. US-3.5 → DONE 2026-04-15 — surveillance cadence helper + alerts endpoint + dashboard widgets.)
+> **True greenfield remaining** (stories still NOT STARTED): none — US-1.3 and US-4.8 closed 2026-04-15 via parallel-agent build (see below). (US-4.5 → DONE 2026-04-15 — DUVRI CRUD + committente sync banner. US-4.6 → DONE 2026-04-15 — 15-rule interference engine with Accetta/Rifiuta sheet. US-5.3 → PARTIAL 2026-04-15 — AI badge + filter wired across Azienda description, measures panel, **and SDS review**. US-4.2 → DONE 2026-04-15 — A-E procedures with per-client overrides. US-2.2 → PARTIAL 2026-04-15 — seismic zone auto-fill from 154-comune lookup; regional regulations half still open. US-3.14 → DONE 2026-04-15 — PHS Dlim < 30 min red banner. US-3.5 → DONE 2026-04-15 — surveillance cadence helper + alerts endpoint + dashboard widgets.)
 
 Tier A (2026-04-14): US-1.5 (contextual risk filtering + summary bar), US-2.3 (default scoring matrix + Reset button), US-2.8 (Part II + logo embed + versioned filename), US-2.9 (version history Sheet) — all four stories advanced within their PARTIAL status toward DONE.
 
@@ -76,11 +76,11 @@ As a field operator, I want dynamic equipment checklists that change based on en
 - **Given** I switch the environment type from "Ufficio" to "Magazzino", **When** the change is confirmed, **Then** the checklist refreshes to show warehouse items (scaffalatura, transpallet, muletto, casco) and previously checked office items are preserved on the original environment
 - **Given** I am working on an environment whose type is not in the predefined list, **When** the checklist loads, **Then** I see a generic checklist with an "Aggiungi attrezzatura" button to enter custom items
 
-#### US-1.3 `NOT STARTED`
+#### US-1.3 `DONE`
 As a field operator, I want to upload photos of each work environment and equipment so they can be referenced during document generation.
 
-> **Built**: Nothing.
-> **Missing**: No photo upload UI. No camera integration. No file size/format validation. No offline retry. No thumbnail preview.
+> **Built**: `AmbienteFoto` model + migration `b8c9d0e1f2a3`, `POST/GET/DELETE /aziende/{azienda_id}/ambienti/{ambiente_id}/foto` endpoints with JPG/PNG/HEIC + 10 MB + 10-photo-per-ambiente enforcement (400 with Italian message on rejection). Frontend `AmbienteFotoGrid` subcomponent in `step-ambienti.tsx`: hidden `<input type=file accept=image/jpeg,image/png,image/heic multiple capture=environment>`, thumbnail grid with filename + formatted size + delete X, inline `sonner` toast `"Formato non supportato o file troppo grande (max 10 MB)"`, persistent `"Caricamento in corso"` banner while uploads pending, `window.addEventListener("online", retry)` auto-retry queue.
+> **Missing**: Nothing — all 4 acceptance criteria met.
 
 **Acceptance Criteria:**
 
@@ -276,11 +276,11 @@ As an office operator, I want the final DVR output as a professionally formatted
 - **Given** the generation finishes successfully, **When** the file is ready, **Then** I receive a desktop notification and the file is downloadable from the document drawer with a versioned filename `DVR_<ragione_sociale>_<YYYYMMDD>_v<N>.docx`
 - **Given** the generation fails halfway, **When** the error is captured, **Then** the partial file is discarded, the document status is rolled back to "Bozza", and the error is logged with a user-friendly message
 
-#### US-2.9 `PARTIAL`
+#### US-2.9 `DONE`
 As an office operator, I want version tracking for document revisions so I can audit changes over time.
 
-> **Built**: Backend tracks version number per document type per azienda. Documents page shows version and date per generated document. **Version History Sheet (slide-in drawer)** reachable via "Cronologia (vN)" button in each document card footer. Timeline view with current-version accent, per-entry date (it-IT locale), status badge, per-version "Scarica" button, and simple diff summary ("+{gap} da v{N-1}" with time-gap auto-scaling minuti/ore/giorni + optional status-transition note). New component `components/documents/version-history.tsx` (Sheet primitive).
-> **Missing**: No side-by-side "Differenze" diff viewer (current summary is time-gap + status only, not content-level). No "Ripristina versione" restore flow creating a new version from an historical snapshot. No user attribution in the timeline (would need backend to expose created_by).
+> **Built**: Backend tracks version number per document type per azienda. Documents page shows version and date per generated document. **Version History Sheet (slide-in drawer)** reachable via "Cronologia (vN)" button in each document card footer. Timeline view with current-version accent, per-entry date (it-IT locale), status badge, per-version "Scarica" button, simple time-gap summary, **plus content-level side-by-side diff** ("Confronta con precedente" → Dialog with old vs new column, green=added / red=removed via inline LCS algo, no external diff dep), **"Ripristina" button** that hits `POST .../documents/{id}/restore` to copy the snapshot into a new versioned file (400 on bozza), and **user attribution** via `generated_by_name` resolved server-side with an outer-join on `users.full_name` in `DocumentResponse`. New endpoints `GET .../snapshot` (parses .docx via python-docx → `{paragraphs, tables, versione, generated_at, generated_by_name}`) and `POST .../restore`.
+> **Missing**: Nothing — all 3 acceptance criteria met.
 
 **Acceptance Criteria:**
 
@@ -367,11 +367,11 @@ As an operator, I want a digital checklist with ~50 INAIL indicators (SI/NO) acr
 - **Given** I am partway through and close the page, **When** I reopen it, **Then** my previous answers are restored from the saved draft
 - **Given** I attempt to finalize with unanswered indicators, **When** I click "Conferma valutazione", **Then** the unanswered items are highlighted and the action is blocked
 
-#### US-3.7 `PARTIAL`
+#### US-3.7 `DONE`
 As an operator, I want real-time score calculation and automatic risk level (Low/Medium/High) so I see the impact of each answer.
 
-> **Built**: Scoring logic at `frontend/src/components/assessments/stress-checklist.tsx:175-278` updates area score + band on toggle. Hover tooltip at line 512-527 shows per-area subtotals and overall formula.
-> **Missing**: Band-transition animation uses `transition-all duration-500` (500ms) vs. AC2's 200ms target — minor SLA breach.
+> **Built**: Scoring logic at `frontend/src/components/assessments/stress-checklist.tsx:175-278` updates area score + band on toggle. Hover tooltip at line 512-527 shows per-area subtotals and overall formula. Band-fill bar animation uses `transition-all duration-200` (line 485) matching AC2.
+> **Missing**: Nothing — all 3 acceptance criteria met.
 
 **Acceptance Criteria:**
 
@@ -379,11 +379,11 @@ As an operator, I want real-time score calculation and automatic risk level (Low
 - **Given** the overall score crosses a threshold band (e.g., from "Basso" to "Medio"), **When** the recalculation completes, **Then** the band header animates the color change and a tooltip shows the threshold rule
 - **Given** I hover the score widget, **When** the tooltip appears, **Then** it shows the per-area sub-totals and the overall formula
 
-#### US-3.8 `PARTIAL`
+#### US-3.8 `DONE`
 As an operator, I want auto-generated corrective measures based on risk level so I don't write them from scratch.
 
-> **Built**: Default measures scaffolded per risk band in `frontend/src/app/(dashboard)/assessments/stress/[aziendaId]/page.tsx:18-47`. Backend returns measures at `backend/app/api/v1/calculations.py:116-127`. Misura interface (line 59-62) supports edit/remove UI.
-> **Missing**: "Personalizzato" tag not applied to edited measures. Custom-entry persistence via "Aggiungi misura" not wired through to per-client library.
+> **Built**: Default measures scaffolded per risk band in `frontend/src/app/(dashboard)/assessments/stress/[aziendaId]/page.tsx:18-47`. Backend returns measures at `backend/app/api/v1/calculations.py:116-127`. Misura interface supports edit/remove UI. **Per-client measures library**: new `stress_misure_libreria` table (migration `d0e1f2a3b4c5`) keyed by `azienda_id + livello_rischio`. New router `/aziende/{azienda_id}/stress/misure` with full CRUD. Frontend fetches saved measures per band on load + band-change, renders `<Badge>Personalizzato</Badge>` next to library-sourced rows. Editing a default row and saving posts to the library with `personalizzato=true`. "Aggiungi misura" creates empty editable row → POST persists.
+> **Missing**: Nothing — all 3 acceptance criteria met.
 
 **Acceptance Criteria:**
 
@@ -571,11 +571,11 @@ As an operator, I want to define construction phases with specific risks, NIOSH 
 - **Given** I want phases in a specific order, **When** I drag and drop them, **Then** the order is persisted and reflected in the generated .docx
 - **Given** a phase depends on another phase being complete, **When** I link them, **Then** the dependency is shown both in the UI and in the printed Gantt-like overview
 
-#### US-4.8 `NOT STARTED`
+#### US-4.8 `DONE`
 As an operator, I want a detailed job description matrix with DPI per role per phase.
 
-> **Built**: Nothing.
-> **Missing**: No role x phase DPI matrix. No rules engine for DPI suggestions. No inline override. No formatted .docx table export.
+> **Built**: DPI rules engine at `backend/app/services/dpi_rules.py` (10 construction roles, 8 phases, 10-item DPI catalog with EN-standard labels). Extended `Pos` model with `dpi_matrix`, `dpi_matrix_roles`, `dpi_matrix_phases` JSONB columns (migration `c9d0e1f2a3b4`). New `/aziende/{azienda_id}/pos` CRUD router + `POST /{pos_id}/dpi-matrix` (matrix=null → `build_default_matrix`, non-null → override persists per-client) + `GET /meta/dpi-catalog`. POS docx generator emits `"Matrice DPI per ruolo e fase"` level-3 section with formatted table: rows=roles, cols=phases, cells render Italian DPI labels via `DPI_CATALOG` lookup; vertical cell merge for adjacent identical-DPI rows; `"(personalizzato)"` marker on overridden cells. Frontend at `/assessments/pos/[aziendaId]` with three-card UI (Ruoli / Fasi / Matrice DPI), inline cell editor (expanding checkbox panel), "Rigenera dai default" dialog.
+> **Missing**: Nothing — all 3 acceptance criteria met.
 
 **Acceptance Criteria:**
 
@@ -587,11 +587,11 @@ As an operator, I want a detailed job description matrix with DPI per role per p
 
 ## Epic 5: Cross-cutting
 
-#### US-5.1 `PARTIAL`
+#### US-5.1 `DONE`
 As an admin, I want to manage multiple client companies and their document packages from a single dashboard.
 
-> **Built**: Dashboard with live KPI cards computed from API data (Clienti attivi, Sopralluoghi in corso, Sopralluoghi completati, Bozze) with colored icons. "Aziende Clienti" table with columns: Ragione Sociale (linked), Attivita, Citta, Stato (color-coded badge), Ultimo Aggiornamento (DD/MM/YYYY). Real-time search (min 2 chars, filters by ragione_sociale/attivita). Default sort by updated_at desc. Loading states.
-> **Missing**: No "scadenza DVR" tracking. No role-based action hiding (admin vs. non-admin). No sortable columns. API returns data but no 403 enforcement for non-admin actions.
+> **Built**: Dashboard with **5 live KPI cards** (Clienti attivi, Sopralluoghi in corso, Sopralluoghi completati, Bozze, **Scadenze imminenti** — counting aziende with `data_scadenza_dvr` within 30 days). "Aziende Clienti" table with columns: Ragione Sociale (linked), Attivita, Citta, Stato (color-coded badge), Ultimo Aggiornamento (DD/MM/YYYY), **Scadenza DVR** (red chip ≤ 7 days / amber ≤ 30 / grey otherwise). **Sortable columns** via clickable headers with ↑/↓ indicator. **Extended search** matches `ragione_sociale`, `partita_iva`, `sede_legale_citta`, `sede_operativa_citta` both client-side and at API (`?search=`). **Role-based 403**: `POST /aziende` and `DELETE /aziende/{id}` return 403 for non-admins (`"Solo gli amministratori possono creare/eliminare clienti"`); `/aziende/new` page redirects non-admins with a sonner toast; "Aggiungi cliente" / "Nuova Azienda" buttons hidden when `session.user.role !== "admin"`. New `GET /aziende/dashboard/kpis` endpoint. Migration `e1f2a3b4c5d6` adds nullable `aziende.data_scadenza_dvr Date`.
+> **Missing**: Nothing — all 3 acceptance criteria met.
 
 **Acceptance Criteria:**
 
