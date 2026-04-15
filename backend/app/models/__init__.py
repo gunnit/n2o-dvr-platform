@@ -26,6 +26,7 @@ from app.models.pos import Pos
 
 # Cross-cutting
 from app.models.audit_log import AuditLog
+from app.models.ai_feedback import AiFeedback
 
 __all__ = [
     "Organization",
@@ -51,4 +52,5 @@ __all__ = [
     "Duvri",
     "Pos",
     "AuditLog",
+    "AiFeedback",
 ]

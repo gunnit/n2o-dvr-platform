@@ -19,14 +19,14 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 | 2 — DVR Master | 9 | 3 | 5 | 1 | 61% |
 | 3 — DVR Attachments | 15 | 7 | 8 | 0 | 73% |
 | 4 — Complementary Docs | 8 | 0 | 5 | 3 | 31% |
-| 5 — Cross-cutting | 4 | 0 | 3 | 1 | 38% |
-| **TOTAL** | **46** | **16** | **24** | **6** | **61%** |
+| 5 — Cross-cutting | 4 | 0 | 4 | 0 | 50% |
+| **TOTAL** | **46** | **16** | **25** | **5** | **62%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
 > **2026-04-15 reconciliation**: Done in two passes. Pass 1 realigned against the Sprint Closure section dated 2026-04-14 (SDS trilogy, Epic 4 generators, US-5.4 backups). Pass 2 audited the code against acceptance criteria for stories touched by post-closure commits (`0779050` MMC, `c8a4670` Stress, `01077fb` Incendio, `05173f2` VDT+Microclima, `8f6c61c` AI integration, `e2b6475` Wave 1). Net effect of Pass 2: US-3.1/3.2/3.3/3.4/3.6/3.12/3.13 → **DONE**; US-2.1/2.6/3.5/3.7/3.8/3.14 → **PARTIAL** with specific AC gaps documented per story below.
 >
-> **True greenfield remaining** (stories still NOT STARTED): US-1.3 photo uploads, US-2.2 comune seismic lookup, US-4.2 emergency procedures A-E, US-4.6 interference rules engine, US-4.8 POS role×phase DPI matrix, US-5.3 global AI badge/filter system.
+> **True greenfield remaining** (stories still NOT STARTED): US-1.3 photo uploads, US-2.2 comune seismic lookup, US-4.2 emergency procedures A-E, US-4.6 interference rules engine, US-4.8 POS role×phase DPI matrix. (US-5.3 moved to PARTIAL on 2026-04-15 — shared AI badge + filter wired; still needs SDS extraction panel adoption.)
 
 Tier A (2026-04-14): US-1.5 (contextual risk filtering + summary bar), US-2.3 (default scoring matrix + Reset button), US-2.8 (Part II + logo embed + versioned filename), US-2.9 (version history Sheet) — all four stories advanced within their PARTIAL status toward DONE.
 
@@ -181,8 +181,8 @@ As an operator, I want to review and correct AI-extracted chemical data in a tab
 #### US-2.1 `PARTIAL`
 As an office operator, I want the system to auto-generate the company description from survey data + visura + website using AI so I don't have to write boilerplate.
 
-> **Built**: `backend/app/services/ai/company_description.py:70-88` generates 200-400 word Italian description. API wired at `backend/app/api/v1/aziende.py:101-125`. Edit tracking fields on model support "Modificato dall'utente" badge flow.
-> **Missing**: No failure/timeout → "Generazione fallita" UX with Retry button (AC3). No visura PDF upload path. No version history of AI vs. edited drafts.
+> **Built**: `backend/app/services/ai/company_description.py:70-88` generates 200-400 word Italian description. API wired at `backend/app/api/v1/aziende.py:101-125`. Edit tracking fields support "Modificato dall'utente" badge flow. Generation failures surface with an inline "Riprova" button (AC3) via the shared AI badge + error card in `frontend/src/components/ai/description-editor.tsx`.
+> **Missing**: No visura PDF upload path. No version history of AI vs. edited drafts (would need a `description_revisions` table).
 
 **Acceptance Criteria:**
 
@@ -241,8 +241,8 @@ As an office operator, I want employee tables with roles and environment assignm
 #### US-2.6 `PARTIAL`
 As an office operator, I want AI-suggested improvement measures based on identified risks that I can accept, modify, or reject.
 
-> **Built**: `backend/app/services/ai/improvement_measures.py:122-140` returns 2-5 structured suggestions per risk row. Persistence endpoint exposed at `backend/app/api/v1/rischi.py:97-127`.
-> **Missing**: No "AI - accettato" / "Manuale" tagging on saved measures. No per-client reusable library. No thumbs-down feedback signal on Rifiuta. No "Aggiungi misura personalizzata" empty-row UX. Frontend Accetta/Modifica/Rifiuta wiring not fully closed.
+> **Built**: `backend/app/services/ai/improvement_measures.py:122-140` returns 2-5 structured suggestions per risk row. Persistence endpoint at `backend/app/api/v1/rischi.py:97-127`. Frontend at `frontend/src/components/ai/measures-panel.tsx` wires Accetta/Modifica/Rifiuta + "Aggiungi misura personalizzata". Provenance tagging via shared `AIBadge` ("AI - accettato" / "AI - modificato" / "Manuale"). Rifiuta fires a thumbs-down signal to `POST /api/v1/ai-feedback` (AC3) using the new `AiFeedback` model.
+> **Missing**: No per-client reusable measures library (accepted measures don't populate a reusable store keyed by azienda_id + categoria). Thumbs-down signals are captured but not yet surfaced in any admin/model-tuning view.
 
 **Acceptance Criteria:**
 
@@ -618,11 +618,11 @@ As any user, I want all documents generated from the same shared data (enter onc
 - **Given** survey data is changed while a generation job is in flight, **When** the job completes, **Then** I receive a warning that the snapshot may be stale and I can choose to regenerate
 - **Given** I want to know which documents currently consume a specific data field, **When** I open the field's tooltip, **Then** a list of dependent documents is shown
 
-#### US-5.3 `NOT STARTED`
+#### US-5.3 `PARTIAL`
 As an operator, I want AI-generated content clearly marked so I know what to review carefully.
 
-> **Built**: Nothing. Backend sostanza_chimica has `human_reviewed` flag but no broader AI marking system.
-> **Missing**: No AI badge system. No background tint. No tooltip with timestamp. No "Mostra solo contenuto AI" filter.
+> **Built**: Shared `<AIBadge>` component (`frontend/src/components/ai/ai-badge.tsx`) with variants `ai` / `edited` / `manual`, native-title tooltip carrying the "Generato da AI - revisiona prima della pubblicazione" prompt + optional `toLocaleString("it-IT")` timestamp (AC1 + AC2). Global `<AIFilterProvider>` wired into dashboard layout via `providers.tsx`; `<AIFilterToggle>` button in the header flips a page-level "Mostra solo contenuto AI" state that the `<AIContent>` wrapper uses to dim non-AI blocks and accent AI blocks with a violet ring (AC3). Description editor + measures panel refactored to consume the shared primitives.
+> **Missing**: Badge system not yet applied to SDS extraction review panel (`step-sostanze.tsx`) or document review surfaces — only Azienda description + improvement measures consume it so far. Thumbs-down signals logged but no admin view.
 
 **Acceptance Criteria:**
 

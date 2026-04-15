@@ -30,5 +30,7 @@ class BiologicoValutazione(Base):
     protocollo_sanitario: Mapped[str | None] = mapped_column(Text)
     formazione_specifica: Mapped[str | None] = mapped_column(Text)
     livello_rischio: Mapped[str | None] = mapped_column(String)  # BASSO / MEDIO / ALTO
+    # Sector checklist responses: list of {id: str, risposta: "SI"|"NO"|"NA"}.
+    risposte_checklist: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

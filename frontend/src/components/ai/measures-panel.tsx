@@ -8,11 +8,14 @@ import {
   Pencil,
   Plus,
   Sparkles,
+  ThumbsDown,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useApi } from "@/hooks/use-api";
+import { AIBadge } from "./ai-badge";
+import { AIContent } from "./ai-filter-context";
 
 /**
  * AI improvement measures panel (US-2.6).
@@ -95,6 +98,7 @@ export function MeasuresPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
 
   const fetchSuggestions = async () => {
     setError(null);
@@ -106,6 +110,7 @@ export function MeasuresPanel({
       );
       setSuggestions(res.misure);
       setRejected(new Set());
+      setGeneratedAt(new Date().toISOString());
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Errore nella generazione"
@@ -127,6 +132,22 @@ export function MeasuresPanel({
 
   const rejectSuggestion = (idx: number) => {
     setRejected((r) => new Set(r).add(idx));
+    // Fire-and-forget thumbs-down signal (US-2.6 AC3).
+    // Don't await — the user rejection should feel instant; feedback is advisory.
+    const suggestion = suggestions[idx];
+    if (!suggestion) return;
+    apiFetch("/api/v1/ai-feedback", {
+      method: "POST",
+      body: JSON.stringify({
+        entity_type: "misura_suggerita",
+        entity_id: `${rischioId}:${idx}`,
+        signal: "thumbs_down",
+        azienda_id: aziendaId,
+        context: { rischioId, suggestion },
+      }),
+    }).catch(() => {
+      // Feedback failures are non-blocking — users already moved on.
+    });
   };
 
   const saveEdit = (idx: number, edits: Partial<MisuraSuggerita>) => {
@@ -251,8 +272,9 @@ export function MeasuresPanel({
                     variant="ghost"
                     size="sm"
                     onClick={() => rejectSuggestion(idx)}
+                    title="Rifiuta questa proposta e invia un segnale 'non utile' all'AI"
                   >
-                    <X className="mr-1 h-3.5 w-3.5" />
+                    <ThumbsDown className="mr-1 h-3.5 w-3.5" />
                     Rifiuta
                   </Button>
                 </div>
@@ -270,9 +292,11 @@ export function MeasuresPanel({
           </p>
           {accepted.map((m, idx) => {
             const isEditing = editingIdx === idx;
+            const isAI = m.provenance === "ai-accepted" || m.provenance === "ai-modified";
             return (
-              <div
+              <AIContent
                 key={m.id}
+                isAI={isAI}
                 className="rounded-md border border-input bg-background p-3"
               >
                 {isEditing ? (
@@ -294,25 +318,23 @@ export function MeasuresPanel({
                         {m.priorita}
                       </Badge>
                       {m.provenance === "ai-accepted" && (
-                        <Badge
-                          variant="secondary"
-                          className="bg-violet-100 text-violet-800 text-xs"
-                        >
-                          AI - accettato
-                        </Badge>
+                        <AIBadge
+                          provenance="ai"
+                          label="AI - accettato"
+                          timestamp={generatedAt}
+                          size="xs"
+                        />
                       )}
                       {m.provenance === "ai-modified" && (
-                        <Badge
-                          variant="secondary"
-                          className="bg-sky-100 text-sky-800 text-xs"
-                        >
-                          AI - modificato
-                        </Badge>
+                        <AIBadge
+                          provenance="edited"
+                          label="AI - modificato"
+                          timestamp={generatedAt}
+                          size="xs"
+                        />
                       )}
                       {m.provenance === "manual" && (
-                        <Badge variant="outline" className="text-xs">
-                          Manuale
-                        </Badge>
+                        <AIBadge provenance="manual" size="xs" />
                       )}
                     </div>
                     <p className="mb-2 text-sm text-muted-foreground">
@@ -338,7 +360,7 @@ export function MeasuresPanel({
                     </div>
                   </>
                 )}
-              </div>
+              </AIContent>
             );
           })}
         </div>
