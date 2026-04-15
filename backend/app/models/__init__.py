@@ -19,6 +19,7 @@ from app.models.microclima_valutazione import MicroclimaValutazione
 from app.models.gestanti_valutazione import GestantiValutazione
 from app.models.biologico_valutazione import BiologicoValutazione
 from app.models.stress_misura_libreria import StressMisuraLibreria
+from app.models.rischio_misura_libreria import RischioMisuraLibreria
 
 # Complementary document models
 from app.models.haccp_form import HaccpConfig, HaccpFormState
@@ -50,6 +51,7 @@ __all__ = [
     "GestantiValutazione",
     "BiologicoValutazione",
     "StressMisuraLibreria",
+    "RischioMisuraLibreria",
     "HaccpConfig",
     "HaccpFormState",
     "PeePlan",

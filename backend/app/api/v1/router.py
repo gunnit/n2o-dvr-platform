@@ -15,6 +15,7 @@ from app.api.v1.pee_procedures import router as pee_procedures_router
 from app.api.v1.persone import router as persone_router
 from app.api.v1.pos import router as pos_router
 from app.api.v1.rischi import router as rischi_router
+from app.api.v1.rischi_misure import router as rischi_misure_router
 from app.api.v1.sorveglianza import router as sorveglianza_router
 from app.api.v1.sostanze_chimiche import router as sostanze_chimiche_router
 from app.api.v1.stress_misure import router as stress_misure_router
@@ -28,6 +29,7 @@ api_router.include_router(ambienti_router)
 api_router.include_router(attrezzature_router)
 api_router.include_router(sostanze_chimiche_router)
 api_router.include_router(rischi_router)
+api_router.include_router(rischi_misure_router)
 api_router.include_router(survey_router)
 api_router.include_router(documents_router)
 api_router.include_router(documents_download_router)

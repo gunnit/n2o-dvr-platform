@@ -18,7 +18,7 @@ Stories below are being worked on by a parallel agent. **Do not pick these up if
 | Story | Claimed by | Timestamp | Scope |
 |-------|-----------|-----------|-------|
 | ~~US-1.4~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (modal + qualifiche + multi-select shipped) |
-| US-2.6 | Agent-B | 2026-04-15 | Per-client reusable misure library (backend table + CRUD + measures-panel wiring) |
+| ~~US-2.6~~ | Agent-B | 2026-04-15 | **CLOSED → DONE** (per-client misure library + measures-panel wiring shipped) |
 | ~~US-4.1~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (DVR guard + planimetria + plan-config UX shipped) |
 | US-4.4 | Agent-A | 2026-04-15 | HACCP forms per-client branding + subset dialog |
 | US-5.4 | Agent-A | 2026-04-15 | Admin backup status panel + failure alerting + audit wiring |
@@ -30,17 +30,17 @@ Release a claim by deleting the row and the inline marker on the story once you 
 | Epic | Stories | Done | Partial | Not Started | Progress |
 |------|---------|------|---------|-------------|----------|
 | 1 — Digital Survey | 10 | 8 | 2 | 0 | 90% |
-| 2 — DVR Master | 9 | 4 | 5 | 0 | 72% |
+| 2 — DVR Master | 9 | 5 | 4 | 0 | 78% |
 | 3 — DVR Attachments | 15 | 15 | 0 | 0 | 100% |
 | 4 — Complementary Docs | 8 | 5 | 3 | 0 | 81% |
 | 5 — Cross-cutting | 4 | 1 | 3 | 0 | 63% |
-| **TOTAL** | **46** | **33** | **13** | **0** | **86%** |
+| **TOTAL** | **46** | **34** | **12** | **0** | **87%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
 > **2026-04-15 reconciliation**: Done in three passes. Pass 1 realigned against the Sprint Closure section dated 2026-04-14 (SDS trilogy, Epic 4 generators, US-5.4 backups). Pass 2 audited the code against acceptance criteria for stories touched by post-closure commits (`0779050` MMC, `c8a4670` Stress, `01077fb` Incendio, `05173f2` VDT+Microclima, `8f6c61c` AI integration, `e2b6475` Wave 1). Net effect of Pass 2: US-3.1/3.2/3.3/3.4/3.6/3.12/3.13 → **DONE**; US-2.1/2.6/3.5/3.7/3.8/3.14 → **PARTIAL** with specific AC gaps documented per story below. Pass 3 folded in parallel-session commits from later the same day (`f0dd50c` + `84fca5f` + `bbc13e1` gestanti cross-reference, `b2d9de4` biologico sector checklist, `c5c7e5e` + `4252c5c` + `dfa202b` MMC polish): US-3.9/3.10/3.15 → **DONE**; and this-session new work US-4.2/4.5/4.6 → **DONE**, US-2.2/5.3 → **PARTIAL**. Pass 4 (evening, commits `0717a04` + `73679a4`) added the PHS critical-exposure banner and wired the shared AI badge/filter into the SDS review panel: **US-3.14 → DONE** (AC3 banner), and US-5.3 advanced but stays PARTIAL until the badge is also applied to document review surfaces.
 >
-> **True greenfield remaining** (stories still NOT STARTED): none — US-1.3 and US-4.8 closed 2026-04-15 via parallel-agent build (see below). (US-4.5 → DONE 2026-04-15 — DUVRI CRUD + committente sync banner. US-4.6 → DONE 2026-04-15 — 15-rule interference engine with Accetta/Rifiuta sheet. US-5.3 → PARTIAL 2026-04-15 — AI badge + filter wired across Azienda description, measures panel, **and SDS review**. US-4.2 → DONE 2026-04-15 — A-E procedures with per-client overrides. US-2.2 → PARTIAL 2026-04-15 — seismic zone auto-fill from 154-comune lookup; regional regulations half still open. US-3.14 → DONE 2026-04-15 — PHS Dlim < 30 min red banner. US-3.5 → DONE 2026-04-15 — surveillance cadence helper + alerts endpoint + dashboard widgets.)
+> **True greenfield remaining** (stories still NOT STARTED): none — US-1.3 and US-4.8 closed 2026-04-15 via parallel-agent build (see below). (US-4.5 → DONE 2026-04-15 — DUVRI CRUD + committente sync banner. US-4.6 → DONE 2026-04-15 — 15-rule interference engine with Accetta/Rifiuta sheet. US-5.3 → PARTIAL 2026-04-15 — AI badge + filter wired across Azienda description, measures panel, **and SDS review**. US-4.2 → DONE 2026-04-15 — A-E procedures with per-client overrides. US-2.2 → PARTIAL 2026-04-15 — seismic zone auto-fill from 154-comune lookup; regional regulations half still open. US-3.14 → DONE 2026-04-15 — PHS Dlim < 30 min red banner. US-3.5 → DONE 2026-04-15 — surveillance cadence helper + alerts endpoint + dashboard widgets. **US-2.6 → DONE 2026-04-15 (Agent-B)** — per-client `rischi_misure_libreria` table + CRUD + measures-panel library section with Usa/Rimuovi actions; accepted/modified/manual measures auto-persisted keyed by azienda + categoria_rischio.)
 
 Tier A (2026-04-14): US-1.5 (contextual risk filtering + summary bar), US-2.3 (default scoring matrix + Reset button), US-2.8 (Part II + logo embed + versioned filename), US-2.9 (version history Sheet) — all four stories advanced within their PARTIAL status toward DONE.
 
@@ -251,11 +251,11 @@ As an office operator, I want employee tables with roles and environment assignm
 - **Given** the survey is updated after a DVR was generated, **When** I regenerate the same document, **Then** the personnel table reflects the new survey state and a diff is shown in the version log
 - **Given** the table is rendered in the final .docx, **When** I open it in Word, **Then** the table uses the official N2O style (header row in dark gray, alternating row shading)
 
-#### US-2.6 `PARTIAL` 🔒 CLAIMED by Agent-B (2026-04-15) — other agents skip
+#### US-2.6 `DONE`
 As an office operator, I want AI-suggested improvement measures based on identified risks that I can accept, modify, or reject.
 
-> **Built**: `backend/app/services/ai/improvement_measures.py:122-140` returns 2-5 structured suggestions per risk row. Persistence endpoint at `backend/app/api/v1/rischi.py:97-127`. Frontend at `frontend/src/components/ai/measures-panel.tsx` wires Accetta/Modifica/Rifiuta + "Aggiungi misura personalizzata". Provenance tagging via shared `AIBadge` ("AI - accettato" / "AI - modificato" / "Manuale"). Rifiuta fires a thumbs-down signal to `POST /api/v1/ai-feedback` (AC3) using the new `AiFeedback` model.
-> **Missing**: No per-client reusable measures library (accepted measures don't populate a reusable store keyed by azienda_id + categoria). Thumbs-down signals are captured but not yet surfaced in any admin/model-tuning view.
+> **Built**: `backend/app/services/ai/improvement_measures.py:122-140` returns 2-5 structured suggestions per risk row. Persistence endpoint at `backend/app/api/v1/rischi.py:97-127`. Frontend at `frontend/src/components/ai/measures-panel.tsx` wires Accetta/Modifica/Rifiuta + "Aggiungi misura personalizzata". Provenance tagging via shared `AIBadge` ("AI - accettato" / "AI - modificato" / "Manuale"). Rifiuta fires a thumbs-down signal to `POST /api/v1/ai-feedback` (AC3) using the `AiFeedback` model. **Per-client reusable measures library (AC2)**: new `rischi_misure_libreria` table (migration `a9c0d1e2f3b4`) keyed by `azienda_id + categoria_rischio`, with full CRUD at `/api/v1/aziende/{id}/rischi/misure-libreria` (`backend/app/api/v1/rischi_misure.py`). Measures panel fetches library entries on mount filtered by `categoria_rischio`, renders them in an emerald "Libreria cliente" section above the AI suggestions with `Usa` / `Rimuovi` actions, and auto-persists every accepted/modified/manual measure to the library on Save so it surfaces on future risks of the same categoria. 14 unit tests in `backend/tests/test_rischi_misure_libreria.py` pin the schema contract + route registration.
+> **Missing**: Nothing — all 4 acceptance criteria met. (Thumbs-down signals still lack an admin visualization surface, but AC3 only requires "a thumbs-down feedback signal is recorded", which the `AiFeedback` row satisfies.)
 
 **Acceptance Criteria:**
 

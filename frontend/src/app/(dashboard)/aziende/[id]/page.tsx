@@ -582,6 +582,7 @@ export default function AziendaDetailPage() {
                             <MeasuresPanel
                               aziendaId={azienda.id}
                               rischioId={r.id}
+                              categoriaRischio={r.categoria_rischio}
                               initialText={r.misure_prevenzione ?? ""}
                               onSave={async (text) => {
                                 await apiCall(
