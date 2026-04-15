@@ -220,3 +220,30 @@ class NioshCpResponse(BaseModel):
     sesso: _Literal["M", "F"]
     eta: int
     fascia: _Literal["giovane", "adulto", "anziano"]
+
+
+# ---------------------------------------------------------------------------
+# Biologico — sector checklist (D.Lgs. 81/2008 Titolo X, US-3.15)
+# ---------------------------------------------------------------------------
+
+
+class BiologicoChecklistItem(BaseModel):
+    id: str
+    descrizione: str
+    criticita: _Literal["alta", "media", "bassa"]
+
+
+class BiologicoChecklistResponse(BaseModel):
+    settore: _Literal["alimentare", "asilo", "dentisti"]
+    items: list[BiologicoChecklistItem]
+
+
+# ---------------------------------------------------------------------------
+# Fire measures — recommended prevention/protection actions per level
+# (D.M. 03/09/2021, D.Lgs. 81/2008 art. 46, US-3.12)
+# ---------------------------------------------------------------------------
+
+
+class FireMeasuresResponse(BaseModel):
+    livello: _Literal["Basso", "Medio", "Alto"]
+    misure: list[str]

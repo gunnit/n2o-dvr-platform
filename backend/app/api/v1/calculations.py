@@ -1,7 +1,10 @@
 from fastapi import APIRouter, HTTPException
 
+from app.data.fire_measures import get_measures_for_level
 from app.data.niosh_cp import get_default_cp
 from app.schemas.calculation import (
+    BiologicoChecklistResponse,
+    FireMeasuresResponse,
     FireRiskRequest,
     FireRiskResponse,
     NioshCpResponse,
@@ -19,6 +22,9 @@ from app.schemas.calculation import (
     VdtAssessmentRequest,
     VdtAssessmentResponse,
     VdtWorkerResult,
+)
+from app.services.document_generator.reference_data_biologico import (
+    get_checklist as get_biologico_checklist,
 )
 from app.services.microclima_calculator import calculate_phs, calculate_pmv_ppd
 from app.services.risk_calculator import calculate_fire_risk
@@ -302,3 +308,40 @@ async def niosh_cp(sesso: str, eta: int) -> NioshCpResponse:
     else:
         fascia = "anziano"
     return NioshCpResponse(cp=cp, sesso=sesso, eta=eta, fascia=fascia)  # type: ignore[arg-type]
+
+
+@router.get("/biologico-checklist", response_model=BiologicoChecklistResponse)
+async def biologico_checklist(settore: str) -> BiologicoChecklistResponse:
+    """Return the sector-specific biological-risk checklist (US-3.15).
+
+    The operator UI renders the items with SI/NO/NA toggles and computes a
+    live risk classification (BASSO/MEDIO/ALTO) locally. The same algorithm
+    lives in `reference_data_biologico.classify_biologico` for server-side
+    use when persisting a valutazione.
+
+    Sectors (D.Lgs. 81/2008 Titolo X, Reg. CE 852/2004 for alimentare):
+      - alimentare: HACCP / catena del freddo / formazione
+      - asilo:      vaccinazioni / DPI / gestione malattie infantili
+      - dentisti:   HBV / sterilizzazione / taglienti / post-esposizione
+    """
+    try:
+        items = get_biologico_checklist(settore)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return BiologicoChecklistResponse(settore=settore.lower(), items=items)  # type: ignore[arg-type]
+
+
+@router.get("/fire-measures", response_model=FireMeasuresResponse)
+async def fire_measures(livello: str) -> FireMeasuresResponse:
+    """Return recommended fire-prevention measures for the given level (US-3.12).
+
+    Accepted values: "Basso" | "Medio" | "Alto". For `Alto`, the list
+    includes a VV.F. involvement item so the UI can surface the VVF banner.
+
+    Source: D.M. 03/09/2021 (criteri antincendio) and D.Lgs. 81/2008 art. 46.
+    """
+    try:
+        misure = get_measures_for_level(livello)  # type: ignore[arg-type]
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return FireMeasuresResponse(livello=livello, misure=misure)  # type: ignore[arg-type]
