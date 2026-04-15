@@ -1,10 +1,15 @@
 """PEE - Piano Gestione Emergenze variante Comune/Edificio."""
 
+import logging
 import os
 
 from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Inches
 from sqlalchemy import func, select
 
+from app.models.ambiente import Ambiente
+from app.models.ambiente_foto import AmbienteFoto
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_pee
@@ -18,6 +23,31 @@ from app.services.document_generator.docx_utils import (
     replace_placeholders,
     slugify,
 )
+
+logger = logging.getLogger(__name__)
+
+
+async def _find_planimetria_path(db, azienda_id) -> str | None:
+    """Locate a planimetria photo among ambienti_foto (US-4.1 AC3).
+
+    Returns ``None`` in fixture/test mode where ``db`` is None so the test
+    runner can exercise the placeholder branch without a live session.
+    """
+    if db is None:
+        return None
+    stmt = (
+        select(AmbienteFoto)
+        .join(Ambiente, Ambiente.id == AmbienteFoto.ambiente_id)
+        .where(Ambiente.azienda_id == azienda_id)
+        .where(func.lower(AmbienteFoto.filename).like("%planimetria%"))
+        .order_by(AmbienteFoto.created_at.desc())
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    row = result.scalar_one_or_none()
+    if row is None or not row.file_path or not os.path.exists(row.file_path):
+        return None
+    return row.file_path
 
 TEMPLATE = TEMPLATES_DIR / "PIANO GESTIONE EMERGENZE - COMUNE.docx"
 TIPO_DOC = "pee_comune"
@@ -61,6 +91,34 @@ class PeeComuneGenerator(BaseDocumentGenerator):
 
         add_heading(doc, "Procedure comuni multi-tenant", level=2)
         add_paragraph(doc, "In caso di attivazione dell'allarme generale dell'edificio, tutte le aziende interrompono le attivita, attivano il proprio coordinatore locale e procedono all'evacuazione verso il punto di raccolta condominiale.")
+
+        # Planimetria (US-4.1 AC3): embed the uploaded floor plan if one exists,
+        # otherwise a placeholder. Condominial buildings tend to share a single
+        # planimetry across occupants so we look on the same azienda photo set.
+        add_heading(doc, "Planimetria di emergenza edificio", level=2)
+        planimetria_path = await _find_planimetria_path(self.db, self.azienda_id)
+        if planimetria_path:
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = p.add_run()
+            try:
+                run.add_picture(planimetria_path, width=Inches(6.0))
+            except Exception:
+                logger.exception(
+                    "Failed to embed planimetria for azienda %s", self.azienda_id
+                )
+                add_paragraph(
+                    doc,
+                    "Inserire planimetria (immagine allegata non leggibile).",
+                    italic=True,
+                )
+            add_paragraph(
+                doc,
+                "Planimetria generale dell'edificio con percorsi di esodo e punto di raccolta.",
+                italic=True,
+            )
+        else:
+            add_paragraph(doc, "Inserire planimetria", italic=True)
 
         add_heading(doc, "Manutenzione dei presidi comuni", level=2)
         add_paragraph(doc, "Gli impianti antincendio comuni (rivelazione, idranti, porte REI) sono manutenuti dall'amministratore condominiale con cadenza almeno semestrale e documentazione conservata a disposizione.")

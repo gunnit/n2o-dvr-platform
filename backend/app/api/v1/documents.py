@@ -55,6 +55,39 @@ router = APIRouter(prefix="/aziende/{azienda_id}/documents", tags=["documents"])
 download_router = APIRouter(prefix="/documenti", tags=["documents"])
 
 
+# US-4.1: document types that require the DVR Master to already exist before
+# they can be generated. The DVR carries the anagrafica + environments that
+# these dependent documents reuse, so generating them first would produce
+# incomplete output.
+_DVR_DEPENDENT_TYPES: set[str] = {"pee_azienda", "pee_comune"}
+
+
+async def _ensure_dvr_exists_for_dependent(
+    azienda_id: uuid.UUID, tipo_documento: str, db: AsyncSession
+) -> None:
+    """If tipo_documento depends on the DVR Master, raise 400 when none exists.
+
+    Matches US-4.1 AC2: "Given no DVR exists yet, When I attempt to generate the
+    PEE, Then the action is blocked with the message 'Genera prima il DVR Master'."
+    A DVR counts as "existing" when at least one DocumentoGenerato row exists
+    with tipo_documento == 'dvr_master' and a successful status
+    (completed / ready). Bozza / failed / pending rows do not unblock.
+    """
+    if tipo_documento not in _DVR_DEPENDENT_TYPES:
+        return
+    result = await db.execute(
+        select(DocumentoGenerato.id)
+        .where(
+            DocumentoGenerato.azienda_id == azienda_id,
+            DocumentoGenerato.tipo_documento == "dvr_master",
+            DocumentoGenerato.status.in_(("completed", "ready")),
+        )
+        .limit(1)
+    )
+    if result.scalar_one_or_none() is None:
+        raise BadRequestError("Genera prima il DVR Master")
+
+
 @download_router.get("/{document_id}/download")
 async def download_document(
     document_id: uuid.UUID,
@@ -106,6 +139,8 @@ async def generate_document(
     immediately. The actual generation will be handled by a Celery worker.
     """
     await _get_azienda(azienda_id, org_id, db)
+    # US-4.1 AC2: block dependent documents (PEE) until the DVR Master exists.
+    await _ensure_dvr_exists_for_dependent(azienda_id, body.tipo_documento, db)
 
     # Determine the next version number for this document type
     result = await db.execute(

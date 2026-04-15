@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { VersionHistory } from "@/components/documents/version-history";
 import type { Azienda, DocumentoGenerato } from "@/types";
 import { apiCall, downloadFile } from "@/lib/api-client";
+import { cn } from "@/lib/utils";
 
 const documentTypes = [
   { key: "dvr_master", name: "DVR Master", pages: "~187", complexity: "Alta" },
@@ -134,8 +135,24 @@ export default function DocumentsPage() {
       .sort((a, b) => b.versione - a.versione)[0];
   }
 
+  // US-4.1 AC2: PEE cards are blocked until the DVR Master has a successful
+  // generation. We derive the flag from the latest DVR row's status.
+  const DVR_DEPENDENT_TYPES = new Set(["pee_azienda", "pee_comune"]);
+  const latestDvr = getDocStatus("dvr_master");
+  const dvrReady =
+    latestDvr?.status === "completed" || latestDvr?.status === "ready";
+
+  const [generateError, setGenerateError] = useState<string | null>(null);
+
   async function handleGenerate(typeKey: string) {
     if (!selectedAziendaId) return;
+    // Short-circuit on DVR-dependent types so we surface the Italian message
+    // immediately without a round-trip. Backend guard is still authoritative.
+    if (DVR_DEPENDENT_TYPES.has(typeKey) && !dvrReady) {
+      setGenerateError("Genera prima il DVR Master");
+      return;
+    }
+    setGenerateError(null);
     setGeneratingTypes((prev) => new Set(prev).add(typeKey));
     try {
       await apiCall(`/api/v1/aziende/${selectedAziendaId}/documents/generate`, {
@@ -143,8 +160,12 @@ export default function DocumentsPage() {
         body: JSON.stringify({ tipo_documento: typeKey }),
       });
       await fetchDocumenti();
-    } catch {
-      // silently handle
+    } catch (err) {
+      // Surface the backend Italian error (e.g. "Genera prima il DVR Master")
+      // so the operator knows what to do next.
+      setGenerateError(
+        err instanceof Error ? err.message : "Generazione non riuscita",
+      );
     } finally {
       setGeneratingTypes((prev) => {
         const next = new Set(prev);
@@ -245,6 +266,18 @@ export default function DocumentsPage() {
               Documenti per <span className="font-medium text-foreground">{selectedAzienda.ragione_sociale}</span>
             </p>
           )}
+          {generateError && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              {generateError}
+              <button
+                type="button"
+                onClick={() => setGenerateError(null)}
+                className="ml-2 underline"
+              >
+                Chiudi
+              </button>
+            </div>
+          )}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {documentTypes.map((docType) => {
               const existing = getDocStatus(docType.key);
@@ -254,9 +287,18 @@ export default function DocumentsPage() {
               const versionCount = documenti.filter(
                 (d) => d.tipo_documento === docType.key
               ).length;
+              // US-4.1: visually mark PEE cards as blocked when the DVR
+              // Master has not yet been generated. The generate button stays
+              // clickable so the Italian error message can still surface; the
+              // block itself is enforced by the backend.
+              const blockedByDvr =
+                DVR_DEPENDENT_TYPES.has(docType.key) && !dvrReady;
 
               return (
-                <Card key={docType.key}>
+                <Card
+                  key={docType.key}
+                  className={cn(blockedByDvr && "opacity-75")}
+                >
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
@@ -270,6 +312,11 @@ export default function DocumentsPage() {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     <p className="text-xs text-muted-foreground">{docType.pages} pagine</p>
+                    {blockedByDvr && (
+                      <p className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                        Genera prima il DVR Master
+                      </p>
+                    )}
                     {existing && config && (
                       <div className="flex items-center gap-2">
                         <Badge

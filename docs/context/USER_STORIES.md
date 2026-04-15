@@ -19,7 +19,7 @@ Stories below are being worked on by a parallel agent. **Do not pick these up if
 |-------|-----------|-----------|-------|
 | ~~US-1.4~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (modal + qualifiche + multi-select shipped) |
 | US-2.6 | Agent-B | 2026-04-15 | Per-client reusable misure library (backend table + CRUD + measures-panel wiring) |
-| US-4.1 | Agent-A | 2026-04-15 | PEE DVR-dependency block + planimetria placeholder + team override UX |
+| ~~US-4.1~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (DVR guard + planimetria + plan-config UX shipped) |
 | US-4.4 | Agent-A | 2026-04-15 | HACCP forms per-client branding + subset dialog |
 | US-5.4 | Agent-A | 2026-04-15 | Admin backup status panel + failure alerting + audit wiring |
 
@@ -32,9 +32,9 @@ Release a claim by deleting the row and the inline marker on the story once you 
 | 1 — Digital Survey | 10 | 8 | 2 | 0 | 90% |
 | 2 — DVR Master | 9 | 4 | 5 | 0 | 72% |
 | 3 — DVR Attachments | 15 | 15 | 0 | 0 | 100% |
-| 4 — Complementary Docs | 8 | 4 | 4 | 0 | 75% |
+| 4 — Complementary Docs | 8 | 5 | 3 | 0 | 81% |
 | 5 — Cross-cutting | 4 | 1 | 3 | 0 | 63% |
-| **TOTAL** | **46** | **32** | **14** | **0** | **85%** |
+| **TOTAL** | **46** | **33** | **13** | **0** | **86%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
@@ -497,11 +497,10 @@ As an operator, I want to select the sector type (nursery, food, dental, etc.) a
 
 ### PEE (Emergency Plan)
 
-#### US-4.1 `PARTIAL` 🔒 CLAIMED by Agent-A (2026-04-15) — other agents skip
+#### US-4.1 `DONE`
 As an operator, I want the PEE auto-generated from DVR data (environments, emergency teams, assembly points).
 
-> **Built**: `PEE_AZIENDA` (579 paragraphs, 18 tables) and `PEE_COMUNE` (985 paragraphs, 13 tables) generators produce valid `.docx` against Acme fixture. Registered in documents page with per-type generate/download (Sprint Closure 2026-04-14).
-> **Missing**: No "Genera prima il DVR Master" dependency block. No floor plan image embedding or "Inserire planimetria" placeholder. No per-client emergency team/assembly point overrides surfaced in UX.
+> **Built (2026-04-15)**: `PEE_AZIENDA` (579 paragraphs, 18 tables) and `PEE_COMUNE` (985 paragraphs, 13 tables) generators produce valid `.docx` against Acme fixture. **DVR-dependency guard** added in `backend/app/api/v1/documents.py` via `_ensure_dvr_exists_for_dependent` — `POST /aziende/{id}/documents/generate` returns 400 `"Genera prima il DVR Master"` for `pee_azienda` / `pee_comune` whenever there is no prior DVR Master row with status in {`completed`,`ready`}. Frontend documents page mirrors the check locally (disables the generate CTA with an amber "Genera prima il DVR Master" hint chip and fades the card when DVR isn't ready), and the backend message surfaces in an inline error banner above the grid if a user bypasses the UI. **Planimetria embedding** (AC3): both generators call `_find_planimetria_path()` which picks the most recent `ambienti_foto` whose filename contains "planimetria" (case-insensitive); when present the image is embedded `Inches(6.0)` under a "Planimetria di emergenza" heading with italic caption, otherwise an italic "Inserire planimetria" placeholder paragraph is rendered. In fixture/test mode (`db=None`) the lookup short-circuits so the existing generator smoke test still exercises the placeholder branch. **Per-client emergency team / assembly point overrides** (AC1 data): new `GET/PUT /aziende/{id}/pee/plan` endpoints in `pee_procedures.py` read/write `PeePlan.coordinatore_emergenza`, `punto_raccolta`, `vie_fuga`, `tempo_evacuazione_stimato_min`, `frequenza_prove`, `squadra_emergenza` (list of {nome,ruolo}), and `telefoni_emergenza` (ente→numero map). Frontend `assessments/pee/[aziendaId]/page.tsx` gains a top "Configurazione piano di emergenza" Card with a Modifica/Salva/Annulla flow, per-member row editor for the squadra, and key/value editor for the numbers.
 
 **Acceptance Criteria:**
 

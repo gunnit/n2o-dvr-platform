@@ -1,11 +1,16 @@
 """PEE - Piano di Emergenza ed Evacuazione (variante aziendale)."""
 
+import logging
 import os
 
 from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Inches
 from sqlalchemy import func, select
 
 from app.data.pee_procedures import merge_with_overrides
+from app.models.ambiente import Ambiente
+from app.models.ambiente_foto import AmbienteFoto
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_pee
@@ -20,8 +25,44 @@ from app.services.document_generator.docx_utils import (
     slugify,
 )
 
+logger = logging.getLogger(__name__)
+
 TEMPLATE = TEMPLATES_DIR / "PIANO GESTIONE EMERGENZE - AZIENDA.docx"
 TIPO_DOC = "pee_azienda"
+
+
+async def _find_planimetria_path(db, azienda_id) -> str | None:
+    """Return the on-disk path of a planimetria photo for this azienda, if any.
+
+    Heuristic: any ``ambienti_foto`` row whose filename (or path) contains
+    the substring "planimetria" (case-insensitive) is treated as the floor
+    plan. If multiple rows match we pick the most recent one. When no
+    match exists we return ``None`` so the caller can render the placeholder.
+
+    In fixture/test mode ``db`` is ``None`` (see scripts/verify_all_generators.py);
+    we short-circuit so the test runner produces the placeholder output rather
+    than crashing on the lookup.
+    """
+    if db is None:
+        return None
+    stmt = (
+        select(AmbienteFoto)
+        .join(Ambiente, Ambiente.id == AmbienteFoto.ambiente_id)
+        .where(Ambiente.azienda_id == azienda_id)
+        .where(
+            func.lower(AmbienteFoto.filename).like("%planimetria%")
+        )
+        .order_by(AmbienteFoto.created_at.desc())
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    row = result.scalar_one_or_none()
+    if row is None:
+        return None
+    # Only embed if the file still exists on disk.
+    if not row.file_path or not os.path.exists(row.file_path):
+        return None
+    return row.file_path
 
 
 class PeeAziendaGenerator(BaseDocumentGenerator):
@@ -68,6 +109,36 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
             add_heading(doc, "Vie di fuga e punto di raccolta", level=2)
             add_paragraph(doc, pee.vie_fuga or "Vie di fuga indicate dalla segnaletica di sicurezza UNI EN ISO 7010.")
             add_paragraph(doc, f"Punto di raccolta: {pee.punto_raccolta or '—'}")
+
+        # Planimetria (US-4.1 AC3): embed the uploaded floor plan if one exists
+        # among ambienti_foto (filename containing "planimetria"); otherwise
+        # render the placeholder text so the operator knows to attach one.
+        add_heading(doc, "Planimetria di emergenza", level=2)
+        planimetria_path = await _find_planimetria_path(self.db, self.azienda_id)
+        if planimetria_path:
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = p.add_run()
+            try:
+                run.add_picture(planimetria_path, width=Inches(6.0))
+            except Exception:
+                # Any load-time error (corrupt image, unsupported format)
+                # falls back to the placeholder so generation never breaks.
+                logger.exception(
+                    "Failed to embed planimetria for azienda %s", self.azienda_id
+                )
+                add_paragraph(
+                    doc,
+                    "Inserire planimetria (immagine allegata non leggibile).",
+                    italic=True,
+                )
+            add_paragraph(
+                doc,
+                "Planimetria indicativa con percorsi di esodo, uscite di sicurezza e punto di raccolta.",
+                italic=True,
+            )
+        else:
+            add_paragraph(doc, "Inserire planimetria", italic=True)
 
         # Structured A-E procedures per event type (US-4.2). Standard procedures
         # from app.data.pee_procedures are merged with per-client overrides
