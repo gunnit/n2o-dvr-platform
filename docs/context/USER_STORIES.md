@@ -13,11 +13,12 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 
 ## 🔒 Active Agent Claims (2026-04-15)
 
-Stories below are being worked on by a parallel agent. **Do not pick these up if you are a fresh agent.** Look for free PARTIAL stories instead (e.g. US-1.5, US-1.6, US-2.1, US-2.2, US-2.3, US-2.6, US-2.8, US-4.3, US-4.7, US-5.2, US-5.3).
+Stories below are being worked on by a parallel agent. **Do not pick these up if you are a fresh agent.** Look for free PARTIAL stories instead (e.g. US-1.5, US-1.6, US-2.1, US-2.2, US-2.3, US-2.8, US-4.3, US-4.7, US-5.2, US-5.3).
 
 | Story | Claimed by | Timestamp | Scope |
 |-------|-----------|-----------|-------|
-| US-1.4 | Agent-A | 2026-04-15 | step-persone modal + qualifiche + multi-select ambienti |
+| ~~US-1.4~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (modal + qualifiche + multi-select shipped) |
+| US-2.6 | Agent-B | 2026-04-15 | Per-client reusable misure library (backend table + CRUD + measures-panel wiring) |
 | US-4.1 | Agent-A | 2026-04-15 | PEE DVR-dependency block + planimetria placeholder + team override UX |
 | US-4.4 | Agent-A | 2026-04-15 | HACCP forms per-client branding + subset dialog |
 | US-5.4 | Agent-A | 2026-04-15 | Admin backup status panel + failure alerting + audit wiring |
@@ -28,12 +29,12 @@ Release a claim by deleting the row and the inline marker on the story once you 
 
 | Epic | Stories | Done | Partial | Not Started | Progress |
 |------|---------|------|---------|-------------|----------|
-| 1 — Digital Survey | 10 | 7 | 3 | 0 | 85% |
+| 1 — Digital Survey | 10 | 8 | 2 | 0 | 90% |
 | 2 — DVR Master | 9 | 4 | 5 | 0 | 72% |
 | 3 — DVR Attachments | 15 | 15 | 0 | 0 | 100% |
 | 4 — Complementary Docs | 8 | 4 | 4 | 0 | 75% |
 | 5 — Cross-cutting | 4 | 1 | 3 | 0 | 63% |
-| **TOTAL** | **46** | **31** | **15** | **0** | **84%** |
+| **TOTAL** | **46** | **32** | **14** | **0** | **85%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
@@ -102,11 +103,10 @@ As a field operator, I want to upload photos of each work environment and equipm
 - **Given** I attempt to upload a file larger than 10 MB or in an unsupported format (not JPG/PNG/HEIC), **When** the upload is triggered, **Then** I see an inline toast "Formato non supportato o file troppo grande (max 10 MB)" and the file is rejected
 - **Given** my network connection drops mid-upload, **When** connectivity is restored, **Then** the upload retries automatically and I see a persistent "Caricamento in corso" indicator
 
-#### US-1.4 `PARTIAL` 🔒 CLAIMED by Agent-A (2026-04-15) — other agents skip
+#### US-1.4 `DONE`
 As a field operator, I want to register employees with their roles, assignments to environments, and qualifications in a structured form.
 
-> **Built**: Step 2 "Persone" with add/edit/delete. Fields: nominativo, codice fiscale (with 16-char alphanumeric validation + auto-uppercase), mansione, tipologia_contrattuale, sesso, fascia_eta. 6 safety role checkboxes. Delete confirmation dialog ("Elimina persona" / "Annulla"). Backend CRUD with persona-ambiente M2M.
-> **Missing**: No qualifiche field. No multi-select ambienti assegnati in modal. Uses inline form rather than modal pattern.
+> **Built (2026-04-15)**: Step 2 "Persone" reworked into a table + Dialog-modal pattern. Table columns: Nominativo / Mansione / Ambienti / Ruoli / Azioni (edit pencil + delete trash). "Aggiungi persona" CTA and per-row Edit action both open the same Dialog with fields nominativo, codice fiscale (16-char alphanumeric validation + auto-uppercase on blur), mansione, tipologia contrattuale, sesso, fascia eta, **qualifiche** (free-text textarea for attestati / patenti / corsi), **ambienti assegnati** (multi-select chip row driven by the wizard's `data.ambienti`, rendering "Nessun ambiente ancora dichiarato" empty state when step 3 hasn't been visited), and the 6 safety-role checkboxes. Save is disabled until nominativo is non-empty. Delete still gated by the "Elimina persona" / "Annulla" confirmation Dialog. Backend: new nullable `persone.qualifiche` column (migration `a8b9c0d1e2f3`); `PersonaCreate` / `PersonaUpdate` accept `ambiente_ids: list[UUID]` and the CRUD writes through `persone_ambienti` with cross-azienda validation (BadRequest 400 if an ambiente doesn't belong to the same azienda); `PersonaResponse` exposes `ambiente_ids` via an `@property` on the model, with `survey.py` GET and `persone.py` endpoints eager-loading the relationship via `selectinload`. Frontend `Persona` type extended with `qualifiche` and `ambiente_ids` and threaded through `survey-wizard.tsx`.
 
 **Acceptance Criteria:**
 
@@ -251,7 +251,7 @@ As an office operator, I want employee tables with roles and environment assignm
 - **Given** the survey is updated after a DVR was generated, **When** I regenerate the same document, **Then** the personnel table reflects the new survey state and a diff is shown in the version log
 - **Given** the table is rendered in the final .docx, **When** I open it in Word, **Then** the table uses the official N2O style (header row in dark gray, alternating row shading)
 
-#### US-2.6 `PARTIAL`
+#### US-2.6 `PARTIAL` 🔒 CLAIMED by Agent-B (2026-04-15) — other agents skip
 As an office operator, I want AI-suggested improvement measures based on identified risks that I can accept, modify, or reject.
 
 > **Built**: `backend/app/services/ai/improvement_measures.py:122-140` returns 2-5 structured suggestions per risk row. Persistence endpoint at `backend/app/api/v1/rischi.py:97-127`. Frontend at `frontend/src/components/ai/measures-panel.tsx` wires Accetta/Modifica/Rifiuta + "Aggiungi misura personalizzata". Provenance tagging via shared `AIBadge` ("AI - accettato" / "AI - modificato" / "Manuale"). Rifiuta fires a thumbs-down signal to `POST /api/v1/ai-feedback` (AC3) using the new `AiFeedback` model.

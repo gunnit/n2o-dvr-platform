@@ -1,6 +1,6 @@
 import uuid
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PersonaBase(BaseModel):
@@ -16,10 +16,13 @@ class PersonaBase(BaseModel):
     ruolo_antincendio: bool = False
     ruolo_preposto: bool = False
     ruolo_datore_lavoro: bool = False
+    # US-1.4: free-text qualifications.
+    qualifiche: str | None = None
 
 
 class PersonaCreate(PersonaBase):
-    pass
+    # US-1.4: ambienti assegnati multi-select written through persone_ambienti.
+    ambiente_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class PersonaUpdate(BaseModel):
@@ -35,10 +38,15 @@ class PersonaUpdate(BaseModel):
     ruolo_antincendio: bool | None = None
     ruolo_preposto: bool | None = None
     ruolo_datore_lavoro: bool | None = None
+    qualifiche: str | None = None
+    # When present the M2M is rewritten; when absent it is left untouched.
+    ambiente_ids: list[uuid.UUID] | None = None
 
 
 class PersonaResponse(PersonaBase):
     id: uuid.UUID
     azienda_id: uuid.UUID
+    # US-1.4: ambienti assegnati exposed as a flat list of IDs.
+    ambiente_ids: list[uuid.UUID] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}

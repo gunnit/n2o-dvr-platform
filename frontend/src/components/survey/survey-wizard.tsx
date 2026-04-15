@@ -172,6 +172,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
           <StepPersone
             aziendaId={aziendaId}
             persone={data.persone}
+            ambienti={data.ambienti}
             onChange={updatePersone}
           />
         );

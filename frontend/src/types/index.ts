@@ -34,6 +34,9 @@ export interface Persona {
   ruolo_antincendio: boolean;
   ruolo_preposto: boolean;
   ruolo_datore_lavoro: boolean;
+  // US-1.4: free-text qualifiche + multi-select ambienti assegnati.
+  qualifiche: string | null;
+  ambiente_ids: string[];
 }
 
 export interface Ambiente {

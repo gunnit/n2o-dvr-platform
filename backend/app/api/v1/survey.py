@@ -39,7 +39,10 @@ async def get_survey(
     azienda = await _get_azienda(azienda_id, org_id, db)
 
     persone_result = await db.execute(
-        select(Persona).where(Persona.azienda_id == azienda_id)
+        select(Persona)
+        .where(Persona.azienda_id == azienda_id)
+        # US-1.4: eager-load ambienti so PersonaResponse.ambiente_ids serializes.
+        .options(selectinload(Persona.ambienti))
     )
     ambienti_result = await db.execute(
         select(Ambiente).where(Ambiente.azienda_id == azienda_id)

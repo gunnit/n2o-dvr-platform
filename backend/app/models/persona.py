@@ -26,7 +26,14 @@ class Persona(Base):
     ruolo_antincendio: Mapped[bool] = mapped_column(Boolean, default=False)
     ruolo_preposto: Mapped[bool] = mapped_column(Boolean, default=False)
     ruolo_datore_lavoro: Mapped[bool] = mapped_column(Boolean, default=False)
+    # US-1.4: free-text qualifications (attestati, patenti, corsi di formazione).
+    qualifiche: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     azienda: Mapped["Azienda"] = relationship(back_populates="persone")
     ambienti: Mapped[list["Ambiente"]] = relationship(secondary=persone_ambienti, back_populates="persone")
+
+    @property
+    def ambiente_ids(self) -> list[uuid.UUID]:
+        """Expose the M2M as a flat id list for serialization (US-1.4)."""
+        return [a.id for a in self.ambienti]
