@@ -9,6 +9,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Clock,
+  History,
+  User as UserIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -292,6 +294,12 @@ export default function DocumentsPage() {
                         </span>
                       </div>
                     )}
+                    {existing?.generated_by_name && (
+                      <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <UserIcon className="h-3 w-3" />
+                        Generato da {existing.generated_by_name}
+                      </p>
+                    )}
                     {status === "bozza" && existing?.error_message && (
                       <p className="text-xs text-amber-700 dark:text-amber-400">
                         {existing.error_message}
@@ -337,8 +345,10 @@ export default function DocumentsPage() {
                         size="sm"
                         variant="ghost"
                         onClick={() => setHistoryTipo(docType.key)}
+                        aria-label={`Storia versioni ${docType.name}`}
                       >
-                        Cronologia (v{versionCount})
+                        <History className="mr-1.5 h-3 w-3" />
+                        Storia (v{versionCount})
                       </Button>
                     )}
                   </CardFooter>
@@ -359,6 +369,7 @@ export default function DocumentsPage() {
           (historyTipo && documentTypes.find((d) => d.key === historyTipo)?.name) ||
           ""
         }
+        aziendaId={selectedAziendaId}
         aziendaLabel={selectedAzienda?.ragione_sociale ?? ""}
         versions={
           historyTipo
@@ -367,6 +378,7 @@ export default function DocumentsPage() {
                 .sort((a, b) => b.versione - a.versione)
             : []
         }
+        onRestored={fetchDocumenti}
       />
     </div>
   );

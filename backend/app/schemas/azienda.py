@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -18,6 +18,7 @@ class AziendaBase(BaseModel):
     zona_sismica: int | None = None
     descrizione_attivita: str | None = None
     contesto_territoriale: str | None = None
+    data_scadenza_dvr: date | None = None
 
 
 class AziendaCreate(AziendaBase):
@@ -38,6 +39,7 @@ class AziendaUpdate(BaseModel):
     zona_sismica: int | None = None
     descrizione_attivita: str | None = None
     contesto_territoriale: str | None = None
+    data_scadenza_dvr: date | None = None
     survey_status: str | None = None
 
 

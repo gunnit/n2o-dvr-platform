@@ -482,7 +482,7 @@ export function StressChecklist({ aziendaId, onResultChange }: StressChecklistPr
               <div className="h-2 overflow-hidden rounded-full bg-muted">
                 <div
                   className={cn(
-                    "h-full transition-all duration-500",
+                    "h-full transition-all duration-200",
                     result.livello === "BASSO" && "bg-emerald-500",
                     result.livello === "MEDIO" && "bg-amber-500",
                     result.livello === "ALTO" && "bg-rose-500",

@@ -35,6 +35,12 @@ class Pos(Base):
     valutazione_vibrazioni: Mapped[dict] = mapped_column(JSONB, default=dict)
     mezzi_attrezzature: Mapped[list] = mapped_column(JSONB, default=list)
     sostanze_pericolose: Mapped[list] = mapped_column(JSONB, default=list)
+    # DPI matrix (US-4.8): {phase_key: {role_key: [dpi_codes]}} — operator-edited
+    # copy. Starts empty; populated on first "rigenera dai default" call or via
+    # cell override. See services/dpi_rules.py for the rule engine.
+    dpi_matrix: Mapped[dict] = mapped_column(JSONB, default=dict)
+    dpi_matrix_roles: Mapped[list] = mapped_column(JSONB, default=list)
+    dpi_matrix_phases: Mapped[list] = mapped_column(JSONB, default=list)
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())

@@ -2,7 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Building2, FileCheck, FileText, Search, Users } from "lucide-react";
+import { useSession } from "next-auth/react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Building2,
+  Clock,
+  FileCheck,
+  FileText,
+  Plus,
+  Search,
+  Users,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -17,6 +29,27 @@ import {
 import type { Azienda } from "@/types";
 import { useApi } from "@/hooks/use-api";
 import { SurveillanceAlerts } from "@/components/dashboard/surveillance-alerts";
+
+// US-5.1: orchestrator will add `data_scadenza_dvr` to the canonical Azienda
+// type. Until then we extend it locally so the dashboard can typecheck.
+interface AziendaWithScadenza extends Azienda {
+  data_scadenza_dvr: string | null;
+}
+
+interface DashboardKpis {
+  clienti_attivi: number;
+  sopralluoghi_in_corso: number;
+  sopralluoghi_completati: number;
+  bozze: number;
+  scadenze_imminenti: number;
+}
+
+type SortKey =
+  | "ragione_sociale"
+  | "codice_ateco"
+  | "updated_at"
+  | "data_scadenza_dvr";
+type SortDir = "asc" | "desc";
 
 const statusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-700",
@@ -38,31 +71,65 @@ function formatDate(iso: string): string {
   return `${day}/${month}/${year}`;
 }
 
+function daysUntil(iso: string | null): number | null {
+  if (!iso) return null;
+  const target = new Date(iso);
+  if (Number.isNaN(target.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - today.getTime()) / 86400000);
+}
+
+function scadenzaChipClass(days: number | null): string {
+  if (days === null) return "bg-gray-100 text-gray-500";
+  if (days <= 7) return "bg-red-100 text-red-700";
+  if (days <= 30) return "bg-amber-100 text-amber-700";
+  return "bg-gray-100 text-gray-600";
+}
+
 export default function DashboardPage() {
   const { apiFetch, isAuthenticated } = useApi();
-  const [aziende, setAziende] = useState<Azienda[]>([]);
+  const { data: session } = useSession();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const role = (session?.user as any)?.role as string | undefined;
+  const isAdmin = role === "admin";
+
+  const [aziende, setAziende] = useState<AziendaWithScadenza[]>([]);
+  const [kpis, setKpis] = useState<DashboardKpis | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("updated_at");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    apiFetch<Azienda[]>("/api/v1/aziende")
-      .then(setAziende)
-      .catch(() => {})
+    Promise.all([
+      apiFetch<AziendaWithScadenza[]>("/api/v1/aziende").catch(
+        () => [] as AziendaWithScadenza[]
+      ),
+      apiFetch<DashboardKpis>("/api/v1/aziende/dashboard/kpis").catch(
+        () => null
+      ),
+    ])
+      .then(([a, k]) => {
+        setAziende(a);
+        setKpis(k);
+      })
       .finally(() => setLoading(false));
   }, [apiFetch, isAuthenticated]);
 
   const stats = useMemo(() => {
-    const total = aziende.length;
-    const inProgress = aziende.filter(
-      (a) => a.survey_status === "in_progress"
-    ).length;
-    const completed = aziende.filter(
-      (a) => a.survey_status === "completed"
-    ).length;
-    const drafts = aziende.filter(
-      (a) => a.survey_status === "draft"
-    ).length;
+    const total = kpis?.clienti_attivi ?? aziende.length;
+    const inProgress =
+      kpis?.sopralluoghi_in_corso ??
+      aziende.filter((a) => a.survey_status === "in_progress").length;
+    const completed =
+      kpis?.sopralluoghi_completati ??
+      aziende.filter((a) => a.survey_status === "completed").length;
+    const drafts =
+      kpis?.bozze ?? aziende.filter((a) => a.survey_status === "draft").length;
+    const scadenze = kpis?.scadenze_imminenti ?? 0;
 
     return [
       {
@@ -93,39 +160,98 @@ export default function DashboardPage() {
         description: "Da completare",
         accent: "text-gray-500",
       },
+      {
+        name: "Scadenze imminenti",
+        value: scadenze,
+        icon: Clock,
+        description: "DVR in scadenza entro 30 giorni",
+        accent: "text-orange-600",
+      },
     ];
-  }, [aziende]);
+  }, [aziende, kpis]);
+
+  function toggleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "updated_at" ? "desc" : "asc");
+    }
+  }
 
   const sortedAndFiltered = useMemo(() => {
-    const sorted = [...aziende].sort(
-      (a, b) =>
-        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-    );
+    const filtered =
+      search.length < 2
+        ? [...aziende]
+        : aziende.filter((a) => {
+            const q = search.toLowerCase();
+            return (
+              a.ragione_sociale.toLowerCase().includes(q) ||
+              (a.partita_iva && a.partita_iva.toLowerCase().includes(q)) ||
+              (a.sede_legale_citta &&
+                a.sede_legale_citta.toLowerCase().includes(q)) ||
+              (a.sede_operativa_citta &&
+                a.sede_operativa_citta.toLowerCase().includes(q)) ||
+              (a.attivita && a.attivita.toLowerCase().includes(q))
+            );
+          });
 
-    if (search.length < 2) return sorted;
+    const dir = sortDir === "asc" ? 1 : -1;
+    filtered.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      // Null/undefined always sorts last regardless of direction
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
 
-    const q = search.toLowerCase();
-    return sorted.filter(
-      (a) =>
-        a.ragione_sociale.toLowerCase().includes(q) ||
-        (a.attivita && a.attivita.toLowerCase().includes(q))
+      if (sortKey === "updated_at" || sortKey === "data_scadenza_dvr") {
+        return (
+          (new Date(av as string).getTime() -
+            new Date(bv as string).getTime()) *
+          dir
+        );
+      }
+      return String(av).localeCompare(String(bv)) * dir;
+    });
+    return filtered;
+  }, [aziende, search, sortKey, sortDir]);
+
+  function SortIndicator({ column }: { column: SortKey }) {
+    if (sortKey !== column) return null;
+    return sortDir === "asc" ? (
+      <ArrowUp className="ml-1 inline h-3 w-3" />
+    ) : (
+      <ArrowDown className="ml-1 inline h-3 w-3" />
     );
-  }, [aziende, search]);
+  }
+
+  function sortableHeaderClass(): string {
+    return "cursor-pointer select-none";
+  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Panoramica dell&apos;attivit&agrave;
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Panoramica dell&apos;attivit&agrave;
+          </p>
+        </div>
+        {isAdmin && (
+          <Button nativeButton={false} render={<Link href="/aziende/new" />}>
+            <Plus className="mr-2 h-4 w-4" />
+            Aggiungi cliente
+          </Button>
+        )}
       </div>
 
       {loading ? (
         <p className="text-muted-foreground">Caricamento...</p>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
             {stats.map((stat) => (
               <Card key={stat.name}>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -156,7 +282,7 @@ export default function DashboardPage() {
               <div className="relative mt-2">
                 <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Cerca per ragione sociale, attivita..."
+                  placeholder="Cerca per ragione sociale, partita IVA, comune..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="pl-8"
@@ -174,44 +300,81 @@ export default function DashboardPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Ragione Sociale</TableHead>
-                      <TableHead>Attivita</TableHead>
+                      <TableHead
+                        className={sortableHeaderClass()}
+                        onClick={() => toggleSort("ragione_sociale")}
+                      >
+                        Ragione Sociale
+                        <SortIndicator column="ragione_sociale" />
+                      </TableHead>
+                      <TableHead
+                        className={sortableHeaderClass()}
+                        onClick={() => toggleSort("codice_ateco")}
+                      >
+                        Codice ATECO
+                        <SortIndicator column="codice_ateco" />
+                      </TableHead>
                       <TableHead>Citta</TableHead>
                       <TableHead>Stato</TableHead>
-                      <TableHead>Ultimo Aggiornamento</TableHead>
+                      <TableHead
+                        className={sortableHeaderClass()}
+                        onClick={() => toggleSort("updated_at")}
+                      >
+                        Ultimo Aggiornamento
+                        <SortIndicator column="updated_at" />
+                      </TableHead>
+                      <TableHead
+                        className={sortableHeaderClass()}
+                        onClick={() => toggleSort("data_scadenza_dvr")}
+                      >
+                        Scadenza DVR
+                        <SortIndicator column="data_scadenza_dvr" />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedAndFiltered.map((azienda) => (
-                      <TableRow key={azienda.id}>
-                        <TableCell>
-                          <Link
-                            href={`/aziende/${azienda.id}`}
-                            className="font-medium text-primary hover:underline"
-                          >
-                            {azienda.ragione_sociale}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {azienda.attivita || "-"}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {azienda.sede_operativa_citta ||
-                            azienda.sede_legale_citta ||
-                            "-"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            className={statusColors[azienda.survey_status]}
-                          >
-                            {statusLabels[azienda.survey_status]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {formatDate(azienda.updated_at)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {sortedAndFiltered.map((azienda) => {
+                      const days = daysUntil(azienda.data_scadenza_dvr);
+                      return (
+                        <TableRow key={azienda.id}>
+                          <TableCell>
+                            <Link
+                              href={`/aziende/${azienda.id}`}
+                              className="font-medium text-primary hover:underline"
+                            >
+                              {azienda.ragione_sociale}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {azienda.codice_ateco || "-"}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {azienda.sede_operativa_citta ||
+                              azienda.sede_legale_citta ||
+                              "-"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              className={statusColors[azienda.survey_status]}
+                            >
+                              {statusLabels[azienda.survey_status]}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {formatDate(azienda.updated_at)}
+                          </TableCell>
+                          <TableCell>
+                            {azienda.data_scadenza_dvr ? (
+                              <Badge className={scadenzaChipClass(days)}>
+                                {formatDate(azienda.data_scadenza_dvr)}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}

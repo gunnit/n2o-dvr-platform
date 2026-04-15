@@ -13,9 +13,11 @@ from app.api.v1.gestanti import router as gestanti_router
 from app.api.v1.lookups import router as lookups_router
 from app.api.v1.pee_procedures import router as pee_procedures_router
 from app.api.v1.persone import router as persone_router
+from app.api.v1.pos import router as pos_router
 from app.api.v1.rischi import router as rischi_router
 from app.api.v1.sorveglianza import router as sorveglianza_router
 from app.api.v1.sostanze_chimiche import router as sostanze_chimiche_router
+from app.api.v1.stress_misure import router as stress_misure_router
 from app.api.v1.survey import router as survey_router
 
 api_router = APIRouter(prefix="/api/v1")
@@ -36,3 +38,5 @@ api_router.include_router(pee_procedures_router)
 api_router.include_router(lookups_router)
 api_router.include_router(duvri_router)
 api_router.include_router(sorveglianza_router)
+api_router.include_router(pos_router)
+api_router.include_router(stress_misure_router)

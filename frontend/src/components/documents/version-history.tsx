@@ -1,8 +1,17 @@
 "use client";
 
-import { Download, FileText, History } from "lucide-react";
+import { useState } from "react";
+import { Download, FileText, GitCompare, History, RotateCcw } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
@@ -12,17 +21,38 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { DocumentoGenerato } from "@/types";
-import { downloadFile } from "@/lib/api-client";
+import { apiCall, downloadFile } from "@/lib/api-client";
 
 interface VersionHistoryProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tipoDocumento: string;
   tipoDocumentoLabel: string;
+  aziendaId: string;
   aziendaLabel: string;
   // Expected to be pre-sorted with highest versione first.
   versions: DocumentoGenerato[];
+  onRestored?: () => void | Promise<void>;
 }
+
+// Structured text representation of a generated .docx, returned by the
+// snapshot endpoint (US-2.9). Declared locally to avoid widening the
+// shared types module — only this component consumes it.
+interface DocumentSnapshot {
+  id: string;
+  versione: number;
+  generated_at: string | null;
+  generated_by_name: string | null;
+  paragraphs: string[];
+  tables: string[][][];
+}
+
+// A single diff row: either unchanged, added (only in new), or removed
+// (only in old). We render both columns side-by-side.
+type DiffRow =
+  | { kind: "same"; left: string; right: string }
+  | { kind: "added"; left: null; right: string }
+  | { kind: "removed"; left: string; right: null };
 
 const statusLabels: Record<string, { color: string; label: string }> = {
   pending: { color: "bg-gray-100 text-gray-700", label: "In attesa" },
@@ -82,121 +112,362 @@ async function triggerDownload(id: string): Promise<void> {
   try {
     await downloadFile(`/api/v1/documenti/${id}/download`);
   } catch (e) {
-    alert((e as Error).message || "Download fallito");
+    toast.error((e as Error).message || "Download fallito");
   }
+}
+
+// Flatten a snapshot into a single ordered list of "lines". Paragraphs
+// become one line each; table cells are prefixed with "[T{i} R{j} C{k}]"
+// so rearranged tables surface as both a removal and an addition rather
+// than silently matching across table boundaries.
+function snapshotToLines(snap: DocumentSnapshot): string[] {
+  const lines: string[] = [];
+  for (const p of snap.paragraphs) {
+    lines.push(p);
+  }
+  snap.tables.forEach((table, ti) => {
+    table.forEach((row, ri) => {
+      row.forEach((cell, ci) => {
+        if (cell) lines.push(`[T${ti + 1} R${ri + 1} C${ci + 1}] ${cell}`);
+      });
+    });
+  });
+  return lines;
+}
+
+// Naive line-level diff — classic LCS-based. Keeps the component free of
+// a new npm dependency. For DVR-scale docs (~2k paragraphs) this is
+// O(n*m) in memory but runs client-side on demand, which is acceptable
+// for a single-user review surface.
+function diffLines(oldLines: string[], newLines: string[]): DiffRow[] {
+  const n = oldLines.length;
+  const m = newLines.length;
+  // Build LCS length table.
+  const dp: number[][] = Array.from({ length: n + 1 }, () =>
+    new Array<number>(m + 1).fill(0)
+  );
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      if (oldLines[i] === newLines[j]) {
+        dp[i][j] = dp[i + 1][j + 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+  }
+  // Walk the table to emit the diff.
+  const out: DiffRow[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (oldLines[i] === newLines[j]) {
+      out.push({ kind: "same", left: oldLines[i], right: newLines[j] });
+      i++;
+      j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      out.push({ kind: "removed", left: oldLines[i], right: null });
+      i++;
+    } else {
+      out.push({ kind: "added", left: null, right: newLines[j] });
+      j++;
+    }
+  }
+  while (i < n) {
+    out.push({ kind: "removed", left: oldLines[i++], right: null });
+  }
+  while (j < m) {
+    out.push({ kind: "added", left: null, right: newLines[j++] });
+  }
+  return out;
 }
 
 export function VersionHistory({
   open,
   onOpenChange,
   tipoDocumentoLabel,
+  aziendaId,
   aziendaLabel,
   versions,
+  onRestored,
 }: VersionHistoryProps) {
   const latestVersione = versions[0]?.versione;
 
+  const [diffOpen, setDiffOpen] = useState(false);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffError, setDiffError] = useState<string | null>(null);
+  const [diffTitle, setDiffTitle] = useState<string>("");
+  const [diffRows, setDiffRows] = useState<DiffRow[]>([]);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+
+  async function handleCompareWithPrevious(
+    current: DocumentoGenerato,
+    previous: DocumentoGenerato
+  ): Promise<void> {
+    setDiffOpen(true);
+    setDiffLoading(true);
+    setDiffError(null);
+    setDiffRows([]);
+    setDiffTitle(`Differenze: v${previous.versione} vs v${current.versione}`);
+    try {
+      const [oldSnap, newSnap] = await Promise.all([
+        apiCall<DocumentSnapshot>(
+          `/api/v1/aziende/${aziendaId}/documents/${previous.id}/snapshot`
+        ),
+        apiCall<DocumentSnapshot>(
+          `/api/v1/aziende/${aziendaId}/documents/${current.id}/snapshot`
+        ),
+      ]);
+      const rows = diffLines(snapshotToLines(oldSnap), snapshotToLines(newSnap));
+      setDiffRows(rows);
+    } catch (e) {
+      setDiffError(
+        (e as Error).message ||
+          "Impossibile caricare gli snapshot per il confronto"
+      );
+    } finally {
+      setDiffLoading(false);
+    }
+  }
+
+  async function handleRestore(version: DocumentoGenerato): Promise<void> {
+    setRestoringId(version.id);
+    try {
+      const restored = await apiCall<DocumentoGenerato>(
+        `/api/v1/aziende/${aziendaId}/documents/${version.id}/restore`,
+        { method: "POST" }
+      );
+      toast.success(`Ripristinata come v${restored.versione}`);
+      if (onRestored) await onRestored();
+    } catch (e) {
+      toast.error((e as Error).message || "Ripristino fallito");
+    } finally {
+      setRestoringId(null);
+    }
+  }
+
+  const addedCount = diffRows.filter((r) => r.kind === "added").length;
+  const removedCount = diffRows.filter((r) => r.kind === "removed").length;
+
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-xl">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <History className="h-4 w-4 text-muted-foreground" />
-            Cronologia versioni &mdash; {tipoDocumentoLabel}
-          </SheetTitle>
-          <SheetDescription>{aziendaLabel}</SheetDescription>
-        </SheetHeader>
+    <>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent side="right" className="w-full sm:max-w-xl">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <History className="h-4 w-4 text-muted-foreground" />
+              Cronologia versioni &mdash; {tipoDocumentoLabel}
+            </SheetTitle>
+            <SheetDescription>{aziendaLabel}</SheetDescription>
+          </SheetHeader>
 
-        <Separator />
+          <Separator />
 
-        <div className="flex-1 overflow-y-auto px-4 pb-6">
-          {versions.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <FileText className="mb-3 h-10 w-10 text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">
-                Nessuna versione disponibile per questo documento.
-              </p>
-            </div>
-          ) : (
-            <ol className="relative space-y-5 border-l border-border pl-5">
-              {versions.map((version, idx) => {
-                const isCurrent = version.versione === latestVersione;
-                const statusInfo =
-                  statusLabels[version.status] ?? {
-                    color: "bg-gray-100 text-gray-700",
-                    label: version.status,
-                  };
-                const previous = versions[idx + 1];
-                const diffSummary = previous
-                  ? buildDiffSummary(version, previous)
-                  : null;
+          <div className="flex-1 overflow-y-auto px-4 pb-6">
+            {versions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <FileText className="mb-3 h-10 w-10 text-muted-foreground/50" />
+                <p className="text-sm text-muted-foreground">
+                  Nessuna versione disponibile per questo documento.
+                </p>
+              </div>
+            ) : (
+              <ol className="relative space-y-5 border-l border-border pl-5">
+                {versions.map((version, idx) => {
+                  const isCurrent = version.versione === latestVersione;
+                  const statusInfo =
+                    statusLabels[version.status] ?? {
+                      color: "bg-gray-100 text-gray-700",
+                      label: version.status,
+                    };
+                  const previous = versions[idx + 1];
+                  const diffSummary = previous
+                    ? buildDiffSummary(version, previous)
+                    : null;
+                  const canCompare =
+                    !!previous &&
+                    !!version.file_path &&
+                    !!previous.file_path &&
+                    (version.status === "completed" ||
+                      version.status === "ready") &&
+                    (previous.status === "completed" ||
+                      previous.status === "ready");
+                  const canRestore =
+                    !isCurrent &&
+                    !!version.file_path &&
+                    (version.status === "completed" ||
+                      version.status === "ready");
 
-                return (
-                  <li key={version.id} className="relative">
-                    <span
-                      className={
-                        "absolute -left-[29px] top-1.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-background " +
-                        (isCurrent ? "bg-primary" : "bg-muted")
-                      }
-                      aria-hidden
-                    />
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge
-                          className={
-                            isCurrent
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground"
-                          }
-                        >
-                          v{version.versione}
-                        </Badge>
-                        <Badge className={statusInfo.color}>
-                          {statusInfo.label}
-                        </Badge>
-                        {isCurrent && (
-                          <span className="text-xs font-medium text-primary">
-                            Versione corrente
-                          </span>
-                        )}
-                      </div>
-
-                      <p className="text-xs text-muted-foreground">
-                        Creato il {formatItalianDateTime(version.created_at)}
-                      </p>
-
-                      {diffSummary && (
-                        <p className="text-xs text-muted-foreground">
-                          {diffSummary}
-                        </p>
-                      )}
-
-                      {version.status === "bozza" && version.error_message && (
-                        <p className="text-xs text-amber-700 dark:text-amber-400">
-                          {version.error_message}
-                        </p>
-                      )}
-
-                      {(version.status === "ready" || version.status === "completed") &&
-                        version.file_path && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              void triggerDownload(version.id);
-                            }}
+                  return (
+                    <li key={version.id} className="relative">
+                      <span
+                        className={
+                          "absolute -left-[29px] top-1.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-background " +
+                          (isCurrent ? "bg-primary" : "bg-muted")
+                        }
+                        aria-hidden
+                      />
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            className={
+                              isCurrent
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted text-muted-foreground"
+                            }
                           >
-                            <Download className="mr-1.5 h-3 w-3" />
-                            Scarica
-                          </Button>
+                            v{version.versione}
+                          </Badge>
+                          <Badge className={statusInfo.color}>
+                            {statusInfo.label}
+                          </Badge>
+                          {isCurrent && (
+                            <span className="text-xs font-medium text-primary">
+                              Versione corrente
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-xs text-muted-foreground">
+                          Creato il {formatItalianDateTime(version.created_at)}
+                          {version.generated_by_name
+                            ? ` da ${version.generated_by_name}`
+                            : ""}
+                        </p>
+
+                        {diffSummary && (
+                          <p className="text-xs text-muted-foreground">
+                            {diffSummary}
+                          </p>
                         )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
+
+                        {version.status === "bozza" && version.error_message && (
+                          <p className="text-xs text-amber-700 dark:text-amber-400">
+                            {version.error_message}
+                          </p>
+                        )}
+
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {(version.status === "ready" ||
+                            version.status === "completed") &&
+                            version.file_path && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  void triggerDownload(version.id);
+                                }}
+                              >
+                                <Download className="mr-1.5 h-3 w-3" />
+                                Scarica
+                              </Button>
+                            )}
+                          {canCompare && previous && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                void handleCompareWithPrevious(version, previous);
+                              }}
+                            >
+                              <GitCompare className="mr-1.5 h-3 w-3" />
+                              Confronta con precedente
+                            </Button>
+                          )}
+                          {canRestore && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={restoringId === version.id}
+                              onClick={() => {
+                                void handleRestore(version);
+                              }}
+                            >
+                              <RotateCcw className="mr-1.5 h-3 w-3" />
+                              {restoringId === version.id
+                                ? "Ripristino..."
+                                : "Ripristina"}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Dialog open={diffOpen} onOpenChange={setDiffOpen}>
+        <DialogContent className="max-w-[min(1100px,calc(100%-2rem))] sm:max-w-[min(1100px,calc(100%-2rem))]">
+          <DialogHeader>
+            <DialogTitle>{diffTitle}</DialogTitle>
+            <DialogDescription>
+              {diffLoading
+                ? "Caricamento snapshot..."
+                : diffError
+                ? diffError
+                : `${addedCount} righe aggiunte, ${removedCount} righe rimosse`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-[65vh] overflow-auto rounded-md border">
+            {diffLoading ? (
+              <div className="p-6 text-center text-sm text-muted-foreground">
+                Caricamento...
+              </div>
+            ) : diffError ? (
+              <div className="p-6 text-center text-sm text-red-600">
+                {diffError}
+              </div>
+            ) : diffRows.length === 0 ? (
+              <div className="p-6 text-center text-sm text-muted-foreground">
+                Nessuna differenza rilevata.
+              </div>
+            ) : (
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-muted">
+                  <tr>
+                    <th className="w-1/2 border-b px-2 py-1.5 text-left font-medium">
+                      Precedente
+                    </th>
+                    <th className="w-1/2 border-b px-2 py-1.5 text-left font-medium">
+                      Nuovo
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {diffRows.map((row, i) => (
+                    <tr key={i} className="align-top">
+                      <td
+                        className={
+                          "whitespace-pre-wrap break-words border-b px-2 py-1 " +
+                          (row.kind === "removed"
+                            ? "bg-red-50 text-red-900"
+                            : "")
+                        }
+                      >
+                        {row.left ?? ""}
+                      </td>
+                      <td
+                        className={
+                          "whitespace-pre-wrap break-words border-b px-2 py-1 " +
+                          (row.kind === "added"
+                            ? "bg-green-50 text-green-900"
+                            : "")
+                        }
+                      >
+                        {row.right ?? ""}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

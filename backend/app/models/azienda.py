@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Date, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,6 +26,7 @@ class Azienda(Base):
     zona_sismica: Mapped[int | None] = mapped_column(Integer)
     descrizione_attivita: Mapped[str | None] = mapped_column(Text)
     contesto_territoriale: Mapped[str | None] = mapped_column(Text)
+    data_scadenza_dvr: Mapped[date | None] = mapped_column(Date)
     survey_status: Mapped[str] = mapped_column(String, default="draft")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())

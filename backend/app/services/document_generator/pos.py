@@ -18,6 +18,7 @@ from app.services.document_generator.docx_utils import (
     replace_placeholders,
     slugify,
 )
+from app.services.dpi_rules import DPI_CATALOG, build_default_matrix
 
 TEMPLATE = TEMPLATES_DIR / "POS.docx"
 TIPO_DOC = "pos"
@@ -88,6 +89,11 @@ class PosGenerator(BaseDocumentGenerator):
             sostanze = p.sostanze_pericolose or []
             add_data_table(doc, ["Sostanza", "Uso"], [[s.get("nome", ""), s.get("uso", "")] for s in sostanze] or [["—", "—"]])
 
+            # US-4.8: DPI matrix (role x phase). Only emit when the operator
+            # has actually built one — we never auto-seed at generation time
+            # because the matrix is a per-client override surface.
+            _render_dpi_matrix(doc, p)
+
         add_heading(doc, "Sottoscrizione", level=2)
         add_data_table(doc, ["Ruolo", "Firma"], [
             ["Datore di lavoro impresa esecutrice", "________________________"],
@@ -110,3 +116,77 @@ class PosGenerator(BaseDocumentGenerator):
         )
         r = await self.db.execute(stmt)
         return (r.scalar() or 0) + 1
+
+
+# ---------------------------------------------------------------------------
+# DPI matrix (US-4.8)
+# ---------------------------------------------------------------------------
+
+
+def _dpi_labels(codes: list[str]) -> str:
+    """Render a list of DPI codes as comma-separated Italian labels."""
+    if not codes:
+        return "—"
+    return ", ".join(DPI_CATALOG.get(c, c) for c in codes)
+
+
+def _render_dpi_matrix(doc, pos) -> None:
+    """Emit the role x phase DPI matrix for one POS.
+
+    Layout: rows = roles, columns = phases (first column is the role
+    label). Cells list the DPI as Italian labels from DPI_CATALOG. Where
+    an operator edited a cell (differs from the rules-engine default for
+    this role/phase), we append " (personalizzato)" so the reviewer can
+    spot customisations.
+
+    Merge rule: if two adjacent rows have identical DPI across every
+    phase, their phase cells are merged vertically (their role labels
+    stay separate since they're semantically different).
+    """
+    matrix = pos.dpi_matrix or {}
+    roles = pos.dpi_matrix_roles or []
+    phases = pos.dpi_matrix_phases or []
+    if not matrix or not roles or not phases:
+        return
+
+    add_heading(doc, "Matrice DPI per ruolo e fase", level=3)
+
+    # Pre-compute defaults once so we can detect operator overrides.
+    defaults = build_default_matrix(roles, phases)
+
+    header = ["Ruolo"] + list(phases)
+    data_rows: list[list[str]] = []
+    for role in roles:
+        row: list[str] = [role]
+        for phase in phases:
+            cell_codes = (matrix.get(phase, {}) or {}).get(role, []) or []
+            default_codes = (defaults.get(phase, {}) or {}).get(role, []) or []
+            label = _dpi_labels(cell_codes)
+            if sorted(cell_codes) != sorted(default_codes):
+                label = f"{label} (personalizzato)" if label != "—" else "— (personalizzato)"
+            row.append(label)
+        data_rows.append(row)
+
+    table = add_data_table(doc, header, data_rows)
+
+    # Vertical merge for adjacent rows with identical DPI across every
+    # phase. python-docx merges are additive — cell.merge(other) merges
+    # the rectangle they span, so we call it per column for each run of
+    # identical rows. Column 0 (role) is left untouched so the labels
+    # remain distinct.
+    if len(data_rows) < 2:
+        return
+    run_start = 0
+    for i in range(1, len(data_rows) + 1):
+        same = (
+            i < len(data_rows)
+            and data_rows[i][1:] == data_rows[run_start][1:]
+        )
+        if not same:
+            if i - run_start > 1:
+                # +1 because the header occupies row 0 in the docx table.
+                top_row = table.rows[run_start + 1]
+                bot_row = table.rows[i - 1 + 1]
+                for col in range(1, len(header)):
+                    top_row.cells[col].merge(bot_row.cells[col])
+            run_start = i

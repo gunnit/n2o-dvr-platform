@@ -13,6 +13,7 @@ export interface Azienda {
   zona_sismica: number | null;
   descrizione_attivita: string | null;
   contesto_territoriale: string | null;
+  data_scadenza_dvr: string | null;
   survey_status: "draft" | "in_progress" | "completed";
   created_at: string;
   updated_at: string;
@@ -83,6 +84,10 @@ export interface DocumentoGenerato {
   // User-facing explanation when status === "bozza" (US-2.8 AC3).
   error_message?: string | null;
   created_at: string;
+  // US-2.9: human-readable name of the user who triggered generation.
+  // Resolved server-side via join on users.full_name. Optional so older
+  // clients / records still type-check.
+  generated_by_name?: string | null;
 }
 
 export interface Attrezzatura {
@@ -144,3 +149,44 @@ export interface BatchStatusResponse {
 }
 
 export type UserRole = "admin" | "operatore_ufficio" | "operatore_campo";
+
+// US-1.3 photo uploads
+export interface AmbienteFoto {
+  id: string;
+  ambiente_id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  created_at: string;
+}
+
+// US-4.8 POS DPI matrix
+export interface DpiCatalog {
+  roles: string[];
+  phases: string[];
+  dpi_catalog: Record<string, string>;
+}
+
+export interface DpiMatrix {
+  [phase: string]: { [role: string]: string[] };
+}
+
+export interface Pos {
+  id: string;
+  azienda_id: string;
+  cantiere_indirizzo: string;
+  dpi_matrix: DpiMatrix;
+  dpi_matrix_roles: string[];
+  dpi_matrix_phases: string[];
+}
+
+// US-3.8 stress per-client measures library
+export interface StressMisuraLibreria {
+  id: string;
+  azienda_id: string;
+  livello_rischio: "Basso" | "Medio" | "Alto";
+  testo: string;
+  personalizzato: boolean;
+  created_at: string;
+}
+

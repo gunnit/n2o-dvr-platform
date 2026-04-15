@@ -3,6 +3,7 @@ from app.models.user import User
 from app.models.azienda import Azienda
 from app.models.persona import Persona
 from app.models.ambiente import Ambiente
+from app.models.ambiente_foto import AmbienteFoto
 from app.models.persone_ambienti import persone_ambienti
 from app.models.attrezzatura import Attrezzatura
 from app.models.sostanza_chimica import SostanzaChimica
@@ -17,6 +18,7 @@ from app.models.incendio_valutazione import IncendioValutazione
 from app.models.microclima_valutazione import MicroclimaValutazione
 from app.models.gestanti_valutazione import GestantiValutazione
 from app.models.biologico_valutazione import BiologicoValutazione
+from app.models.stress_misura_libreria import StressMisuraLibreria
 
 # Complementary document models
 from app.models.haccp_form import HaccpConfig, HaccpFormState
@@ -34,6 +36,7 @@ __all__ = [
     "Azienda",
     "Persona",
     "Ambiente",
+    "AmbienteFoto",
     "persone_ambienti",
     "Attrezzatura",
     "SostanzaChimica",
@@ -46,6 +49,7 @@ __all__ = [
     "MicroclimaValutazione",
     "GestantiValutazione",
     "BiologicoValutazione",
+    "StressMisuraLibreria",
     "HaccpConfig",
     "HaccpFormState",
     "PeePlan",

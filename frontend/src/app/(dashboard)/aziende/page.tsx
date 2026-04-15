@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +24,10 @@ const statusLabels: Record<string, string> = {
 
 export default function AziendePage() {
   const { apiFetch, isAuthenticated } = useApi();
+  const { data: session } = useSession();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const role = (session?.user as any)?.role as string | undefined;
+  const isAdmin = role === "admin";
   const [aziende, setAziende] = useState<Azienda[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -41,10 +46,12 @@ export default function AziendePage() {
           <h1 className="text-2xl font-semibold tracking-tight">Aziende</h1>
           <p className="text-muted-foreground">Gestione clienti</p>
         </div>
-        <Button nativeButton={false} render={<Link href="/aziende/new" />}>
-          <Plus className="mr-2 h-4 w-4" />
-          Nuova Azienda
-        </Button>
+        {isAdmin && (
+          <Button nativeButton={false} render={<Link href="/aziende/new" />}>
+            <Plus className="mr-2 h-4 w-4" />
+            Nuova Azienda
+          </Button>
+        )}
       </div>
 
       {loading ? (
@@ -53,9 +60,11 @@ export default function AziendePage() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <p className="text-muted-foreground">Nessuna azienda registrata</p>
-            <Button className="mt-4" nativeButton={false} render={<Link href="/aziende/new" />}>
-              Aggiungi la prima azienda
-            </Button>
+            {isAdmin && (
+              <Button className="mt-4" nativeButton={false} render={<Link href="/aziende/new" />}>
+                Aggiungi la prima azienda
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (

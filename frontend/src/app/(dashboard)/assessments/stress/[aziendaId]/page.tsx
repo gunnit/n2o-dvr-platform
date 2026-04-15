@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import { toast } from "sonner";
 import {
   Card,
   CardContent,
@@ -21,6 +22,18 @@ import {
   type StressResult,
 } from "@/components/assessments/stress-checklist";
 import type { Azienda } from "@/types";
+
+// Inline copy of the library type. The orchestrator wires the canonical
+// definition into `frontend/src/types/index.ts`; keeping this declared
+// locally means the page compiles even before that merge lands.
+interface StressMisuraLibreria {
+  id: string;
+  azienda_id: string;
+  livello_rischio: "Basso" | "Medio" | "Alto";
+  testo: string;
+  personalizzato: boolean;
+  created_at: string;
+}
 
 const DEFAULT_MEASURES: Record<Livello, string[]> = {
   BASSO: [
@@ -53,14 +66,37 @@ const AZIONE_PER_LIVELLO: Record<Livello, string> = {
     "Procedere al 2º livello (valutazione percezione lavoratori). Verificare efficacia delle azioni entro 1 anno. Ripetere entro 2 anni.",
 };
 
+// The backend library stores the band title-cased (Basso/Medio/Alto) while
+// the UI uses the uppercase Livello variant. Map both directions.
+const LIVELLO_TO_BAND: Record<Livello, "Basso" | "Medio" | "Alto"> = {
+  BASSO: "Basso",
+  MEDIO: "Medio",
+  ALTO: "Alto",
+};
+
 interface Misura {
   id: string;
   text: string;
   personalizzata: boolean;
+  // Library row id — present only for measures persisted server-side.
+  libraryId?: string;
+  // The original default text (if this row started as a default). Used to
+  // detect whether the user actually edited the suggestion before saving.
+  originalText?: string;
 }
 
 function makeId(): string {
   return `m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const s = await fetch("/api/auth/session");
+    const session = await s.json();
+    return session?.accessToken ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -68,6 +104,7 @@ function makeId(): string {
 export default function StressAssessmentPage() {
   const params = useParams<{ aziendaId: string }>();
   const aziendaId = params.aziendaId;
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const [azienda, setAzienda] = useState<Azienda | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -76,6 +113,8 @@ export default function StressAssessmentPage() {
   const [misureLivello, setMisureLivello] = useState<Livello | null>(null);
   const [finalizing, setFinalizing] = useState(false);
   const [finalizeMessage, setFinalizeMessage] = useState<string | null>(null);
+  // Track the last saved text per row so we can detect dirty state on blur.
+  const lastSavedTextRef = useRef<Map<string, string>>(new Map());
 
   // Load azienda metadata (best-effort — if auth not set up, we fall back to
   // the raw id so the UI still works for testing).
@@ -83,15 +122,7 @@ export default function StressAssessmentPage() {
     let cancelled = false;
     async function load() {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        let token: string | null = null;
-        try {
-          const s = await fetch("/api/auth/session");
-          const session = await s.json();
-          token = session?.accessToken ?? null;
-        } catch {
-          /* noop */
-        }
+        const token = await getAuthToken();
         const res = await fetch(`${apiUrl}/api/v1/aziende/${aziendaId}`, {
           headers: token
             ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
@@ -112,35 +143,200 @@ export default function StressAssessmentPage() {
     return () => {
       cancelled = true;
     };
-  }, [aziendaId]);
+  }, [aziendaId, apiUrl]);
 
-  // Refresh the measures panel whenever the risk level changes. We preserve
-  // user edits: if they've already customised the list for this livello, we
-  // leave it. If they haven't, we seed with defaults.
+  // Rebuild the measures panel whenever the risk level changes. For each
+  // band we: (1) seed with defaults, (2) fetch the per-client library for
+  // that band and append every library entry tagged as personalizzata.
   useEffect(() => {
     if (result.livello === misureLivello) return;
-    setMisureLivello(result.livello);
-    setMisure(
-      DEFAULT_MEASURES[result.livello].map((text) => ({
+    const livello = result.livello;
+    const band = LIVELLO_TO_BAND[livello];
+    setMisureLivello(livello);
+
+    let cancelled = false;
+
+    async function hydrate() {
+      // Start with default scaffolded list.
+      const defaults: Misura[] = DEFAULT_MEASURES[livello].map((text) => ({
         id: makeId(),
         text,
         personalizzata: false,
-      })),
-    );
-  }, [result.livello, misureLivello]);
+        originalText: text,
+      }));
+
+      try {
+        const token = await getAuthToken();
+        const res = await fetch(
+          `${apiUrl}/api/v1/aziende/${aziendaId}/stress/misure?livello_rischio=${encodeURIComponent(band)}`,
+          {
+            headers: token
+              ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
+              : { "Content-Type": "application/json" },
+          },
+        );
+        if (res.ok) {
+          const rows = (await res.json()) as StressMisuraLibreria[];
+          const fromLibrary: Misura[] = rows.map((row) => ({
+            id: makeId(),
+            text: row.testo,
+            personalizzata: row.personalizzato,
+            libraryId: row.id,
+          }));
+          if (!cancelled) {
+            const merged = [...defaults, ...fromLibrary];
+            lastSavedTextRef.current = new Map(
+              fromLibrary.map((m) => [m.id, m.text]),
+            );
+            setMisure(merged);
+          }
+        } else if (!cancelled) {
+          setMisure(defaults);
+          lastSavedTextRef.current = new Map();
+        }
+      } catch {
+        if (!cancelled) {
+          setMisure(defaults);
+          lastSavedTextRef.current = new Map();
+        }
+      }
+    }
+
+    hydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, [result.livello, misureLivello, apiUrl, aziendaId]);
 
   const answeredCount = INDICATORS.length - result.unanswered.length;
   const allAnswered = result.unanswered.length === 0;
 
-  const updateMisura = useCallback((id: string, text: string) => {
-    setMisure((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, text, personalizzata: true } : m)),
-    );
+  const updateMisuraText = useCallback((id: string, text: string) => {
+    setMisure((prev) => prev.map((m) => (m.id === id ? { ...m, text } : m)));
   }, []);
 
-  const removeMisura = useCallback((id: string) => {
-    setMisure((prev) => prev.filter((m) => m.id !== id));
-  }, []);
+  // Persist a measure row to the per-client library.
+  // - If it already has libraryId + the text changed, PUT it.
+  // - Else if the text is non-empty and differs from the original default
+  //   (or the row had no originalText, i.e. was user-added), POST it.
+  const saveMisura = useCallback(
+    async (id: string) => {
+      const row = misure.find((m) => m.id === id);
+      if (!row) return;
+      const trimmed = row.text.trim();
+      if (!trimmed) return;
+      // Skip if unchanged since last save.
+      if (lastSavedTextRef.current.get(id) === row.text) return;
+      // Skip if this is a default row that hasn't actually been edited.
+      if (
+        row.originalText !== undefined &&
+        row.originalText === row.text &&
+        !row.libraryId
+      ) {
+        return;
+      }
+
+      const band = LIVELLO_TO_BAND[result.livello];
+      const token = await getAuthToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      try {
+        if (row.libraryId) {
+          const res = await fetch(
+            `${apiUrl}/api/v1/aziende/${aziendaId}/stress/misure/${row.libraryId}`,
+            {
+              method: "PUT",
+              headers,
+              body: JSON.stringify({ testo: row.text }),
+            },
+          );
+          if (!res.ok) throw new Error(`Errore ${res.status}`);
+          const saved = (await res.json()) as StressMisuraLibreria;
+          lastSavedTextRef.current.set(id, saved.testo);
+          setMisure((prev) =>
+            prev.map((m) =>
+              m.id === id
+                ? { ...m, personalizzata: true, text: saved.testo }
+                : m,
+            ),
+          );
+          toast.success("Misura aggiornata nella libreria cliente");
+        } else {
+          const res = await fetch(
+            `${apiUrl}/api/v1/aziende/${aziendaId}/stress/misure`,
+            {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                azienda_id: aziendaId,
+                livello_rischio: band,
+                testo: row.text,
+              }),
+            },
+          );
+          if (!res.ok) throw new Error(`Errore ${res.status}`);
+          const saved = (await res.json()) as StressMisuraLibreria;
+          lastSavedTextRef.current.set(id, saved.testo);
+          setMisure((prev) =>
+            prev.map((m) =>
+              m.id === id
+                ? {
+                    ...m,
+                    personalizzata: true,
+                    libraryId: saved.id,
+                    text: saved.testo,
+                  }
+                : m,
+            ),
+          );
+          toast.success("Misura salvata nella libreria cliente");
+        }
+      } catch (err) {
+        toast.error(
+          err instanceof Error
+            ? `Salvataggio fallito: ${err.message}`
+            : "Salvataggio fallito",
+        );
+      }
+    },
+    [apiUrl, aziendaId, misure, result.livello],
+  );
+
+  const removeMisura = useCallback(
+    async (id: string) => {
+      const row = misure.find((m) => m.id === id);
+      if (!row) return;
+      // If the row has a library id, delete it server-side first.
+      if (row.libraryId) {
+        try {
+          const token = await getAuthToken();
+          const headers: Record<string, string> = {
+            "Content-Type": "application/json",
+          };
+          if (token) headers.Authorization = `Bearer ${token}`;
+          const res = await fetch(
+            `${apiUrl}/api/v1/aziende/${aziendaId}/stress/misure/${row.libraryId}`,
+            { method: "DELETE", headers },
+          );
+          if (!res.ok && res.status !== 204) {
+            throw new Error(`Errore ${res.status}`);
+          }
+          toast.success("Misura rimossa dalla libreria cliente");
+        } catch (err) {
+          toast.error(
+            err instanceof Error
+              ? `Rimozione fallita: ${err.message}`
+              : "Rimozione fallita",
+          );
+          return;
+        }
+      }
+      lastSavedTextRef.current.delete(id);
+      setMisure((prev) => prev.filter((m) => m.id !== id));
+    },
+    [apiUrl, aziendaId, misure],
+  );
 
   const addMisura = useCallback(() => {
     setMisure((prev) => [
@@ -153,15 +349,7 @@ export default function StressAssessmentPage() {
     setFinalizing(true);
     setFinalizeMessage(null);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      let token: string | null = null;
-      try {
-        const s = await fetch("/api/auth/session");
-        const session = await s.json();
-        token = session?.accessToken ?? null;
-      } catch {
-        /* noop */
-      }
+      const token = await getAuthToken();
 
       // Pull answers directly from localStorage (the checklist owns the state)
       const raw = window.localStorage.getItem(`stress-draft-${aziendaId}`);
@@ -188,7 +376,7 @@ export default function StressAssessmentPage() {
     } finally {
       setFinalizing(false);
     }
-  }, [aziendaId]);
+  }, [apiUrl, aziendaId]);
 
   const pageSubtitle = useMemo(() => {
     if (loadError) return `Azienda ${aziendaId} (metadati non disponibili)`;
@@ -264,14 +452,21 @@ export default function StressAssessmentPage() {
                     rows={Math.max(2, Math.ceil((m.text.length || 20) / 90))}
                     value={m.text}
                     placeholder="Descrivi la misura correttiva…"
-                    onChange={(e) => updateMisura(m.id, e.target.value)}
+                    onChange={(e) => updateMisuraText(m.id, e.target.value)}
+                    onBlur={() => saveMisura(m.id)}
                   />
                   <div className="flex shrink-0 items-center gap-2">
                     {m.personalizzata && (
-                      <Badge className="bg-primary/10 text-primary hover:bg-primary/15">
-                        Personalizzato
-                      </Badge>
+                      <Badge variant="secondary">Personalizzato</Badge>
                     )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => saveMisura(m.id)}
+                    >
+                      Salva
+                    </Button>
                     <Button
                       variant="ghost"
                       size="sm"

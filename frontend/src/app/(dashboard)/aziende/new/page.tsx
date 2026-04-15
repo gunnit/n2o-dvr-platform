@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,9 +16,21 @@ const ATECO_REGEX = /^\d{2}(\.\d{2}(\.\d{1,2})?)?$/;
 
 export default function NewAziendaPage() {
   const router = useRouter();
+  const { data: session, status } = useSession();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const role = (session?.user as any)?.role as string | undefined;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // US-5.1: non-admins cannot create clients. Bounce them with a toast.
+  useEffect(() => {
+    if (status === "loading") return;
+    if (role && role !== "admin") {
+      toast.error("Solo gli amministratori possono creare nuovi clienti");
+      router.replace("/dashboard");
+    }
+  }, [role, status, router]);
 
   function validateField(name: string, value: string) {
     if (name === "partita_iva" && value && !PARTITA_IVA_REGEX.test(value.trim())) {
