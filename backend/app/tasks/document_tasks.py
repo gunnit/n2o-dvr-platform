@@ -2,11 +2,13 @@
 
 The task receives a DocumentoGenerato.id and dispatches to the right
 generator based on tipo_documento. Updates status through
-pending -> in_progress -> completed / failed.
+pending -> in_progress -> completed, or rolls back to 'bozza' on failure
+per US-2.8 AC3 (partial file discarded, user-friendly error recorded).
 """
 
 import asyncio
 import logging
+import os
 import traceback
 import uuid
 from datetime import datetime, timezone
@@ -21,6 +23,24 @@ from app.services.document_generator.dispatcher import get_generator_for
 logger = logging.getLogger(__name__)
 
 
+def _friendly_error_for(exc: Exception) -> str:
+    """Translate a raw exception into a short Italian line for the operator.
+
+    The full traceback stays in the worker log; only this line ends up in
+    the DB and the UI. Kept deliberately terse so it fits in a tooltip.
+    """
+    name = type(exc).__name__
+    if isinstance(exc, FileNotFoundError):
+        return "Template mancante o file di supporto non trovato. Contatta l'amministratore."
+    if isinstance(exc, PermissionError):
+        return "Permessi insufficienti sul disco di output. Contatta l'amministratore."
+    if isinstance(exc, TimeoutError):
+        return "Timeout durante la generazione. Riprova tra qualche minuto."
+    # Generic fallback: expose just the exception class — never the message,
+    # which can leak stack traces or SQL fragments.
+    return f"Generazione non riuscita ({name}). Riprova o contatta l'amministratore."
+
+
 async def _run_generation(document_id: uuid.UUID) -> None:
     """Async inner: load the doc record, run the generator, update status."""
     async with async_session_factory() as db:
@@ -32,9 +52,11 @@ async def _run_generation(document_id: uuid.UUID) -> None:
             logger.error("Document record not found: %s", document_id)
             return
 
+        output_path: str | None = None
         try:
             doc.status = "in_progress"
             doc.generation_started_at = datetime.utcnow()
+            doc.error_message = None  # clear any prior rollback note
             await db.commit()
 
             # Dispatch to the right generator class
@@ -58,9 +80,23 @@ async def _run_generation(document_id: uuid.UUID) -> None:
                 logger.warning("Google Drive upload failed (non-fatal): %s", drive_err)
 
         except Exception as e:
+            # US-2.8 AC3: discard the partial file, roll status back to
+            # "bozza", and log a user-friendly error message. The full
+            # traceback stays in the worker log only.
             logger.error("Generation failed for %s: %s\n%s", document_id, e, traceback.format_exc())
-            doc.status = "failed"
-            doc.file_path = f"ERROR: {type(e).__name__}: {str(e)[:500]}"
+
+            # Best-effort: remove a partially-written file if the generator
+            # managed to open one before throwing. Swallow OSErrors because
+            # the exact path may never have been created.
+            if output_path and os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                except OSError as rm_err:
+                    logger.warning("Failed to remove partial %s: %s", output_path, rm_err)
+
+            doc.status = "bozza"
+            doc.file_path = None
+            doc.error_message = _friendly_error_for(e)
             doc.generation_completed_at = datetime.utcnow()
             await db.commit()
 

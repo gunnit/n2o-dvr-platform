@@ -50,6 +50,12 @@ const statusConfig: Record<string, { color: string; label: string; icon: typeof 
   generating: { color: "bg-yellow-100 text-yellow-700", label: "In generazione", icon: Loader2 },
   completed: { color: "bg-green-100 text-green-700", label: "Pronto", icon: CheckCircle2 },
   ready: { color: "bg-green-100 text-green-700", label: "Pronto", icon: CheckCircle2 },
+  // US-2.8 AC3: a failed attempt is rolled back to "bozza" — partial
+  // file discarded, record retained so the operator can retry without
+  // starting from scratch. Amber rather than red because the record is
+  // still usable (retry is available); red is reserved for non-recoverable
+  // legacy "failed" rows that predate the rollback logic.
+  bozza: { color: "bg-amber-100 text-amber-800", label: "Bozza", icon: AlertCircle },
   failed: { color: "bg-red-100 text-red-700", label: "Errore", icon: AlertCircle },
   error: { color: "bg-red-100 text-red-700", label: "Errore", icon: AlertCircle },
 };
@@ -264,7 +270,17 @@ export default function DocumentsPage() {
                     <p className="text-xs text-muted-foreground">{docType.pages} pagine</p>
                     {existing && config && (
                       <div className="flex items-center gap-2">
-                        <Badge className={config.color}>
+                        <Badge
+                          className={config.color}
+                          // Surface the short Italian error line from the
+                          // worker (US-2.8 AC3) via native tooltip rather
+                          // than wiring a Popover — single-line content.
+                          title={
+                            status === "bozza" && existing.error_message
+                              ? existing.error_message
+                              : undefined
+                          }
+                        >
                           {(status === "generating" || status === "in_progress") && (
                             <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                           )}
@@ -275,6 +291,11 @@ export default function DocumentsPage() {
                           {new Date(existing.created_at).toLocaleDateString("it-IT")}
                         </span>
                       </div>
+                    )}
+                    {status === "bozza" && existing?.error_message && (
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        {existing.error_message}
+                      </p>
                     )}
                   </CardContent>
                   <CardFooter className="gap-2">
@@ -289,7 +310,11 @@ export default function DocumentsPage() {
                       ) : (
                         <RefreshCw className="mr-1.5 h-3 w-3" />
                       )}
-                      {(existing?.status === "ready" || existing?.status === "completed") ? "Rigenera" : "Genera"}
+                      {existing?.status === "ready" || existing?.status === "completed"
+                        ? "Rigenera"
+                        : existing?.status === "bozza"
+                        ? "Riprova"
+                        : "Genera"}
                     </Button>
                     {(existing?.status === "ready" || existing?.status === "completed") && existing.file_path && (
                       <Button

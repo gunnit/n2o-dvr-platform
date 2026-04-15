@@ -27,8 +27,14 @@ interface VersionHistoryProps {
 const statusLabels: Record<string, { color: string; label: string }> = {
   pending: { color: "bg-gray-100 text-gray-700", label: "In attesa" },
   generating: { color: "bg-yellow-100 text-yellow-700", label: "In generazione" },
+  in_progress: { color: "bg-yellow-100 text-yellow-700", label: "In generazione" },
   ready: { color: "bg-green-100 text-green-700", label: "Pronto" },
+  completed: { color: "bg-green-100 text-green-700", label: "Pronto" },
+  // See documents/page.tsx for the rationale on amber — bozza is a
+  // recoverable rollback state, not a hard failure.
+  bozza: { color: "bg-amber-100 text-amber-800", label: "Bozza" },
   error: { color: "bg-red-100 text-red-700", label: "Errore" },
+  failed: { color: "bg-red-100 text-red-700", label: "Errore" },
 };
 
 function formatItalianDateTime(iso: string): string {
@@ -161,6 +167,12 @@ export function VersionHistory({
                       {diffSummary && (
                         <p className="text-xs text-muted-foreground">
                           {diffSummary}
+                        </p>
+                      )}
+
+                      {version.status === "bozza" && version.error_message && (
+                        <p className="text-xs text-amber-700 dark:text-amber-400">
+                          {version.error_message}
                         </p>
                       )}
 

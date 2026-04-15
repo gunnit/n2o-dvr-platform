@@ -15,7 +15,7 @@ Output: A .docx file with professional formatting including:
 import os
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from docx import Document
@@ -118,11 +118,17 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         self._add_part_iii(doc, data["ambienti"])
         self._add_part_iv(doc)
 
-        # Determine version and save with slugified filename
+        # Determine version and save with the filename pattern required
+        # by US-2.8 AC2: DVR_<ragione_sociale>_<YYYYMMDD>_v<N>.docx.
+        # The <ragione_sociale> segment is slugified (lowercase,
+        # alphanumeric + underscore) so the filename stays safe on both
+        # POSIX and Windows checkouts. The date is the generation day
+        # (UTC) so regenerations on the same day keep the same stamp.
         version = await self._get_next_version()
         output_dir = self._get_output_dir()
         slug = self._slugify(azienda.ragione_sociale or "azienda")
-        filename = f"dvr_master_{slug}_v{version}.docx"
+        date_stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
+        filename = f"DVR_{slug}_{date_stamp}_v{version}.docx"
         filepath = os.path.join(output_dir, filename)
 
         doc.save(filepath)

@@ -65,18 +65,23 @@ export interface DocumentoGenerato {
   azienda_id: string;
   tipo_documento: string;
   versione: number;
-  // Backend emits these four; legacy "generating"/"ready"/"error" values are
-  // kept only for older records that may still be in the DB.
+  // Backend emits these five; legacy "generating"/"ready"/"error"/"failed"
+  // values are kept only for older records that may still be in the DB.
+  // "bozza" is the US-2.8 AC3 rollback state: a generation attempt failed
+  // and the record was reset — partial file discarded, error_message set.
   status:
     | "pending"
     | "in_progress"
     | "completed"
+    | "bozza"
     | "failed"
     | "generating"
     | "ready"
     | "error";
   file_path: string | null;
   gdrive_file_id: string | null;
+  // User-facing explanation when status === "bozza" (US-2.8 AC3).
+  error_message?: string | null;
   created_at: string;
 }
 

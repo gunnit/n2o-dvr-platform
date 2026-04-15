@@ -20,6 +20,9 @@ class DocumentResponse(BaseModel):
     status: str
     file_path: str | None = None
     gdrive_file_id: str | None = None
+    # User-facing error line shown next to "bozza" status (US-2.8 AC3).
+    # None on success, and non-None on any failed-and-rolled-back record.
+    error_message: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
