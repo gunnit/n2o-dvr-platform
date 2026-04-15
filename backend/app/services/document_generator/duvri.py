@@ -65,6 +65,16 @@ class DuvriGenerator(BaseDocumentGenerator):
                 ("Costi della sicurezza (EUR)", f"{float(d.costi_sicurezza):,.2f}" if d.costi_sicurezza else "—"),
             ])
 
+            attrezz = d.attrezzature_appaltatore or []
+            if attrezz:
+                add_heading(doc, "Attrezzature / attivita appaltatore", level=3)
+                rows = [
+                    [a.get("tipo", ""), a.get("descrizione", "") or ""]
+                    for a in attrezz
+                    if isinstance(a, dict)
+                ]
+                add_data_table(doc, ["Tipo", "Descrizione"], rows)
+
             add_heading(doc, "Interferenze identificate", level=3)
             interfs = d.interferenze or []
             if interfs:

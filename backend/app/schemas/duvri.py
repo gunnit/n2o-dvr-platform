@@ -20,6 +20,17 @@ class InterferenzaItem(BaseModel):
     dpi: str | None = Field(None, max_length=500)
 
 
+class AppaltatoreAttrezzatura(BaseModel):
+    tipo: str = Field(..., max_length=64)
+    descrizione: str | None = Field(None, max_length=255)
+
+
+class InterferenzaDecisione(BaseModel):
+    rule_id: str = Field(..., max_length=128)
+    decision: str = Field(..., pattern=r"^(accept|reject)$")
+    custom_text: str | None = Field(None, max_length=2000)
+
+
 class DuvriBase(BaseModel):
     appaltatore_ragione_sociale: str = Field(..., min_length=1, max_length=255)
     appaltatore_partita_iva: str | None = Field(None, max_length=32)
@@ -29,6 +40,10 @@ class DuvriBase(BaseModel):
     data_fine: date | None = None
     importo_appalto: float | None = None
     interferenze: list[InterferenzaItem] = Field(default_factory=list)
+    attrezzature_appaltatore: list[AppaltatoreAttrezzatura] = Field(
+        default_factory=list
+    )
+    interferenze_decisioni: list[InterferenzaDecisione] = Field(default_factory=list)
     costi_sicurezza: float | None = None
     note: str | None = None
 
@@ -46,8 +61,33 @@ class DuvriUpdate(BaseModel):
     data_fine: date | None = None
     importo_appalto: float | None = None
     interferenze: list[InterferenzaItem] | None = None
+    attrezzature_appaltatore: list[AppaltatoreAttrezzatura] | None = None
+    interferenze_decisioni: list[InterferenzaDecisione] | None = None
     costi_sicurezza: float | None = None
     note: str | None = None
+
+
+class InterferenceSuggestion(BaseModel):
+    rule_id: str
+    contractor_eq: str
+    titolo: str
+    rischio: str
+    misure: str
+    dpi: str | None
+    riferimento: str
+    decision: str | None = None  # accept | reject if previously decided
+
+
+class AnalyzeInterferencesResponse(BaseModel):
+    suggestions: list[InterferenceSuggestion]
+    no_interference_detected: bool
+    contractor_equipment: list[str]
+
+
+class InterferenceDecisionBody(BaseModel):
+    rule_id: str = Field(..., max_length=128)
+    decision: str = Field(..., pattern=r"^(accept|reject)$")
+    custom_text: str | None = Field(None, max_length=2000)
 
 
 class DuvriResponse(DuvriBase):

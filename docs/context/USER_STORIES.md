@@ -18,15 +18,15 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 | 1 — Digital Survey | 10 | 6 | 3 | 1 | 75% |
 | 2 — DVR Master | 9 | 3 | 6 | 0 | 67% |
 | 3 — DVR Attachments | 15 | 8 | 7 | 0 | 77% |
-| 4 — Complementary Docs | 8 | 2 | 4 | 2 | 50% |
+| 4 — Complementary Docs | 8 | 3 | 4 | 1 | 63% |
 | 5 — Cross-cutting | 4 | 0 | 4 | 0 | 50% |
-| **TOTAL** | **46** | **19** | **24** | **3** | **67%** |
+| **TOTAL** | **46** | **20** | **24** | **2** | **70%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
 > **2026-04-15 reconciliation**: Done in two passes. Pass 1 realigned against the Sprint Closure section dated 2026-04-14 (SDS trilogy, Epic 4 generators, US-5.4 backups). Pass 2 audited the code against acceptance criteria for stories touched by post-closure commits (`0779050` MMC, `c8a4670` Stress, `01077fb` Incendio, `05173f2` VDT+Microclima, `8f6c61c` AI integration, `e2b6475` Wave 1). Net effect of Pass 2: US-3.1/3.2/3.3/3.4/3.6/3.12/3.13 → **DONE**; US-2.1/2.6/3.5/3.7/3.8/3.14 → **PARTIAL** with specific AC gaps documented per story below.
 >
-> **True greenfield remaining** (stories still NOT STARTED): US-1.3 photo uploads, US-4.6 interference rules engine, US-4.8 POS role×phase DPI matrix. (US-5.3 → PARTIAL on 2026-04-15 — shared AI badge + filter wired. US-4.2 → DONE on 2026-04-15 — standard A-E procedures with per-client overrides + reset dialog. US-2.2 → PARTIAL on 2026-04-15 — seismic zone auto-fill from 154-comune lookup + override UX; regional regulations half still open.)
+> **True greenfield remaining** (stories still NOT STARTED): US-1.3 photo uploads, US-4.8 POS role×phase DPI matrix. (US-4.5 → DONE 2026-04-15 — DUVRI CRUD + committente sync banner. US-4.6 → DONE 2026-04-15 — 15-rule interference engine with Accetta/Rifiuta sheet. US-5.3 → PARTIAL 2026-04-15 — AI badge + filter wired. US-4.2 → DONE 2026-04-15 — A-E procedures with per-client overrides. US-2.2 → PARTIAL 2026-04-15 — seismic zone auto-fill from 154-comune lookup; regional regulations half still open.)
 
 Tier A (2026-04-14): US-1.5 (contextual risk filtering + summary bar), US-2.3 (default scoring matrix + Reset button), US-2.8 (Part II + logo embed + versioned filename), US-2.9 (version history Sheet) — all four stories advanced within their PARTIAL status toward DONE.
 
@@ -546,11 +546,10 @@ As an operator, I want principal company data auto-filled from the DVR and contr
 - **Given** I want to add a contractor, **When** I click "Aggiungi appaltatore", **Then** a new contractor section opens with empty fields for the contractor's data and scope of work
 - **Given** the DVR principal data changes, **When** I open the DUVRI again, **Then** the principal section updates automatically and a banner notes "Dati committente aggiornati"
 
-#### US-4.6 `NOT STARTED`
+#### US-4.6 `DONE`
 As an operator, I want interference analysis per equipment type with suggested prevention measures.
 
-> **Built**: Nothing.
-> **Missing**: No interference analysis engine. No equipment overlap detection. No rules engine. No accept/reject per measure.
+> **Built**: Rules-engine catalog at `backend/app/data/duvri_interference_rules.py` — 15 rules across 15 contractor equipment / activity types (muletto, ponteggio, saldatrice, fiamma_libera, prodotti_chimici, lavori in quota, scavi, demolizioni, etc.) with Italian risk descriptions, prevention/protection measures, DPI requirements, and normative references (D.Lgs. 81/2008 art. 26, D.M. 02/09/2021, etc.). New columns on `duvri`: `attrezzature_appaltatore` (JSONB list of {tipo, descrizione}) + `interferenze_decisioni` (JSONB list of {rule_id, decision, custom_text}) via migration `e5f6a7b8c9d0`. Three new endpoints: `GET /duvri/{id}/analyze-interferences` runs `evaluate_rules()` on the contractor equipment list and returns suggestions with prior decisions; `POST /duvri/{id}/interferences/decision` upserts an accept/reject + mirrors accepted rules into the live `interferenze` list (so the generator picks them up); `GET /duvri/_meta/equipment-types` powers the frontend chip selector. Frontend: equipment chip multi-select inside the DUVRI form + per-card "Analizza interferenze" CTA opening a side Sheet that lists suggestions with Accetta/Rifiuta/Cambia actions, surfaces "Nessuna interferenza rilevata" (AC3) when no rules fire, and renders the riferimento normativo per suggestion. DUVRI generator updated to include "Attrezzature / attivita appaltatore" section before interferenze.
 
 **Acceptance Criteria:**
 

@@ -6,9 +6,13 @@ import {
   AlertTriangle,
   Building2,
   Calendar,
+  Check,
   Loader2,
   Pencil,
   Plus,
+  RotateCcw,
+  Search,
+  ThumbsDown,
   Trash2,
   X,
 } from "lucide-react";
@@ -32,6 +36,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +60,17 @@ interface InterferenzaItem {
   rischio: string;
   misure: string;
   dpi?: string | null;
+}
+
+interface AppaltatoreAttrezzatura {
+  tipo: string;
+  descrizione?: string | null;
+}
+
+interface InterferenzaDecisione {
+  rule_id: string;
+  decision: "accept" | "reject";
+  custom_text?: string | null;
 }
 
 interface CommittenteSnapshot {
@@ -71,6 +93,8 @@ interface DuvriResponse {
   data_fine: string | null;
   importo_appalto: number | null;
   interferenze: InterferenzaItem[];
+  attrezzature_appaltatore: AppaltatoreAttrezzatura[];
+  interferenze_decisioni: InterferenzaDecisione[];
   costi_sicurezza: number | null;
   note: string | null;
   created_at: string;
@@ -78,6 +102,41 @@ interface DuvriResponse {
   committente_outdated: boolean;
   committente_snapshot: CommittenteSnapshot | null;
 }
+
+interface InterferenceSuggestion {
+  rule_id: string;
+  contractor_eq: string;
+  titolo: string;
+  rischio: string;
+  misure: string;
+  dpi: string | null;
+  riferimento: string;
+  decision: "accept" | "reject" | null;
+}
+
+interface AnalyzeResponse {
+  suggestions: InterferenceSuggestion[];
+  no_interference_detected: boolean;
+  contractor_equipment: string[];
+}
+
+const EQUIPMENT_LABELS: Record<string, string> = {
+  muletto: "Muletto / carrello elevatore",
+  transpallet_elettrico: "Transpallet elettrico",
+  ponteggio: "Ponteggio",
+  piattaforma_aerea: "Piattaforma aerea (PLE)",
+  gru: "Gru",
+  saldatrice: "Saldatrice",
+  fiamma_libera: "Fiamma libera",
+  prodotti_chimici: "Prodotti chimici",
+  pulizie_pavimenti: "Pulizie pavimenti",
+  macchinari_rumorosi: "Macchinari rumorosi",
+  attrezzature_elettriche_portatili: "Attrezzature elettriche portatili",
+  veicoli_trasporto: "Veicoli di trasporto",
+  scavo_movimento_terra: "Scavo / movimento terra",
+  lavori_in_quota: "Lavori in quota",
+  demolizioni: "Demolizioni",
+};
 
 interface DuvriFormState {
   appaltatore_ragione_sociale: string;
@@ -90,6 +149,7 @@ interface DuvriFormState {
   costi_sicurezza: string;
   note: string;
   interferenze: InterferenzaItem[];
+  attrezzature_appaltatore: AppaltatoreAttrezzatura[];
 }
 
 const EMPTY_FORM: DuvriFormState = {
@@ -103,6 +163,7 @@ const EMPTY_FORM: DuvriFormState = {
   costi_sicurezza: "",
   note: "",
   interferenze: [],
+  attrezzature_appaltatore: [],
 };
 
 function toFormState(d: DuvriResponse): DuvriFormState {
@@ -119,6 +180,7 @@ function toFormState(d: DuvriResponse): DuvriFormState {
       d.costi_sicurezza != null ? String(d.costi_sicurezza) : "",
     note: d.note ?? "",
     interferenze: d.interferenze.map((i) => ({ ...i })),
+    attrezzature_appaltatore: d.attrezzature_appaltatore.map((a) => ({ ...a })),
   };
 }
 
@@ -144,6 +206,10 @@ function toPayload(form: DuvriFormState) {
         misure: i.misure.trim(),
         dpi: (i.dpi || "").trim() || null,
       })),
+    attrezzature_appaltatore: form.attrezzature_appaltatore.map((a) => ({
+      tipo: a.tipo,
+      descrizione: (a.descrizione || "").trim() || null,
+    })),
   };
 }
 
@@ -163,6 +229,12 @@ export default function DuvriListPage() {
   const [deleteTarget, setDeleteTarget] = useState<DuvriResponse | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const [equipmentTypes, setEquipmentTypes] = useState<string[]>([]);
+  const [analyzeTarget, setAnalyzeTarget] = useState<DuvriResponse | null>(null);
+  const [analyzeData, setAnalyzeData] = useState<AnalyzeResponse | null>(null);
+  const [analyzeLoading, setAnalyzeLoading] = useState(false);
+  const [decisionPending, setDecisionPending] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -181,6 +253,87 @@ export default function DuvriListPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Load the canonical equipment-type list once for the chips selector.
+  useEffect(() => {
+    apiFetch<string[]>(
+      `/api/v1/aziende/${aziendaId}/duvri/_meta/equipment-types`
+    )
+      .then(setEquipmentTypes)
+      .catch(() => {
+        // Fall back to local label keys if the endpoint hiccups so the form
+        // still works for new contractors.
+        setEquipmentTypes(Object.keys(EQUIPMENT_LABELS));
+      });
+  }, [aziendaId, apiFetch]);
+
+  const toggleEquipment = (tipo: string) => {
+    setForm((f) => {
+      const exists = f.attrezzature_appaltatore.some((a) => a.tipo === tipo);
+      return {
+        ...f,
+        attrezzature_appaltatore: exists
+          ? f.attrezzature_appaltatore.filter((a) => a.tipo !== tipo)
+          : [...f.attrezzature_appaltatore, { tipo, descrizione: "" }],
+      };
+    });
+  };
+
+  const openAnalyze = async (d: DuvriResponse) => {
+    setAnalyzeTarget(d);
+    setAnalyzeData(null);
+    setAnalyzeLoading(true);
+    try {
+      const res = await apiFetch<AnalyzeResponse>(
+        `/api/v1/aziende/${aziendaId}/duvri/${d.id}/analyze-interferences`
+      );
+      setAnalyzeData(res);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Analisi non riuscita.");
+    } finally {
+      setAnalyzeLoading(false);
+    }
+  };
+
+  const closeAnalyze = () => {
+    setAnalyzeTarget(null);
+    setAnalyzeData(null);
+  };
+
+  const recordDecision = async (
+    rule_id: string,
+    decision: "accept" | "reject"
+  ) => {
+    if (!analyzeTarget) return;
+    setDecisionPending(rule_id);
+    try {
+      const updated = await apiFetch<DuvriResponse>(
+        `/api/v1/aziende/${aziendaId}/duvri/${analyzeTarget.id}/interferences/decision`,
+        {
+          method: "POST",
+          body: JSON.stringify({ rule_id, decision }),
+        }
+      );
+      setItems((prev) =>
+        prev.map((p) => (p.id === updated.id ? updated : p))
+      );
+      setAnalyzeTarget(updated);
+      setAnalyzeData((prev) =>
+        prev
+          ? {
+              ...prev,
+              suggestions: prev.suggestions.map((s) =>
+                s.rule_id === rule_id ? { ...s, decision } : s
+              ),
+            }
+          : prev
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Decisione non salvata.");
+    } finally {
+      setDecisionPending(null);
+    }
+  };
 
   const openCreate = () => {
     setForm(EMPTY_FORM);
@@ -330,6 +483,14 @@ export default function DuvriListPage() {
                   </CardDescription>
                 </div>
                 <div className="flex gap-2">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => openAnalyze(d)}
+                  >
+                    <Search className="mr-1 h-3.5 w-3.5" />
+                    Analizza interferenze
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -565,6 +726,37 @@ export default function DuvriListPage() {
             </div>
 
             <div className="space-y-2">
+              <Label>Attrezzature / attivita appaltatore</Label>
+              <p className="text-xs text-muted-foreground">
+                Seleziona le attivita che l&apos;appaltatore portera&apos; sul
+                sito. Useremo questa lista per suggerire le interferenze tipiche
+                tramite &quot;Analizza interferenze&quot; sulla card.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {equipmentTypes.map((tipo) => {
+                  const selected = form.attrezzature_appaltatore.some(
+                    (a) => a.tipo === tipo
+                  );
+                  return (
+                    <button
+                      key={tipo}
+                      type="button"
+                      onClick={() => toggleEquipment(tipo)}
+                      className={cn(
+                        "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+                        selected
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-input bg-background hover:bg-muted"
+                      )}
+                    >
+                      {EQUIPMENT_LABELS[tipo] || tipo}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Interferenze identificate</Label>
                 <Button
@@ -641,6 +833,153 @@ export default function DuvriListPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Analyze interferences sheet (US-4.6) */}
+      <Sheet
+        open={analyzeTarget !== null}
+        onOpenChange={(o) => !o && closeAnalyze()}
+      >
+        <SheetContent
+          side="right"
+          className="w-full overflow-y-auto sm:max-w-xl"
+        >
+          <SheetHeader>
+            <SheetTitle>Analisi interferenze</SheetTitle>
+            <SheetDescription>
+              {analyzeTarget?.appaltatore_ragione_sociale} —{" "}
+              {analyzeTarget?.oggetto_appalto}
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-4 space-y-4">
+            {analyzeLoading && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Esecuzione analisi...
+              </div>
+            )}
+
+            {analyzeData && analyzeData.contractor_equipment.length === 0 && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <p className="font-medium">Nessuna attrezzatura selezionata</p>
+                <p className="text-xs">
+                  Apri &quot;Modifica&quot; e seleziona almeno
+                  un&apos;attrezzatura/attivita per poter eseguire l&apos;analisi.
+                </p>
+              </div>
+            )}
+
+            {analyzeData &&
+              analyzeData.no_interference_detected &&
+              analyzeData.contractor_equipment.length > 0 && (
+                <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900">
+                  <p className="font-medium">Nessuna interferenza rilevata</p>
+                  <p className="text-xs">
+                    Le attrezzature dichiarate non corrispondono a regole note.
+                    Puoi comunque aggiungere interferenze manualmente da
+                    &quot;Modifica&quot;.
+                  </p>
+                </div>
+              )}
+
+            {analyzeData &&
+              analyzeData.suggestions.map((s) => {
+                const isPending = decisionPending === s.rule_id;
+                return (
+                  <div
+                    key={s.rule_id}
+                    className={cn(
+                      "rounded-md border p-3",
+                      s.decision === "accept" &&
+                        "border-emerald-300 bg-emerald-50/30",
+                      s.decision === "reject" &&
+                        "border-slate-300 bg-slate-50/50 opacity-70"
+                    )}
+                  >
+                    <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                      <span className="text-sm font-medium">{s.titolo}</span>
+                      <Badge variant="outline" className="text-[11px]">
+                        {EQUIPMENT_LABELS[s.contractor_eq] || s.contractor_eq}
+                      </Badge>
+                      {s.decision === "accept" && (
+                        <Badge className="bg-emerald-100 text-emerald-800 text-[11px] hover:bg-emerald-100">
+                          <Check className="mr-1 h-2.5 w-2.5" />
+                          Accettata
+                        </Badge>
+                      )}
+                      {s.decision === "reject" && (
+                        <Badge className="bg-slate-100 text-slate-700 text-[11px] hover:bg-slate-100">
+                          <ThumbsDown className="mr-1 h-2.5 w-2.5" />
+                          Rifiutata
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium">Rischio: </span>
+                      {s.rischio}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      <span className="font-medium">Misure: </span>
+                      {s.misure}
+                    </p>
+                    {s.dpi && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        <span className="font-medium">DPI: </span>
+                        {s.dpi}
+                      </p>
+                    )}
+                    <p className="mt-1 text-[11px] italic text-muted-foreground">
+                      Rif. {s.riferimento}
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      {s.decision !== "accept" && (
+                        <Button
+                          size="sm"
+                          onClick={() => recordDecision(s.rule_id, "accept")}
+                          disabled={isPending}
+                        >
+                          {isPending ? (
+                            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Check className="mr-1 h-3.5 w-3.5" />
+                          )}
+                          Accetta
+                        </Button>
+                      )}
+                      {s.decision !== "reject" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => recordDecision(s.rule_id, "reject")}
+                          disabled={isPending}
+                        >
+                          <ThumbsDown className="mr-1 h-3.5 w-3.5" />
+                          Rifiuta
+                        </Button>
+                      )}
+                      {s.decision && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            recordDecision(
+                              s.rule_id,
+                              s.decision === "accept" ? "reject" : "accept"
+                            )
+                          }
+                          disabled={isPending}
+                        >
+                          <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                          Cambia
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Delete confirmation */}
       <Dialog

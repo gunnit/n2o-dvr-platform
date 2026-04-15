@@ -29,6 +29,12 @@ class Duvri(Base):
     importo_appalto: Mapped[float | None] = mapped_column(Numeric)
     # Interferences identified
     interferenze: Mapped[list] = mapped_column(JSONB, default=list)  # list of {rischio, misure, dpi}
+    # Contractor equipment / activities used to fire the interference rules
+    # engine (US-4.6). Items: {tipo: str, descrizione: str | None}.
+    attrezzature_appaltatore: Mapped[list] = mapped_column(JSONB, default=list)
+    # Per-rule operator decisions: {rule_id, decision: 'accept'|'reject',
+    # custom_text: str | None}. Only accepted rules end up in the final DUVRI.
+    interferenze_decisioni: Mapped[list] = mapped_column(JSONB, default=list)
     # Safety costs (costi della sicurezza da interferenza)
     costi_sicurezza: Mapped[float | None] = mapped_column(Numeric)
     note: Mapped[str | None] = mapped_column(Text)
