@@ -25,6 +25,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.shared import Cm, Inches, Mm, Pt, RGBColor
 
+from app.data.regional_regulations import get_regulations_for_comune
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.risk_calculator import calculate_risk_index
 
@@ -435,6 +436,41 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             p = doc.add_paragraph()
             run = p.add_run(f"Contesto territoriale: {contesto}")
             run.font.size = Pt(10)
+
+        # US-2.2 AC1: inject regione + applicable regional regulations into
+        # Parte II Contesto Territoriale. Driven off sede_legale_citta (falls
+        # back to sede_operativa_citta when absent). Silent no-op for comuni
+        # not in the 158-entry lookup so the generator never fails because of
+        # a missing regulation match — the operator fills it in during review.
+        sede_citta = (
+            getattr(azienda, "sede_legale_citta", None)
+            or getattr(azienda, "sede_operativa_citta", None)
+            or ""
+        )
+        regione, regulations = get_regulations_for_comune(sede_citta.strip())
+        if regione and regulations:
+            p = doc.add_paragraph()
+            run = p.add_run(f"Regione di riferimento: {regione}")
+            run.font.size = Pt(10)
+            run.font.bold = True
+
+            p = doc.add_paragraph()
+            run = p.add_run(
+                "Regolamenti regionali applicabili (in aggiunta al D.Lgs. 81/2008):"
+            )
+            run.font.size = Pt(10)
+            run.font.italic = True
+
+            for reg in regulations:
+                bullet = doc.add_paragraph(style="List Bullet")
+                run = bullet.add_run(f"{reg['titolo']} — ")
+                run.font.size = Pt(10)
+                run.font.bold = True
+                run = bullet.add_run(reg["riferimento"])
+                run.font.size = Pt(10)
+                run = bullet.add_run(f" ({reg['ambito']})")
+                run.font.size = Pt(10)
+                run.font.italic = True
 
         doc.add_paragraph("")
 

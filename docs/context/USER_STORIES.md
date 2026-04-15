@@ -13,16 +13,19 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 
 ## 🔒 Active Agent Claims (2026-04-15)
 
-Stories below are being worked on by a parallel agent. **Do not pick these up if you are a fresh agent.** Look for free PARTIAL stories instead (e.g. US-1.5, US-1.6, US-2.1, US-2.2, US-2.3, US-2.8, US-4.3, US-4.7, US-5.2, US-5.3).
+Stories below are being worked on by a parallel agent. **Do not pick these up if you are a fresh agent.** Look for free PARTIAL stories instead (e.g. US-1.5, US-2.1, US-2.2, US-2.8, US-4.7, US-5.2, US-5.3).
 
 | Story | Claimed by | Timestamp | Scope |
 |-------|-----------|-----------|-------|
+| US-1.6 | Agent-C | 2026-04-15 | **IN PROGRESS** — persist signature PNG + server-side timestamp, flip survey to "Firmato", "Apri revisione" audited edit flow |
+| US-4.3 | Agent-C | 2026-04-15 | **IN PROGRESS** — food-activity-type selector + activity-specific CCP pre-loading + edit-then-merge on activity change |
 | ~~US-1.4~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (modal + qualifiche + multi-select shipped) |
 | ~~US-2.6~~ | Agent-B | 2026-04-15 | **CLOSED → DONE** (per-client misure library + measures-panel wiring shipped) |
 | ~~US-4.1~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (DVR guard + planimetria + plan-config UX shipped) |
 | ~~US-2.3~~ | Agent-B | 2026-04-15 | **CLOSED → DONE** (step-rischi seeds defaults from matrix on first load; operator reviews not enters) |
 | ~~US-4.4~~ | Agent-A | 2026-04-15 | **CLOSED → DONE** (letterhead + ragione sociale + subset dialog shipped) |
 | ~~US-5.4~~ | Agent-A | 2026-04-15 | **CLOSED → PARTIAL→PARTIAL** (panel + audit wiring + alert log shipped; AC2 SMTP + AC3 restore stay open by design) |
+| ~~US-2.2~~ | Agent-B | 2026-04-15 | **CLOSED → DONE** (comune→regione in seismic_zones + regional_regulations module + DVR Parte II injection) |
 
 Release a claim by deleting the row and the inline marker on the story once you DONE/PARTIAL-update it.
 
@@ -31,17 +34,17 @@ Release a claim by deleting the row and the inline marker on the story once you 
 | Epic | Stories | Done | Partial | Not Started | Progress |
 |------|---------|------|---------|-------------|----------|
 | 1 — Digital Survey | 10 | 8 | 2 | 0 | 90% |
-| 2 — DVR Master | 9 | 6 | 3 | 0 | 83% |
+| 2 — DVR Master | 9 | 7 | 2 | 0 | 89% |
 | 3 — DVR Attachments | 15 | 15 | 0 | 0 | 100% |
 | 4 — Complementary Docs | 8 | 6 | 2 | 0 | 88% |
 | 5 — Cross-cutting | 4 | 1 | 3 | 0 | 63% |
-| **TOTAL** | **46** | **36** | **10** | **0** | **89%** |
+| **TOTAL** | **46** | **37** | **9** | **0** | **90%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
 > **2026-04-15 reconciliation**: Done in three passes. Pass 1 realigned against the Sprint Closure section dated 2026-04-14 (SDS trilogy, Epic 4 generators, US-5.4 backups). Pass 2 audited the code against acceptance criteria for stories touched by post-closure commits (`0779050` MMC, `c8a4670` Stress, `01077fb` Incendio, `05173f2` VDT+Microclima, `8f6c61c` AI integration, `e2b6475` Wave 1). Net effect of Pass 2: US-3.1/3.2/3.3/3.4/3.6/3.12/3.13 → **DONE**; US-2.1/2.6/3.5/3.7/3.8/3.14 → **PARTIAL** with specific AC gaps documented per story below. Pass 3 folded in parallel-session commits from later the same day (`f0dd50c` + `84fca5f` + `bbc13e1` gestanti cross-reference, `b2d9de4` biologico sector checklist, `c5c7e5e` + `4252c5c` + `dfa202b` MMC polish): US-3.9/3.10/3.15 → **DONE**; and this-session new work US-4.2/4.5/4.6 → **DONE**, US-2.2/5.3 → **PARTIAL**. Pass 4 (evening, commits `0717a04` + `73679a4`) added the PHS critical-exposure banner and wired the shared AI badge/filter into the SDS review panel: **US-3.14 → DONE** (AC3 banner), and US-5.3 advanced but stays PARTIAL until the badge is also applied to document review surfaces.
 >
-> **True greenfield remaining** (stories still NOT STARTED): none — US-1.3 and US-4.8 closed 2026-04-15 via parallel-agent build (see below). (US-4.5 → DONE 2026-04-15 — DUVRI CRUD + committente sync banner. US-4.6 → DONE 2026-04-15 — 15-rule interference engine with Accetta/Rifiuta sheet. US-5.3 → PARTIAL 2026-04-15 — AI badge + filter wired across Azienda description, measures panel, **and SDS review**. US-4.2 → DONE 2026-04-15 — A-E procedures with per-client overrides. US-2.2 → PARTIAL 2026-04-15 — seismic zone auto-fill from 154-comune lookup; regional regulations half still open. US-3.14 → DONE 2026-04-15 — PHS Dlim < 30 min red banner. US-3.5 → DONE 2026-04-15 — surveillance cadence helper + alerts endpoint + dashboard widgets. **US-2.6 → DONE 2026-04-15 (Agent-B)** — per-client `rischi_misure_libreria` table + CRUD + measures-panel library section with Usa/Rimuovi actions; accepted/modified/manual measures auto-persisted keyed by azienda + categoria_rischio. **US-2.3 → DONE 2026-04-15 (Agent-B)** — Step 5 seeds every fresh valutazione from the matrix on first load; operator reviews rather than enters; 7 new tests pin matrix shape + non-mutation guarantees.)
+> **True greenfield remaining** (stories still NOT STARTED): none — US-1.3 and US-4.8 closed 2026-04-15 via parallel-agent build (see below). (US-4.5 → DONE 2026-04-15 — DUVRI CRUD + committente sync banner. US-4.6 → DONE 2026-04-15 — 15-rule interference engine with Accetta/Rifiuta sheet. US-5.3 → PARTIAL 2026-04-15 — AI badge + filter wired across Azienda description, measures panel, **and SDS review**. US-4.2 → DONE 2026-04-15 — A-E procedures with per-client overrides. US-2.2 → PARTIAL 2026-04-15 — seismic zone auto-fill from 154-comune lookup; regional regulations half still open. US-3.14 → DONE 2026-04-15 — PHS Dlim < 30 min red banner. US-3.5 → DONE 2026-04-15 — surveillance cadence helper + alerts endpoint + dashboard widgets. **US-2.6 → DONE 2026-04-15 (Agent-B)** — per-client `rischi_misure_libreria` table + CRUD + measures-panel library section with Usa/Rimuovi actions; accepted/modified/manual measures auto-persisted keyed by azienda + categoria_rischio. **US-2.3 → DONE 2026-04-15 (Agent-B)** — Step 5 seeds every fresh valutazione from the matrix on first load; operator reviews rather than enters; 7 new tests pin matrix shape + non-mutation guarantees. **US-2.2 → DONE 2026-04-15 (Agent-B)** — seismic_zones extended with comune→regione tuples, new regional_regulations module (20 regioni × PRP + local L.R./D.G.R.), DVR Parte II now emits the "Regolamenti regionali applicabili" bulleted block beneath contesto territoriale; 11 new tests keep the two lookups lock-stepped.)
 
 Tier A (2026-04-14): US-1.5 (contextual risk filtering + summary bar), US-2.3 (default scoring matrix + Reset button), US-2.8 (Part II + logo embed + versioned filename), US-2.9 (version history Sheet) — all four stories advanced within their PARTIAL status toward DONE.
 
@@ -128,7 +131,7 @@ As a field operator, I want a contextualized risk list (not the full generic dec
 - **Given** I tap a risk to mark it applicable to an environment, **When** the toggle activates, **Then** the summary bar at the bottom updates the count "X rischi selezionati"
 - **Given** I return to Step 3 "Ambienti" and add or remove an environment after marking risks, **When** I navigate back to Step 5, **Then** I see a banner "Ambienti modificati - rivedi le selezioni" prompting me to reconfirm
 
-#### US-1.6 `PARTIAL`
+#### US-1.6 `PARTIAL` 🔒 CLAIMED by Agent-C (2026-04-15)
 As a field operator, I want the client to digitally countersign the completed survey on my device so I have legal proof of acceptance.
 
 > **Built**: Step 7 "Riepilogo" with full data summary, "Modifica" buttons, and "Firma del Cliente" section. Completion validation checks: ragione sociale non-empty, at least 1 persona, at least 1 ambiente, at least 1 RSPP. Missing items shown as clickable links in yellow warning banner. HTML5 canvas signature pad with mouse/touch support. Auto-populated timestamp. "Cancella firma" / "Conferma firma" buttons. Signature stored as PNG data URL. "Modifica" buttons disabled after signing. Green "Firmato" badge when signed.
@@ -204,11 +207,11 @@ As an office operator, I want the system to auto-generate the company descriptio
 - **Given** I edit the generated text, **When** I save, **Then** the badge changes to "Modificato dall'utente" and the original AI version is retained in the version history
 - **Given** the AI call fails or times out (>30s), **When** the error surfaces, **Then** I see "Generazione fallita - riprova o inserisci manualmente" with a Retry button and the editor remains usable for manual entry
 
-#### US-2.2 `PARTIAL`
+#### US-2.2 `DONE`
 As an office operator, I want territorial context (seismic zone, local regulations) auto-populated so I don't have to look it up per municipality.
 
-> **Built**: `backend/app/data/seismic_zones.py` ships 154 Italian comuni (all regional capitals + major provincial cities) mapped to OPCM 3519/2006 zones 1-4, with casing/apostrophe-tolerant normalisation. `GET /api/v1/lookup/seismic-zone?comune={name}` returns `{zona, found, comune_matched, source}`. Frontend hook on `step-azienda.tsx` calls the endpoint on comune blur: if found, auto-fills `zona_sismica`, locks the select, shows an emerald "Auto" badge, and exposes a "Modifica manualmente" button (AC1 + AC3). Unmapped comuni surface "Comune non trovato - inserisci manualmente la zona sismica." (AC2). Sede legale takes precedence; sede operativa is used as a fallback source.
-> **Missing**: Regional regulation lookup (second half of AC1) not implemented — only seismic zones. Table coverage is the top ~150 comuni; long-tail comuni fall through to manual entry. Lookup is attached to Step 1 form only, not re-checked at DVR generation time.
+> **Built**: `backend/app/data/seismic_zones.py` ships 158 Italian comuni mapped to OPCM 3519/2006 zones 1-4 **and their regione** as a single source of truth (`_RAW: dict[str, tuple[SeismicZone, str]]`), with casing/apostrophe-tolerant normalisation and new `lookup_regione()` helper. New `backend/app/data/regional_regulations.py` publishes 2-3 anchor regulations per regione (20 regioni + Trentino-Alto Adige double-entry for Trento/Bolzano) — Piano Regionale Prevenzione 2020-2025, plus regione-specific L.R./D.G.R. on cantieri / amianto / radon — exposed via `get_regulations_for_regione()` and `get_regulations_for_comune()`. `GET /api/v1/lookup/seismic-zone` now additionally returns `regione` + `regolamenti_regionali` so a single fetch carries everything the "Contesto Territoriale" block needs; companion endpoint `GET /api/v1/lookup/regional-regulations?comune=...` for callers that only want the regulations half. DVR generator (`dvr_master.py::_add_part_ii`) resolves `sede_legale_citta` (or sede_operativa_citta fallback) to a regione and emits a bulleted "Regolamenti regionali applicabili" block under the existing contesto territoriale paragraph in Parte II — AC1 second half closed. Frontend Step 1 hook at `step-azienda.tsx` still auto-fills `zona_sismica` as before (AC1/AC2/AC3 for seismic stay unchanged). 11 unit tests in `backend/tests/test_regional_regulations.py` pin the two lookups in lock-step (every comune has both a zone AND a regione AND mapped regulations) so the DVR can't silently emit a regulations block for the wrong regione.
+> **Missing**: Long-tail comuni (outside the 158-entry registry) still fall through to manual entry — same coverage caveat as before; operators review and add what's missing during DVR review.
 
 **Acceptance Criteria:**
 
@@ -522,7 +525,7 @@ As an operator, I want standard emergency procedures (A-E) for each event type p
 
 ### HACCP
 
-#### US-4.3 `PARTIAL`
+#### US-4.3 `PARTIAL` 🔒 CLAIMED by Agent-C (2026-04-15)
 As an operator, I want the HACCP manual auto-generated based on food activity type with customized CCP analysis.
 
 > **Built**: `HACCP` generator produces 1370 paragraphs / 23 tables against Acme fixture. Registered in documents page (Sprint Closure 2026-04-14).

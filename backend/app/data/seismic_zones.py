@@ -1,22 +1,19 @@
-"""Italian seismic zone lookup (US-2.2).
+"""Italian seismic zone + regione lookup (US-2.2).
 
-Maps comune (municipality) names to the four-zone seismic classification
-established by OPCM 3519/2006 and refined by regional ordinanze. Values:
+Maps comune (municipality) names to:
+  1. the four-zone seismic classification established by OPCM 3519/2006
+     and refined by regional ordinanze — values 1 (high) through 4 (very low)
+  2. the Italian regione the comune sits in — used to look up applicable
+     regional regulations in ``app.data.regional_regulations``
 
-  1  — alto rischio (high)
-  2  — medio rischio (medium)
-  3  — basso rischio (low)
-  4  — molto basso (very low)
-
-Scope is intentionally pragmatic: ~100 of the most populated Italian comuni
+Scope is intentionally pragmatic: ~150 of the most populated Italian comuni
 plus all regional capitals. Operators working in an unclassified comune hit
 the "Comune non trovato - inserisci manualmente" fallback per AC2 and can
 enter the zone manually in the Azienda form.
 
 Expanding the table later is a drop-in: any new entry here is immediately
-picked up by ``GET /api/v1/lookup/seismic-zone``. Keys are normalised to
-``_normalize`` (lowercase, stripped, apostrophe-free) so lookups tolerate
-casing and typography variations.
+picked up by ``GET /api/v1/lookup/seismic-zone`` AND by the regulations
+lookup — the regione annotation keeps both lookups in sync from one source.
 
 Source references:
   - OPCM 3519/2006 (classificazione sismica)
@@ -37,195 +34,197 @@ def _normalize(value: str) -> str:
         value.strip()
         .lower()
         .replace("'", "")
-        .replace("'", "")
+        .replace("\u2019", "")  # right single quotation mark
+        .replace("\u2018", "")  # left single quotation mark
         .replace("`", "")
     )
 
 
-# Populated from OPCM 3519/2006 + regional updates. Prefixed comments group
-# by Italian region to keep the list auditable. Where a comune spans multiple
-# zones (e.g. large metropolitan areas), we use the dominant / administratively
-# assigned zone.
-_RAW: dict[str, SeismicZone] = {
+# Populated from OPCM 3519/2006 + regional updates. Comments group by Italian
+# regione to keep the list auditable; the second tuple element carries the
+# regione explicitly so a single update here feeds both lookups in sync.
+# Where a comune spans multiple zones (e.g. large metropolitan areas), we
+# use the dominant / administratively assigned zone.
+_RAW: dict[str, tuple[SeismicZone, str]] = {
     # --- Abruzzo ---
-    "L'Aquila": 1,
-    "Pescara": 3,
-    "Teramo": 2,
-    "Chieti": 2,
-    "Avezzano": 1,
-    "Sulmona": 1,
+    "L'Aquila": (1, "Abruzzo"),
+    "Pescara": (3, "Abruzzo"),
+    "Teramo": (2, "Abruzzo"),
+    "Chieti": (2, "Abruzzo"),
+    "Avezzano": (1, "Abruzzo"),
+    "Sulmona": (1, "Abruzzo"),
     # --- Basilicata ---
-    "Potenza": 1,
-    "Matera": 3,
-    "Melfi": 2,
+    "Potenza": (1, "Basilicata"),
+    "Matera": (3, "Basilicata"),
+    "Melfi": (2, "Basilicata"),
     # --- Calabria ---
-    "Catanzaro": 2,
-    "Reggio Calabria": 1,
-    "Cosenza": 2,
-    "Crotone": 2,
-    "Vibo Valentia": 2,
-    "Lamezia Terme": 2,
-    "Castrovillari": 2,
+    "Catanzaro": (2, "Calabria"),
+    "Reggio Calabria": (1, "Calabria"),
+    "Cosenza": (2, "Calabria"),
+    "Crotone": (2, "Calabria"),
+    "Vibo Valentia": (2, "Calabria"),
+    "Lamezia Terme": (2, "Calabria"),
+    "Castrovillari": (2, "Calabria"),
     # --- Campania ---
-    "Napoli": 2,
-    "Salerno": 2,
-    "Caserta": 2,
-    "Avellino": 1,
-    "Benevento": 1,
-    "Torre del Greco": 2,
-    "Giugliano in Campania": 2,
-    "Pozzuoli": 2,
-    "Portici": 2,
-    "Castellammare di Stabia": 2,
-    "Afragola": 2,
-    "Battipaglia": 2,
-    "Ercolano": 2,
-    "Casoria": 2,
+    "Napoli": (2, "Campania"),
+    "Salerno": (2, "Campania"),
+    "Caserta": (2, "Campania"),
+    "Avellino": (1, "Campania"),
+    "Benevento": (1, "Campania"),
+    "Torre del Greco": (2, "Campania"),
+    "Giugliano in Campania": (2, "Campania"),
+    "Pozzuoli": (2, "Campania"),
+    "Portici": (2, "Campania"),
+    "Castellammare di Stabia": (2, "Campania"),
+    "Afragola": (2, "Campania"),
+    "Battipaglia": (2, "Campania"),
+    "Ercolano": (2, "Campania"),
+    "Casoria": (2, "Campania"),
     # --- Emilia-Romagna ---
-    "Bologna": 3,
-    "Modena": 3,
-    "Parma": 3,
-    "Reggio Emilia": 3,
-    "Ravenna": 2,
-    "Ferrara": 3,
-    "Rimini": 2,
-    "Forli": 2,
-    "Cesena": 2,
-    "Piacenza": 3,
-    "Imola": 2,
-    "Carpi": 3,
+    "Bologna": (3, "Emilia-Romagna"),
+    "Modena": (3, "Emilia-Romagna"),
+    "Parma": (3, "Emilia-Romagna"),
+    "Reggio Emilia": (3, "Emilia-Romagna"),
+    "Ravenna": (2, "Emilia-Romagna"),
+    "Ferrara": (3, "Emilia-Romagna"),
+    "Rimini": (2, "Emilia-Romagna"),
+    "Forli": (2, "Emilia-Romagna"),
+    "Cesena": (2, "Emilia-Romagna"),
+    "Piacenza": (3, "Emilia-Romagna"),
+    "Imola": (2, "Emilia-Romagna"),
+    "Carpi": (3, "Emilia-Romagna"),
     # --- Friuli-Venezia Giulia ---
-    "Trieste": 4,
-    "Udine": 3,
-    "Pordenone": 3,
-    "Gorizia": 3,
+    "Trieste": (4, "Friuli-Venezia Giulia"),
+    "Udine": (3, "Friuli-Venezia Giulia"),
+    "Pordenone": (3, "Friuli-Venezia Giulia"),
+    "Gorizia": (3, "Friuli-Venezia Giulia"),
     # --- Lazio ---
-    "Roma": 3,
-    "Latina": 3,
-    "Frosinone": 3,
-    "Rieti": 2,
-    "Viterbo": 2,
-    "Tivoli": 3,
-    "Fiumicino": 3,
-    "Aprilia": 3,
-    "Pomezia": 3,
-    "Guidonia Montecelio": 3,
-    "Civitavecchia": 3,
-    "Velletri": 2,
-    "Albano Laziale": 3,
+    "Roma": (3, "Lazio"),
+    "Latina": (3, "Lazio"),
+    "Frosinone": (3, "Lazio"),
+    "Rieti": (2, "Lazio"),
+    "Viterbo": (2, "Lazio"),
+    "Tivoli": (3, "Lazio"),
+    "Fiumicino": (3, "Lazio"),
+    "Aprilia": (3, "Lazio"),
+    "Pomezia": (3, "Lazio"),
+    "Guidonia Montecelio": (3, "Lazio"),
+    "Civitavecchia": (3, "Lazio"),
+    "Velletri": (2, "Lazio"),
+    "Albano Laziale": (3, "Lazio"),
     # --- Liguria ---
-    "Genova": 3,
-    "La Spezia": 3,
-    "Savona": 3,
-    "Imperia": 3,
-    "Sanremo": 3,
+    "Genova": (3, "Liguria"),
+    "La Spezia": (3, "Liguria"),
+    "Savona": (3, "Liguria"),
+    "Imperia": (3, "Liguria"),
+    "Sanremo": (3, "Liguria"),
     # --- Lombardia ---
-    "Milano": 4,
-    "Brescia": 3,
-    "Bergamo": 3,
-    "Monza": 4,
-    "Como": 3,
-    "Varese": 4,
-    "Pavia": 4,
-    "Cremona": 4,
-    "Mantova": 3,
-    "Lecco": 4,
-    "Lodi": 4,
-    "Sondrio": 4,
-    "Busto Arsizio": 4,
-    "Cinisello Balsamo": 4,
-    "Sesto San Giovanni": 4,
-    "Legnano": 4,
-    "Rho": 4,
-    "Vigevano": 3,
+    "Milano": (4, "Lombardia"),
+    "Brescia": (3, "Lombardia"),
+    "Bergamo": (3, "Lombardia"),
+    "Monza": (4, "Lombardia"),
+    "Como": (3, "Lombardia"),
+    "Varese": (4, "Lombardia"),
+    "Pavia": (4, "Lombardia"),
+    "Cremona": (4, "Lombardia"),
+    "Mantova": (3, "Lombardia"),
+    "Lecco": (4, "Lombardia"),
+    "Lodi": (4, "Lombardia"),
+    "Sondrio": (4, "Lombardia"),
+    "Busto Arsizio": (4, "Lombardia"),
+    "Cinisello Balsamo": (4, "Lombardia"),
+    "Sesto San Giovanni": (4, "Lombardia"),
+    "Legnano": (4, "Lombardia"),
+    "Rho": (4, "Lombardia"),
+    "Vigevano": (3, "Lombardia"),
     # --- Marche ---
-    "Ancona": 2,
-    "Pesaro": 2,
-    "Macerata": 2,
-    "Ascoli Piceno": 2,
-    "Fermo": 2,
+    "Ancona": (2, "Marche"),
+    "Pesaro": (2, "Marche"),
+    "Macerata": (2, "Marche"),
+    "Ascoli Piceno": (2, "Marche"),
+    "Fermo": (2, "Marche"),
     # --- Molise ---
-    "Campobasso": 2,
-    "Isernia": 1,
+    "Campobasso": (2, "Molise"),
+    "Isernia": (1, "Molise"),
     # --- Piemonte ---
-    "Torino": 4,
-    "Novara": 4,
-    "Alessandria": 3,
-    "Asti": 3,
-    "Cuneo": 3,
-    "Biella": 4,
-    "Vercelli": 4,
-    "Verbania": 4,
-    "Moncalieri": 4,
+    "Torino": (4, "Piemonte"),
+    "Novara": (4, "Piemonte"),
+    "Alessandria": (3, "Piemonte"),
+    "Asti": (3, "Piemonte"),
+    "Cuneo": (3, "Piemonte"),
+    "Biella": (4, "Piemonte"),
+    "Vercelli": (4, "Piemonte"),
+    "Verbania": (4, "Piemonte"),
+    "Moncalieri": (4, "Piemonte"),
     # --- Puglia ---
-    "Bari": 3,
-    "Taranto": 3,
-    "Foggia": 2,
-    "Lecce": 4,
-    "Brindisi": 4,
-    "Andria": 3,
-    "Barletta": 3,
-    "Bisceglie": 3,
-    "Cerignola": 2,
-    "Bitonto": 3,
-    "Molfetta": 3,
-    "Manfredonia": 2,
+    "Bari": (3, "Puglia"),
+    "Taranto": (3, "Puglia"),
+    "Foggia": (2, "Puglia"),
+    "Lecce": (4, "Puglia"),
+    "Brindisi": (4, "Puglia"),
+    "Andria": (3, "Puglia"),
+    "Barletta": (3, "Puglia"),
+    "Bisceglie": (3, "Puglia"),
+    "Cerignola": (2, "Puglia"),
+    "Bitonto": (3, "Puglia"),
+    "Molfetta": (3, "Puglia"),
+    "Manfredonia": (2, "Puglia"),
     # --- Sardegna ---
-    "Cagliari": 4,
-    "Sassari": 4,
-    "Nuoro": 4,
-    "Oristano": 4,
-    "Olbia": 4,
-    "Alghero": 4,
+    "Cagliari": (4, "Sardegna"),
+    "Sassari": (4, "Sardegna"),
+    "Nuoro": (4, "Sardegna"),
+    "Oristano": (4, "Sardegna"),
+    "Olbia": (4, "Sardegna"),
+    "Alghero": (4, "Sardegna"),
     # --- Sicilia ---
-    "Palermo": 2,
-    "Catania": 2,
-    "Messina": 1,
-    "Siracusa": 2,
-    "Ragusa": 2,
-    "Trapani": 3,
-    "Enna": 2,
-    "Caltanissetta": 2,
-    "Agrigento": 3,
-    "Marsala": 3,
-    "Acireale": 2,
-    "Gela": 2,
+    "Palermo": (2, "Sicilia"),
+    "Catania": (2, "Sicilia"),
+    "Messina": (1, "Sicilia"),
+    "Siracusa": (2, "Sicilia"),
+    "Ragusa": (2, "Sicilia"),
+    "Trapani": (3, "Sicilia"),
+    "Enna": (2, "Sicilia"),
+    "Caltanissetta": (2, "Sicilia"),
+    "Agrigento": (3, "Sicilia"),
+    "Marsala": (3, "Sicilia"),
+    "Acireale": (2, "Sicilia"),
+    "Gela": (2, "Sicilia"),
     # --- Toscana ---
-    "Firenze": 3,
-    "Prato": 3,
-    "Pisa": 3,
-    "Livorno": 3,
-    "Arezzo": 2,
-    "Pistoia": 3,
-    "Siena": 3,
-    "Lucca": 3,
-    "Grosseto": 4,
-    "Massa": 3,
-    "Carrara": 3,
-    "Viareggio": 3,
+    "Firenze": (3, "Toscana"),
+    "Prato": (3, "Toscana"),
+    "Pisa": (3, "Toscana"),
+    "Livorno": (3, "Toscana"),
+    "Arezzo": (2, "Toscana"),
+    "Pistoia": (3, "Toscana"),
+    "Siena": (3, "Toscana"),
+    "Lucca": (3, "Toscana"),
+    "Grosseto": (4, "Toscana"),
+    "Massa": (3, "Toscana"),
+    "Carrara": (3, "Toscana"),
+    "Viareggio": (3, "Toscana"),
     # --- Trentino-Alto Adige ---
-    "Trento": 3,
-    "Bolzano": 4,
+    "Trento": (3, "Trentino-Alto Adige"),
+    "Bolzano": (4, "Trentino-Alto Adige"),
     # --- Umbria ---
-    "Perugia": 2,
-    "Terni": 2,
-    "Foligno": 1,
+    "Perugia": (2, "Umbria"),
+    "Terni": (2, "Umbria"),
+    "Foligno": (1, "Umbria"),
     # --- Valle d'Aosta ---
-    "Aosta": 4,
+    "Aosta": (4, "Valle d'Aosta"),
     # --- Veneto ---
-    "Venezia": 4,
-    "Verona": 3,
-    "Padova": 4,
-    "Vicenza": 3,
-    "Treviso": 3,
-    "Rovigo": 4,
-    "Belluno": 3,
-    "Valdagno": 3,
+    "Venezia": (4, "Veneto"),
+    "Verona": (3, "Veneto"),
+    "Padova": (4, "Veneto"),
+    "Vicenza": (3, "Veneto"),
+    "Treviso": (3, "Veneto"),
+    "Rovigo": (4, "Veneto"),
+    "Belluno": (3, "Veneto"),
+    "Valdagno": (3, "Veneto"),
 }
 
 
-_NORMALISED: dict[str, SeismicZone] = {
-    _normalize(name): zone for name, zone in _RAW.items()
+_NORMALISED: dict[str, tuple[SeismicZone, str]] = {
+    _normalize(name): entry for name, entry in _RAW.items()
 }
 
 # Reverse lookup so the endpoint can echo back the canonical spelling.
@@ -236,15 +235,31 @@ def lookup_zone(comune: str) -> tuple[str, SeismicZone] | None:
     """Return (canonical_name, zone) for ``comune``, or None if not found.
 
     The lookup is case-insensitive and tolerant of leading/trailing whitespace
-    and apostrophe variations (L'Aquila vs L'Aquila vs LAquila).
+    and apostrophe variations (L'Aquila vs L\u2019Aquila vs LAquila).
     """
     if not comune:
         return None
     norm = _normalize(comune)
-    zone = _NORMALISED.get(norm)
-    if zone is None:
+    entry = _NORMALISED.get(norm)
+    if entry is None:
         return None
+    zone, _regione = entry
     return _CANONICAL[norm], zone
+
+
+def lookup_regione(comune: str) -> str | None:
+    """Return the Italian regione for ``comune``, or None if not in the table.
+
+    Uses the same case-insensitive matching as ``lookup_zone`` so the two
+    helpers always agree on whether a comune is known.
+    """
+    if not comune:
+        return None
+    entry = _NORMALISED.get(_normalize(comune))
+    if entry is None:
+        return None
+    _zone, regione = entry
+    return regione
 
 
 def table_size() -> int:
