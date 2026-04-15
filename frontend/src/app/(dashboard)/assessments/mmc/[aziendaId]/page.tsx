@@ -15,7 +15,7 @@ import {
   DEFAULT_INPUTS,
   type MmcInputs,
   type MmcResult,
-} from "@/components/assessments/mmc-form";
+} from "@/components/assessments/mmc/mmc-form";
 import type { Azienda } from "@/types";
 
 // ---------------------------------------------------------------------------
