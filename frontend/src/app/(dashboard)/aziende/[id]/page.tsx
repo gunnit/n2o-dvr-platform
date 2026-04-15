@@ -621,34 +621,64 @@ export default function AziendaDetailPage() {
                   Nessun documento generato. Clicca &quot;Genera Documenti&quot; per iniziare.
                 </p>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Documento</TableHead>
-                      <TableHead>Versione</TableHead>
-                      <TableHead>Stato</TableHead>
-                      <TableHead>Data Creazione</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {documenti.map((d) => (
-                      <TableRow key={d.id}>
-                        <TableCell className="font-medium">
-                          {d.tipo_documento}
-                        </TableCell>
-                        <TableCell>v{d.versione}</TableCell>
-                        <TableCell>
-                          <Badge className={docStatusColors[d.status]}>
-                            {docStatusLabels[d.status]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {new Date(d.created_at).toLocaleDateString("it-IT")}
-                        </TableCell>
+                <>
+                  {documenti.some((d) => d.stale_snapshot) && (
+                    <div
+                      className="mb-3 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                      role="status"
+                    >
+                      <ShieldAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                      <span className="flex-1">
+                        Il sopralluogo &egrave; stato modificato dopo
+                        l&apos;ultima generazione di alcuni documenti — i
+                        contenuti potrebbero essere disallineati. Rigenera i
+                        documenti contrassegnati per aggiornarli.
+                      </span>
+                    </div>
+                  )}
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Documento</TableHead>
+                        <TableHead>Versione</TableHead>
+                        <TableHead>Stato</TableHead>
+                        <TableHead>Data Creazione</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {documenti.map((d) => (
+                        <TableRow
+                          key={d.id}
+                          className={d.stale_snapshot ? "bg-amber-50/40" : ""}
+                        >
+                          <TableCell className="font-medium">
+                            <span className="flex items-center gap-1.5">
+                              {d.tipo_documento}
+                              {d.stale_snapshot && (
+                                <Badge
+                                  variant="secondary"
+                                  className="bg-amber-100 text-amber-800 text-[10px]"
+                                  title="Il sopralluogo e' cambiato dopo questa generazione — rigenera per aggiornare"
+                                >
+                                  Da rigenerare
+                                </Badge>
+                              )}
+                            </span>
+                          </TableCell>
+                          <TableCell>v{d.versione}</TableCell>
+                          <TableCell>
+                            <Badge className={docStatusColors[d.status]}>
+                              {docStatusLabels[d.status]}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {new Date(d.created_at).toLocaleDateString("it-IT")}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </>
               )}
             </CardContent>
           </Card>

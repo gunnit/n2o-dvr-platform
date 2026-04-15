@@ -5,6 +5,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
+from app.data.field_dependencies import (
+    all_field_dependencies,
+    dependencies_for,
+)
 from app.data.regional_regulations import get_regulations_for_comune
 from app.data.seismic_zones import lookup_regione, lookup_zone
 from app.dependencies import get_current_user
@@ -100,3 +104,41 @@ async def regional_regulations(
         found=regione is not None,
         regolamenti=[Regulation(**r) for r in regulations],
     )
+
+
+# ---------------------------------------------------------------------------
+# US-5.2 AC3 — Field-dependency tooltip catalog
+# ---------------------------------------------------------------------------
+
+
+class FieldDependenciesResponse(BaseModel):
+    # Map of ``entity.field`` → list of ``tipo_documento`` strings.
+    # Returned in one shot so the frontend can build all tooltips up
+    # front (the catalog is small enough that incremental fetches would
+    # cost more than the bulk one).
+    dependencies: dict[str, list[str]]
+
+
+@router.get("/field-dependencies", response_model=FieldDependenciesResponse)
+async def field_dependencies(
+    field: str | None = Query(
+        None,
+        description=(
+            "Optional ``entity.field`` filter. When provided, returns "
+            "just that single mapping (or an empty list)."
+        ),
+    ),
+    _: User = Depends(get_current_user),
+) -> FieldDependenciesResponse:
+    """Return the field → document-types catalog (US-5.2 AC3).
+
+    Used by the survey form's `<FieldDependencyTooltip>` to render
+    "Modifying this field will update: DVR, PEE, …" when the operator
+    hovers a field. The full payload is small (~40 entries) so we ship
+    it whole; the optional ``field`` filter is for one-off lookups.
+    """
+    if field:
+        return FieldDependenciesResponse(
+            dependencies={field: dependencies_for(field)}
+        )
+    return FieldDependenciesResponse(dependencies=all_field_dependencies())

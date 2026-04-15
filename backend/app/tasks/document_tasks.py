@@ -19,6 +19,7 @@ from app.celery_app import celery_app
 from app.db.session import async_session_factory
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.dispatcher import get_generator_for
+from app.services.survey_snapshot import compute_survey_snapshot_hash
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,18 @@ async def _run_generation(document_id: uuid.UUID) -> None:
             doc.status = "in_progress"
             doc.generation_started_at = datetime.utcnow()
             doc.error_message = None  # clear any prior rollback note
+            # US-5.2 AC2 — snapshot the survey state we're generating
+            # against so we can detect drift on completion. Compute it
+            # before any generator runs so the worker is comparing apples
+            # to apples even if the generator takes minutes.
+            try:
+                doc.survey_snapshot_hash = await compute_survey_snapshot_hash(
+                    doc.azienda_id, db
+                )
+                doc.stale_snapshot = False
+            except Exception:  # pragma: no cover — defensive: never block gen on snapshot failures
+                logger.exception("Snapshot hash compute failed for %s", doc.id)
+                doc.survey_snapshot_hash = None
             await db.commit()
 
             # Dispatch to the right generator class. Forward the per-row
@@ -73,6 +86,24 @@ async def _run_generation(document_id: uuid.UUID) -> None:
             doc.status = "completed"
             doc.file_path = output_path
             doc.generation_completed_at = datetime.utcnow()
+            # US-5.2 AC2 — re-hash and flag drift. If the survey changed
+            # while the generator was running, the documents page will
+            # render the "rigenera" banner so the operator can refresh.
+            if doc.survey_snapshot_hash:
+                try:
+                    completion_hash = await compute_survey_snapshot_hash(
+                        doc.azienda_id, db
+                    )
+                    if completion_hash != doc.survey_snapshot_hash:
+                        doc.stale_snapshot = True
+                        logger.info(
+                            "Stale snapshot detected for %s (start=%s, end=%s)",
+                            doc.id,
+                            doc.survey_snapshot_hash[:12],
+                            completion_hash[:12],
+                        )
+                except Exception:  # pragma: no cover — same defensive guard
+                    logger.exception("Completion-hash compute failed for %s", doc.id)
             await db.commit()
             logger.info("Generated %s v%s -> %s", doc.tipo_documento, doc.versione, output_path)
 

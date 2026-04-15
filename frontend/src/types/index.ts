@@ -96,6 +96,12 @@ export interface DocumentoGenerato {
   // Resolved server-side via join on users.full_name. Optional so older
   // clients / records still type-check.
   generated_by_name?: string | null;
+  // US-5.2 AC2: true when the survey changed between this document's
+  // generation start and completion (or after completion via PUT
+  // propagation). Documents page renders an amber "rigenera" banner.
+  // Optional so legacy clients still type-check; backend defaults to
+  // false on every emission.
+  stale_snapshot?: boolean;
 }
 
 export interface Attrezzatura {

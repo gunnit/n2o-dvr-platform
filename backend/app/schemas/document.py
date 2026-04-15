@@ -32,6 +32,10 @@ class DocumentResponse(BaseModel):
     # US-2.9: human-readable name of the user who triggered generation.
     # Resolved via a join on users.full_name in the list/detail endpoints.
     generated_by_name: str | None = None
+    # US-5.2 AC2 — true when the survey changed between this document's
+    # generation start and completion (or after completion via PUT
+    # propagation). Frontend renders an amber "rigenera" banner.
+    stale_snapshot: bool = False
 
     model_config = {"from_attributes": True}
 

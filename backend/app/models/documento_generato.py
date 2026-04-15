@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -32,6 +32,13 @@ class DocumentoGenerato(Base):
     generation_started_at: Mapped[datetime | None] = mapped_column()
     generation_completed_at: Mapped[datetime | None] = mapped_column()
     generated_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    # US-5.2 AC2 — survey snapshot fingerprint captured at generation start.
+    # On completion the worker re-hashes the live survey and sets
+    # `stale_snapshot=True` if it differs, which the documents page renders
+    # as a "rigenera" banner. NULL on legacy rows generated before this
+    # column landed (the documents page treats NULL as "fresh enough").
+    survey_snapshot_hash: Mapped[str | None] = mapped_column(String(64))
+    stale_snapshot: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     azienda: Mapped["Azienda"] = relationship(back_populates="documenti")

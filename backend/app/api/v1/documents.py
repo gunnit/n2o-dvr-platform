@@ -40,6 +40,10 @@ def _doc_to_response(doc: DocumentoGenerato, generated_by_name: str | None) -> D
         error_message=doc.error_message,
         created_at=doc.created_at,
         generated_by_name=generated_by_name,
+        # US-5.2 AC2: pass the worker-set drift flag to the documents
+        # page. Defaults to False on legacy rows where the column was
+        # NULL before the d3e4f5a6b7c8 migration applied a default.
+        stale_snapshot=bool(getattr(doc, "stale_snapshot", False)),
     )
 
 
@@ -189,8 +193,32 @@ async def list_documents(
     org_id: uuid.UUID = Depends(get_current_org),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all generated documents for an azienda."""
+    """List all generated documents for an azienda.
+
+    US-5.2 AC2 — drift detection runs on every list call: we compute the
+    current survey hash once and update any completed rows whose stored
+    hash no longer matches. This catches the case where the operator
+    edits the survey *after* a job completes (the worker can't see those
+    edits since it's already done). Cost: one extra SHA256 + small UPDATE
+    per page load.
+    """
     await _get_azienda(azienda_id, org_id, db)
+
+    # Recompute the live hash + flip any completed docs whose snapshot is
+    # now stale. Done in a single helper so the survey-edit endpoints can
+    # call the same code path proactively.
+    try:
+        from app.services.survey_snapshot import mark_documents_stale_for
+
+        await mark_documents_stale_for(azienda_id, db)
+        await db.commit()
+    except Exception:  # pragma: no cover — never fail the list call on this
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "Stale-snapshot recompute failed for %s", azienda_id
+        )
+
     # Left-join on users so rows with a NULL generated_by (legacy records)
     # still appear, just without an author name.
     result = await db.execute(
