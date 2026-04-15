@@ -1,10 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { AlertTriangle, Check, Lock, Unlock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useApi } from "@/hooks/use-api";
 import type { Azienda } from "@/types";
+
+interface SeismicLookupResult {
+  comune_query: string;
+  comune_matched: string | null;
+  zona: number | null;
+  found: boolean;
+  source: string;
+}
+
+type LookupState =
+  | { kind: "idle" }
+  | { kind: "found"; comune: string; zona: number }
+  | { kind: "not_found"; comune: string }
+  | { kind: "overridden" };
 
 interface StepAziendaProps {
   aziendaId: string;
@@ -30,6 +48,40 @@ const CODICE_ATECO_REGEX = /^\d{2}\.\d{2}\.\d{2}$/;
 
 export function StepAzienda({ data, onChange }: StepAziendaProps) {
   const [errors, setErrors] = useState<ValidationErrors>({});
+  const [lookup, setLookup] = useState<LookupState>({ kind: "idle" });
+  const { apiFetch } = useApi();
+  // Remember the last comune we looked up so we don't spam the endpoint on
+  // unrelated re-renders (e.g. unrelated field edits).
+  const lastLookupRef = useRef<string | null>(null);
+
+  async function resolveSeismicZone(comune: string) {
+    const trimmed = comune.trim();
+    if (!trimmed) return;
+    if (lastLookupRef.current === trimmed.toLowerCase()) return;
+    lastLookupRef.current = trimmed.toLowerCase();
+    try {
+      const qs = new URLSearchParams({ comune: trimmed });
+      const res = await apiFetch<SeismicLookupResult>(
+        `/api/v1/lookup/seismic-zone?${qs.toString()}`
+      );
+      if (res.found && res.zona != null && res.comune_matched) {
+        // Only auto-fill when the field is empty or was previously auto-filled.
+        if (data.zona_sismica == null || lookup.kind === "found") {
+          onChange({ zona_sismica: res.zona });
+        }
+        setLookup({ kind: "found", comune: res.comune_matched, zona: res.zona });
+      } else {
+        setLookup({ kind: "not_found", comune: trimmed });
+      }
+    } catch {
+      // Silent — the user keeps manual control, this is a soft enhancement.
+    }
+  }
+
+  function overrideSeismicZone() {
+    setLookup({ kind: "overridden" });
+    lastLookupRef.current = null;
+  }
 
   function validateRagioneSociale(value: string | undefined) {
     if (!value || value.trim() === "") {
@@ -170,6 +222,7 @@ export function StepAzienda({ data, onChange }: StepAziendaProps) {
                   onChange={(e) =>
                     onChange({ sede_legale_citta: e.target.value })
                   }
+                  onBlur={(e) => resolveSeismicZone(e.target.value)}
                   placeholder="Es. Roma"
                 />
               </div>
@@ -201,6 +254,13 @@ export function StepAzienda({ data, onChange }: StepAziendaProps) {
                   onChange={(e) =>
                     onChange({ sede_operativa_citta: e.target.value })
                   }
+                  onBlur={(e) => {
+                    // Only look up from sede operativa if sede legale is empty
+                    // (otherwise we respect the earlier auto-fill).
+                    if (!data.sede_legale_citta?.trim()) {
+                      resolveSeismicZone(e.target.value);
+                    }
+                  }}
                   placeholder="Es. Milano"
                 />
               </div>
@@ -237,7 +297,19 @@ export function StepAzienda({ data, onChange }: StepAziendaProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="zona_sismica">Zona Sismica</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="zona_sismica">Zona Sismica</Label>
+                {lookup.kind === "found" && (
+                  <Badge
+                    variant="secondary"
+                    className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 text-[11px]"
+                    title={`Compilata automaticamente dal lookup comune "${lookup.comune}" (fonte: OPCM 3519/2006).`}
+                  >
+                    <Check className="mr-1 h-2.5 w-2.5" />
+                    Auto
+                  </Badge>
+                )}
+              </div>
               <select
                 id="zona_sismica"
                 value={data.zona_sismica ?? ""}
@@ -248,7 +320,8 @@ export function StepAzienda({ data, onChange }: StepAziendaProps) {
                       : null,
                   })
                 }
-                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                disabled={lookup.kind === "found"}
+                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 <option value="">Seleziona zona</option>
                 {ZONE_SISMICHE.map((z) => (
@@ -257,6 +330,30 @@ export function StepAzienda({ data, onChange }: StepAziendaProps) {
                   </option>
                 ))}
               </select>
+              {lookup.kind === "found" && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={overrideSeismicZone}
+                  className="h-7 px-2 text-xs"
+                >
+                  <Unlock className="mr-1 h-3 w-3" />
+                  Modifica manualmente
+                </Button>
+              )}
+              {lookup.kind === "overridden" && (
+                <p className="text-[11px] text-muted-foreground">
+                  <Lock className="mr-1 inline h-3 w-3" />
+                  Valore impostato manualmente (override del lookup comune).
+                </p>
+              )}
+              {lookup.kind === "not_found" && (
+                <p className="flex items-start gap-1 text-[11px] text-amber-700">
+                  <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" />
+                  Comune non trovato — inserisci manualmente la zona sismica.
+                </p>
+              )}
             </div>
           </div>
         </CardContent>
