@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type UseFormReturn } from "react-hook-form";
 import { AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,14 +27,20 @@ export function MmcMeasures({
   form: UseFormReturn<MmcFormValues>;
   visible: boolean;
 }) {
-  const stored = form.watch("measures") ?? [];
-  const [items, setItems] = useState<string[]>(
-    stored.length > 0 ? stored : DEFAULT_MEASURES,
-  );
+  // Snapshot any pre-existing measures from the form ONCE on mount.
+  const initialRef = useRef<string[] | null>(null);
+  if (initialRef.current === null) {
+    const stored = form.getValues("measures") ?? [];
+    initialRef.current = stored.length > 0 ? stored : DEFAULT_MEASURES;
+  }
+  const [items, setItems] = useState<string[]>(initialRef.current);
 
-  // Sync back to the form so `Salva valutazione` includes the measures.
+  // Sync back to the form when the user edits the list.
   useEffect(() => {
-    form.setValue("measures", items, { shouldDirty: true });
+    form.setValue("measures", items, {
+      shouldDirty: true,
+      shouldValidate: false,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
 

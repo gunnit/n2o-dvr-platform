@@ -1,19 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
   MmcForm,
-  computeMmc,
-  DEFAULT_INPUTS,
-  type MmcInputs,
+  type MmcFormValues,
   type MmcResult,
 } from "@/components/assessments/mmc/mmc-form";
 import type { Azienda } from "@/types";
@@ -26,10 +19,9 @@ export default function MmcAssessmentPage() {
 
   const [azienda, setAzienda] = useState<Azienda | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [result, setResult] = useState<MmcResult>(() => computeMmc(DEFAULT_INPUTS));
-  const [inputs, setInputs] = useState<MmcInputs>(DEFAULT_INPUTS);
   const [finalizing, setFinalizing] = useState(false);
   const [finalizeMessage, setFinalizeMessage] = useState<string | null>(null);
+  const [latestResult, setLatestResult] = useState<MmcResult | null>(null);
 
   // Load azienda metadata (best-effort — if auth not set up, we fall back to
   // the raw id so the UI still works for testing).
@@ -68,9 +60,13 @@ export default function MmcAssessmentPage() {
     };
   }, [aziendaId]);
 
-  const allAnswered = result.unanswered.length === 0;
+  const pageSubtitle = useMemo(() => {
+    if (loadError) return `Azienda ${aziendaId} (metadati non disponibili)`;
+    if (azienda) return azienda.ragione_sociale ?? `Azienda ${aziendaId}`;
+    return "Caricamento in corso...";
+  }, [azienda, aziendaId, loadError]);
 
-  const finalize = useCallback(async () => {
+  const handleFinalize = async (values: MmcFormValues, result: MmcResult) => {
     setFinalizing(true);
     setFinalizeMessage(null);
     try {
@@ -84,31 +80,22 @@ export default function MmcAssessmentPage() {
         /* noop */
       }
 
-      // Guard: backend requires every factor > 0 (strict gt validator). If any
-      // input produces a zero multiplier the server will reject with 422, so
-      // surface that immediately rather than sending a bad payload.
-      const zeroFactors: string[] = [];
-      if (result.a <= 0) zeroFactors.push("A (altezza)");
-      if (result.b <= 0) zeroFactors.push("B (dislocazione)");
-      if (result.c <= 0) zeroFactors.push("C (distanza)");
-      if (result.d <= 0) zeroFactors.push("D (angolo)");
-      if (result.e <= 0) zeroFactors.push("E (presa)");
-      if (result.f <= 0) zeroFactors.push("F (frequenza)");
-      if (zeroFactors.length > 0) {
+      const worst = result.worst;
+      if (!worst || worst.plr <= 0) {
         throw new Error(
-          `Fattore fuori soglia: ${zeroFactors.join(", ")}. Correggi i parametri prima di confermare.`,
+          "Parametri incompleti o fuori soglia. Correggi i sollevamenti prima di salvare.",
         );
       }
 
       const body = {
-        peso_sollevato: inputs.peso_sollevato ?? 0,
+        peso_sollevato: values.lifts[0]?.peso_reale ?? 0,
         cp: result.cp,
-        fattore_a: result.a,
-        fattore_b: result.b,
-        fattore_c: result.c,
-        fattore_d: result.d,
-        fattore_e: result.e,
-        fattore_f: result.f,
+        fattore_a: worst.a,
+        fattore_b: worst.b,
+        fattore_c: worst.c,
+        fattore_d: worst.d,
+        fattore_e: worst.e,
+        fattore_f: worst.f,
       };
 
       const res = await fetch(`${apiUrl}/api/v1/calculate/niosh`, {
@@ -121,26 +108,20 @@ export default function MmcAssessmentPage() {
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const data = (await res.json()) as { plr: number; ir: number; livello: string };
       setFinalizeMessage(
-        `Valutazione confermata: PLR ${data.plr.toFixed(2)} kg · IR ${data.ir.toFixed(
+        `Valutazione salvata: PLR ${data.plr.toFixed(2)} kg · IR ${data.ir.toFixed(
           2,
-        )} · zona ${data.livello}`,
+        )} · zona ${data.livello} · ${values.lifts.length} sollevamento/i registrato/i.`,
       );
     } catch (err) {
       setFinalizeMessage(
         err instanceof Error
-          ? `Errore conferma: ${err.message}`
-          : "Errore conferma sconosciuto",
+          ? `Errore salvataggio: ${err.message}`
+          : "Errore salvataggio sconosciuto",
       );
     } finally {
       setFinalizing(false);
     }
-  }, [aziendaId, inputs, result]);
-
-  const pageSubtitle = useMemo(() => {
-    if (loadError) return `Azienda ${aziendaId} (metadati non disponibili)`;
-    if (azienda) return azienda.ragione_sociale ?? `Azienda ${aziendaId}`;
-    return "Caricamento…";
-  }, [azienda, aziendaId, loadError]);
+  };
 
   return (
     <div className="space-y-6">
@@ -157,46 +138,32 @@ export default function MmcAssessmentPage() {
         </div>
       </div>
 
+      {finalizeMessage && (
+        <div
+          className={cn(
+            "rounded-md border px-4 py-3 text-sm",
+            finalizeMessage.startsWith("Errore")
+              ? "border-rose-500/40 bg-rose-50/40 text-rose-700 dark:bg-rose-950/20 dark:text-rose-300"
+              : "border-emerald-500/40 bg-emerald-50/40 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300",
+          )}
+        >
+          {finalizeMessage}
+        </div>
+      )}
+
       <MmcForm
         aziendaId={aziendaId}
-        onResultChange={setResult}
-        onInputsChange={setInputs}
+        finalizing={finalizing}
+        onFinalize={handleFinalize}
+        onResult={setLatestResult}
       />
 
-      {/* Finalize */}
-      <Card className="border-primary/30 bg-primary/5">
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
-          <div>
-            <p className="text-sm font-medium">Conferma valutazione</p>
-            <p className="text-xs text-muted-foreground">
-              {allAnswered
-                ? "Parametri completi. Il backend ricalcolerà PLR e IR per l'archiviazione."
-                : `Mancano ${result.unanswered.length} parametri. Completa il modulo per confermare.`}
-            </p>
-            {finalizeMessage && (
-              <p
-                className={cn(
-                  "mt-1 text-xs",
-                  finalizeMessage.startsWith("Errore")
-                    ? "text-destructive"
-                    : "text-emerald-700 dark:text-emerald-400",
-                )}
-              >
-                {finalizeMessage}
-              </p>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <Button disabled={!allAnswered || finalizing} onClick={finalize}>
-              {finalizing ? "Conferma in corso…" : "Conferma valutazione"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <p className="text-[11px] text-muted-foreground">
-        Bozza salvata in locale (chiave: <code>mmc-draft-{aziendaId}</code>)
-      </p>
+      {latestResult?.perLift.length ? (
+        <p className="text-[11px] text-muted-foreground">
+          {latestResult.perLift.length} sollevamento/i calcolato/i. Salva la
+          valutazione per archiviarla nel DVR.
+        </p>
+      ) : null}
     </div>
   );
 }

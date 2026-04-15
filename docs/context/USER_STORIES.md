@@ -419,11 +419,10 @@ As an operator, I want auto-identification of incompatible tasks and relocation 
 
 ### Rischio Incendio (Fire Risk)
 
-#### US-3.11 `PARTIAL`
+#### US-3.11 `DONE`
 As an operator, I want to input INF/SI/PI scores (1-3 each) per homogeneous area so the fire classification is computed.
 
-> **Built**: Frontend form at `frontend/src/components/assessments/incendio-form.tsx:60-135` with 3 parameter inputs (1-3 range validation). Live sum display wired in backend response at `backend/app/api/v1/calculations.py:150-172`.
-> **Missing**: "Duplica area" action for copying parameters across multiple homogeneous areas not implemented.
+> **Built**: Multi-area form at `frontend/src/components/assessments/incendio/incendio-form.tsx` (react-hook-form `useFieldArray` + zod, "Valore consentito: 1-3" messages). Per-area card at `frontend/src/components/assessments/incendio/incendio-area-card.tsx` with 3 segmented controls (INF/SI/PI), live sum + band chip (Basso/Medio/Alto) driven by `computeArea()`, "Duplica area" button that copies INF/SI/PI into a new entry (clears `nome`), and a guarded "Rimuovi" with confirm (disabled when only one area remains). Page at `frontend/src/app/(dashboard)/assessments/incendio/[aziendaId]/page.tsx` watches the form, displays a sticky overview with per-area badges and the worst-case level, cross-checks the worst area against `POST /api/v1/calculate/fire-risk` on "Salva valutazione", and surfaces a "Modifiche non salvate" dirty badge. Screenshots in `docs/qa/incendio/incendio-01-medio.png` and `incendio-02-alto-vvf-banner.png`.
 
 **Acceptance Criteria:**
 
@@ -434,7 +433,7 @@ As an operator, I want to input INF/SI/PI scores (1-3 each) per homogeneous area
 #### US-3.12 `DONE`
 As an operator, I want automatic risk level calculation (Low/Medium/High) and required fire safety measures.
 
-> **Built**: Band thresholds in `backend/app/services/risk_calculator.py:1-50` (Basso 3-4 / Medio 5-7 / Alto 8-9). Measures-per-band data in `frontend/src/app/(dashboard)/assessments/incendio/[aziendaId]/page.tsx:18-37` (`AZIONE_PER_LIVELLO`). Alto triggers "Richiesta valutazione approfondita VVF" messaging. Measures list updates dynamically when the INF+SI+PI sum changes.
+> **Built**: Band thresholds in `backend/app/services/risk_calculator.py` (Basso 3-4 / Medio 5-7 / Alto 8-9). Canonical measures catalog per band in `backend/app/data/fire_measures.py` (D.M. 03/09/2021 + D.Lgs. 81/2008 art. 46) exposed via `GET /api/v1/calculate/fire-measures?livello=…` (`FireMeasuresResponse`). Per-area checklist at `frontend/src/components/assessments/incendio/incendio-measures.tsx` fetches the list when the band changes, supports uncheck + custom "Aggiungi misura" entries. VVF banner at `frontend/src/components/assessments/incendio/incendio-vvf-banner.tsx` renders a sticky rose alert (Lucide `AlertTriangle`, no emoji) with the text *"Richiesta valutazione approfondita VV.F. — Rischio Alto rilevato in almeno un'area."* whenever any area reaches Alto. Tests in `backend/tests/test_calculators.py::test_fire_measures_*`.
 
 **Acceptance Criteria:**
 

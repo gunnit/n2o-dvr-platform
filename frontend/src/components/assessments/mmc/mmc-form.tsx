@@ -424,12 +424,15 @@ export function MmcForm({
     onResultChange?.(aggregate);
   }, [aggregate, onResult, onResultChange]);
 
-  const watchedValues = form.watch();
-  const watchedSerialized = JSON.stringify(watchedValues);
+  // Fire onInputsChange only when the form becomes valid/dirty; subscribing to
+  // `form.watch()` in render causes render loops, so we listen via subscribe().
   useEffect(() => {
-    onInputsChange?.(watchedValues);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchedSerialized]);
+    if (!onInputsChange) return;
+    const sub = form.watch((value) => {
+      onInputsChange(value as MmcFormValues);
+    });
+    return () => sub.unsubscribe();
+  }, [form, onInputsChange]);
 
   const onSubmit = form.handleSubmit((v) => {
     const cpErr = validateCpOverride(v);

@@ -35,9 +35,12 @@ export function MmcCpOverride({
 
   useEffect(() => {
     if (!sesso || !eta || eta < 15) {
-      setAutoCp(null);
-      onAutoCpChange?.(null);
-      return;
+      // Defer so we don't trigger cascading renders inside the effect body.
+      const t = setTimeout(() => {
+        setAutoCp(null);
+        onAutoCpChange?.(null);
+      }, 0);
+      return () => clearTimeout(t);
     }
     const ctrl = new AbortController();
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
