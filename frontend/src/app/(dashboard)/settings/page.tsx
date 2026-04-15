@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { Database } from "lucide-react";
+import { Database, Sparkles } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -49,6 +49,32 @@ export default function SettingsPage() {
               className="inline-flex h-8 items-center justify-center rounded-lg border border-input bg-background px-3 text-sm font-medium transition-colors hover:bg-muted"
             >
               Apri pannello backup
+            </Link>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* US-5.3: admin-only AI feedback panel — the page itself bounces
+          non-admins, but we hide the entry too to keep the UI honest. */}
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4" />
+              Feedback AI
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Conteggi di accettazioni / rifiuti dei suggerimenti AI per
+              superficie e cronologia degli ultimi 50 segnali — utile per
+              capire dove migliorare i prompt.
+            </p>
+            <Link
+              href="/admin/ai-feedback"
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-input bg-background px-3 text-sm font-medium transition-colors hover:bg-muted"
+            >
+              Apri pannello feedback AI
             </Link>
           </CardContent>
         </Card>

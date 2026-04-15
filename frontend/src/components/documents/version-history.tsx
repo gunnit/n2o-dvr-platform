@@ -20,8 +20,17 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import type { DocumentoGenerato } from "@/types";
+import type { Azienda, DocumentoGenerato } from "@/types";
 import { apiCall, downloadFile } from "@/lib/api-client";
+import { AIBadge } from "@/components/ai/ai-badge";
+import { AIFilterToggle, useAIFilter } from "@/components/ai/ai-filter-context";
+
+// Subset of the rischio shape we care about for AI tagging — keeps this
+// component free of a deeper schema dependency.
+interface RischioWithMisure {
+  id: string;
+  misure_prevenzione: string | null;
+}
 
 interface VersionHistoryProps {
   open: boolean;
@@ -116,6 +125,48 @@ async function triggerDownload(id: string): Promise<void> {
   }
 }
 
+// US-5.3: build the list of known AI-originated text snippets for an
+// azienda — currently the AI-drafted descrizione_attivita and any
+// improvement-measure rows that came from the AI suggestion endpoint.
+// Snippets shorter than MIN_AI_LEN are dropped to avoid false positives
+// (a 5-character measure like "DPI" would match every paragraph).
+const MIN_AI_LEN = 24;
+
+async function fetchAITexts(aziendaId: string): Promise<string[]> {
+  const [azienda, rischi] = await Promise.all([
+    apiCall<Azienda>(`/api/v1/aziende/${aziendaId}`).catch(() => null),
+    apiCall<RischioWithMisure[]>(`/api/v1/aziende/${aziendaId}/rischi`).catch(
+      () => [] as RischioWithMisure[]
+    ),
+  ]);
+
+  const out = new Set<string>();
+  if (azienda?.descrizione_attivita) {
+    const desc = azienda.descrizione_attivita.trim();
+    if (desc.length >= MIN_AI_LEN) out.add(desc.toLowerCase());
+  }
+  for (const r of rischi ?? []) {
+    const m = (r.misure_prevenzione ?? "").trim();
+    if (m.length >= MIN_AI_LEN) out.add(m.toLowerCase());
+  }
+  return Array.from(out);
+}
+
+// True when `line` overlaps with any known AI snippet enough that the
+// reviewer should treat it as AI-originated. We try both directions
+// (line includes snippet, or snippet includes line) so generator-added
+// boilerplate around a quoted AI block still flags. Matching is
+// case-insensitive and ignores trivial padding.
+function isAIText(line: string | null, aiTexts: string[]): boolean {
+  if (!line) return false;
+  const norm = line.trim().toLowerCase();
+  if (norm.length < MIN_AI_LEN) return false;
+  for (const snippet of aiTexts) {
+    if (snippet.includes(norm) || norm.includes(snippet)) return true;
+  }
+  return false;
+}
+
 // Flatten a snapshot into a single ordered list of "lines". Paragraphs
 // become one line each; table cells are prefixed with "[T{i} R{j} C{k}]"
 // so rearranged tables surface as both a removal and an addition rather
@@ -198,6 +249,15 @@ export function VersionHistory({
   const [diffTitle, setDiffTitle] = useState<string>("");
   const [diffRows, setDiffRows] = useState<DiffRow[]>([]);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  // US-5.3: known AI-originated text snippets for the current azienda.
+  // Cached for the lifetime of the component so flipping between
+  // adjacent version comparisons does not refetch.
+  const [aiTexts, setAITexts] = useState<string[] | null>(null);
+
+  // US-5.3: subscribe to the global AI filter so the diff table can dim
+  // non-AI rows when the operator activates "Mostra solo contenuto AI"
+  // from the header (or the dialog-local toggle).
+  const { active: aiFilterActive } = useAIFilter();
 
   async function handleCompareWithPrevious(
     current: DocumentoGenerato,
@@ -209,14 +269,18 @@ export function VersionHistory({
     setDiffRows([]);
     setDiffTitle(`Differenze: v${previous.versione} vs v${current.versione}`);
     try {
-      const [oldSnap, newSnap] = await Promise.all([
+      const aiPromise =
+        aiTexts === null ? fetchAITexts(aziendaId) : Promise.resolve(aiTexts);
+      const [oldSnap, newSnap, aiList] = await Promise.all([
         apiCall<DocumentSnapshot>(
           `/api/v1/aziende/${aziendaId}/documents/${previous.id}/snapshot`
         ),
         apiCall<DocumentSnapshot>(
           `/api/v1/aziende/${aziendaId}/documents/${current.id}/snapshot`
         ),
+        aiPromise,
       ]);
+      if (aiTexts === null) setAITexts(aiList);
       const rows = diffLines(snapshotToLines(oldSnap), snapshotToLines(newSnap));
       setDiffRows(rows);
     } catch (e) {
@@ -247,6 +311,14 @@ export function VersionHistory({
 
   const addedCount = diffRows.filter((r) => r.kind === "added").length;
   const removedCount = diffRows.filter((r) => r.kind === "removed").length;
+  // US-5.3: precompute per-row AI flag once so the renderer doesn't
+  // re-scan the snippet list on every cell. Both sides count — if the
+  // old or new side carried AI text, the row is an AI row.
+  const aiList = aiTexts ?? [];
+  const rowIsAI = diffRows.map(
+    (r) => isAIText(r.left, aiList) || isAIText(r.right, aiList)
+  );
+  const aiRowCount = rowIsAI.filter(Boolean).length;
 
   return (
     <>
@@ -408,8 +480,22 @@ export function VersionHistory({
                 ? "Caricamento snapshot..."
                 : diffError
                 ? diffError
-                : `${addedCount} righe aggiunte, ${removedCount} righe rimosse`}
+                : `${addedCount} righe aggiunte, ${removedCount} righe rimosse${
+                    aiRowCount > 0
+                      ? ` - ${aiRowCount} ${
+                          aiRowCount === 1 ? "sezione" : "sezioni"
+                        } generata da AI`
+                      : ""
+                  }`}
             </DialogDescription>
+            {/* US-5.3 AC3: in-dialog mirror of the global AI filter so
+                the operator can dim non-AI paragraphs without leaving
+                the diff view. */}
+            {!diffLoading && !diffError && aiRowCount > 0 && (
+              <div className="flex items-center justify-end pt-1">
+                <AIFilterToggle />
+              </div>
+            )}
           </DialogHeader>
 
           <div className="max-h-[65vh] overflow-auto rounded-md border">
@@ -438,30 +524,64 @@ export function VersionHistory({
                   </tr>
                 </thead>
                 <tbody>
-                  {diffRows.map((row, i) => (
-                    <tr key={i} className="align-top">
-                      <td
+                  {diffRows.map((row, i) => {
+                    const isAI = rowIsAI[i];
+                    // US-5.3 AC1: AI sections get a subtle violet tint
+                    // overlay on top of the diff add/remove colour, plus
+                    // a small AI badge in the leading non-empty cell so
+                    // the reviewer knows which paragraphs the AI wrote.
+                    // AC3: when the global AI filter is active, non-AI
+                    // rows are dimmed and made non-interactive.
+                    const dimmed = aiFilterActive && !isAI;
+                    return (
+                      <tr
+                        key={i}
+                        data-ai-block={isAI ? "ai" : "non-ai"}
                         className={
-                          "whitespace-pre-wrap break-words border-b px-2 py-1 " +
-                          (row.kind === "removed"
-                            ? "bg-red-50 text-red-900"
-                            : "")
+                          "align-top transition-opacity " +
+                          (isAI ? "ring-1 ring-inset ring-violet-200 " : "") +
+                          (dimmed ? "pointer-events-none opacity-40 " : "")
                         }
                       >
-                        {row.left ?? ""}
-                      </td>
-                      <td
-                        className={
-                          "whitespace-pre-wrap break-words border-b px-2 py-1 " +
-                          (row.kind === "added"
-                            ? "bg-green-50 text-green-900"
-                            : "")
-                        }
-                      >
-                        {row.right ?? ""}
-                      </td>
-                    </tr>
-                  ))}
+                        <td
+                          className={
+                            "whitespace-pre-wrap break-words border-b px-2 py-1 " +
+                            (isAI ? "bg-violet-50/60 " : "") +
+                            (row.kind === "removed"
+                              ? "bg-red-50 text-red-900"
+                              : "")
+                          }
+                        >
+                          {isAI && row.left && (
+                            <AIBadge
+                              provenance="ai"
+                              size="xs"
+                              className="mb-1 mr-1"
+                            />
+                          )}
+                          {row.left ?? ""}
+                        </td>
+                        <td
+                          className={
+                            "whitespace-pre-wrap break-words border-b px-2 py-1 " +
+                            (isAI ? "bg-violet-50/60 " : "") +
+                            (row.kind === "added"
+                              ? "bg-green-50 text-green-900"
+                              : "")
+                          }
+                        >
+                          {isAI && row.right && !row.left && (
+                            <AIBadge
+                              provenance="ai"
+                              size="xs"
+                              className="mb-1 mr-1"
+                            />
+                          )}
+                          {row.right ?? ""}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
