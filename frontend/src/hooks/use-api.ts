@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { signOut } from "next-auth/react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -44,6 +45,12 @@ export function useApi() {
         },
         ...rest,
       });
+
+      if (res.status === 401) {
+        // Backend token expired or invalid — sign out of NextAuth and bounce to login
+        await signOut({ redirectTo: "/login" });
+        throw new Error("Sessione scaduta. Effettua nuovamente il login.");
+      }
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

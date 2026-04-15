@@ -647,4 +647,82 @@ As an admin, I want secure cloud hosting with daily backups (replacing the USB s
 
 ---
 
+## Sprint Closure — 2026-04-14 (Niuexa full push)
+
+Per the /mnt/c/Dev/dlg/frontend build sprint, the platform reached end-to-end
+operability. All 17 document generators (16 distinct deliverables + HACCP
+schede zip) produce valid `.docx`/`.zip` output against the composite test
+fixture **Acme Meccanica Composita SRL** (see `backend/app/db/fixtures/acme_meccanica.py`).
+
+### Headline status (post-sprint)
+
+| Area | Before | After |
+|------|--------|-------|
+| Document generators | 1 / 16 | **17 / 17** (16 docs + HACCP forms bundle) |
+| Assessment DB models | 1 (generic) | **12** (mmc, vdt, stress, incendio, microclima, gestanti, biologico, haccp×2, pee, duvri, pos, audit) |
+| Celery workers wired | no | **yes** (worker service in `render.yaml`, dispatcher in `tasks/document_tasks.py`) |
+| Google Drive delivery | no | **yes** (best-effort, `services/gdrive_service.py`) |
+| SDS upload (US-1.8/1.9/1.10) | partial | **DONE** (batch endpoint + background extractor + frontend review panel) |
+| Frontend documents dashboard | 11 cards | **17 cards** including batch "Genera tutti" button |
+| Download endpoint | missing | **DONE** (`GET /api/v1/documenti/{id}/download`) |
+| Gestanti frontend (US-3.9/3.10) | missing | **stub** (`assessments/gestanti/[aziendaId]/page.tsx`) with signature block |
+| Biologico frontend (US-3.15) | missing | **stub** (`assessments/biologico/[aziendaId]/page.tsx`) with 3-sector selector |
+| RBAC | partial | `require_role(...)` helper in place in `app/dependencies.py` |
+| Audit logging (US-5.3) | missing | **helper** `app/core/audit.py` + `AuditLog` model — ready to call from mutation endpoints |
+| Automated tests | 0 | **16 / 16 green** (`pytest backend/tests/`) covering calculators, dispatcher routing, and end-to-end generator validity against Acme fixture |
+| Deployment config | api only | `render.yaml` now includes web + worker + redis + disk, with `preDeployCommand: alembic upgrade head` |
+
+### Explicit deferrals (documented so N2O/Niuexa can pick up)
+
+- **US-1.3 photo uploads** — not wired; no camera/HEIC UX. Filed as follow-up.
+- **Offline mode (IndexedDB + service worker)** — not implemented; draft auto-save only.
+- **Digital signatures** — signature lines appear on Gestanti & DUVRI & POS outputs as placeholders, not cryptographically signed.
+- **Legal accuracy of generated content** — N2O SRL must review every generated `.docx`. The platform produces structurally correct Italian documents using template boilerplate + formulas but does not guarantee legal compliance.
+- **Template matching for 5 unparseable templates** (Microclima × 2 PDF, Biologico × 3 legacy .doc) — generators were built from `DOCUMENT_STRUCTURE.md` + `FORMULAS_AND_CALCULATIONS.md` rather than structural diff.
+- **Playwright e2e** — not written (manual verification done via `python -m scripts.verify_all_generators`). Follow-up: dev needs a running Postgres + Redis + frontend to run full browser-level e2e.
+- **Audit-log middleware auto-wiring** — the helper exists but individual endpoints still need to call `log_audit(...)`. Non-blocking.
+
+### Acceptance evidence
+
+Running `python -m scripts.verify_all_generators /tmp/out` from `backend/`:
+
+```
+[PASS] DVR_MASTER                      -> 85 paragraphs, 14 tables
+[PASS] ALLEGATO_MMC                    -> 451 paragraphs, 32 tables
+[PASS] ALLEGATO_VDT                    -> 405 paragraphs, 24 tables
+[PASS] ALLEGATO_STRESS                 -> 488 paragraphs, 53 tables
+[PASS] ALLEGATO_GESTANTI               -> 173 paragraphs,  9 tables
+[PASS] ALLEGATO_INCENDIO               -> 395 paragraphs, 31 tables
+[PASS] ALLEGATO_MICROCLIMA             ->   6 paragraphs,  3 tables
+[PASS] ALLEGATO_MICROCLIMA_SEVERO      ->   7 paragraphs,  3 tables
+[PASS] ALLEGATO_BIOLOGICO_ALIMENTARE   ->  13 paragraphs,  3 tables
+[PASS] ALLEGATO_BIOLOGICO_ASILO        ->  20 paragraphs,  3 tables
+[PASS] ALLEGATO_BIOLOGICO_DENTISTI     ->  21 paragraphs,  3 tables
+[PASS] PEE_AZIENDA                     -> 579 paragraphs, 18 tables
+[PASS] PEE_COMUNE                      -> 985 paragraphs, 13 tables
+[PASS] HACCP                           -> 1370 paragraphs, 23 tables
+[PASS] HACCP_FORMS                     -> zip with 17 entries
+[PASS] DUVRI                           -> 688 paragraphs, 23 tables
+[PASS] POS                             -> 1272 paragraphs, 87 tables
+
+RESULT: 17/17 generators produced valid output
+```
+
+And `pytest backend/tests/`:
+
+```
+16 passed in 18.11s
+```
+
+### Go-live runbook
+
+1. Provision Render services via `backend/render.yaml` (db, web, worker, redis, disk).
+2. Set env vars on Render dashboard: `OPENAI_API_KEY`, optionally `GOOGLE_DRIVE_FOLDER_ID` (default `13aHCy8D78JwJzgffxYbqe7Nmyed84may`), and copy `credentials/token.json` to an env-readable path for Drive uploads.
+3. First deploy runs `alembic upgrade head` automatically (preDeployCommand) — creates all 23 tables.
+4. Seed demo data: `python -m app.db.fixtures.acme_meccanica` against the Render Postgres URL.
+5. Deploy frontend on Vercel with `NEXT_PUBLIC_API_URL=https://n2o-dvr-api.onrender.com`.
+6. Smoke test: log in as `admin@acme-meccanica.test` / `Acme2026!`, open Documenti page, click "Genera tutti" → wait for all 17 cards to reach status "Pronto", download each.
+
+---
+
 *© 2026 Niuexa. Confidential — prepared for N2O SRL.*

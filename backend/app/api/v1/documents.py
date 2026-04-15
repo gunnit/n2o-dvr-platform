@@ -1,7 +1,9 @@
+import os
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +16,36 @@ from app.models.user import User
 from app.schemas.document import DocumentBatchRequest, DocumentGenerateRequest, DocumentResponse
 
 router = APIRouter(prefix="/aziende/{azienda_id}/documents", tags=["documents"])
+
+# Global (non-nested) router for download-by-id endpoint
+download_router = APIRouter(prefix="/documenti", tags=["documents"])
+
+
+@download_router.get("/{document_id}/download")
+async def download_document(
+    document_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream back the generated file (.docx or .zip)."""
+    result = await db.execute(
+        select(DocumentoGenerato)
+        .join(Azienda, Azienda.id == DocumentoGenerato.azienda_id)
+        .where(DocumentoGenerato.id == document_id, Azienda.organization_id == org_id)
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise NotFoundError("Document not found")
+    if doc.status != "completed" or not doc.file_path:
+        raise NotFoundError("Document not ready yet")
+    if not os.path.exists(doc.file_path):
+        raise NotFoundError("File missing on disk")
+
+    media_type = "application/zip" if doc.file_path.endswith(".zip") else (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    filename = os.path.basename(doc.file_path)
+    return FileResponse(doc.file_path, media_type=media_type, filename=filename)
 
 
 async def _get_azienda(azienda_id: uuid.UUID, org_id: uuid.UUID, db: AsyncSession) -> Azienda:
@@ -66,8 +98,15 @@ async def generate_document(
     await db.commit()
     await db.refresh(doc)
 
-    # TODO: dispatch Celery task here
-    # generate_document_task.delay(str(doc.id))
+    # Dispatch Celery task for async generation
+    try:
+        from app.tasks.document_tasks import generate_document_task
+        generate_document_task.delay(str(doc.id))
+    except Exception:
+        # If the broker is unavailable, fall back to a warning log but still
+        # return the pending record — the task can be retried manually.
+        import logging
+        logging.getLogger(__name__).exception("Celery dispatch failed")
 
     return doc
 
@@ -149,9 +188,14 @@ async def batch_generate_documents(
 
     await db.commit()
 
+    from app.tasks.document_tasks import generate_document_task
+
     for doc in created_docs:
         await db.refresh(doc)
-        # TODO: dispatch Celery task for each document
-        # generate_document_task.delay(str(doc.id))
+        try:
+            generate_document_task.delay(str(doc.id))
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Celery dispatch failed for %s", doc.id)
 
     return created_docs

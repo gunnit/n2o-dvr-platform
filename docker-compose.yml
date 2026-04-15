@@ -1,0 +1,71 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: dev
+      POSTGRES_DB: n2o
+    ports:
+      - "5432:5432"
+    volumes:
+      - n2o_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Optional — run backend & worker via compose; usually dev runs them natively.
+  backend:
+    build: ./backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:dev@postgres:5432/n2o
+      REDIS_URL: redis://redis:6379/0
+      FILE_STORAGE_PATH: /data
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - n2o_docs:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles: ["full"]
+
+  worker:
+    build: ./backend
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:dev@postgres:5432/n2o
+      REDIS_URL: redis://redis:6379/0
+      FILE_STORAGE_PATH: /data
+    volumes:
+      - ./backend:/app
+      - ./templates:/app/templates:ro
+      - n2o_docs:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles: ["full"]
+
+volumes:
+  n2o_pgdata:
+  n2o_docs:

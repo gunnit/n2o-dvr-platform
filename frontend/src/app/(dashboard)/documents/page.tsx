@@ -25,11 +25,17 @@ const documentTypes = [
   { key: "allegato_stress", name: "Allegato Stress", pages: "~20", complexity: "Media" },
   { key: "allegato_gestanti", name: "Allegato Gestanti", pages: "~10", complexity: "Bassa" },
   { key: "allegato_incendio", name: "Allegato Incendio", pages: "~15", complexity: "Media" },
-  { key: "allegato_microclima", name: "Allegato Microclima", pages: "~15", complexity: "Alta" },
-  { key: "pee", name: "Piano Emergenze", pages: "~40", complexity: "Media" },
-  { key: "haccp", name: "HACCP", pages: "~30", complexity: "Media" },
-  { key: "duvri", name: "DUVRI", pages: "~20", complexity: "Bassa" },
-  { key: "pos", name: "POS", pages: "~50", complexity: "Alta" },
+  { key: "allegato_microclima", name: "Microclima Moderato", pages: "~15", complexity: "Alta" },
+  { key: "allegato_microclima_severo", name: "Microclima Caldo Severo", pages: "~12", complexity: "Alta" },
+  { key: "allegato_biologico_alimentare", name: "Biologico Alimentare", pages: "~25", complexity: "Media" },
+  { key: "allegato_biologico_asilo", name: "Biologico Asilo", pages: "~20", complexity: "Media" },
+  { key: "allegato_biologico_dentisti", name: "Biologico Dentisti", pages: "~30", complexity: "Alta" },
+  { key: "pee_azienda", name: "PEE Aziendale", pages: "~25", complexity: "Media" },
+  { key: "pee_comune", name: "PEE Edificio/Comune", pages: "~40", complexity: "Media" },
+  { key: "haccp", name: "HACCP Manuale", pages: "~90", complexity: "Media" },
+  { key: "haccp_forms", name: "HACCP Schede (16)", pages: "~25", complexity: "Bassa" },
+  { key: "duvri", name: "DUVRI", pages: "~45", complexity: "Media" },
+  { key: "pos", name: "POS", pages: "~110", complexity: "Alta" },
 ];
 
 const complexityColors: Record<string, string> = {
@@ -40,8 +46,11 @@ const complexityColors: Record<string, string> = {
 
 const statusConfig: Record<string, { color: string; label: string; icon: typeof Clock }> = {
   pending: { color: "bg-gray-100 text-gray-700", label: "In attesa", icon: Clock },
+  in_progress: { color: "bg-yellow-100 text-yellow-700", label: "In generazione", icon: Loader2 },
   generating: { color: "bg-yellow-100 text-yellow-700", label: "In generazione", icon: Loader2 },
+  completed: { color: "bg-green-100 text-green-700", label: "Pronto", icon: CheckCircle2 },
   ready: { color: "bg-green-100 text-green-700", label: "Pronto", icon: CheckCircle2 },
+  failed: { color: "bg-red-100 text-red-700", label: "Errore", icon: AlertCircle },
   error: { color: "bg-red-100 text-red-700", label: "Errore", icon: AlertCircle },
 };
 
@@ -90,7 +99,7 @@ export default function DocumentsPage() {
   // Poll for status when documents are generating
   useEffect(() => {
     const hasGenerating = documenti.some(
-      (d) => d.status === "pending" || d.status === "generating"
+      (d) => d.status === "pending" || d.status === "generating" || d.status === "in_progress"
     );
 
     if (hasGenerating && selectedAziendaId) {
@@ -143,6 +152,9 @@ export default function DocumentsPage() {
     try {
       await apiCall(`/api/v1/aziende/${selectedAziendaId}/documents/batch`, {
         method: "POST",
+        body: JSON.stringify({
+          tipi_documento: documentTypes.map((d) => d.key),
+        }),
       });
       await fetchDocumenti();
     } catch {
@@ -253,7 +265,7 @@ export default function DocumentsPage() {
                     {existing && config && (
                       <div className="flex items-center gap-2">
                         <Badge className={config.color}>
-                          {status === "generating" && (
+                          {(status === "generating" || status === "in_progress") && (
                             <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                           )}
                           {config.label}
@@ -268,18 +280,18 @@ export default function DocumentsPage() {
                   <CardFooter className="gap-2">
                     <Button
                       size="sm"
-                      variant={existing?.status === "ready" ? "outline" : "default"}
+                      variant={(existing?.status === "ready" || existing?.status === "completed") ? "outline" : "default"}
                       onClick={() => handleGenerate(docType.key)}
-                      disabled={isGenerating || status === "generating"}
+                      disabled={isGenerating || status === "generating" || status === "in_progress"}
                     >
-                      {isGenerating || status === "generating" ? (
+                      {isGenerating || status === "generating" || status === "in_progress" ? (
                         <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
                       ) : (
                         <RefreshCw className="mr-1.5 h-3 w-3" />
                       )}
-                      {existing?.status === "ready" ? "Rigenera" : "Genera"}
+                      {(existing?.status === "ready" || existing?.status === "completed") ? "Rigenera" : "Genera"}
                     </Button>
-                    {existing?.status === "ready" && existing.file_path && (
+                    {(existing?.status === "ready" || existing?.status === "completed") && existing.file_path && (
                       <Button
                         size="sm"
                         variant="ghost"
