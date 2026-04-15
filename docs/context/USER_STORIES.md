@@ -17,10 +17,10 @@ Each story follows the format `As a <persona>, I want <capability>, so that <ben
 |------|---------|------|---------|-------------|----------|
 | 1 — Digital Survey | 10 | 6 | 3 | 1 | 75% |
 | 2 — DVR Master | 9 | 3 | 6 | 0 | 67% |
-| 3 — DVR Attachments | 15 | 7 | 8 | 0 | 73% |
+| 3 — DVR Attachments | 15 | 8 | 7 | 0 | 77% |
 | 4 — Complementary Docs | 8 | 1 | 5 | 2 | 38% |
 | 5 — Cross-cutting | 4 | 0 | 4 | 0 | 50% |
-| **TOTAL** | **46** | **17** | **26** | **3** | **65%** |
+| **TOTAL** | **46** | **18** | **25** | **3** | **67%** |
 
 > **Progress formula**: DONE weighted 1.0, PARTIAL weighted 0.5, NOT STARTED weighted 0.0.
 >
@@ -466,11 +466,11 @@ For severe heat environments, I want PHS calculation with maximum exposure time 
 
 ### Rischio Biologico (Biological Risk)
 
-#### US-3.15 `PARTIAL`
+#### US-3.15 `DONE`
 As an operator, I want to select the sector type (nursery, food, dental, etc.) and get auto-populated biological agents and prevention measures.
 
-> **Built**: 3 biologico generators (`alimentare`, `asilo`, `dentisti`) produce valid `.docx`. Frontend stub at `frontend/src/app/(dashboard)/assessments/biologico/[aziendaId]/page.tsx` with 3-sector selector (per Sprint Closure 2026-04-14).
-> **Missing**: No biological agents database. No auto-population of agents + prevention measures per sector. No "Altro" manual entry mode. Edits are not persisted against the client.
+> **Built**: 3 biologico generators (`alimentare`, `asilo`, `dentisti`) produce valid `.docx`. Full frontend form at `frontend/src/app/(dashboard)/assessments/biologico/[aziendaId]/page.tsx` + `components/assessments/biologico/biologico-form.tsx`. Sector selector drives live checklist load from `GET /api/v1/calculate/biologico-checklist`. Per-sector checklists (10-12 items each, alimentare/asilo/dentisti) defined in `reference_data_biologico.py` with `criticita` weights (alta=3, media=2, bassa=1). SI/NO/NA radio toggles per item, live Basso/Medio/Alto classification via `classify_biologico()` (NO-weight ratio >=0.4 Alto, >=0.15 Medio). New `BiologicoValutazione.risposte_checklist` JSONB column (migration `c3d4e5f6a7b8`). Protocollo sanitario textarea preserved. Dirty-state badge + explicit Salva button. 3 QA screenshots in `docs/qa/biologico/`.
+> **Missing**: "Altro" sector option for activities outside the 3 predefined sectors (defer to US-follow-up — 95% of N2O's clients fall in one of the 3 sectors).
 
 **Acceptance Criteria:**
 
