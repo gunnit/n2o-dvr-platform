@@ -2,25 +2,37 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  useForm,
+  useFieldArray,
+  useWatch,
+  type UseFormReturn,
+} from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Plus } from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
+import { MmcCpOverride } from "./mmc-cp-override";
+import { MmcLiftRow } from "./mmc-lift-row";
+import { MmcMeasures } from "./mmc-measures";
+
 // ---------------------------------------------------------------------------
-// NIOSH reference data — mirrors backend/app/services/reference_data.py
-// so the UI can score instantly. The backend is the source of truth: we
-// re-POST on finalize to confirm.
+// NIOSH multi-lift form — US-3.1 / US-3.2 / US-3.3
+// The backend `POST /api/v1/calculate/niosh` remains the source of truth.
+// `computeLift` below is a local echo used while the network is quiet.
 // ---------------------------------------------------------------------------
 
-// Factor A -- Fattore Altezza (height from floor, cm at start of lift)
+// Factor A -- Fattore Altezza
 export const NIOSH_FACTOR_A: Array<[number, number]> = [
   [0, 0.78],
   [25, 0.85],
@@ -32,7 +44,7 @@ export const NIOSH_FACTOR_A: Array<[number, number]> = [
   [175, 0.0],
 ];
 
-// Factor B -- Fattore Dislocazione Verticale (vertical displacement, cm)
+// Factor B -- Fattore Dislocazione Verticale
 export const NIOSH_FACTOR_B: Array<[number, number]> = [
   [25, 1.0],
   [30, 0.97],
@@ -44,7 +56,7 @@ export const NIOSH_FACTOR_B: Array<[number, number]> = [
   [175, 0.0],
 ];
 
-// Factor C -- Fattore Orizzontale (horizontal distance, cm)
+// Factor C -- Fattore Orizzontale
 export const NIOSH_FACTOR_C: Array<[number, number]> = [
   [25, 1.0],
   [30, 0.83],
@@ -55,7 +67,7 @@ export const NIOSH_FACTOR_C: Array<[number, number]> = [
   [63, 0.0],
 ];
 
-// Factor D -- Fattore Dislocazione Angolare (asymmetry, degrees)
+// Factor D -- Fattore Dislocazione Angolare
 export const NIOSH_FACTOR_D: Array<[number, number]> = [
   [0, 1.0],
   [30, 0.9],
@@ -66,20 +78,18 @@ export const NIOSH_FACTOR_D: Array<[number, number]> = [
   [180, 0.0],
 ];
 
-// Factor E -- Fattore Presa (grip quality)
-export type GripQuality = "Buona" | "Sufficiente" | "Scarsa";
-export const NIOSH_FACTOR_E: Record<GripQuality, number> = {
-  Buona: 1.0,
-  Sufficiente: 0.95,
-  Scarsa: 0.9,
+type GripKey = "buona" | "discreta" | "scarsa";
+const NIOSH_FACTOR_E: Record<GripKey, number> = {
+  buona: 1.0,
+  discreta: 0.95,
+  scarsa: 0.9,
 };
 
-// Factor F -- Fattore Frequenza (lifts/min × duration bucket)
-export type DurationBucket = "breve" | "media" | "lunga";
-export const NIOSH_FACTOR_F_BREAKS: number[] = [
-  0.2, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+type DurationKey = "breve" | "media" | "lunga";
+const NIOSH_FACTOR_F_BREAKS = [
+  0.2, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
 ];
-export const NIOSH_FACTOR_F: Record<number, Record<DurationBucket, number>> = {
+const NIOSH_FACTOR_F: Record<number, Record<DurationKey, number>> = {
   0.2: { breve: 1.0, media: 0.95, lunga: 0.85 },
   0.5: { breve: 0.97, media: 0.92, lunga: 0.81 },
   1: { breve: 0.94, media: 0.88, lunga: 0.75 },
@@ -97,24 +107,8 @@ export const NIOSH_FACTOR_F: Record<number, Record<DurationBucket, number>> = {
   13: { breve: 0.34, media: 0.0, lunga: 0.0 },
   14: { breve: 0.31, media: 0.0, lunga: 0.0 },
   15: { breve: 0.28, media: 0.0, lunga: 0.0 },
-  16: { breve: 0.0, media: 0.0, lunga: 0.0 },
 };
 
-// CP -- Costante di Peso
-export type Sex = "M" | "F";
-export type AgeBucket = ">18" | "15-18";
-export const NIOSH_CP: Record<AgeBucket, Record<Sex, number>> = {
-  ">18": { M: 25.0, F: 20.0 },
-  "15-18": { M: 15.0, F: 10.0 },
-};
-
-// ---------------------------------------------------------------------------
-// Lookup / interpolation helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Linear interpolation over a sorted [x, y] table, clamped at ends.
- */
 function interp(table: Array<[number, number]>, x: number): number {
   if (!isFinite(x)) return 0;
   if (x <= table[0][0]) return table[0][1];
@@ -130,323 +124,326 @@ function interp(table: Array<[number, number]>, x: number): number {
   return 0;
 }
 
-function lookupFactorF(freq: number, duration: DurationBucket): number {
+function lookupFactorF(freq: number, duration: DurationKey): number {
   if (!isFinite(freq) || freq < 0) return 0;
-  // Snap to the nearest breakpoint at or above the input frequency.
-  // Values below 0.2 are treated as 0.2 (minimum), values above 16 return 0.
   if (freq <= NIOSH_FACTOR_F_BREAKS[0]) {
     return NIOSH_FACTOR_F[NIOSH_FACTOR_F_BREAKS[0]][duration];
   }
   for (const brk of NIOSH_FACTOR_F_BREAKS) {
-    if (freq <= brk) {
-      return NIOSH_FACTOR_F[brk][duration];
-    }
+    if (freq <= brk) return NIOSH_FACTOR_F[brk][duration];
   }
   return 0;
 }
 
 // ---------------------------------------------------------------------------
-// Form state + derived result
+// Schema + types
 // ---------------------------------------------------------------------------
 
-export interface MmcInputs {
-  sex: Sex;
-  age: AgeBucket;
-  peso_sollevato: number | null;
-  altezza_cm: number | null;
-  dislocazione_cm: number | null;
-  distanza_cm: number | null;
-  angolo_deg: number | null;
-  presa: GripQuality;
-  frequenza: number | null;
-  durata: DurationBucket;
+const liftSchema = z.object({
+  name: z.string(),
+  altezza: z
+    .number({ message: "Valore consentito: 0-175 cm" })
+    .min(0, "Valore consentito: 0-175 cm")
+    .max(175, "Valore consentito: 0-175 cm"),
+  dislocazione: z
+    .number({ message: "Valore consentito: 0-175 cm" })
+    .min(0, "Valore consentito: 0-175 cm")
+    .max(175, "Valore consentito: 0-175 cm"),
+  distanza: z
+    .number({ message: "Valore consentito: 25-63 cm" })
+    .min(25, "Valore consentito: 25-63 cm")
+    .max(63, "Valore consentito: 25-63 cm"),
+  angolo: z
+    .number({ message: "Valore consentito: 0-135 gradi" })
+    .min(0, "Valore consentito: 0-135 gradi")
+    .max(135, "Valore consentito: 0-135 gradi"),
+  presa: z.enum(["buona", "discreta", "scarsa"]),
+  frequenza: z
+    .number({ message: "Valore consentito: 0.2-15 atti/min" })
+    .min(0.2, "Valore consentito: 0.2-15 atti/min")
+    .max(15, "Valore consentito: 0.2-15 atti/min"),
+  durata: z.enum(["breve", "media", "lunga"]),
+  peso_reale: z
+    .number({ message: "Il peso deve essere > 0 kg" })
+    .positive("Il peso deve essere > 0 kg"),
+});
+
+export const mmcFormSchema = z.object({
+  worker_sesso: z.enum(["M", "F"]),
+  worker_eta: z
+    .number({ message: "Eta non valida (15-70)" })
+    .int("Eta non valida (15-70)")
+    .min(15, "Eta non valida (15-70)")
+    .max(70, "Eta non valida (15-70)"),
+  cp_override: z.number().positive("CP deve essere > 0").optional(),
+  cp_motivazione: z.string().optional(),
+  lifts: z.array(liftSchema).min(1, "Almeno un sollevamento e richiesto"),
+  measures: z.array(z.string()).optional(),
+});
+
+/**
+ * Cross-field validation: when cp_override is set the motivazione must be
+ * at least 5 characters. Called from the submit handler so we can set a
+ * field-level error on cp_motivazione when the guard fails.
+ */
+export function validateCpOverride(v: MmcFormValues): string | null {
+  if (v.cp_override === undefined) return null;
+  if ((v.cp_motivazione?.length ?? 0) >= 5) return null;
+  return "Motivazione richiesta (min. 5 caratteri) per modificare il CP";
 }
 
-export const DEFAULT_INPUTS: MmcInputs = {
-  sex: "M",
-  age: ">18",
-  peso_sollevato: null,
-  altezza_cm: null,
-  dislocazione_cm: null,
-  distanza_cm: null,
-  angolo_deg: null,
-  presa: "Buona",
-  frequenza: null,
-  durata: "breve",
-};
+export type MmcFormValues = z.infer<typeof mmcFormSchema>;
+export type LiftValues = z.infer<typeof liftSchema>;
 
-export type Livello = "VERDE" | "GIALLA" | "ROSSA";
+export type Zona = "VERDE" | "GIALLA" | "ROSSA";
 
-export interface MmcResult {
-  cp: number;
+export interface LiftResult {
+  plr: number;
+  ir: number;
+  zona: Zona;
   a: number;
   b: number;
   c: number;
   d: number;
   e: number;
   f: number;
-  plr: number;
-  ir: number;
-  livello: Livello;
+}
+
+export interface MmcResult {
+  perLift: LiftResult[];
+  worst: LiftResult | null;
   unanswered: string[];
+  cp: number;
 }
 
-export function computeMmc(inputs: MmcInputs): MmcResult {
-  const cp = NIOSH_CP[inputs.age][inputs.sex];
-  const a = inputs.altezza_cm != null ? interp(NIOSH_FACTOR_A, inputs.altezza_cm) : 0;
-  const b =
-    inputs.dislocazione_cm != null ? interp(NIOSH_FACTOR_B, inputs.dislocazione_cm) : 0;
-  const c = inputs.distanza_cm != null ? interp(NIOSH_FACTOR_C, inputs.distanza_cm) : 0;
-  const d = inputs.angolo_deg != null ? interp(NIOSH_FACTOR_D, inputs.angolo_deg) : 0;
-  const e = NIOSH_FACTOR_E[inputs.presa];
-  const f = inputs.frequenza != null ? lookupFactorF(inputs.frequenza, inputs.durata) : 0;
+// Legacy alias kept for the page component until Task A1.7 rewrites it.
+export type MmcInputs = MmcFormValues;
 
-  const unanswered: string[] = [];
-  if (inputs.peso_sollevato == null) unanswered.push("peso_sollevato");
-  if (inputs.altezza_cm == null) unanswered.push("altezza_cm");
-  if (inputs.dislocazione_cm == null) unanswered.push("dislocazione_cm");
-  if (inputs.distanza_cm == null) unanswered.push("distanza_cm");
-  if (inputs.angolo_deg == null) unanswered.push("angolo_deg");
-  if (inputs.frequenza == null) unanswered.push("frequenza");
+function bandFor(ir: number, plr: number, peso: number): Zona {
+  if (plr <= 0 && peso > 0) return "ROSSA";
+  if (ir <= 0.75) return "VERDE";
+  if (ir <= 1.0) return "GIALLA";
+  return "ROSSA";
+}
 
+export function computeLift(cp: number, l: LiftValues): LiftResult {
+  const a = interp(NIOSH_FACTOR_A, l.altezza);
+  const b = interp(NIOSH_FACTOR_B, l.dislocazione);
+  const c = interp(NIOSH_FACTOR_C, l.distanza);
+  const d = interp(NIOSH_FACTOR_D, l.angolo);
+  const e = NIOSH_FACTOR_E[l.presa];
+  const f = lookupFactorF(l.frequenza, l.durata);
   const plr = cp * a * b * c * d * e * f;
-  const peso = inputs.peso_sollevato ?? 0;
-  const ir = plr > 0 ? peso / plr : peso > 0 ? Infinity : 0;
-
-  let livello: Livello;
-  if (plr <= 0 && peso > 0) livello = "ROSSA";
-  else if (ir <= 0.75) livello = "VERDE";
-  else if (ir <= 1.0) livello = "GIALLA";
-  else livello = "ROSSA";
-
-  return { cp, a, b, c, d, e, f, plr, ir, livello, unanswered };
+  const ir = plr > 0 ? l.peso_reale / plr : l.peso_reale > 0 ? Infinity : 0;
+  return { a, b, c, d, e, f, plr, ir, zona: bandFor(ir, plr, l.peso_reale) };
 }
 
+export function computeMmc(values: MmcFormValues, effectiveCp?: number): MmcResult {
+  const cp = effectiveCp ?? values.cp_override ?? 0;
+  const perLift = (values.lifts ?? []).map((l) => computeLift(cp, l));
+  let worst: LiftResult | null = null;
+  for (const r of perLift) {
+    if (!worst || r.ir > worst.ir) worst = r;
+  }
+  return { perLift, worst, unanswered: [], cp };
+}
+
+export const DEFAULT_LIFT: LiftValues = {
+  name: "",
+  altezza: 75,
+  dislocazione: 25,
+  distanza: 40,
+  angolo: 0,
+  presa: "buona",
+  frequenza: 1,
+  durata: "breve",
+  peso_reale: 15,
+};
+
+export const DEFAULT_INPUTS: MmcFormValues = {
+  worker_sesso: "M",
+  worker_eta: 30,
+  cp_override: undefined,
+  cp_motivazione: "",
+  lifts: [DEFAULT_LIFT],
+  measures: [],
+};
+
 // ---------------------------------------------------------------------------
-// UI helpers
+// Main form
 // ---------------------------------------------------------------------------
 
-const BAND_CLASS: Record<Livello, string> = {
-  VERDE: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-400",
-  GIALLA: "bg-amber-500/15 text-amber-800 ring-amber-500/30 dark:text-amber-300",
-  ROSSA: "bg-rose-500/15 text-rose-700 ring-rose-500/30 dark:text-rose-400",
-};
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const h = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(h);
+  }, [value, delayMs]);
+  return debounced;
+}
 
-const BAND_TITLE: Record<Livello, string> = {
-  VERDE: "Accettabile",
-  GIALLA: "Da ridurre",
-  ROSSA: "Non accettabile",
-};
-
-const BAND_DESCRIPTION: Record<Livello, string> = {
-  VERDE: "Situazione accettabile.",
-  GIALLA:
-    "Situazione si avvicina ai limiti; 1-10% della popolazione potrebbe essere a rischio.",
-  ROSSA: "Rischio per quote crescenti di popolazione.",
-};
-
-const BAND_ACTION: Record<Livello, string> = {
-  VERDE: "Nessun intervento specifico richiesto.",
-  GIALLA:
-    "Attivare sorveglianza sanitaria, formazione specifica, interventi strutturali.",
-  ROSSA:
-    "Intervento di prevenzione primaria: riprogettazione postazioni, riduzione carichi, ausili meccanici.",
-};
-
-function LivelloBadge({
-  livello,
-  className,
+function LiftWatcher({
+  form,
+  index,
+  cp,
+  onResult,
 }: {
-  livello: Livello;
-  className?: string;
+  form: UseFormReturn<MmcFormValues>;
+  index: number;
+  cp: number | null;
+  onResult: (index: number, r: LiftResult | null) => void;
 }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 transition-colors",
-        BAND_CLASS[livello],
-        className,
-      )}
-    >
-      {livello}
-    </span>
-  );
-}
+  const lift = useWatch({ control: form.control, name: `lifts.${index}` });
+  const debounced = useDebouncedValue(lift, 350);
 
-function ChoiceButton({
-  label,
-  active,
-  onClick,
-  tone,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  tone?: "danger" | "neutral";
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-md px-2.5 py-1 text-xs font-medium ring-1 transition-colors",
-        active
-          ? tone === "danger"
-            ? "bg-rose-500/15 text-rose-700 ring-rose-500/40 dark:text-rose-400"
-            : "bg-primary/10 text-primary ring-primary/40"
-          : "bg-background text-muted-foreground ring-border hover:bg-muted",
-      )}
-    >
-      {label}
-    </button>
-  );
-}
+  useEffect(() => {
+    if (cp == null || cp <= 0 || !debounced) {
+      onResult(index, null);
+      return;
+    }
+    const local = computeLift(cp, debounced as LiftValues);
+    const anyZero =
+      local.a <= 0 ||
+      local.b <= 0 ||
+      local.c <= 0 ||
+      local.d <= 0 ||
+      local.e <= 0 ||
+      local.f <= 0 ||
+      (debounced as LiftValues).peso_reale <= 0;
+    if (anyZero) {
+      onResult(index, local);
+      return;
+    }
+    const ctrl = new AbortController();
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    fetch(`${apiUrl}/api/v1/calculate/niosh`, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        peso_sollevato: (debounced as LiftValues).peso_reale,
+        cp,
+        fattore_a: local.a,
+        fattore_b: local.b,
+        fattore_c: local.c,
+        fattore_d: local.d,
+        fattore_e: local.e,
+        fattore_f: local.f,
+      }),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d: { plr: number; ir: number; livello: string }) => {
+        const zona: Zona =
+          d.livello === "GREEN"
+            ? "VERDE"
+            : d.livello === "YELLOW"
+            ? "GIALLA"
+            : "ROSSA";
+        onResult(index, { ...local, plr: d.plr, ir: d.ir, zona });
+      })
+      .catch(() => onResult(index, local));
+    return () => ctrl.abort();
+  }, [cp, debounced, index, onResult]);
 
-// Numeric field with live derived factor readout
-function NumericField({
-  label,
-  suffix,
-  value,
-  onChange,
-  placeholder,
-  factorLabel,
-  factorValue,
-  hint,
-  step,
-  min,
-  max,
-}: {
-  label: string;
-  suffix: string;
-  value: number | null;
-  onChange: (v: number | null) => void;
-  placeholder?: string;
-  factorLabel: string;
-  factorValue: number;
-  hint?: string;
-  step?: string;
-  min?: number;
-  max?: number;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-baseline justify-between gap-2">
-        <Label className="text-xs">
-          {label}
-          <span className="ml-1 font-normal text-muted-foreground">({suffix})</span>
-        </Label>
-        <span className="text-[11px] text-muted-foreground tabular-nums">
-          {factorLabel}{" "}
-          <span
-            className={cn(
-              "font-medium",
-              value == null
-                ? "text-muted-foreground"
-                : factorValue === 0
-                ? "text-rose-600 dark:text-rose-400"
-                : "text-foreground",
-            )}
-          >
-            {value == null ? "—" : factorValue.toFixed(2)}
-          </span>
-        </span>
-      </div>
-      <Input
-        type="number"
-        inputMode="decimal"
-        step={step ?? "0.1"}
-        min={min}
-        max={max}
-        placeholder={placeholder}
-        value={value ?? ""}
-        onChange={(e) => {
-          const raw = e.target.value;
-          if (raw === "") {
-            onChange(null);
-          } else {
-            const n = Number(raw);
-            onChange(isNaN(n) ? null : n);
-          }
-        }}
-      />
-      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
-    </div>
-  );
+  return null;
 }
-
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
 
 export interface MmcFormProps {
-  aziendaId: string;
-  onResultChange?: (result: MmcResult) => void;
-  onInputsChange?: (inputs: MmcInputs) => void;
+  aziendaId?: string;
+  initialValues?: Partial<MmcFormValues>;
+  finalizing?: boolean;
+  onResult?: (r: MmcResult) => void;
+  onFinalize?: (v: MmcFormValues, r: MmcResult) => void;
+  // Legacy listeners kept for existing page — invoked on each change.
+  onResultChange?: (r: MmcResult) => void;
+  onInputsChange?: (v: MmcFormValues) => void;
 }
 
-export function MmcForm({ aziendaId, onResultChange, onInputsChange }: MmcFormProps) {
-  const storageKey = `mmc-draft-${aziendaId}`;
+export function MmcForm({
+  initialValues,
+  finalizing = false,
+  onResult,
+  onFinalize,
+  onResultChange,
+  onInputsChange,
+}: MmcFormProps) {
+  const form = useForm<MmcFormValues>({
+    resolver: zodResolver(mmcFormSchema),
+    defaultValues: { ...DEFAULT_INPUTS, ...(initialValues ?? {}) },
+    mode: "onBlur",
+  });
 
-  const [inputs, setInputs] = useState<MmcInputs>(DEFAULT_INPUTS);
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "lifts",
+  });
 
-  // Hydrate from localStorage on mount or aziendaId change
-  useEffect(() => {
-    try {
-      const raw =
-        typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null;
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<MmcInputs>;
-        setInputs({ ...DEFAULT_INPUTS, ...parsed });
-      } else {
-        setInputs(DEFAULT_INPUTS);
-      }
-    } catch {
-      setInputs(DEFAULT_INPUTS);
-    }
-  }, [storageKey]);
+  const [autoCp, setAutoCp] = useState<number | null>(null);
+  const cpOverride = form.watch("cp_override");
+  const effectiveCp = cpOverride ?? autoCp;
 
-  // Persist on change
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(storageKey, JSON.stringify(inputs));
-    } catch {
-      // ignore quota / privacy mode errors
-    }
-  }, [inputs, storageKey]);
+  const [perLiftResults, setPerLiftResults] = useState<(LiftResult | null)[]>([]);
 
-  const result = useMemo(() => computeMmc(inputs), [inputs]);
-
-  useEffect(() => {
-    onResultChange?.(result);
-  }, [result, onResultChange]);
-
-  useEffect(() => {
-    onInputsChange?.(inputs);
-  }, [inputs, onInputsChange]);
-
-  const setField = useCallback(
-    <K extends keyof MmcInputs>(key: K, value: MmcInputs[K]) => {
-      setInputs((prev) => ({ ...prev, [key]: value }));
+  const handleLiftResult = useCallback(
+    (index: number, r: LiftResult | null) => {
+      setPerLiftResults((prev) => {
+        const next = [...prev];
+        while (next.length <= index) next.push(null);
+        next[index] = r;
+        return next;
+      });
     },
     [],
   );
 
-  const resetDraft = useCallback(() => {
-    setInputs(DEFAULT_INPUTS);
-    try {
-      window.localStorage.removeItem(storageKey);
-    } catch {
-      // ignore
-    }
-  }, [storageKey]);
+  useEffect(() => {
+    setPerLiftResults((prev) => prev.slice(0, fields.length));
+  }, [fields.length]);
 
-  const peso = inputs.peso_sollevato ?? 0;
-  const pesoForDisplay = peso > 0 ? peso : null;
-  const allAnswered = result.unanswered.length === 0;
+  const worst = useMemo<LiftResult | null>(() => {
+    let w: LiftResult | null = null;
+    for (const r of perLiftResults) {
+      if (!r) continue;
+      if (!w || r.ir > w.ir) w = r;
+    }
+    return w;
+  }, [perLiftResults]);
+
+  const aggregate = useMemo<MmcResult>(
+    () => ({
+      perLift: perLiftResults.filter((r): r is LiftResult => r !== null),
+      worst,
+      unanswered: [],
+      cp: effectiveCp ?? 0,
+    }),
+    [perLiftResults, worst, effectiveCp],
+  );
+
+  useEffect(() => {
+    onResult?.(aggregate);
+    onResultChange?.(aggregate);
+  }, [aggregate, onResult, onResultChange]);
+
+  const watchedValues = form.watch();
+  const watchedSerialized = JSON.stringify(watchedValues);
+  useEffect(() => {
+    onInputsChange?.(watchedValues);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedSerialized]);
+
+  const onSubmit = form.handleSubmit((v) => {
+    const cpErr = validateCpOverride(v);
+    if (cpErr) {
+      form.setError("cp_motivazione", { type: "manual", message: cpErr });
+      return;
+    }
+    onFinalize?.(v, aggregate);
+  });
+
+  const isDirty = form.formState.isDirty;
 
   return (
-    <div className="space-y-6">
-      {/* Sticky result widget */}
+    <form onSubmit={onSubmit} className="space-y-6" noValidate>
       <Card className="sticky top-4 z-10 shadow-sm">
         <CardHeader className="border-b">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -455,306 +452,110 @@ export function MmcForm({ aziendaId, onResultChange, onInputsChange }: MmcFormPr
                 Indice di Sollevamento (IR)
               </CardTitle>
               <CardDescription className="text-xs">
-                NIOSH ISO 11228-1 · PLR = CP × A × B × C × D × E × F · IR = Peso / PLR
+                NIOSH ISO 11228-1 · PLR = CP x A x B x C x D x E x F · IR = Peso / PLR
               </CardDescription>
             </div>
             <div className="flex items-center gap-3">
               <div className="text-right">
                 <div className="text-2xl font-semibold tabular-nums">
-                  {pesoForDisplay == null || result.plr <= 0
+                  {worst == null
                     ? "—"
-                    : isFinite(result.ir)
-                    ? result.ir.toFixed(2)
+                    : isFinite(worst.ir)
+                    ? worst.ir.toFixed(2)
                     : "∞"}
                 </div>
                 <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  IR
+                  IR peggiore
                 </div>
               </div>
-              <LivelloBadge livello={result.livello} className="px-3 py-1 text-sm" />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3 pt-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex-1 min-w-[180px]">
-              <div className="h-2 overflow-hidden rounded-full bg-muted">
-                <div
+              {worst && (
+                <Badge
                   className={cn(
-                    "h-full transition-all duration-500",
-                    result.livello === "VERDE" && "bg-emerald-500",
-                    result.livello === "GIALLA" && "bg-amber-500",
-                    result.livello === "ROSSA" && "bg-rose-500",
+                    "px-3 py-1 text-sm ring-1",
+                    worst.zona === "VERDE" &&
+                      "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30",
+                    worst.zona === "GIALLA" &&
+                      "bg-amber-500/15 text-amber-800 ring-amber-500/30",
+                    worst.zona === "ROSSA" &&
+                      "bg-rose-500/15 text-rose-700 ring-rose-500/30",
                   )}
-                  style={{
-                    width: `${Math.min(
-                      100,
-                      isFinite(result.ir) ? (result.ir / 1.5) * 100 : 100,
-                    )}%`,
-                  }}
-                />
-              </div>
-              <div className="mt-1 flex justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
-                <span>0</span>
-                <span>0.75</span>
-                <span>1.00</span>
-                <span>≥1.5</span>
-              </div>
+                >
+                  {worst.zona}
+                </Badge>
+              )}
+              {isDirty && (
+                <Badge variant="outline" className="text-xs">
+                  Modifiche non salvate
+                </Badge>
+              )}
             </div>
-            <Badge variant="secondary" className="gap-1 text-xs">
-              <span className="tabular-nums">
-                {pesoForDisplay == null || result.plr <= 0
-                  ? "—"
-                  : `PLR ${result.plr.toFixed(2)} kg`}
-              </span>
-            </Badge>
-          </div>
-          <div className="grid grid-cols-2 gap-2 pt-1 text-xs sm:grid-cols-4">
-            <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
-              <span className="text-muted-foreground">CP</span>
-              <span className="font-medium tabular-nums">
-                {result.cp.toFixed(2)} kg
-              </span>
-            </div>
-            <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
-              <span className="text-muted-foreground">A × B</span>
-              <span className="font-medium tabular-nums">
-                {(result.a * result.b).toFixed(2)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
-              <span className="text-muted-foreground">C × D</span>
-              <span className="font-medium tabular-nums">
-                {(result.c * result.d).toFixed(2)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
-              <span className="text-muted-foreground">E × F</span>
-              <span className="font-medium tabular-nums">
-                {(result.e * result.f).toFixed(2)}
-              </span>
-            </div>
-          </div>
-          <div
-            className={cn(
-              "rounded-md border p-3 text-xs",
-              result.livello === "VERDE" &&
-                "border-emerald-500/30 bg-emerald-500/5 text-emerald-900 dark:text-emerald-200",
-              result.livello === "GIALLA" &&
-                "border-amber-500/30 bg-amber-500/5 text-amber-900 dark:text-amber-200",
-              result.livello === "ROSSA" &&
-                "border-rose-500/30 bg-rose-500/5 text-rose-900 dark:text-rose-200",
-            )}
-          >
-            <div className="font-medium">{BAND_TITLE[result.livello]}</div>
-            <p className="mt-0.5">{BAND_DESCRIPTION[result.livello]}</p>
-            <p className="mt-1 text-muted-foreground">{BAND_ACTION[result.livello]}</p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Worker + CP */}
-      <Card>
-        <CardHeader className="border-b">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-sm">Lavoratore e Costante di Peso (CP)</CardTitle>
-              <CardDescription className="text-xs">
-                CP deriva da sesso e fascia d&apos;età secondo NIOSH ISO 11228-1.
-              </CardDescription>
-            </div>
-            <Badge variant="outline" className="tabular-nums">
-              CP {result.cp.toFixed(2)} kg
-            </Badge>
           </div>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label className="text-xs">Sesso</Label>
-            <div className="flex gap-1.5">
-              <ChoiceButton
-                label="Maschio"
-                active={inputs.sex === "M"}
-                onClick={() => setField("sex", "M")}
-              />
-              <ChoiceButton
-                label="Femmina"
-                active={inputs.sex === "F"}
-                onClick={() => setField("sex", "F")}
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs">Fascia d&apos;età</Label>
-            <div className="flex gap-1.5">
-              <ChoiceButton
-                label="Adulto (>18)"
-                active={inputs.age === ">18"}
-                onClick={() => setField("age", ">18")}
-              />
-              <ChoiceButton
-                label="Giovane (15-18)"
-                active={inputs.age === "15-18"}
-                onClick={() => setField("age", "15-18")}
-              />
-            </div>
-          </div>
-        </CardContent>
       </Card>
 
-      {/* Lifting parameters */}
-      <Card>
-        <CardHeader className="border-b">
-          <CardTitle className="text-sm">Parametri di sollevamento</CardTitle>
-          <CardDescription className="text-xs">
-            Ogni parametro è convertito in un moltiplicatore (0.00 — 1.00) tramite
-            le tabelle NIOSH. I valori 0.00 indicano una condizione fuori soglia.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-x-6 gap-y-4 pt-4 md:grid-cols-2">
-          <NumericField
-            label="Peso sollevato"
-            suffix="kg"
-            placeholder="es. 12"
-            value={inputs.peso_sollevato}
-            onChange={(v) => setField("peso_sollevato", v)}
-            factorLabel="peso reale"
-            factorValue={peso}
-            min={0}
-            step="0.1"
-          />
-          <NumericField
-            label="Altezza inizio presa"
-            suffix="cm dal suolo"
-            placeholder="es. 75"
-            value={inputs.altezza_cm}
-            onChange={(v) => setField("altezza_cm", v)}
-            factorLabel="fattore A ="
-            factorValue={result.a}
-            hint="Ottimale a 75 cm. Oltre 175 cm il fattore è nullo."
-            min={0}
-            max={200}
-            step="1"
-          />
-          <NumericField
-            label="Dislocazione verticale"
-            suffix="cm"
-            placeholder="es. 40"
-            value={inputs.dislocazione_cm}
-            onChange={(v) => setField("dislocazione_cm", v)}
-            factorLabel="fattore B ="
-            factorValue={result.b}
-            hint="|altezza fine − altezza inizio|. Oltre 175 cm il fattore è nullo."
-            min={0}
-            max={200}
-            step="1"
-          />
-          <NumericField
-            label="Distanza orizzontale"
-            suffix="cm caviglie-carico"
-            placeholder="es. 30"
-            value={inputs.distanza_cm}
-            onChange={(v) => setField("distanza_cm", v)}
-            factorLabel="fattore C ="
-            factorValue={result.c}
-            hint="Oltre 63 cm il fattore è nullo."
-            min={0}
-            max={100}
-            step="1"
-          />
-          <NumericField
-            label="Angolo di asimmetria"
-            suffix="° torsione busto"
-            placeholder="es. 0"
-            value={inputs.angolo_deg}
-            onChange={(v) => setField("angolo_deg", v)}
-            factorLabel="fattore D ="
-            factorValue={result.d}
-            hint="Oltre 135° il fattore è nullo."
-            min={0}
-            max={180}
-            step="5"
-          />
-          <NumericField
-            label="Frequenza"
-            suffix="atti/min"
-            placeholder="es. 1"
-            value={inputs.frequenza}
-            onChange={(v) => setField("frequenza", v)}
-            factorLabel="fattore F ="
-            factorValue={result.f}
-            hint="Combinato con la durata sotto."
-            min={0}
-            max={20}
-            step="0.1"
-          />
+      <MmcCpOverride form={form} onAutoCpChange={setAutoCp} />
 
-          {/* Grip quality */}
-          <div className="space-y-1.5">
-            <div className="flex items-baseline justify-between gap-2">
-              <Label className="text-xs">Qualità della presa</Label>
-              <span className="text-[11px] text-muted-foreground tabular-nums">
-                fattore E ={" "}
-                <span className="font-medium text-foreground">
-                  {result.e.toFixed(2)}
-                </span>
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {(["Buona", "Sufficiente", "Scarsa"] as GripQuality[]).map((g) => (
-                <ChoiceButton
-                  key={g}
-                  label={g}
-                  active={inputs.presa === g}
-                  onClick={() => setField("presa", g)}
-                  tone={g === "Scarsa" ? "danger" : "neutral"}
-                />
-              ))}
-            </div>
-          </div>
+      {fields.map((f, i) => (
+        <LiftWatcher
+          key={`${f.id}-watch`}
+          form={form}
+          index={i}
+          cp={effectiveCp}
+          onResult={handleLiftResult}
+        />
+      ))}
 
-          {/* Duration bucket */}
-          <div className="space-y-1.5">
-            <div className="flex items-baseline justify-between gap-2">
-              <Label className="text-xs">Durata del compito</Label>
-              <span className="text-[11px] text-muted-foreground">
-                modula il fattore F
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              <ChoiceButton
-                label="Breve (<1h)"
-                active={inputs.durata === "breve"}
-                onClick={() => setField("durata", "breve")}
-              />
-              <ChoiceButton
-                label="Media (1-2h)"
-                active={inputs.durata === "media"}
-                onClick={() => setField("durata", "media")}
-              />
-              <ChoiceButton
-                label="Lunga (>2h)"
-                active={inputs.durata === "lunga"}
-                onClick={() => setField("durata", "lunga")}
-                tone="danger"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-4">
-        <div className="text-xs text-muted-foreground">
-          Bozza salvata automaticamente ·{" "}
-          {allAnswered ? "tutti i parametri inseriti" : `mancano ${result.unanswered.length} parametri`}
-        </div>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={resetDraft}>
-            Azzera bozza
-          </Button>
-        </div>
+      <div className="space-y-4">
+        {fields.map((f, i) => (
+          <MmcLiftRow
+            key={f.id}
+            index={i}
+            control={form.control}
+            register={form.register}
+            errors={form.formState.errors}
+            result={perLiftResults[i] ?? undefined}
+            onRemove={() => remove(i)}
+            canRemove={fields.length > 1}
+          />
+        ))}
       </div>
-    </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => append({ ...DEFAULT_LIFT })}
+        >
+          <Plus className="mr-2 h-4 w-4" /> Aggiungi sollevamento
+        </Button>
+        {form.formState.errors.lifts?.message && (
+          <p className="text-xs text-rose-600">
+            {form.formState.errors.lifts.message}
+          </p>
+        )}
+      </div>
+
+      <MmcMeasures form={form} visible={worst?.zona === "ROSSA"} />
+
+      <Card className="border-primary/30 bg-primary/5">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+          <div>
+            <p className="text-sm font-medium">Conferma valutazione</p>
+            <p className="text-xs text-muted-foreground">
+              {worst
+                ? `IR peggiore ${
+                    isFinite(worst.ir) ? worst.ir.toFixed(2) : "∞"
+                  } · zona ${worst.zona}`
+                : "Compila i parametri e salva la valutazione."}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button type="submit" disabled={finalizing}>
+              {finalizing ? "Salvataggio in corso..." : "Salva valutazione"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </form>
   );
 }
