@@ -74,3 +74,4 @@ services:
     name: n2o-dvr-redis
     plan: starter
     maxmemoryPolicy: noeviction
+    ipAllowList: []  # internal-only; reached by n2o-dvr-api + n2o-dvr-worker over private network
