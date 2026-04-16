@@ -73,6 +73,8 @@ These bit us the first time; don't undo them:
 | Build runs from repo root, not `backend/` | `cp -r ../templates ./templates` fails otherwise | `rootDir: backend` on api + worker |
 | `alembic` can't find `app` module | Alembic doesn't add CWD to `sys.path` | `preDeployCommand: PYTHONPATH=. alembic upgrade head` |
 | Alembic tries psycopg2, not asyncpg | SQLAlchemy maps `postgres://` to the default sync driver | `backend/alembic/env.py` calls `_normalize_async_url()` (same helper as `session.py`) |
+| Auth.js v5 errors `UntrustedHost` | Render's reverse proxy rewrites Host; NextAuth v5 refuses it for open-redirect protection | Set `AUTH_TRUST_HOST=true` on `n2o-dvr-frontend` |
+| Next.js 16 build fails: `useSearchParams() should be wrapped in a suspense boundary` | Strict prerender rule in app router | Wrap the consuming component in `<Suspense>` (see `frontend/src/app/(auth)/login/page.tsx`) |
 
 ## 4. Known gaps (acceptable for v1, track for follow-up)
 
