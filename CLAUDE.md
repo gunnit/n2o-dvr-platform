@@ -153,7 +153,13 @@ All project docs are branded with Niuexa header/footer, version 1.0, April 2026.
 
 ## Project Status
 
-**Phase: Ready to Build** — Planning/Analysis complete. All 11 context docs written, architecture decided, templates analyzed, reference data extracted. Next step: Phase 2 project setup and core development.
+**Phase: Deployed to production infra** (2026-04-17). Full stack live on Render (Frankfurt): frontend, API, Celery worker, Postgres, Redis. See `DEPLOY.md` for the runbook, live URLs, and the non-obvious `render.yaml` quirks discovered during first deploy (retired postgres plan, rootDir, PYTHONPATH for alembic, asyncpg URL normalization, Next.js Suspense boundary).
+
+## Live URLs
+
+- **Frontend**: https://n2o-dvr-frontend.onrender.com
+- **API**: https://n2o-dvr-api.onrender.com (Swagger at `/docs`)
+- **Worker**: Celery background service (no URL)
 
 ## Development Phases
 
