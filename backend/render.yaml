@@ -34,7 +34,7 @@ services:
           type: redis
           property: connectionString
       - key: CORS_ORIGINS
-        value: '["https://n2o-dvr.vercel.app"]'
+        value: '["https://n2o-dvr-frontend.onrender.com"]'
       - key: FILE_STORAGE_PATH
         value: /data
     disk:
@@ -75,6 +75,24 @@ services:
       name: n2o-data-worker
       mountPath: /data
       sizeGB: 1
+
+  - type: web
+    name: n2o-dvr-frontend
+    runtime: node
+    plan: starter
+    region: frankfurt
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NEXT_PUBLIC_API_URL
+        value: https://n2o-dvr-api.onrender.com
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: NEXTAUTH_URL
+        value: https://n2o-dvr-frontend.onrender.com
 
   - type: redis
     name: n2o-dvr-redis
