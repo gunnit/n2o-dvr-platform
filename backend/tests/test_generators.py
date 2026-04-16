@@ -93,3 +93,169 @@ def test_biologico_all_three_variants_generate(generated_outputs):
     for key in ("ALLEGATO_BIOLOGICO_ALIMENTARE", "ALLEGATO_BIOLOGICO_ASILO", "ALLEGATO_BIOLOGICO_DENTISTI"):
         ok, path, _ = generated_outputs[key]
         assert ok and path.endswith(".docx"), f"{key} failed"
+
+
+def test_dvr_total_table_count_hits_template_parity(generated_outputs):
+    """US-2.8 AC1: DVR .docx emits enough tables to match the master template
+    (Pre-Parte I + Parte I + II + III + IV).
+
+    For the 6-env Acme fixture: 3 pre + 15 Parte I + 5 Parte II +
+    (1 azienda + 6 envs × (identity + addetti + checklist + 2 cat)) +
+    3 Parte IV = 57 tables. Real clients with richer per-env risk data
+    climb toward the template's 111 organically.
+    """
+    ok, path, _ = generated_outputs["DVR_MASTER"]
+    assert ok and path
+    doc = Document(path)
+    count = len(doc.tables)
+    assert count >= 50, (
+        f"DVR Master emitted only {count} tables; expected ≥50 for the "
+        f"Acme fixture. Regression in Parte I/II/III/IV parity."
+    )
+
+
+def test_dvr_parte_i_has_anagrafica_and_hazard_library(generated_outputs):
+    """US-2.8 AC1: Parte I must emit the anagrafica block, single-role title
+    tables, and the 3-group static hazard library (Tables 4, 6–9, 15–17)."""
+    ok, path, _ = generated_outputs["DVR_MASTER"]
+    assert ok and path
+    doc = Document(path)
+
+    headers_seen = []
+    for table in doc.tables:
+        if not table.rows:
+            continue
+        header_cells = [cell.text.strip() for cell in table.rows[0].cells]
+        headers_seen.append(tuple(header_cells))
+
+    assert ("Datore di Lavoro",) in headers_seen, (
+        "missing single-role Datore di Lavoro table (Template Table 6)"
+    )
+    assert ("Responsabile del Servizio di Prevenzione e Protezione",) in headers_seen, (
+        "missing RSPP title table (Template Table 7)"
+    )
+    assert ("Rappresentante dei Lavoratori per la Sicurezza",) in headers_seen, (
+        "missing RLS title table (Template Table 8)"
+    )
+
+    macro_headers = {"Rischi per la Sicurezza", "Rischi per la Salute", "Rischi Trasversali"}
+    static_library_headers = [
+        h for h in headers_seen
+        if len(h) == 2 and h[1] in macro_headers and h[0] == "Categoria"
+    ]
+    assert len(static_library_headers) == 3, (
+        f"expected 3 static hazard-library tables (Templates 15/16/17), "
+        f"got {len(static_library_headers)}"
+    )
+
+
+def test_dvr_parte_ii_has_definizioni_and_criteria(generated_outputs):
+    """US-2.8 AC1: Parte II must emit the Definizioni glossary and full
+    P/D criteria tables (Templates 19, 21, 22)."""
+    ok, path, _ = generated_outputs["DVR_MASTER"]
+    assert ok and path
+    doc = Document(path)
+
+    found_definizioni = False
+    found_prob = False
+    found_danno = False
+    for table in doc.tables:
+        if not table.rows:
+            continue
+        header_cells = tuple(cell.text.strip() for cell in table.rows[0].cells)
+        if header_cells == ("Termine", "Definizione"):
+            found_definizioni = len(table.rows) >= 10
+        if header_cells == ("P", "Livello", "Criteri"):
+            found_prob = True
+        if header_cells == ("D", "Livello", "Criteri"):
+            found_danno = True
+
+    assert found_definizioni, "missing Definizioni glossary (Template Table 19) with ≥10 rows"
+    assert found_prob, "missing Scala di Probabilita with criteri column (Template Table 21)"
+    assert found_danno, "missing Scala del Danno with criteri column (Template Table 22)"
+
+
+def test_dvr_parte_iv_has_signature_table(generated_outputs):
+    """US-2.8 AC1: Parte IV emits the improvement program grid and the 2×3
+    signature block as a real table (Templates 109, 110)."""
+    ok, path, _ = generated_outputs["DVR_MASTER"]
+    assert ok and path
+    doc = Document(path)
+
+    found_program = False
+    for table in doc.tables:
+        if not table.rows:
+            continue
+        header_cells = [cell.text.strip() for cell in table.rows[0].cells]
+        if (
+            header_cells[:1] == ["Misure di miglioramento"]
+            and "Tempi di attuazione" in header_cells
+        ):
+            found_program = True
+            break
+    assert found_program, (
+        "missing improvement-program grid (Template Table 109)"
+    )
+
+    signature_match = False
+    for table in doc.tables:
+        if len(table.rows) != 2 or len(table.rows[0].cells) != 3:
+            continue
+        row0_text = " ".join(cell.text for cell in table.rows[0].cells)
+        row1_text = " ".join(cell.text for cell in table.rows[1].cells)
+        if "Datore di Lavoro" in row0_text and "Rappresentante dei Lavoratori" in row1_text:
+            signature_match = True
+            break
+    assert signature_match, (
+        "missing 2×3 signature table (Template Table 110)"
+    )
+
+
+def test_dvr_parte_iii_env_block_structure(generated_outputs):
+    """US-2.8 AC1: each environment in Parte III emits the full template block.
+
+    Expected per env: 1 identity table (Table 24), 1 addetti table (Table 25),
+    1 SI/NO risk-category checklist (Table 26), plus 1 per-category 5-col risk
+    table for every applicable macro-category. The Acme fixture has 6 envs
+    each with 2 applicable risk categories → at least 6 × (3 + 2) = 30
+    template-shaped tables in Parte III alone.
+    """
+    ok, path, _ = generated_outputs["DVR_MASTER"]
+    assert ok and path
+    doc = Document(path)
+
+    headings = [
+        p.text for p in doc.paragraphs
+        if p.style.name.startswith("Heading")
+    ]
+    env_identity_headers = [
+        h for h in headings
+        if h.startswith("Identificazione dell'Ambiente di Lavoro")
+    ]
+    assert len(env_identity_headers) == 6, (
+        f"expected one env-identity heading per Acme env (6), "
+        f"got {len(env_identity_headers)}: {env_identity_headers}"
+    )
+
+    si_no_tables = 0
+    macro_label_set = {"Rischi per la Sicurezza", "Rischi per la Salute", "Rischi Trasversali"}
+    for table in doc.tables:
+        cell_texts = {cell.text.strip() for row in table.rows for cell in row.cells}
+        if macro_label_set.issubset(cell_texts) and "Applicabile" in cell_texts:
+            si_no_tables += 1
+    assert si_no_tables == 6, (
+        f"expected one SI/NO risk-category checklist per env (6), "
+        f"got {si_no_tables}"
+    )
+
+    category_headers_seen = 0
+    for table in doc.tables:
+        if not table.rows:
+            continue
+        header_texts = [cell.text.strip() for cell in table.rows[0].cells]
+        if header_texts[:1] == ["PERICOLO"] and "I = P + 2*D" in header_texts:
+            category_headers_seen += 1
+    assert category_headers_seen >= 12, (
+        f"expected ≥12 per-category risk tables (6 envs × 2 cats), "
+        f"got {category_headers_seen}"
+    )

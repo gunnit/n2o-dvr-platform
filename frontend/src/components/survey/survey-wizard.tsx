@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -15,6 +16,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Check,
+  Circle,
+  CloudUpload,
   Lock,
 } from "lucide-react";
 import type {
@@ -33,6 +36,8 @@ import { StepAttrezzature } from "./steps/step-attrezzature";
 import { StepRischi, ambientiSignature } from "./steps/step-rischi";
 import { StepSostanze } from "./steps/step-sostanze";
 import { StepRiepilogo } from "./steps/step-riepilogo";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const STEPS = [
   { key: "azienda", label: "Dati Azienda", icon: Building2 },
@@ -89,6 +94,12 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
   const [currentStep, setCurrentStep] = useState(isSigned ? 6 : 0);
   const [direction, setDirection] = useState(0);
   const [saving, setSaving] = useState(false);
+  // B-01 (US-1.1): when the operator clicks "Avanti" on a step with
+  // validation errors we flip this flag so the failing step forces its
+  // inline errors to render (the fields' own onBlur paths don't fire on a
+  // never-touched empty field). Cleared whenever the operator moves off
+  // the step so they don't stay highlighted between visits.
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
 
   const [data, setData] = useState<SurveyData>({
     azienda: initialData?.azienda ?? {},
@@ -148,6 +159,47 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
     setData((prev) => ({ ...prev, sostanze }));
   }, []);
 
+  // Per-step validation (US-1.1 B-01, extendable to later steps as new ACs
+  // tighten). Returns the list of operator-facing error messages for the
+  // step; empty list means the step is ready to advance.
+  const validationForStep = useCallback(
+    (step: number): { field: string; message: string }[] => {
+      const errors: { field: string; message: string }[] = [];
+      if (step === 0) {
+        const a = data.azienda;
+        if (!a.ragione_sociale || !a.ragione_sociale.trim()) {
+          errors.push({
+            field: "ragione_sociale",
+            message: "Ragione sociale: campo obbligatorio",
+          });
+        }
+        if (a.partita_iva && a.partita_iva.trim() !== "") {
+          if (!/^\d{11}$/.test(a.partita_iva.trim())) {
+            errors.push({
+              field: "partita_iva",
+              message: "Partita IVA: deve essere di 11 cifre",
+            });
+          }
+        }
+        if (a.codice_ateco && a.codice_ateco.trim() !== "") {
+          if (!/^\d{2}\.\d{2}\.\d{2}$/.test(a.codice_ateco.trim())) {
+            errors.push({
+              field: "codice_ateco",
+              message: "Codice ATECO: formato richiesto NN.NN.NN",
+            });
+          }
+        }
+      }
+      return errors;
+    },
+    [data.azienda],
+  );
+
+  const currentStepErrors = useMemo(
+    () => validationForStep(currentStep),
+    [validationForStep, currentStep],
+  );
+
   const goToStep = useCallback(
     (step: number) => {
       // US-1.6 AC4: when the survey is firmato, the only reachable step
@@ -155,17 +207,31 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
       if (isSigned && step !== 6) return;
       setDirection(step > currentStep ? 1 : -1);
       setCurrentStep(step);
+      setShowValidationErrors(false);
     },
     [currentStep, isSigned]
   );
 
   const goNext = useCallback(() => {
     if (isSigned) return;
+    // B-01: block advance on steps that fail per-AC validation.
+    const errors = validationForStep(currentStep);
+    if (errors.length > 0) {
+      setShowValidationErrors(true);
+      toast.error(errors[0].message, {
+        description:
+          errors.length > 1
+            ? `Altri ${errors.length - 1} campo/i da correggere prima di avanzare`
+            : undefined,
+      });
+      return;
+    }
     if (currentStep < STEPS.length - 1) {
       setDirection(1);
       setCurrentStep((prev) => prev + 1);
+      setShowValidationErrors(false);
     }
-  }, [currentStep, isSigned]);
+  }, [currentStep, isSigned, validationForStep]);
 
   const goPrev = useCallback(() => {
     if (isSigned) return;
@@ -175,27 +241,75 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
     }
   }, [currentStep, isSigned]);
 
+  // B-03 (US-1.6): "Completa Sopralluogo" must surface *why* it's blocked
+  // instead of being a silent no-op. We check structural completeness
+  // (ragione sociale + at-least-one ambiente/persona + at-least-one RSPP)
+  // and the signed flag before hitting /survey/complete.
+  const completionIssues = useMemo<string[]>(() => {
+    const out: string[] = [];
+    if (!data.azienda.ragione_sociale?.trim()) {
+      out.push("Ragione sociale mancante");
+    }
+    if (data.persone.length === 0) {
+      out.push("Nessuna persona inserita");
+    }
+    if (data.ambienti.length === 0) {
+      out.push("Nessun ambiente inserito");
+    }
+    if (!data.persone.some((p) => p.ruolo_rspp)) {
+      out.push("Manca un RSPP tra le persone");
+    }
+    if (!isSigned) {
+      out.push("Firma del cliente mancante");
+    }
+    return out;
+  }, [data, isSigned]);
+
   const handleComplete = useCallback(async () => {
+    if (completionIssues.length > 0) {
+      toast.error(completionIssues[0], {
+        description:
+          completionIssues.length > 1
+            ? `Altri ${completionIssues.length - 1} prerequisito/i aperto/i`
+            : undefined,
+      });
+      return;
+    }
     setSaving(true);
     try {
       const sessionRes = await fetch("/api/auth/session");
       const session = await sessionRes.json();
       const token = session?.accessToken;
 
-      await fetch(`http://localhost:8000/api/v1/aziende/${aziendaId}/survey/complete`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      const res = await fetch(
+        `${API_URL}/api/v1/aziende/${aziendaId}/survey/complete`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(data),
         },
-        body: JSON.stringify(data),
-      });
+      );
+      if (!res.ok) {
+        const detail = await res.json().catch(() => null);
+        throw new Error(
+          detail?.detail ?? `Errore completamento (${res.status})`,
+        );
+      }
+      toast.success("Sopralluogo completato");
     } catch (err) {
       console.error("Error completing survey:", err);
+      toast.error(
+        err instanceof Error
+          ? `Errore: ${err.message}`
+          : "Errore durante il completamento",
+      );
     } finally {
       setSaving(false);
     }
-  }, [aziendaId, data]);
+  }, [aziendaId, data, completionIssues]);
 
   // US-1.6: POST signed PNG → backend stamps server-side timestamp and
   // flips survey_status to "firmato". Returns the new lifecycle state so
@@ -207,7 +321,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
       const token = session?.accessToken;
 
       const res = await fetch(
-        `http://localhost:8000/api/v1/aziende/${aziendaId}/survey/sign`,
+        `${API_URL}/api/v1/aziende/${aziendaId}/survey/sign`,
         {
           method: "POST",
           headers: {
@@ -248,7 +362,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
     const token = session?.accessToken;
 
     const res = await fetch(
-      `http://localhost:8000/api/v1/aziende/${aziendaId}/survey/revision`,
+      `${API_URL}/api/v1/aziende/${aziendaId}/survey/revision`,
       {
         method: "POST",
         headers: {
@@ -275,6 +389,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             aziendaId={aziendaId}
             data={data.azienda}
             onChange={updateAzienda}
+            showAllErrors={showValidationErrors}
           />
         );
       case 1:
@@ -341,12 +456,17 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
     }
   };
 
+  // Wave 2: Digital Guardian stepper + glass-cards
+  const progressPct = Math.round(((currentStep + 1) / STEPS.length) * 100);
+  const circumference = 2 * Math.PI * 58;
+  const progressDashOffset = circumference - (progressPct / 100) * circumference;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-10 pb-24">
       {/* US-1.6: lock banner when survey is firmato — nav is frozen until
          the operator opens an audited revision via Step 7. */}
       {isSigned && (
-        <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400">
+        <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800">
           <Lock className="h-4 w-4" />
           <span>
             Sopralluogo firmato — navigazione bloccata. Clicca
@@ -355,11 +475,17 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
         </div>
       )}
 
-      {/* Progress bar */}
-      <nav className="relative">
-        <div className="flex items-center justify-between">
+      {/* Stepper */}
+      <div className="mx-auto max-w-6xl">
+        <div className="relative flex items-start justify-between">
+          <div className="absolute left-5 right-5 top-5 -z-10 h-0.5 bg-slate-200" />
+          <div
+            className="absolute left-5 top-5 -z-10 h-0.5 bg-primary-container transition-all duration-500 ease-out"
+            style={{
+              width: `calc((100% - 2.5rem) * ${currentStep / (STEPS.length - 1)})`,
+            }}
+          />
           {STEPS.map((step, index) => {
-            const Icon = step.icon;
             const isActive = index === currentStep;
             const isCompleted = index < currentStep;
             const navDisabled = isSigned && index !== 6;
@@ -371,95 +497,198 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
                 onClick={() => goToStep(index)}
                 disabled={navDisabled}
                 className={cn(
-                  "group relative flex flex-col items-center gap-1.5",
-                  "transition-colors duration-200",
-                  isActive && "text-primary",
-                  isCompleted && "text-primary",
-                  !isActive && !isCompleted && "text-muted-foreground",
+                  "group flex flex-col items-center gap-2",
                   navDisabled && "cursor-not-allowed opacity-50"
                 )}
               >
                 <div
                   className={cn(
-                    "flex h-10 w-10 items-center justify-center rounded-full border-2 transition-all duration-200",
+                    "flex h-10 w-10 items-center justify-center rounded-full shadow-lg transition-all duration-200",
                     isActive &&
-                      "border-primary bg-primary text-primary-foreground shadow-md",
-                    isCompleted &&
-                      "border-primary bg-primary/10 text-primary",
-                    !isActive &&
-                      !isCompleted &&
-                      "border-muted-foreground/30 bg-background text-muted-foreground group-hover:border-muted-foreground/50"
+                      "bg-primary-container text-white ring-4 ring-primary-container/20",
+                    isCompleted && "bg-green-500 text-white",
+                    !isActive && !isCompleted && "bg-slate-200 text-slate-500"
                   )}
                 >
                   {isCompleted ? (
-                    <Check className="h-4 w-4" />
+                    <Check className="h-5 w-5" strokeWidth={2.5} />
                   ) : (
-                    <Icon className="h-4 w-4" />
+                    <span className="font-bold">{index + 1}</span>
                   )}
                 </div>
-                <span className="hidden text-xs font-medium lg:block">
+                <span
+                  className={cn(
+                    "hidden text-[11px] font-bold tracking-tight md:block",
+                    isActive && "text-primary-container",
+                    isCompleted && "text-slate-600",
+                    !isActive && !isCompleted && "text-slate-400"
+                  )}
+                >
                   {step.label}
                 </span>
               </button>
             );
           })}
         </div>
+      </div>
 
-        {/* Connecting line */}
-        <div className="absolute left-0 right-0 top-5 -z-10 mx-auto h-0.5 bg-muted-foreground/20">
-          <div
-            className="h-full bg-primary transition-all duration-500 ease-out"
-            style={{
-              width: `${(currentStep / (STEPS.length - 1)) * 100}%`,
-            }}
-          />
+      {/* Two-column: main content + right sidebar panel */}
+      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
+        <div className="lg:col-span-8">
+          <section className="glass-card relative min-h-[500px] rounded-xl p-8">
+            <AnimatePresence mode="wait" custom={direction}>
+              <motion.div
+                key={currentStep}
+                custom={direction}
+                variants={slideVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+              >
+                {renderStep()}
+              </motion.div>
+            </AnimatePresence>
+          </section>
         </div>
-      </nav>
 
-      {/* Step content */}
-      <div className="relative min-h-[500px] overflow-hidden">
-        <AnimatePresence mode="wait" custom={direction}>
-          <motion.div
-            key={currentStep}
-            custom={direction}
-            variants={slideVariants}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            transition={{ duration: 0.3, ease: "easeInOut" }}
+        <aside className="space-y-6 lg:sticky lg:top-24 lg:col-span-4">
+          <div className="glass-card rounded-xl p-6">
+            <h4 className="mb-6 font-heading text-lg font-bold text-primary-container">
+              Riepilogo Sopralluogo
+            </h4>
+            <div className="mb-6 flex flex-col items-center">
+              <div className="relative flex h-32 w-32 items-center justify-center">
+                <svg className="h-full w-full -rotate-90 transform">
+                  <circle
+                    className="text-slate-100"
+                    cx="64"
+                    cy="64"
+                    fill="transparent"
+                    r="58"
+                    stroke="currentColor"
+                    strokeWidth="8"
+                  />
+                  <circle
+                    className="text-primary-container transition-all duration-500"
+                    cx="64"
+                    cy="64"
+                    fill="transparent"
+                    r="58"
+                    stroke="currentColor"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={progressDashOffset}
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="font-heading text-2xl font-black text-primary-container">
+                    {progressPct}%
+                  </span>
+                  <span className="text-[9px] font-bold uppercase text-slate-400">
+                    Progresso
+                  </span>
+                </div>
+              </div>
+            </div>
+            <ul className="space-y-2">
+              {STEPS.map((step, index) => {
+                const isActive = index === currentStep;
+                const isCompleted = index < currentStep;
+                return (
+                  <li
+                    key={step.key}
+                    className={cn(
+                      "flex items-center justify-between rounded-lg p-3",
+                      isCompleted && "bg-surface-low",
+                      isActive &&
+                        "border border-primary-container/20 bg-primary-container/10",
+                      !isActive && !isCompleted && "bg-surface-low/50 opacity-60"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      {isCompleted ? (
+                        <Check
+                          className="h-5 w-5 text-green-600"
+                          strokeWidth={2.5}
+                        />
+                      ) : isActive ? (
+                        <Circle
+                          className="h-5 w-5 text-primary-container"
+                          strokeWidth={2}
+                        />
+                      ) : (
+                        <Circle
+                          className="h-5 w-5 text-slate-300"
+                          strokeWidth={1.5}
+                        />
+                      )}
+                      <span
+                        className={cn(
+                          "text-sm",
+                          isActive && "font-bold text-primary-container",
+                          isCompleted && "font-medium text-slate-700",
+                          !isActive && !isCompleted && "text-slate-400"
+                        )}
+                      >
+                        {step.label}
+                      </span>
+                    </div>
+                    {isActive && (
+                      <span className="text-xs font-bold text-primary-container">
+                        In corso
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </aside>
+      </div>
+
+      {/* Sticky footer action bar */}
+      <footer className="fixed bottom-0 left-64 right-0 z-40 flex h-16 items-center justify-between border-t border-slate-200/50 bg-white/90 px-8 backdrop-blur-md">
+        <div className="flex items-center gap-2">
+          <CloudUpload className="h-4 w-4 text-green-600" strokeWidth={2} />
+          <span className="text-[11px] font-medium tracking-tight text-slate-400">
+            Passo {currentStep + 1} di {STEPS.length}
+            {saving ? " — salvataggio..." : " — bozza salvata"}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={goPrev}
+            disabled={currentStep === 0 || isSigned}
+            className="flex items-center gap-2 rounded-lg border-2 border-slate-200 px-6 py-2 text-sm font-bold text-slate-500 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {renderStep()}
-          </motion.div>
-        </AnimatePresence>
-      </div>
-
-      {/* Navigation buttons */}
-      <div className="flex items-center justify-between border-t pt-4">
-        <Button
-          variant="outline"
-          onClick={goPrev}
-          disabled={currentStep === 0 || isSigned}
-        >
-          <ChevronLeft className="mr-1 h-4 w-4" />
-          Indietro
-        </Button>
-
-        <span className="text-sm text-muted-foreground">
-          Passo {currentStep + 1} di {STEPS.length}
-        </span>
-
-        {currentStep < STEPS.length - 1 ? (
-          <Button onClick={goNext} disabled={isSigned}>
-            Avanti
-            <ChevronRight className="ml-1 h-4 w-4" />
-          </Button>
-        ) : (
-          <Button onClick={handleComplete} disabled={saving || isSigned}>
-            {saving ? "Salvataggio..." : "Completa Sopralluogo"}
-            {!saving && <Check className="ml-1 h-4 w-4" />}
-          </Button>
-        )}
-      </div>
+            <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={2.5} />
+            Indietro
+          </button>
+          {currentStep < STEPS.length - 1 ? (
+            <button
+              type="button"
+              onClick={goNext}
+              disabled={isSigned}
+              className="flex items-center gap-2 rounded-lg bg-primary-container px-8 py-2 text-sm font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-primary-container/30 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Avanti
+              <ChevronRight className="h-[18px] w-[18px]" strokeWidth={2.5} />
+            </button>
+          ) : (
+            <Button
+              onClick={handleComplete}
+              disabled={saving || isSigned}
+              className="rounded-lg bg-primary-container px-8 py-2 text-sm font-bold text-white shadow-lg hover:-translate-y-0.5"
+            >
+              {saving ? "Salvataggio..." : "Completa Sopralluogo"}
+              {!saving && <Check className="ml-1 h-4 w-4" />}
+            </Button>
+          )}
+        </div>
+      </footer>
     </div>
   );
 }

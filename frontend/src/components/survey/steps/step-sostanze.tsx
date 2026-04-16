@@ -298,19 +298,19 @@ function SDSUploadZone({
     setRows((r) => r.filter((_, i) => i !== idx));
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" />
+    <div>
+      <div className="mb-6">
+        <h3 className="flex items-center gap-2 font-heading text-xl font-bold text-on-surface">
+          <Sparkles className="h-5 w-5 text-primary" />
           Carica schede di sicurezza (SDS)
-        </CardTitle>
-        <CardDescription>
+        </h3>
+        <p className="mt-1 text-sm text-on-surface-variant">
           Trascina fino a {MAX_FILES_PER_BATCH} PDF (max {MAX_FILE_SIZE_MB} MB
           l&apos;uno). L&apos;AI estrarra&apos; automaticamente nome, produttore,
           pittogrammi e frasi H/P. Potrai revisionare tutto prima di confermare.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        </p>
+      </div>
+      <div className="space-y-4">
         <div
           onDragOver={(e) => {
             e.preventDefault();
@@ -428,8 +428,8 @@ function SDSUploadZone({
             ))}
           </ul>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -564,9 +564,12 @@ export function StepSostanze({
   const togglePittogramma = useCallback(
     (index: number, code: string) => {
       const sostanza = sostanze[index];
-      const pitt = sostanza.pittogrammi.includes(code)
-        ? sostanza.pittogrammi.filter((p) => p !== code)
-        : [...sostanza.pittogrammi, code];
+      // Backend can return pittogrammi=null while extraction is in-flight
+      // (US-1.9 B-02), so guard before calling array methods.
+      const current = sostanza.pittogrammi ?? [];
+      const pitt = current.includes(code)
+        ? current.filter((p) => p !== code)
+        : [...current, code];
       updateSostanza(index, { pittogrammi: pitt });
     },
     [sostanze, updateSostanza]
@@ -769,7 +772,7 @@ export function StepSostanze({
                           type="button"
                           onClick={() => togglePittogramma(index, p.code)}
                           className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                            sost.pittogrammi.includes(p.code)
+                            (sost.pittogrammi ?? []).includes(p.code)
                               ? "border-primary bg-primary/10 text-primary"
                               : "border-input text-muted-foreground hover:bg-muted"
                           }`}
@@ -783,7 +786,9 @@ export function StepSostanze({
                   <TagInput
                     id={`sost-h-${index}`}
                     label="Frasi H (Pericolo)"
-                    value={sost.frasi_h}
+                    // Backend may return null while extraction is in-flight
+                    // (same B-02 family of bugs as pittogrammi above).
+                    value={sost.frasi_h ?? []}
                     onChange={(frasi_h) =>
                       updateSostanza(index, { frasi_h })
                     }
@@ -793,7 +798,7 @@ export function StepSostanze({
                   <TagInput
                     id={`sost-p-${index}`}
                     label="Frasi P (Precauzione)"
-                    value={sost.frasi_p}
+                    value={sost.frasi_p ?? []}
                     onChange={(frasi_p) =>
                       updateSostanza(index, { frasi_p })
                     }

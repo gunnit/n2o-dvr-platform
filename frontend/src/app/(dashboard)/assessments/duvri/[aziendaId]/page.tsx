@@ -59,7 +59,17 @@ import { cn } from "@/lib/utils";
 interface InterferenzaItem {
   rischio: string;
   misure: string;
-  dpi?: string | null;
+  // Canonical shape is list[str] (seeded fixture + rules-engine mirror).
+  // The backend accepts a plain string too for legacy callers and normalises
+  // on the way out, so we keep both shapes at the type level and join with
+  // ", " when displaying in the single-line text input.
+  dpi?: string[] | string | null;
+}
+
+function dpiToString(dpi: string[] | string | null | undefined): string {
+  if (dpi == null) return "";
+  if (Array.isArray(dpi)) return dpi.join(", ");
+  return dpi;
 }
 
 interface AppaltatoreAttrezzatura {
@@ -109,7 +119,7 @@ interface InterferenceSuggestion {
   titolo: string;
   rischio: string;
   misure: string;
-  dpi: string | null;
+  dpi: string[] | string | null;
   riferimento: string;
   decision: "accept" | "reject" | null;
 }
@@ -179,7 +189,12 @@ function toFormState(d: DuvriResponse): DuvriFormState {
     costi_sicurezza:
       d.costi_sicurezza != null ? String(d.costi_sicurezza) : "",
     note: d.note ?? "",
-    interferenze: d.interferenze.map((i) => ({ ...i })),
+    interferenze: d.interferenze.map((i) => ({
+      ...i,
+      // Flatten list[str] → string for the single-line text input; the operator
+      // can still type commas, and the backend will split/normalise on save.
+      dpi: dpiToString(i.dpi),
+    })),
     attrezzature_appaltatore: d.attrezzature_appaltatore.map((a) => ({ ...a })),
   };
 }
@@ -201,11 +216,23 @@ function toPayload(form: DuvriFormState) {
     note: form.note.trim() || null,
     interferenze: form.interferenze
       .filter((i) => i.rischio.trim() || i.misure.trim())
-      .map((i) => ({
-        rischio: i.rischio.trim(),
-        misure: i.misure.trim(),
-        dpi: (i.dpi || "").trim() || null,
-      })),
+      .map((i) => {
+        // Form state holds dpi as a string (joined by dpiToString on load), but
+        // the shared type allows string[] too — coerce defensively.
+        const dpiStr = dpiToString(i.dpi).trim();
+        return {
+          rischio: i.rischio.trim(),
+          misure: i.misure.trim(),
+          // Split comma-separated entries into canonical list[str]; backend
+          // validator still accepts plain strings but list matches the DB.
+          dpi: dpiStr
+            ? dpiStr
+                .split(",")
+                .map((s) => s.trim())
+                .filter((s) => s.length > 0)
+            : null,
+        };
+      }),
     attrezzature_appaltatore: form.attrezzature_appaltatore.map((a) => ({
       tipo: a.tipo,
       descrizione: (a.descrizione || "").trim() || null,
@@ -812,7 +839,7 @@ export default function DuvriListPage() {
                   />
                   <Input
                     placeholder="DPI richiesti (opzionale)"
-                    value={it.dpi || ""}
+                    value={dpiToString(it.dpi)}
                     onChange={(e) =>
                       updateInterferenza(idx, { dpi: e.target.value })
                     }
@@ -922,10 +949,10 @@ export default function DuvriListPage() {
                       <span className="font-medium">Misure: </span>
                       {s.misure}
                     </p>
-                    {s.dpi && (
+                    {s.dpi && dpiToString(s.dpi) && (
                       <p className="mt-1 text-xs text-muted-foreground">
                         <span className="font-medium">DPI: </span>
-                        {s.dpi}
+                        {dpiToString(s.dpi)}
                       </p>
                     )}
                     <p className="mt-1 text-[11px] italic text-muted-foreground">

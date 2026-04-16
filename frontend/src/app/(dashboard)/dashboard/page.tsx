@@ -14,10 +14,7 @@ import {
   Search,
   Users,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -231,42 +228,53 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">
+          <h1 className="font-heading text-3xl font-bold text-on-surface">
+            Dashboard
+          </h1>
+          <p className="mt-1 text-sm text-on-surface-variant">
             Panoramica dell&apos;attivit&agrave;
           </p>
         </div>
         {isAdmin && (
-          <Button nativeButton={false} render={<Link href="/aziende/new" />}>
-            <Plus className="mr-2 h-4 w-4" />
+          <Link
+            href="/aziende/new"
+            className="flex items-center gap-2 rounded-lg bg-primary-container px-5 py-2.5 text-sm font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-primary-container/30 active:translate-y-0"
+          >
+            <Plus className="h-4 w-4" strokeWidth={2.5} />
             Aggiungi cliente
-          </Button>
+          </Link>
         )}
       </div>
 
       {loading ? (
-        <p className="text-muted-foreground">Caricamento...</p>
+        <p className="text-on-surface-variant">Caricamento...</p>
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
             {stats.map((stat) => (
-              <Card key={stat.name}>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
+              <div
+                key={stat.name}
+                className="rounded-xl bg-white p-5 ambient-shadow transition-transform hover:-translate-y-0.5"
+              >
+                <div className="mb-4 flex items-start justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
                     {stat.name}
-                  </CardTitle>
-                  <stat.icon className={`h-4 w-4 ${stat.accent}`} />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stat.value}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {stat.description}
-                  </p>
-                </CardContent>
-              </Card>
+                  </span>
+                  <stat.icon
+                    className={`h-4 w-4 ${stat.accent}`}
+                    strokeWidth={2}
+                  />
+                </div>
+                <div className="font-heading text-3xl font-bold tracking-tight text-on-surface">
+                  {stat.value}
+                </div>
+                <p className="mt-1 text-xs text-on-surface-variant">
+                  {stat.description}
+                </p>
+              </div>
             ))}
           </div>
 
@@ -274,24 +282,24 @@ export default function DashboardPage() {
               there's nothing to flag — no empty-state clutter. */}
           <SurveillanceAlerts />
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Aziende Clienti</CardTitle>
-              </div>
-              <div className="relative mt-2">
-                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Cerca per ragione sociale, partita IVA, comune..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-8"
-                />
-              </div>
-            </CardHeader>
-            <CardContent>
+          <div className="rounded-xl bg-white p-6 ambient-shadow">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-heading text-xl font-bold text-on-surface">
+                Aziende Clienti
+              </h2>
+            </div>
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
+              <input
+                placeholder="Cerca per ragione sociale, partita IVA, comune..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full rounded-xl border-none bg-surface-low px-10 py-3 text-sm outline-none transition-all focus:ring-2 focus:ring-primary-container"
+              />
+            </div>
+            <div>
               {sortedAndFiltered.length === 0 ? (
-                <p className="py-6 text-center text-muted-foreground">
+                <p className="py-6 text-center text-on-surface-variant">
                   {aziende.length === 0
                     ? "Nessuna azienda registrata"
                     : "Nessun risultato trovato"}
@@ -378,8 +386,8 @@ export default function DashboardPage() {
                   </TableBody>
                 </Table>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </>
       )}
     </div>

@@ -9,7 +9,22 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+def _normalize_dpi_to_list(v: Any) -> list[str] | None:
+    """Accept ``dpi`` as ``None``, a single string (legacy rules-engine shape),
+    or a list of strings (canonical persisted shape). Always return
+    ``list[str] | None`` so the response schema is stable."""
+    if v is None:
+        return None
+    if isinstance(v, str):
+        # Treat comma-separated legacy strings as a single entry; the docx
+        # generator will flatten again.
+        return [v] if v.strip() else None
+    if isinstance(v, list):
+        return [str(x) for x in v if x is not None]
+    return [str(v)]
 
 
 class InterferenzaItem(BaseModel):
@@ -17,7 +32,15 @@ class InterferenzaItem(BaseModel):
 
     rischio: str = Field(..., max_length=500)
     misure: str = Field(..., max_length=2000)
-    dpi: str | None = Field(None, max_length=500)
+    # Accept either list[str] (canonical — seed fixture + rules-engine mirror)
+    # or a legacy single string. Normalised to list[str] on the way out so the
+    # response model is consistent for the frontend.
+    dpi: list[str] | None = None
+
+    @field_validator("dpi", mode="before")
+    @classmethod
+    def _coerce_dpi(cls, v: Any) -> list[str] | None:
+        return _normalize_dpi_to_list(v)
 
 
 class AppaltatoreAttrezzatura(BaseModel):
@@ -73,9 +96,17 @@ class InterferenceSuggestion(BaseModel):
     titolo: str
     rischio: str
     misure: str
-    dpi: str | None
+    # Same flexible shape as InterferenzaItem above so API responses are
+    # consistent whether the source is the live rules engine (string) or a
+    # persisted interferenza (list).
+    dpi: list[str] | None = None
     riferimento: str
     decision: str | None = None  # accept | reject if previously decided
+
+    @field_validator("dpi", mode="before")
+    @classmethod
+    def _coerce_dpi(cls, v: Any) -> list[str] | None:
+        return _normalize_dpi_to_list(v)
 
 
 class AnalyzeInterferencesResponse(BaseModel):

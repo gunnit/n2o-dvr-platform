@@ -25,7 +25,10 @@ import {
 import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
 import { PhaseBuilder } from "@/components/assessments/pos/phase-builder";
-import type { PhaseValues } from "@/components/assessments/pos/phase-schema";
+import {
+  promoteLegacyPhase,
+  type PhaseValues,
+} from "@/components/assessments/pos/phase-schema";
 
 /**
  * POS DPI matrix editor (US-4.8).
@@ -273,7 +276,13 @@ export default function PosDpiMatrixPage() {
       <PhaseBuilder
         aziendaId={aziendaId}
         posId={pos.id}
-        initialPhases={(pos.fasi_lavorative ?? []) as PhaseValues[]}
+        // B-06: Legacy seeds store fasi_lavorative as `{fase, dpi[], mezzi[],
+        // rischi[], descrizione}` without id/ordine/dipende_da. Promote them
+        // here (mirrors the backend's PosPhase in-place promotion) so the
+        // builder never reads through `undefined.map()`.
+        initialPhases={(pos.fasi_lavorative ?? []).map((raw, i) =>
+          promoteLegacyPhase(raw as Record<string, unknown>, i),
+        )}
         onSaved={() => void load()}
       />
 

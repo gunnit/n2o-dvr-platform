@@ -34,14 +34,43 @@ export function MmcCpOverride({
   const [lookupError, setLookupError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!sesso || !eta || eta < 15) {
+    if (!sesso || !eta || Number.isNaN(eta) || eta < 15) {
       // Defer so we don't trigger cascading renders inside the effect body.
       const t = setTimeout(() => {
         setAutoCp(null);
+        setFascia(null);
         onAutoCpChange?.(null);
       }, 0);
       return () => clearTimeout(t);
     }
+
+    // Optimistic local lookup so the display is correct *immediately* for the
+    // current (sesso, eta) pair — eliminates the "stale 20 kg until next
+    // interaction" flash that QA flagged as H-04 (US-3.2) when rapidly editing
+    // worker attributes. The server-side fetch below overwrites with the
+    // canonical NIOSH reference value once it resolves.
+    const localLookup = () => {
+      const cp =
+        sesso === "M"
+          ? eta <= 17
+            ? 20
+            : eta <= 45
+              ? 25
+              : 20
+          : eta <= 17
+            ? 15
+            : eta <= 45
+              ? 20
+              : 15;
+      const fasciaLbl =
+        eta <= 17 ? "giovane" : eta <= 45 ? "adulto" : "anziano";
+      return { cp, fascia: fasciaLbl };
+    };
+    const local = localLookup();
+    setAutoCp(local.cp);
+    setFascia(local.fascia);
+    onAutoCpChange?.(local.cp);
+
     const ctrl = new AbortController();
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     fetch(
@@ -57,25 +86,9 @@ export function MmcCpOverride({
       })
       .catch((err) => {
         if (err?.name === "AbortError") return;
-        // Fallback: compute locally so the UI still works offline.
-        const localCp =
-          sesso === "M"
-            ? eta <= 17
-              ? 20
-              : eta <= 45
-              ? 25
-              : 20
-            : eta <= 17
-            ? 15
-            : eta <= 45
-            ? 20
-            : 15;
-        const localFascia =
-          eta <= 17 ? "giovane" : eta <= 45 ? "adulto" : "anziano";
-        setAutoCp(localCp);
-        setFascia(localFascia);
+        // Fallback: optimistic local value is already applied above; just
+        // surface the offline hint.
         setLookupError("Lookup offline — valore calcolato localmente");
-        onAutoCpChange?.(localCp);
       });
     return () => ctrl.abort();
   }, [sesso, eta, onAutoCpChange]);

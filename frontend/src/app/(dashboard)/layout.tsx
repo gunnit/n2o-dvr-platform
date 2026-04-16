@@ -10,13 +10,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect("/login");
   }
 
+  const user = {
+    name: session.user?.name,
+    email: session.user?.email,
+    role: (session.user as { role?: string | null })?.role ?? "Operatore",
+  };
+
   return (
     <Providers>
-      <div className="flex h-screen">
-        <Sidebar />
-        <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="min-h-screen bg-background">
+        <Sidebar user={user} />
+        <div className="ml-64 flex min-h-screen flex-col">
           <Header />
-          <main className="flex-1 overflow-y-auto p-6">{children}</main>
+          <main className="flex-1 px-8 py-8">{children}</main>
         </div>
       </div>
     </Providers>

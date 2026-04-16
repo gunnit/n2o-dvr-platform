@@ -1,8 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Check, Lock, Unlock } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +27,10 @@ interface StepAziendaProps {
   aziendaId: string;
   data: Partial<Azienda>;
   onChange: (fields: Partial<Azienda>) => void;
+  // B-01 (US-1.1): set by the wizard's "Avanti" handler when validation
+  // fails so the failing fields highlight even if the operator never
+  // focused them. When false, errors only appear after onBlur as before.
+  showAllErrors?: boolean;
 }
 
 interface ValidationErrors {
@@ -46,10 +49,31 @@ const ZONE_SISMICHE = [
 const PARTITA_IVA_REGEX = /^\d{11}$/;
 const CODICE_ATECO_REGEX = /^\d{2}\.\d{2}\.\d{2}$/;
 
-export function StepAzienda({ data, onChange }: StepAziendaProps) {
+export function StepAzienda({
+  data,
+  onChange,
+  showAllErrors,
+}: StepAziendaProps) {
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [lookup, setLookup] = useState<LookupState>({ kind: "idle" });
   const { apiFetch } = useApi();
+
+  // When the wizard signals that validation must be surfaced (goNext with
+  // invalid data), run every validator once so errors appear even without
+  // the field having been focused. Re-runs on data change so errors update
+  // live as the operator fixes them.
+  useEffect(() => {
+    if (!showAllErrors) return;
+    validateRagioneSociale(data.ragione_sociale);
+    validatePartitaIva(data.partita_iva);
+    validateCodiceAteco(data.codice_ateco);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    showAllErrors,
+    data.ragione_sociale,
+    data.partita_iva,
+    data.codice_ateco,
+  ]);
   // Remember the last comune we looked up so we don't spam the endpoint on
   // unrelated re-renders (e.g. unrelated field edits).
   const lastLookupRef = useRef<string | null>(null);
@@ -122,16 +146,18 @@ export function StepAzienda({ data, onChange }: StepAziendaProps) {
     }
   }
 
+  // Wave 3: no inner Card — survey-wizard glass-card is the container
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Dati Azienda</CardTitle>
-          <CardDescription>
-            Inserisci i dati identificativi dell&apos;azienda
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
+      <div>
+        <h3 className="font-heading text-xl font-bold text-on-surface">
+          Dati Azienda
+        </h3>
+        <p className="mt-1 text-sm text-on-surface-variant">
+          Inserisci i dati identificativi dell&apos;azienda
+        </p>
+      </div>
+      <div className="space-y-6">
           {/* Ragione Sociale */}
           <div className="space-y-2">
             <Label htmlFor="ragione_sociale">Ragione Sociale *</Label>
@@ -356,8 +382,7 @@ export function StepAzienda({ data, onChange }: StepAziendaProps) {
               )}
             </div>
           </div>
-        </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }

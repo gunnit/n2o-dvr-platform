@@ -138,7 +138,14 @@ export function PhaseBuilder({
         const cleaned = phases.map((p, pi) =>
           pi === idx
             ? p
-            : { ...p, dipende_da: p.dipende_da.filter((d) => d !== removedId) },
+            : {
+                ...p,
+                // Defensive `?? []` — legacy seed shapes may slip through if the
+                // page-level `promoteLegacyPhase` normaliser is ever bypassed.
+                dipende_da: (p.dipende_da ?? []).filter(
+                  (d) => d !== removedId,
+                ),
+              },
         );
         form.setValue("fasi", cleaned, { shouldDirty: true });
       }
@@ -162,7 +169,7 @@ export function PhaseBuilder({
     return phases.map((p) => ({
       ordine: p.ordine,
       nome: p.nome || "(senza nome)",
-      dipende_da: p.dipende_da
+      dipende_da: (p.dipende_da ?? [])
         .map((d) => nameById.get(d) ?? d)
         .join(", "),
     }));

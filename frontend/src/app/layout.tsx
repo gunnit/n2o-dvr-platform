@@ -4,15 +4,15 @@ import { Toaster } from "sonner";
 import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
-  variable: "--font-heading",
+  variable: "--font-plus-jakarta",
   subsets: ["latin"],
-  weight: ["600", "700"],
+  weight: ["500", "600", "700", "800"],
 });
 
 const inter = Inter({
-  variable: "--font-body",
+  variable: "--font-inter",
   subsets: ["latin"],
-  weight: ["400", "500"],
+  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -27,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="it" className={`${plusJakarta.variable} ${inter.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col font-[family-name:var(--font-body)]" suppressHydrationWarning>
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>
         {children}
         <Toaster position="top-right" richColors />
       </body>

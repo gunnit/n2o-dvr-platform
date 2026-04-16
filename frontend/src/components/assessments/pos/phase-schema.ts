@@ -96,6 +96,50 @@ export function makeBlankPhase(ordine: number): PhaseValues {
   };
 }
 
+/**
+ * Normalise a raw backend `pos.fasi_lavorative` entry into the canonical
+ * `PhaseValues` shape. Mirrors the backend's `PosPhase` promotion so the
+ * legacy `{fase, dpi[], mezzi[], rischi[], descrizione}` seed shape — still
+ * present in fixture data — renders without crashing (US-4.7 B-06).
+ *
+ * Arrays get defaulted to `[]`; missing ids / ordine fall back to deterministic
+ * locals so the operator's first save generates a clean canonical record.
+ */
+export function promoteLegacyPhase(
+  raw: Record<string, unknown>,
+  fallbackOrdine: number,
+): PhaseValues {
+  const asArr = (v: unknown): string[] =>
+    Array.isArray(v) ? v.map((x) => String(x)) : [];
+  const nome = typeof raw.nome === "string" && raw.nome
+    ? raw.nome
+    : typeof raw.fase === "string" && raw.fase
+      ? raw.fase
+      : "";
+  const id =
+    typeof raw.id === "string" && raw.id
+      ? raw.id
+      : `local-${Math.random().toString(36).slice(2, 10)}`;
+  const ordine =
+    typeof raw.ordine === "number" && Number.isFinite(raw.ordine)
+      ? raw.ordine
+      : fallbackOrdine;
+  return {
+    id,
+    ordine,
+    nome: nome || "(senza nome)",
+    descrizione:
+      typeof raw.descrizione === "string" ? raw.descrizione : null,
+    rischi: asArr(raw.rischi),
+    dpi: asArr(raw.dpi),
+    mezzi: asArr(raw.mezzi),
+    niosh: (raw.niosh as PhaseValues["niosh"]) ?? null,
+    rumore: (raw.rumore as PhaseValues["rumore"]) ?? null,
+    vibrazioni: (raw.vibrazioni as PhaseValues["vibrazioni"]) ?? null,
+    dipende_da: asArr(raw.dipende_da),
+  };
+}
+
 /** Default sub-schema seed values used when the operator opts in via the UI. */
 export const DEFAULT_NIOSH: PhaseNioshValues = {
   peso_sollevato: 15,

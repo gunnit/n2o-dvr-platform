@@ -27,7 +27,171 @@ from docx.shared import Cm, Inches, Mm, Pt, RGBColor
 
 from app.data.regional_regulations import get_regulations_for_comune
 from app.services.document_generator.base import BaseDocumentGenerator
+from app.services.reference_data import HAZARD_LIBRARY, RISK_CATEGORIES
 from app.services.risk_calculator import calculate_risk_index
+
+
+# ---------------------------------------------------------------------------
+# Parte II — Definizioni (Template Table 19, MIXED). Core D.Lgs. 81/2008
+# terms from art. 2 — kept compact so the emitted table mirrors the
+# template's 27-row shape without exploding the .docx size.
+# ---------------------------------------------------------------------------
+
+_DEFINIZIONI_ROWS: list[tuple[str, str]] = [
+    ("LAVORATORE (LAV)",
+     "Persona che, indipendentemente dalla tipologia contrattuale, svolge "
+     "un'attivita lavorativa nell'ambito dell'organizzazione di un datore "
+     "di lavoro pubblico o privato, con o senza retribuzione."),
+    ("DATORE DI LAVORO (DL)",
+     "Soggetto titolare del rapporto di lavoro con il lavoratore o, "
+     "comunque, il soggetto che ha la responsabilita dell'organizzazione "
+     "stessa o dell'unita produttiva."),
+    ("AZIENDA",
+     "Il complesso della struttura organizzata dal datore di lavoro "
+     "pubblico o privato."),
+    ("DIRIGENTE",
+     "Persona che attua le direttive del datore di lavoro organizzando "
+     "l'attivita lavorativa e vigilando su di essa."),
+    ("PREPOSTO",
+     "Persona che, in ragione delle competenze professionali e nei limiti "
+     "di poteri gerarchici e funzionali adeguati alla natura dell'incarico "
+     "conferitogli, sovrintende alla attivita lavorativa."),
+    ("RSPP",
+     "Responsabile del Servizio di Prevenzione e Protezione — persona "
+     "designata dal datore di lavoro, in possesso di attitudini e "
+     "capacita adeguate, a cui il datore di lavoro si avvale per "
+     "organizzare il servizio di prevenzione e protezione."),
+    ("ASPP",
+     "Addetto del Servizio di Prevenzione e Protezione — persona in "
+     "possesso di attitudini e capacita adeguate che supporta il RSPP "
+     "nell'organizzazione del servizio."),
+    ("RLS",
+     "Rappresentante dei Lavoratori per la Sicurezza — persona eletta o "
+     "designata per rappresentare i lavoratori per quanto concerne gli "
+     "aspetti della salute e della sicurezza durante il lavoro."),
+    ("MEDICO COMPETENTE (MC)",
+     "Medico in possesso di uno dei titoli e requisiti formativi e "
+     "professionali richiesti dalla normativa, che collabora con il "
+     "datore di lavoro ai fini della valutazione dei rischi e della "
+     "sorveglianza sanitaria."),
+    ("VALUTAZIONE DEI RISCHI",
+     "Valutazione globale e documentata di tutti i rischi per la salute "
+     "e la sicurezza dei lavoratori presenti nell'ambito "
+     "dell'organizzazione in cui essi prestano la propria attivita."),
+    ("PERICOLO",
+     "Proprieta o qualita intrinseca di un determinato fattore avente "
+     "il potenziale di causare danni."),
+    ("RISCHIO",
+     "Probabilita di raggiungimento del livello potenziale di danno "
+     "nelle condizioni di impiego o di esposizione a un determinato "
+     "fattore o agente oppure alla loro combinazione."),
+    ("PROBABILITA (P)",
+     "Frequenza con cui un evento dannoso puo verificarsi, valutata "
+     "su scala 1-4 (Bassa, Medio-Bassa, Medio-Alta, Elevata)."),
+    ("DANNO (D)",
+     "Entita del danno atteso per il lavoratore esposto, valutata su "
+     "scala 1-4 (Trascurabile, Modesto, Notevole, Ingente)."),
+    ("INDICE DI RISCHIO (I)",
+     "Calcolato come I = 2 x D + P; range 3-12; livelli ACCETTABILE, "
+     "MODESTO, GRAVE, GRAVISSIMO."),
+    ("UNITA PRODUTTIVA",
+     "Stabilimento o struttura finalizzati alla produzione di beni "
+     "o all'erogazione di servizi, dotati di autonomia finanziaria e "
+     "tecnico-funzionale."),
+    ("DPI",
+     "Dispositivo di Protezione Individuale — qualsiasi attrezzatura "
+     "destinata ad essere indossata e tenuta dal lavoratore allo scopo "
+     "di proteggerlo contro uno o piu rischi."),
+    ("SORVEGLIANZA SANITARIA",
+     "Insieme degli atti medici finalizzati alla tutela dello stato di "
+     "salute e sicurezza dei lavoratori, in relazione all'ambiente di "
+     "lavoro, ai fattori di rischio professionali e alle modalita di "
+     "svolgimento dell'attivita lavorativa."),
+    ("FORMAZIONE",
+     "Processo educativo attraverso il quale trasferire ai lavoratori "
+     "conoscenze e procedure utili alla acquisizione di competenze "
+     "per lo svolgimento in sicurezza dei rispettivi compiti."),
+    ("INFORMAZIONE",
+     "Complesso delle attivita dirette a fornire conoscenze utili alla "
+     "identificazione, alla riduzione e alla gestione dei rischi "
+     "nell'ambiente di lavoro."),
+    ("ADDESTRAMENTO",
+     "Complesso delle attivita dirette a fare apprendere ai lavoratori "
+     "l'uso corretto di attrezzature, macchine, impianti, sostanze, "
+     "dispositivi, anche di protezione individuale, e le procedure di lavoro."),
+    ("AGENTE",
+     "L'agente chimico, fisico o biologico presente durante il lavoro "
+     "e potenzialmente dannoso per la salute."),
+    ("NORMA TECNICA",
+     "Specifica tecnica, approvata e pubblicata da un'organizzazione "
+     "internazionale, da un organismo europeo o nazionale di "
+     "normalizzazione, la cui osservanza non e obbligatoria."),
+    ("BUONA PRASSI",
+     "Soluzioni organizzative o procedurali coerenti con la normativa "
+     "vigente e con le norme di buona tecnica, adottate volontariamente e "
+     "finalizzate a promuovere la salute e sicurezza sui luoghi di lavoro."),
+    ("LINEE GUIDA",
+     "Atti di indirizzo e coordinamento per l'applicazione della "
+     "normativa in materia di salute e sicurezza."),
+    ("MODELLO DI ORGANIZZAZIONE E GESTIONE",
+     "Modello organizzativo e gestionale per la definizione e "
+     "attuazione di una politica aziendale per la salute e sicurezza."),
+    ("RESPONSABILITA SOCIALE",
+     "Integrazione volontaria delle preoccupazioni sociali ed "
+     "ecologiche delle aziende nelle loro operazioni commerciali e nei "
+     "loro rapporti con le parti interessate."),
+]
+
+# Parte II — P/D criteria lookup tables (Template Tables 21 and 22).
+_PROBABILITA_CRITERI_ROWS = [
+    ("4", "ELEVATA",
+     "Esiste correlazione diretta tra mancanza rilevata e possibilita "
+     "che l'evento dannoso si verifichi; si sono gia verificati casi "
+     "analoghi in azienda o in realta simili."),
+    ("3", "MEDIO ALTA",
+     "La mancanza rilevata puo provocare un danno, anche se non "
+     "direttamente, seppur in modo automatico; sono noti rari episodi "
+     "in azienda o in realta simili."),
+    ("2", "MEDIO BASSA",
+     "La mancanza rilevata puo provocare un danno in circostanze "
+     "particolari; non sono noti episodi in azienda."),
+    ("1", "BASSA",
+     "La mancanza rilevata puo provocare un danno solo in circostanze "
+     "eccezionali e in concomitanza con piu eventi sfavorevoli; non "
+     "sono noti episodi nel settore."),
+]
+
+_DANNO_CRITERI_ROWS = [
+    ("4", "INGENTE",
+     "Infortunio o episodio di esposizione con effetti letali o "
+     "invalidita totale permanente."),
+    ("3", "NOTEVOLE",
+     "Infortunio o episodio di esposizione acuta con effetti di "
+     "invalidita parziale permanente; patologie gravi a effetti "
+     "progressivi."),
+    ("2", "MODESTO",
+     "Infortunio o episodio di esposizione acuta con inabilita "
+     "temporanea reversibile."),
+    ("1", "TRASCURABILE",
+     "Infortunio o episodio di esposizione acuta con inabilita "
+     "reversibile di rapida guarigione."),
+]
+
+
+# Ordered list of the 11 canonical risk categories grouped by macro-area.
+# Drives both the SI/NO checklist (Table 26 per env) and the per-category
+# 5-col risk tables (Tables 27+). Order matches the DVR template.
+_CATEGORY_ORDER: list[tuple[str, str]] = [
+    (rc["macro_categoria"], rc["categoria"]) for rc in RISK_CATEGORIES
+]
+
+# Macro-area row labels interleaved into the checklist so it mirrors the
+# template's 3 section headers + 11 data rows = 14 rows layout.
+_MACRO_LABELS: list[str] = [
+    "Rischi per la Sicurezza",
+    "Rischi per la Salute",
+    "Rischi Trasversali",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -65,21 +229,6 @@ _RISK_LEVEL_TABLE_ROWS = [
     ("9-12", "GRAVISSIMO", "Ricerca urgente misure", "Immediatamente"),
 ]
 
-_PROBABILITA_TABLE_ROWS = [
-    ("1", "Bassa", "Raramente accade"),
-    ("2", "Medio-Bassa", "Plausibile in certe condizioni"),
-    ("3", "Medio-Alta", "Accade con una certa frequenza"),
-    ("4", "Elevata", "Accade sistematicamente"),
-]
-
-_DANNO_TABLE_ROWS = [
-    ("1", "Trascurabile", "Lesioni lievi reversibili"),
-    ("2", "Modesto", "Inabilita temporanea reversibile"),
-    ("3", "Notevole", "Lesioni permanenti parziali"),
-    ("4", "Ingente", "Inabilita totale o decesso"),
-]
-
-
 # ---------------------------------------------------------------------------
 # Color palette for risk levels
 # ---------------------------------------------------------------------------
@@ -114,10 +263,18 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         # Build document sections
         self._add_cover_page(doc, azienda, data["generated_at"])
         self._add_table_of_contents(doc)
-        self._add_part_i(doc, azienda, data["persone"], data["attrezzature"])
+        self._add_pre_parte_i(doc, azienda, data["generated_at"])
+        self._add_part_i(
+            doc,
+            azienda,
+            data["persone"],
+            data["attrezzature"],
+            data["sostanze_chimiche"],
+            data["ambienti"],
+        )
         self._add_part_ii(doc, azienda)
-        self._add_part_iii(doc, data["ambienti"])
-        self._add_part_iv(doc)
+        self._add_part_iii(doc, azienda, data["persone"], data["ambienti"])
+        self._add_part_iv(doc, azienda, data["persone"])
 
         # Determine version and save with the filename pattern required
         # by US-2.8 AC2: DVR_<ragione_sociale>_<YYYYMMDD>_v<N>.docx.
@@ -308,91 +465,365 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         doc.add_page_break()
 
     # ------------------------------------------------------------------
-    # Part I — Company data
+    # Pre-Parte I — Frontispiece (Template Tables 0, 1, 2)
+    # ------------------------------------------------------------------
+
+    def _add_pre_parte_i(
+        self, doc: Document, azienda, generated_at: datetime
+    ) -> None:
+        """Render the front-matter block that appears before Parte I.
+
+        Tables 0, 1, 2 from DVR_TEMPLATE_MAPPING.md — azienda identity,
+        revision history, and a stamped-signature placeholder. The revision
+        row uses the azienda's own DVR version (next-version - 1 because
+        ``_get_next_version`` is called later; for the front page we reflect
+        the current emission).
+        """
+        p = doc.add_paragraph()
+        run = p.add_run(
+            "ex art. 17, comma 1, lettera a) ed art. 28 del "
+            "D.Lgs. 81/2008 e s.m.i."
+        )
+        run.bold = True
+        run.font.size = Pt(11)
+
+        doc.add_paragraph("")
+        self._add_azienda_header_table(doc, azienda)
+        doc.add_paragraph("")
+
+        doc.add_heading("Storico Revisioni", level=3)
+        self._add_revision_history_table(doc, generated_at)
+        doc.add_paragraph("")
+
+        self._add_timbro_firma_table(doc)
+        doc.add_page_break()
+
+    def _add_revision_history_table(
+        self, doc: Document, generated_at: datetime
+    ) -> None:
+        """Template Table 1 — Rev./Motivazione/Data (7×3 DYNAMIC).
+
+        Emits a single row for the current emission. Real clients will have
+        this backed by the ``DocumentoGenerato`` version log in a later
+        iteration; for now it's a truthful single-entry record.
+        """
+        headers = ["Rev.", "Motivazione", "Data"]
+        rows = [[
+            "00",
+            "Emissione",
+            generated_at.strftime("%d/%m/%Y"),
+        ]]
+        self._add_data_table(doc, headers, rows)
+
+    def _add_timbro_firma_table(self, doc: Document) -> None:
+        """Template Table 2 — single-cell 'Timbro e Firma' placeholder (2×1)."""
+        table = doc.add_table(rows=2, cols=1)
+        table.style = "Table Grid"
+        table.alignment = WD_TABLE_ALIGNMENT.LEFT
+
+        header_cell = table.rows[0].cells[0]
+        header_cell.text = ""
+        p = header_cell.paragraphs[0]
+        run = p.add_run("Timbro e Firma")
+        run.bold = True
+        run.font.size = Pt(9)
+        run.font.color.rgb = _HEADER_TEXT
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        self._set_cell_bg(header_cell, _HEADER_BG)
+
+        body_cell = table.rows[1].cells[0]
+        body_cell.text = ""
+        body_cell.paragraphs[0].add_run("\n\n\n")
+
+    # ------------------------------------------------------------------
+    # Part I — Company data (Template Tables 3–17)
     # ------------------------------------------------------------------
 
     def _add_part_i(
-        self, doc: Document, azienda, persone: list, attrezzature: list
+        self,
+        doc: Document,
+        azienda,
+        persone: list,
+        attrezzature: list,
+        sostanze_chimiche: list,
+        ambienti: list,
     ) -> None:
-        """Add Part I: company data tables."""
+        """Full Parte I with 15-table parity against the master template.
+
+        Layout (Tables 3–17 in DVR_TEMPLATE_MAPPING.md):
+          3   Azienda header (5×2)
+          4   Anagrafica Aziendale (12×2)
+          5   Dati occupazionali grid (N×5)
+          6–9 Single-role titles (Datore di Lavoro / RSPP / RLS / Medico)
+          10  Addetti Primo Soccorso
+          11  Addetti Antincendio
+          12  Ambienti + N.Lavoratori
+          13  Attrezzature / Marcatura CE / Verifiche
+          14  Sostanze chimiche / Produttore / Attivita
+          15–17 Static hazard library (Sicurezza / Salute / Trasversali)
+        """
         doc.add_heading("PARTE I — DATI GENERALI DELL'AZIENDA", level=1)
 
-        # Section 1: Anagrafica Aziendale
-        doc.add_heading("1. Anagrafica Aziendale", level=2)
-        company_data = [
+        # Table 3 — Presentazione dell'azienda
+        doc.add_heading("1. Presentazione dell'Azienda", level=2)
+        self._add_azienda_header_table(doc, azienda)
+        doc.add_paragraph("")
+
+        # Table 4 — Anagrafica Aziendale (12-row key-value)
+        doc.add_heading("2. Anagrafica Aziendale", level=2)
+        anagrafica_rows = [
             ("Ragione Sociale", azienda.ragione_sociale or "—"),
+            ("Attivita",
+             f"{azienda.codice_ateco or '—'} — {azienda.attivita or '—'}"),
             ("Sede Legale", self._format_address(
                 azienda.sede_legale_via, azienda.sede_legale_citta
             )),
             ("Sede Operativa", self._format_address(
                 azienda.sede_operativa_via, azienda.sede_operativa_citta
             )),
-            ("Attivita", azienda.attivita or "—"),
-            ("Codice ATECO", azienda.codice_ateco or "—"),
+            ("Partita IVA", getattr(azienda, "partita_iva", None) or "—"),
+            ("Codice Fiscale", getattr(azienda, "codice_fiscale", None) or "—"),
+            ("Telefono", getattr(azienda, "telefono", None) or "—"),
+            ("Email", getattr(azienda, "email", None) or "—"),
+            ("PEC", getattr(azienda, "pec", None) or "—"),
             ("Orario di Lavoro", azienda.orario_lavoro or "—"),
-            ("Metratura Totale", f"{azienda.metratura_totale} mq" if azienda.metratura_totale else "—"),
-            ("Zona Sismica", str(azienda.zona_sismica) if azienda.zona_sismica else "—"),
+            ("Metratura Totale",
+             f"{azienda.metratura_totale} mq" if azienda.metratura_totale else "—"),
+            ("Zona Sismica",
+             str(azienda.zona_sismica) if azienda.zona_sismica else "—"),
         ]
-        self._add_key_value_table(doc, company_data)
-
+        self._add_key_value_table(doc, anagrafica_rows)
         doc.add_paragraph("")
 
-        # Section 2: Figure della Sicurezza
-        doc.add_heading("2. Figure della Sicurezza", level=2)
-        safety_roles = {
-            "Datore di Lavoro": [p for p in persone if p.ruolo_datore_lavoro],
-            "RSPP": [p for p in persone if p.ruolo_rspp],
-            "RLS": [p for p in persone if p.ruolo_rls],
-            "Addetto Primo Soccorso": [p for p in persone if p.ruolo_primo_soccorso],
-            "Addetto Antincendio": [p for p in persone if p.ruolo_antincendio],
-            "Preposto": [p for p in persone if p.ruolo_preposto],
-        }
-        role_rows = []
-        for role, role_persone in safety_roles.items():
-            names = ", ".join(p.nominativo for p in role_persone) if role_persone else "—"
-            role_rows.append((role, names))
-        self._add_key_value_table(doc, role_rows)
-
+        # Table 5 — Dati occupazionali (Nominativo | Mansione | Ambiente | Note | Contratto)
+        doc.add_heading("3. Dati Occupazionali", level=2)
+        self._add_dati_occupazionali_table(doc, persone)
         doc.add_paragraph("")
 
-        # Section 3: Elenco Lavoratori
-        doc.add_heading("3. Elenco Lavoratori", level=2)
-        if persone:
-            headers = ["N.", "Nominativo", "Mansione", "Contratto", "Sesso"]
-            rows = []
-            for i, p in enumerate(persone, 1):
-                rows.append([
-                    str(i),
-                    p.nominativo,
-                    p.mansione or "—",
-                    p.tipologia_contrattuale or "—",
-                    p.sesso or "—",
-                ])
-            self._add_data_table(doc, headers, rows)
-        else:
-            p = doc.add_paragraph("Nessun lavoratore registrato.")
-            p.runs[0].font.italic = True
+        # Tables 6–9 — Organizzazione Aziendale della Sicurezza
+        doc.add_heading("4. Organizzazione Aziendale della Sicurezza", level=2)
+        role_tables = [
+            ("Datore di Lavoro",
+             [p for p in persone if p.ruolo_datore_lavoro]),
+            ("Responsabile del Servizio di Prevenzione e Protezione",
+             [p for p in persone if p.ruolo_rspp]),
+            ("Rappresentante dei Lavoratori per la Sicurezza",
+             [p for p in persone if p.ruolo_rls]),
+            ("Medico Competente",
+             [p for p in persone if getattr(p, "ruolo_medico_competente", False)]),
+        ]
+        for title, role_persone in role_tables:
+            self._add_single_role_title_table(doc, title, role_persone)
+            doc.add_paragraph("")
 
+        # Tables 10, 11 — Addetti Primo Soccorso / Antincendio
+        self._add_addetti_role_table(
+            doc,
+            "Addetti al Primo Soccorso",
+            [p for p in persone if p.ruolo_primo_soccorso],
+        )
+        doc.add_paragraph("")
+        self._add_addetti_role_table(
+            doc,
+            "Addetti alla Prevenzione Incendi e Lotta Antincendio",
+            [p for p in persone if p.ruolo_antincendio],
+        )
         doc.add_paragraph("")
 
-        # Section 4: Attrezzature
-        doc.add_heading("4. Attrezzature di Lavoro", level=2)
-        if attrezzature:
-            headers = ["N.", "Descrizione", "Marcatura CE", "Verifiche Periodiche"]
-            rows = []
-            for i, att in enumerate(attrezzature, 1):
-                rows.append([
-                    str(i),
-                    att.descrizione,
-                    "SI" if att.marcatura_ce else "NO",
-                    "SI" if att.verifiche_periodiche else "NO",
-                ])
-            self._add_data_table(doc, headers, rows)
-        else:
-            p = doc.add_paragraph("Nessuna attrezzatura registrata.")
-            p.runs[0].font.italic = True
+        # Table 12 — Ambienti di Lavoro + N. Lavoratori
+        doc.add_heading("5. Ambienti di Lavoro", level=2)
+        self._add_ambienti_summary_table(doc, ambienti)
+        doc.add_paragraph("")
+
+        # Table 13 — Macchine, attrezzature ed impianti
+        doc.add_heading("6. Macchine, Attrezzature ed Impianti", level=2)
+        self._add_attrezzature_table(doc, attrezzature)
+        doc.add_paragraph("")
+
+        # Table 14 — Sostanze, prodotti e preparati chimici
+        doc.add_heading("7. Sostanze, Prodotti e Preparati Chimici", level=2)
+        self._add_sostanze_table(doc, sostanze_chimiche)
+        doc.add_paragraph("")
+
+        # Tables 15, 16, 17 — Static hazard library
+        doc.add_heading("8. Elenco Fattori di Pericolo (Riferimento)", level=2)
+        p = doc.add_paragraph()
+        run = p.add_run(
+            "N.B. Gli elenchi seguenti sono da intendersi indicativi e non "
+            "esaustivi. Sono valutati in dettaglio per ogni ambiente di "
+            "lavoro nella Parte III."
+        )
+        run.font.size = Pt(9)
+        run.font.italic = True
+        doc.add_paragraph("")
+
+        self._add_hazard_library_group(doc, "Rischi per la Sicurezza", [
+            "Strutture", "Macchine", "Impianti Elettrici", "Incendio-Esplosioni",
+        ])
+        doc.add_paragraph("")
+        self._add_hazard_library_group(doc, "Rischi per la Salute", [
+            "Agenti Chimici", "Agenti Fisici", "Agenti Biologici", "Agenti Cancerogeni",
+        ])
+        doc.add_paragraph("")
+        self._add_hazard_library_group(doc, "Rischi Trasversali", [
+            "Organizzazione del Lavoro", "Fattori Psicologici", "Fattori Ergonomici",
+        ])
 
         doc.add_page_break()
+
+    def _add_dati_occupazionali_table(self, doc: Document, persone: list) -> None:
+        """Template Table 5 — 5-col lavoratori grid including ambiente assignments."""
+        headers = ["Nominativo", "Mansione", "Ambiente di Lavoro", "Note", "Tipologia contrattuale"]
+        if not persone:
+            self._add_data_table(doc, headers, [["—", "—", "—", "—", "—"]])
+            return
+
+        rows = []
+        for p in persone:
+            ambienti_names = ", ".join(
+                (a.nome or "")
+                for a in (getattr(p, "ambienti", None) or [])
+                if getattr(a, "nome", None)
+            ) or "—"
+            note = getattr(p, "codice_fiscale", None) or "—"
+            rows.append([
+                (p.nominativo or "—").upper(),
+                (p.mansione or "—").upper(),
+                ambienti_names.upper(),
+                note,
+                (p.tipologia_contrattuale or "—").upper(),
+            ])
+        self._add_data_table(doc, headers, rows)
+
+    def _add_single_role_title_table(
+        self, doc: Document, title: str, role_persone: list
+    ) -> None:
+        """Template Tables 6–9 — single-column title table with the role-holder's name."""
+        names = [(p.nominativo or "").upper() for p in role_persone] or ["—"]
+        table = doc.add_table(rows=1 + len(names), cols=1)
+        table.style = "Table Grid"
+
+        header_cell = table.rows[0].cells[0]
+        header_cell.text = ""
+        hp = header_cell.paragraphs[0]
+        hrun = hp.add_run(title)
+        hrun.bold = True
+        hrun.font.size = Pt(9)
+        hrun.font.color.rgb = _HEADER_TEXT
+        hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        self._set_cell_bg(header_cell, _HEADER_BG)
+
+        for i, name in enumerate(names, start=1):
+            c = table.rows[i].cells[0]
+            c.text = ""
+            cp = c.paragraphs[0]
+            crun = cp.add_run(name)
+            crun.font.size = Pt(9)
+            cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    def _add_addetti_role_table(
+        self, doc: Document, title: str, role_persone: list
+    ) -> None:
+        """Template Tables 10, 11 — Nominativo/Mansione grid with a spanning header."""
+        table = doc.add_table(rows=2, cols=2)
+        table.style = "Table Grid"
+
+        merged = table.rows[0].cells[0].merge(table.rows[0].cells[1])
+        merged.text = ""
+        p = merged.paragraphs[0]
+        run = p.add_run(title)
+        run.bold = True
+        run.font.size = Pt(9)
+        run.font.color.rgb = _HEADER_TEXT
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        self._set_cell_bg(merged, _HEADER_BG)
+
+        sub_row = table.rows[1]
+        for i, text in enumerate(["Nominativo", "Mansione"]):
+            c = sub_row.cells[i]
+            c.text = ""
+            cp = c.paragraphs[0]
+            crun = cp.add_run(text)
+            crun.bold = True
+            crun.font.size = Pt(9)
+            cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            self._set_cell_bg(c, _LIGHT_GRAY)
+
+        if not role_persone:
+            row = table.add_row()
+            row.cells[0].text = "—"
+            row.cells[1].text = "—"
+            return
+
+        for p in role_persone:
+            row = table.add_row()
+            for i, text in enumerate([
+                (p.nominativo or "—").upper(),
+                (p.mansione or "—").upper(),
+            ]):
+                c = row.cells[i]
+                c.text = ""
+                cp = c.paragraphs[0]
+                crun = cp.add_run(text)
+                crun.font.size = Pt(9)
+
+    def _add_ambienti_summary_table(self, doc: Document, ambienti: list) -> None:
+        """Template Table 12 — Ambiente | N. Lavoratori."""
+        headers = ["Ambiente", "N. Lavoratori"]
+        if not ambienti:
+            rows = [["—", "0"]]
+        else:
+            rows = [
+                [(a.nome or "—").upper(), str(len(getattr(a, "persone", None) or []))]
+                for a in ambienti
+            ]
+        self._add_data_table(doc, headers, rows)
+
+    def _add_attrezzature_table(self, doc: Document, attrezzature: list) -> None:
+        """Template Table 13 — Descrizione | Marcata CE | Verifiche periodiche."""
+        headers = ["Macchine, Attrezzature ed Impianti", "Marcata CE", "Verifiche Periodiche"]
+        if not attrezzature:
+            rows = [["Nessuna attrezzatura registrata.", "—", "—"]]
+        else:
+            rows = [
+                [
+                    (a.descrizione or "—").upper(),
+                    "SI" if a.marcatura_ce else "NO",
+                    "SI" if a.verifiche_periodiche else "NO",
+                ]
+                for a in attrezzature
+            ]
+        self._add_data_table(doc, headers, rows)
+
+    def _add_sostanze_table(self, doc: Document, sostanze: list) -> None:
+        """Template Table 14 — Sostanza/Prodotto | Produttore | Attivita."""
+        headers = ["Sostanza / Prodotto", "Produttore / Distributore", "Attivita"]
+        if not sostanze:
+            rows = [["Nessuna sostanza chimica registrata.", "—", "—"]]
+        else:
+            rows = []
+            for s in sostanze:
+                rows.append([
+                    (s.nome_prodotto or "—").upper(),
+                    (s.produttore or "—").upper(),
+                    (getattr(s, "stato_miscela", None) or "—").upper(),
+                ])
+        self._add_data_table(doc, headers, rows)
+
+    def _add_hazard_library_group(
+        self, doc: Document, macro_label: str, categorie: list[str]
+    ) -> None:
+        """Template Tables 15/16/17 — 2-col static hazard catalog per macro-area."""
+        rows: list[list[str]] = []
+        for categoria in categorie:
+            items = HAZARD_LIBRARY.get(categoria, [])
+            for item in items:
+                rows.append([categoria, item])
+
+        if not rows:
+            rows = [["—", "—"]]
+
+        self._add_data_table(doc, headers=["Categoria", macro_label], rows=rows)
 
     # ------------------------------------------------------------------
     # Part II — Activity description and risk assessment methodology
@@ -413,6 +844,10 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             "PARTE II — DESCRIZIONE DELL'ATTIVITA E METODOLOGIA DI VALUTAZIONE",
             level=1,
         )
+
+        # Template Table 18 — Azienda identity block at the top of Parte II
+        self._add_azienda_header_table(doc, azienda)
+        doc.add_paragraph("")
 
         # 2.1 — Activity description
         doc.add_heading("2.1 Descrizione dell'Attivita", level=2)
@@ -474,8 +909,17 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         doc.add_paragraph("")
 
-        # 2.2 — Risk assessment methodology
-        doc.add_heading("2.2 Metodologia di Valutazione dei Rischi", level=2)
+        # Template Table 19 — Definizioni (glossary)
+        doc.add_heading("2.2 Definizioni", level=2)
+        self._add_data_table(
+            doc,
+            headers=["Termine", "Definizione"],
+            rows=[list(r) for r in _DEFINIZIONI_ROWS],
+        )
+        doc.add_paragraph("")
+
+        # 2.3 — Risk assessment methodology
+        doc.add_heading("2.3 Metodologia di Valutazione dei Rischi", level=2)
 
         p = doc.add_paragraph()
         run = p.add_run(_METODOLOGIA_INTRO_1)
@@ -489,21 +933,21 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         self._add_risk_level_table(doc)
         doc.add_paragraph("")
 
-        # 2.3 — Probability scale
-        doc.add_heading("2.3 Scala di Probabilita (P)", level=2)
+        # Template Table 21 — Scala di Probabilita (P) with full criteria column
+        doc.add_heading("2.4 Scala di Probabilita (P)", level=2)
         self._add_data_table(
             doc,
-            headers=["P", "Descrizione", "Esempio"],
-            rows=[list(row) for row in _PROBABILITA_TABLE_ROWS],
+            headers=["P", "Livello", "Criteri"],
+            rows=[list(row) for row in _PROBABILITA_CRITERI_ROWS],
         )
         doc.add_paragraph("")
 
-        # 2.4 — Damage scale
-        doc.add_heading("2.4 Scala del Danno (D)", level=2)
+        # Template Table 22 — Scala del Danno (D) with full criteria column
+        doc.add_heading("2.5 Scala del Danno (D)", level=2)
         self._add_data_table(
             doc,
-            headers=["D", "Descrizione", "Effetto"],
-            rows=[list(row) for row in _DANNO_TABLE_ROWS],
+            headers=["D", "Livello", "Criteri"],
+            rows=[list(row) for row in _DANNO_CRITERI_ROWS],
         )
 
         doc.add_page_break()
@@ -558,12 +1002,24 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     # Part III — Risk assessment per environment
     # ------------------------------------------------------------------
 
-    def _add_part_iii(self, doc: Document, ambienti: list) -> None:
-        """Add Part III: risk assessment tables per environment."""
+    def _add_part_iii(
+        self, doc: Document, azienda, persone: list, ambienti: list
+    ) -> None:
+        """Add Part III: per-environment risk assessment block.
+
+        Emits the template-shaped env block (tables 23–33 in DVR_TEMPLATE_MAPPING.md):
+          - Table 23 (once): azienda identity header — Ragione Sociale + Sede.
+          - Per environment: 4 tables — identity, addetti, risk-category
+            checklist (SI/NO), and one 5-col risk table per applicable
+            macro-category.
+        """
         doc.add_heading(
             "PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO",
             level=1,
         )
+
+        self._add_azienda_header_table(doc, azienda)
+        doc.add_paragraph("")
 
         if not ambienti:
             p = doc.add_paragraph("Nessun ambiente di lavoro registrato.")
@@ -571,155 +1027,297 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             doc.add_page_break()
             return
 
+        persone_by_id = {getattr(p, "id", None): p for p in persone}
         for ambiente in ambienti:
-            self._add_environment_section(doc, ambiente)
+            self._add_environment_section(doc, ambiente, persone_by_id)
 
-    def _add_environment_section(self, doc: Document, ambiente) -> None:
-        """Add the risk assessment section for a single environment."""
-        # Environment header
+    def _add_azienda_header_table(self, doc: Document, azienda) -> None:
+        """Template Table 23 — Azienda / Sede identity block (once, at top of Parte III)."""
+        rows = [
+            ("Azienda", (azienda.ragione_sociale or "—").upper()),
+            ("Sede Legale", azienda.sede_legale_via or "—"),
+            ("Sede Legale", azienda.sede_legale_citta or "—"),
+        ]
+        if azienda.sede_operativa_via or azienda.sede_operativa_citta:
+            rows.append(
+                ("Sede Operativa", self._format_address(
+                    azienda.sede_operativa_via, azienda.sede_operativa_citta
+                ))
+            )
+        self._add_key_value_table(doc, rows)
+
+    def _add_environment_section(
+        self, doc: Document, ambiente, persone_by_id: dict
+    ) -> None:
+        """Render the 4-block env section for a single environment.
+
+        Order mirrors tables 24–33 in the template:
+          1. Identity (Table 24) — ambiente / preposto / descrizione.
+          2. Addetti (Table 25) — nominativo / mansione.
+          3. Risk-category checklist (Table 26) — SI/NO per macro-area.
+          4. One 5-col risk table per applicable macro-category.
+        """
         doc.add_heading(
-            f"Ambiente: {ambiente.nome} ({ambiente.tipo})", level=2
+            f"Identificazione dell'Ambiente di Lavoro e degli Addetti — {ambiente.nome.upper()}",
+            level=2,
         )
 
-        # Environment details
-        details = []
-        if ambiente.superficie_mq:
-            details.append(f"Superficie: {ambiente.superficie_mq} mq")
-        if ambiente.descrizione_attivita:
-            details.append(f"Attivita: {ambiente.descrizione_attivita}")
-        if details:
-            p = doc.add_paragraph(" | ".join(details))
-            p.runs[0].font.size = Pt(9)
-            p.runs[0].font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-
+        self._add_env_identity_table(doc, ambiente, persone_by_id)
+        doc.add_paragraph("")
+        self._add_env_addetti_table(doc, ambiente)
         doc.add_paragraph("")
 
-        risks = ambiente.valutazioni_rischio
-        applicable_risks = [r for r in risks if r.applicabile]
+        doc.add_heading(
+            f"Identificazione dei Fattori di Rischio — {ambiente.nome.upper()}",
+            level=3,
+        )
+        self._add_env_risk_checklist(doc, ambiente)
+        doc.add_paragraph("")
 
-        if not applicable_risks:
+        self._add_env_risk_tables(doc, ambiente)
+        doc.add_page_break()
+
+    def _add_env_identity_table(
+        self, doc: Document, ambiente, persone_by_id: dict
+    ) -> None:
+        """Template Table 24 — 3×2 DYNAMIC key-value block for the environment."""
+        preposto_name = "—"
+        preposto_id = getattr(ambiente, "preposto_id", None)
+        if preposto_id and preposto_id in persone_by_id:
+            preposto_name = (persone_by_id[preposto_id].nominativo or "—").upper()
+
+        descrizione = (
+            (ambiente.descrizione_attivita or "").strip()
+            or (ambiente.tipo or "—")
+        ).upper()
+
+        rows = [
+            ("Ambiente di lavoro", (ambiente.nome or "—").upper()),
+            ("Preposto per la sicurezza", preposto_name),
+            ("Descrizione Attività", descrizione),
+        ]
+        self._add_key_value_table(doc, rows)
+
+    def _add_env_addetti_table(self, doc: Document, ambiente) -> None:
+        """Template Table 25 — Nominativo / Mansione for addetti assigned to this env.
+
+        Always emits the table shell so the per-env layout matches the
+        template even when no persone_ambienti mapping exists yet; a single
+        placeholder row signals the missing assignment to the operator.
+        """
+        addetti = list(getattr(ambiente, "persone", []) or [])
+        if addetti:
+            rows = [
+                [(a.nominativo or "—").upper(), (a.mansione or "—").upper()]
+                for a in addetti
+            ]
+        else:
+            rows = [["—", "—"]]
+        self._add_data_table(doc, headers=["Nominativo Addetti", "Mansione"], rows=rows)
+
+    def _add_env_risk_checklist(self, doc: Document, ambiente) -> None:
+        """Template Table 26 — 14-row SI/NO checklist for the 11 risk categories.
+
+        Row layout: macro-area label row, then its categories with SI/NO
+        derived from whether at least one applicable valutazione_rischio
+        exists with that categoria in this ambiente.
+        """
+        applicable_by_category = {
+            (r.categoria_rischio or "").strip(): True
+            for r in ambiente.valutazioni_rischio
+            if getattr(r, "applicabile", False)
+        }
+
+        table = doc.add_table(rows=1, cols=2)
+        table.style = "Table Grid"
+
+        header_row = table.rows[0]
+        for i, text in enumerate(["Categoria di Rischio", "Applicabile"]):
+            cell = header_row.cells[i]
+            cell.text = ""
+            p = cell.paragraphs[0]
+            run = p.add_run(text)
+            run.bold = True
+            run.font.size = Pt(9)
+            run.font.color.rgb = _HEADER_TEXT
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            self._set_cell_bg(cell, _HEADER_BG)
+
+        current_macro = None
+        for macro, categoria in _CATEGORY_ORDER:
+            if macro != current_macro:
+                macro_row = table.add_row()
+                merged = macro_row.cells[0].merge(macro_row.cells[1])
+                merged.text = ""
+                p = merged.paragraphs[0]
+                run = p.add_run(macro)
+                run.bold = True
+                run.font.size = Pt(9)
+                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                self._set_cell_bg(merged, _LIGHT_GRAY)
+                current_macro = macro
+
+            row = table.add_row()
+            cell_label = row.cells[0]
+            cell_label.text = ""
+            p = cell_label.paragraphs[0]
+            run = p.add_run(categoria)
+            run.font.size = Pt(9)
+
+            cell_flag = row.cells[1]
+            cell_flag.text = ""
+            p = cell_flag.paragraphs[0]
+            flag = "SI" if applicable_by_category.get(categoria) else "NO"
+            run = p.add_run(flag)
+            run.font.size = Pt(9)
+            run.bold = True
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    def _add_env_risk_tables(self, doc: Document, ambiente) -> None:
+        """Template Tables 27+ — one 5-col (PERICOLO/CONDIZIONI/RISCHIO/MISURE/I)
+        table per applicable macro-category, emitted in the canonical order."""
+        by_category: dict[str, list] = {}
+        for r in ambiente.valutazioni_rischio:
+            if not getattr(r, "applicabile", False):
+                continue
+            key = (r.categoria_rischio or "").strip()
+            by_category.setdefault(key, []).append(r)
+
+        ordered_keys = [cat for _, cat in _CATEGORY_ORDER if cat in by_category]
+        trailing = [k for k in by_category.keys() if k not in ordered_keys]
+
+        if not ordered_keys and not trailing:
             p = doc.add_paragraph(
                 "Nessun rischio applicabile identificato per questo ambiente."
             )
             p.runs[0].font.italic = True
-            doc.add_paragraph("")
             return
 
-        # Risk assessment table
+        for cat_name in ordered_keys + trailing:
+            self._add_single_category_risk_table(doc, cat_name, by_category[cat_name])
+            doc.add_paragraph("")
+
+    def _add_single_category_risk_table(
+        self, doc: Document, categoria: str, risks: list
+    ) -> None:
+        """5-col risk table for a single category (Template Tables 27–33 shape)."""
+        p = doc.add_paragraph()
+        run = p.add_run(categoria.upper())
+        run.bold = True
+        run.font.size = Pt(10)
+        run.font.color.rgb = _HEADER_BG
+
         headers = [
-            "Categoria",
-            "Pericolo",
-            "Condizioni di Esposizione",
-            "Rischio",
-            "Misure di Prevenzione e Protezione",
-            "P",
-            "D",
-            "I",
-            "Livello",
+            "PERICOLO",
+            "CONDIZIONI DI IMPIEGO O DI ESPOSIZIONE",
+            "RISCHIO",
+            "MISURE DI PREVENZIONE E PROTEZIONE ATTUATE E DPI",
+            "I = P + 2*D",
         ]
         table = doc.add_table(rows=1, cols=len(headers))
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         table.style = "Table Grid"
 
-        # Header row
         header_row = table.rows[0]
         for i, text in enumerate(headers):
             cell = header_row.cells[i]
             cell.text = ""
-            p = cell.paragraphs[0]
-            run = p.add_run(text)
-            run.bold = True
-            run.font.size = Pt(8)
-            run.font.color.rgb = _HEADER_TEXT
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            hp = cell.paragraphs[0]
+            hrun = hp.add_run(text)
+            hrun.bold = True
+            hrun.font.size = Pt(8)
+            hrun.font.color.rgb = _HEADER_TEXT
+            hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
             self._set_cell_bg(cell, _HEADER_BG)
 
-        # Data rows
-        for risk in applicable_risks:
-            row = table.add_row()
+        for risk in risks:
             p_val = risk.probabilita_p
             d_val = risk.danno_d
-
-            # Calculate risk index if P and D are available
             if p_val is not None and d_val is not None:
                 result = calculate_risk_index(p_val, d_val)
                 indice = result["indice_i"]
                 livello = result["livello_rischio"]
+                indice_text = f"P = {p_val}; D = {d_val}; I = {indice}; {livello}"
             else:
-                indice = None
                 livello = None
+                indice_text = "—"
 
+            row = table.add_row()
             values = [
-                risk.categoria_rischio,
                 risk.pericolo or "—",
                 risk.condizioni_esposizione or "—",
                 risk.rischio or "—",
                 risk.misure_prevenzione or "—",
-                str(p_val) if p_val is not None else "—",
-                str(d_val) if d_val is not None else "—",
-                str(indice) if indice is not None else "—",
-                livello or "—",
+                indice_text,
             ]
-
             for i, text in enumerate(values):
                 cell = row.cells[i]
                 cell.text = ""
-                p = cell.paragraphs[0]
-                run = p.add_run(text)
-                run.font.size = Pt(8)
+                cp = cell.paragraphs[0]
+                crun = cp.add_run(text)
+                crun.font.size = Pt(8)
+                if i == 4:
+                    cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    if livello and livello in _RISK_COLORS:
+                        self._set_cell_bg(cell, _RISK_COLORS[livello])
+                        crun.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+                        crun.bold = True
 
-                # Center-align the numeric and level columns
-                if i >= 5:
-                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-                # Color the risk level cell
-                if i == 8 and livello and livello in _RISK_COLORS:
-                    self._set_cell_bg(cell, _RISK_COLORS[livello])
-                    run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-                    run.bold = True
-
-                # Color the I (index) cell with lighter version
-                if i == 7 and livello and livello in _RISK_COLORS:
-                    self._set_cell_bg(cell, _RISK_COLORS[livello])
-                    run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-                    run.bold = True
-
-        # Set column widths (approximate)
-        widths = [Cm(2.2), Cm(3.0), Cm(3.0), Cm(2.5), Cm(4.0), Cm(0.8), Cm(0.8), Cm(0.8), Cm(2.0)]
+        widths = [Cm(3.5), Cm(4.0), Cm(3.0), Cm(4.5), Cm(3.5)]
         for row in table.rows:
             for i, width in enumerate(widths):
                 row.cells[i].width = width
 
-        doc.add_paragraph("")
-
     # ------------------------------------------------------------------
-    # Part IV — Improvement measures
+    # Part IV — Improvement measures (Template Tables 108, 109, 110)
     # ------------------------------------------------------------------
 
-    def _add_part_iv(self, doc: Document) -> None:
-        """Add Part IV: improvement measures placeholder."""
+    def _add_part_iv(self, doc: Document, azienda, persone: list) -> None:
+        """Parte IV with 3-table parity — azienda header, improvement program,
+        signatures."""
         doc.add_heading("PARTE IV — PROGRAMMA DI MIGLIORAMENTO", level=1)
 
+        # Template Table 108 — Azienda header
+        self._add_azienda_header_table(doc, azienda)
+        doc.add_paragraph("")
+
+        doc.add_heading(
+            "Programma e Procedure di attuazione delle Misure di Miglioramento",
+            level=2,
+        )
         p = doc.add_paragraph()
         run = p.add_run(
-            "Il programma di miglioramento viene definito sulla base delle "
+            "Il programma di miglioramento e definito sulla base delle "
             "criticita emerse dalla valutazione dei rischi. Le misure sono "
             "ordinate per priorita in funzione del livello di rischio."
         )
         run.font.size = Pt(10)
-
         doc.add_paragraph("")
 
-        # Placeholder improvement table
+        # Template Table 109 — Misure di miglioramento (5-col grid)
+        self._add_improvement_program_table(doc)
+        doc.add_paragraph("")
+        doc.add_paragraph("")
+
+        # Template Table 110 — Signature block (2×3)
+        self._add_signature_table(doc, persone)
+
+    def _add_improvement_program_table(self, doc: Document) -> None:
+        """Template Table 109 — 5-col measures grid with a placeholder row for
+        operator completion."""
         headers = [
-            "N.",
-            "Ambiente",
-            "Rischio",
-            "Livello",
-            "Misura Proposta",
-            "Priorita",
+            "Misure di miglioramento",
+            "Procedure per l'attuazione delle misure di miglioramento",
+            "Risorse necessarie per l'attuazione",
             "Responsabile",
-            "Scadenza",
+            "Tempi di attuazione",
+        ]
+        placeholder_row = [
+            "[Misura]",
+            "[Procedura]",
+            "[Risorse]",
+            "[Responsabile]",
+            "[Scadenza]",
         ]
         table = doc.add_table(rows=1, cols=len(headers))
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -729,51 +1327,67 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         for i, text in enumerate(headers):
             cell = header_row.cells[i]
             cell.text = ""
-            p = cell.paragraphs[0]
-            run = p.add_run(text)
-            run.bold = True
-            run.font.size = Pt(9)
-            run.font.color.rgb = _HEADER_TEXT
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            hp = cell.paragraphs[0]
+            hrun = hp.add_run(text)
+            hrun.bold = True
+            hrun.font.size = Pt(9)
+            hrun.font.color.rgb = _HEADER_TEXT
+            hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
             self._set_cell_bg(cell, _HEADER_BG)
 
-        # Add a single placeholder row
         row = table.add_row()
-        placeholders = [
-            "1",
-            "[Ambiente]",
-            "[Descrizione rischio]",
-            "[Livello]",
-            "[Misura di miglioramento]",
-            "[Alta/Media/Bassa]",
-            "[Nome]",
-            "[GG/MM/AAAA]",
-        ]
-        for i, text in enumerate(placeholders):
-            cell = row.cells[i]
+        for i, text in enumerate(placeholder_row):
+            c = row.cells[i]
+            c.text = ""
+            cp = c.paragraphs[0]
+            crun = cp.add_run(text)
+            crun.font.size = Pt(9)
+            crun.font.italic = True
+            crun.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+
+    def _add_signature_table(self, doc: Document, persone: list) -> None:
+        """Template Table 110 — 2×3 signature grid with DL / RSPP / Medico
+        (row 1) and RLS (row 2, merged center cell)."""
+        def _first(pred) -> str:
+            match = next((p for p in persone if pred(p)), None)
+            return (match.nominativo if match else "").upper()
+
+        dl = _first(lambda p: p.ruolo_datore_lavoro) or "—"
+        rspp = _first(lambda p: p.ruolo_rspp) or "—"
+        medico = _first(lambda p: getattr(p, "ruolo_medico_competente", False)) or "—"
+        rls = _first(lambda p: p.ruolo_rls) or "—"
+
+        table = doc.add_table(rows=2, cols=3)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.style = "Table Grid"
+
+        def _fill(cell, title_line: str, name_line: str) -> None:
             cell.text = ""
             p = cell.paragraphs[0]
-            run = p.add_run(text)
+            run = p.add_run(title_line)
+            run.bold = True
             run.font.size = Pt(9)
-            run.font.italic = True
-            run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p2 = cell.add_paragraph()
+            p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run2 = p2.add_run(name_line)
+            run2.font.size = Pt(9)
+            p3 = cell.add_paragraph()
+            p3.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run3 = p3.add_run("___________________________")
+            run3.font.size = Pt(9)
 
-        doc.add_paragraph("")
+        _fill(table.rows[0].cells[0], "Il Datore di Lavoro", f"({dl})")
+        _fill(table.rows[0].cells[1], "", "")
+        _fill(table.rows[0].cells[2], "Il Responsabile del S.P.P.", f"({rspp})")
 
-        # Signature block
-        doc.add_paragraph("")
-        doc.add_paragraph("")
-
-        signatures = [
-            ("Il Datore di Lavoro", "___________________________"),
-            ("Il RSPP", "___________________________"),
-            ("Il RLS", "___________________________"),
-            ("Il Medico Competente", "___________________________"),
-        ]
-        for title, line in signatures:
-            p = doc.add_paragraph()
-            run = p.add_run(f"{title}:\t{line}")
-            run.font.size = Pt(10)
+        _fill(table.rows[1].cells[0], "Il Medico Competente", f"({medico})")
+        _fill(table.rows[1].cells[1], "", "")
+        _fill(
+            table.rows[1].cells[2],
+            "Per consultazione\nIl Rappresentante dei Lavoratori",
+            f"({rls})",
+        )
 
     # ------------------------------------------------------------------
     # Helper methods

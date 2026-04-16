@@ -2,13 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -70,14 +63,16 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function fileIsValid(file: File): boolean {
+type FileRejectReason = "format" | "empty" | "oversize";
+
+function validateFotoFile(file: File): FileRejectReason | null {
   const nameLower = file.name.toLowerCase();
   const extOk = ALLOWED_FOTO_EXTENSIONS.some((ext) => nameLower.endsWith(ext));
   const typeOk = ALLOWED_FOTO_TYPES.includes(file.type);
-  if (!typeOk && !extOk) return false;
-  if (file.size === 0) return false;
-  if (file.size > MAX_FOTO_SIZE_BYTES) return false;
-  return true;
+  if (!typeOk && !extOk) return "format";
+  if (file.size === 0) return "empty";
+  if (file.size > MAX_FOTO_SIZE_BYTES) return "oversize";
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -208,7 +203,23 @@ function AmbienteFotoGrid({ aziendaId, ambienteId }: AmbienteFotoGridProps) {
 
       const accepted: File[] = [];
       for (const f of files) {
-        if (!fileIsValid(f)) {
+        // H-03 (US-1.3): surface a distinct toast per failure mode so the
+        // oversize branch no longer "silently rejects" 11 MB+ JPGs. The
+        // original unified path relied on `fileIsValid` being false-y, but
+        // the failure message didn't encode *why* — here we map every
+        // reject reason to an operator-facing Italian string.
+        const reason = validateFotoFile(f);
+        if (reason === "oversize") {
+          toast.error(
+            `"${f.name}" è troppo grande (${formatBytes(f.size)}). Max ${MAX_FOTO_SIZE_BYTES / (1024 * 1024)} MB.`,
+          );
+          continue;
+        }
+        if (reason === "empty") {
+          toast.error(`"${f.name}" è vuoto e non può essere caricato.`);
+          continue;
+        }
+        if (reason === "format") {
           toast.error(INVALID_FOTO_MESSAGE);
           continue;
         }
@@ -348,14 +359,16 @@ export function StepAmbienti({
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Ambienti di Lavoro</CardTitle>
-          <CardDescription>
+      <div>
+        <div className="mb-6">
+          <h3 className="font-heading text-xl font-bold text-on-surface">
+            Ambienti di Lavoro
+          </h3>
+          <p className="mt-1 text-sm text-on-surface-variant">
             Definisci gli ambienti di lavoro dell&apos;azienda
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
+          </p>
+        </div>
+        <div className="space-y-6">
           {ambienti.length === 0 && (
             <p className="py-8 text-center text-muted-foreground">
               Nessun ambiente aggiunto. Clicca &quot;Aggiungi Ambiente&quot; per
@@ -481,8 +494,8 @@ export function StepAmbienti({
             <Plus className="mr-2 h-4 w-4" />
             Aggiungi Ambiente
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

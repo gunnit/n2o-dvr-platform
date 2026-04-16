@@ -87,20 +87,25 @@ class BaseDocumentGenerator(ABC):
         if azienda is None:
             raise ValueError(f"Azienda with id {self.azienda_id} not found")
 
-        # Load persone
+        # Load persone (with ambienti assignments for DVR Parte I grid).
         stmt = (
             select(Persona)
             .where(Persona.azienda_id == self.azienda_id)
+            .options(selectinload(Persona.ambienti))
             .order_by(Persona.nominativo)
         )
         result = await self.db.execute(stmt)
         persone = list(result.scalars().all())
 
-        # Load ambienti with their risk assessments
+        # Load ambienti with their risk assessments + assigned persone
+        # (persone needed by DVR Parte III addetti table per env).
         stmt = (
             select(Ambiente)
             .where(Ambiente.azienda_id == self.azienda_id)
-            .options(selectinload(Ambiente.valutazioni_rischio))
+            .options(
+                selectinload(Ambiente.valutazioni_rischio),
+                selectinload(Ambiente.persone),
+            )
             .order_by(Ambiente.nome)
         )
         result = await self.db.execute(stmt)

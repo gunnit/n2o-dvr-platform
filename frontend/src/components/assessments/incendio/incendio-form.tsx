@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   FormProvider,
   useFieldArray,
@@ -188,9 +188,34 @@ export function IncendioForm({ form, onResultChange }: IncendioFormProps) {
   const watched = watch();
   const result = useMemo(() => computeIncendioResult(watched), [watched]);
 
+  // H-02 (US-3.12): `computeIncendioResult` always returns a fresh object,
+  // and the parent's setState tends to land in a state object that — even
+  // when shallow-equal — looks different to React by reference. That tripped
+  // an infinite render loop (48+ "Maximum update depth exceeded" logs on
+  // every interaction). Key the effect off a stable content-hash instead of
+  // the object reference so the parent is only notified when the result
+  // actually changes.
+  const lastHashRef = useRef<string>("");
+  const resultHash = useMemo(() => {
+    const parts = [
+      result.maxLivello ?? "",
+      result.allComplete ? "1" : "0",
+      ...result.areas.map(
+        (a) =>
+          `${a.nome}|${a.inf ?? ""}|${a.si ?? ""}|${a.pi ?? ""}|${a.totale ?? ""}|${a.livello ?? ""}`,
+      ),
+    ];
+    return parts.join("§");
+  }, [result]);
+
   useEffect(() => {
+    if (lastHashRef.current === resultHash) return;
+    lastHashRef.current = resultHash;
     onResultChange?.(result);
-  }, [result, onResultChange]);
+    // `result` is intentionally excluded — the hash captures its content,
+    // and including `result` would re-fire the effect on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resultHash, onResultChange]);
 
   const handleAdd = () => {
     append({ ...DEFAULT_AREA, nome: "" });

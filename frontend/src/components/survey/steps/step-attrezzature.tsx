@@ -179,30 +179,29 @@ export function StepAttrezzature({
 
   if (ambienti.length === 0) {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <p className="text-muted-foreground">
-            Aggiungi almeno un ambiente di lavoro nel passo 3 prima di
-            procedere con le attrezzature.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col items-center justify-center py-12">
+        <p className="text-on-surface-variant">
+          Aggiungi almeno un ambiente di lavoro nel passo 3 prima di
+          procedere con le attrezzature.
+        </p>
+      </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Ambiente selector */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Attrezzature</CardTitle>
-          <CardDescription>
+      <div>
+        <div className="mb-6">
+          <h3 className="font-heading text-xl font-bold text-on-surface">
+            Attrezzature
+          </h3>
+          <p className="mt-1 text-sm text-on-surface-variant">
             Seleziona un ambiente per visualizzare le attrezzature suggerite in
             base alla tipologia. Le attrezzature selezionate sono condivise tra
             tutti gli ambienti.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+          </p>
+        </div>
+        <div>
           <div className="space-y-3">
             <Label>Seleziona Ambiente</Label>
             <div className="flex flex-wrap gap-2">
@@ -224,8 +223,8 @@ export function StepAttrezzature({
               ))}
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Suggested equipment */}
       <Card>

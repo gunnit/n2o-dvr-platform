@@ -6,6 +6,8 @@ import { SurveyWizard } from "@/components/survey/survey-wizard";
 import type { SurveyData } from "@/components/survey/survey-wizard";
 import type { Azienda } from "@/types";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 async function apiCall<T>(path: string, token: string | null): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -14,7 +16,7 @@ async function apiCall<T>(path: string, token: string | null): Promise<T> {
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`http://localhost:8000${path}`, { headers });
+  const res = await fetch(`${API_URL}${path}`, { headers });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -52,15 +54,27 @@ export default function SurveyAziendaPage() {
         );
         setAzienda(aziendaData);
 
-        // Try to load existing survey data
+        // Try to load existing survey data. The backend returns the shape
+        // defined in `app/schemas/survey.py::SurveyResponse`, which uses
+        // `sostanze_chimiche` and `rischi` — the wizard's SurveyData shape
+        // uses `sostanze` and `valutazioni`. Normalise here (B-03 fix for
+        // the "Riepilogo shows 0 valutazioni / 0 sostanze" regression).
         try {
-          const surveyData = await apiCall<Partial<SurveyData>>(
-            `/api/v1/aziende/${aziendaId}/survey`,
-            token
-          );
+          const surveyData = await apiCall<
+            Partial<SurveyData> & {
+              sostanze_chimiche?: SurveyData["sostanze"];
+              rischi?: SurveyData["valutazioni"];
+            }
+          >(`/api/v1/aziende/${aziendaId}/survey`, token);
           setInitialData({
             azienda: aziendaData,
-            ...surveyData,
+            persone: surveyData.persone ?? [],
+            ambienti: surveyData.ambienti ?? [],
+            attrezzature: surveyData.attrezzature ?? [],
+            sostanze:
+              surveyData.sostanze ?? surveyData.sostanze_chimiche ?? [],
+            valutazioni:
+              surveyData.valutazioni ?? surveyData.rischi ?? [],
           });
         } catch {
           // No existing survey data — start fresh

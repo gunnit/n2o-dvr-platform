@@ -604,14 +604,12 @@ export function StepRischi({
 
   if (ambienti.length === 0) {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <p className="text-muted-foreground">
-            Aggiungi almeno un ambiente di lavoro nel passo 3 prima di
-            procedere con la valutazione dei rischi.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col items-center justify-center py-12">
+        <p className="text-on-surface-variant">
+          Aggiungi almeno un ambiente di lavoro nel passo 3 prima di
+          procedere con la valutazione dei rischi.
+        </p>
+      </div>
     );
   }
 
@@ -647,36 +645,36 @@ export function StepRischi({
       )}
 
       {/* Ambiente selector */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Valutazione Rischi</CardTitle>
-          <CardDescription>
+      <div>
+        <div className="mb-4">
+          <h3 className="font-heading text-xl font-bold text-on-surface">
+            Valutazione Rischi
+          </h3>
+          <p className="mt-1 text-sm text-on-surface-variant">
             Valuta i rischi per ogni ambiente di lavoro. Formula: I = 2D + P
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <Label>Seleziona Ambiente</Label>
-            <div className="flex flex-wrap gap-2">
-              {ambienti.map((amb, idx) => (
-                <button
-                  key={amb.id}
-                  type="button"
-                  onClick={() => setSelectedAmbienteIndex(idx)}
-                  className={cn(
-                    "rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
-                    idx === selectedAmbienteIndex
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-input bg-background text-foreground hover:bg-muted"
-                  )}
-                >
-                  {amb.nome || `Ambiente ${idx + 1}`}
-                </button>
-              ))}
-            </div>
+          </p>
+        </div>
+        <div className="space-y-3">
+          <Label>Seleziona Ambiente</Label>
+          <div className="flex flex-wrap gap-2">
+            {ambienti.map((amb, idx) => (
+              <button
+                key={amb.id}
+                type="button"
+                onClick={() => setSelectedAmbienteIndex(idx)}
+                className={cn(
+                  "rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
+                  idx === selectedAmbienteIndex
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-input bg-background text-foreground hover:bg-muted"
+                )}
+              >
+                {amb.nome || `Ambiente ${idx + 1}`}
+              </button>
+            ))}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Risk table */}
       <Card>

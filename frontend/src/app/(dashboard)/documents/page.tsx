@@ -264,67 +264,70 @@ export default function DocumentsPage() {
   const selectedAzienda = aziende.find((a) => a.id === selectedAziendaId);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Documenti</h1>
-          <p className="text-muted-foreground">
+          <h1 className="font-heading text-3xl font-bold text-on-surface">
+            Documenti
+          </h1>
+          <p className="mt-1 text-sm text-on-surface-variant">
             Genera i documenti di sicurezza per le aziende clienti
           </p>
         </div>
         {selectedAziendaId && (
-          <Button onClick={handleGenerateAll} disabled={generatingAll}>
+          <button
+            type="button"
+            onClick={handleGenerateAll}
+            disabled={generatingAll}
+            className="flex items-center gap-2 rounded-lg bg-primary-container px-5 py-2.5 text-sm font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+          >
             {generatingAll ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <RefreshCw className="mr-2 h-4 w-4" />
+              <RefreshCw className="h-4 w-4" strokeWidth={2.5} />
             )}
             Genera Tutti
-          </Button>
+          </button>
         )}
       </div>
 
       {/* Azienda Selector */}
-      <Card>
-        <CardContent className="pt-4">
-          <div className="space-y-2">
-            <Label htmlFor="azienda-select">Seleziona Azienda</Label>
-            {loadingAziende ? (
-              <p className="text-sm text-muted-foreground">Caricamento aziende...</p>
-            ) : aziende.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nessuna azienda registrata. Aggiungi un&apos;azienda per iniziare.
-              </p>
-            ) : (
-              <select
-                id="azienda-select"
-                value={selectedAziendaId}
-                onChange={(e) => setSelectedAziendaId(e.target.value)}
-                className="h-8 w-full max-w-md rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-              >
-                <option value="">-- Seleziona un&apos;azienda --</option>
-                {aziende.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.ragione_sociale}
-                    {a.sede_operativa_citta ? ` - ${a.sede_operativa_citta}` : ""}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <div className="rounded-xl bg-white p-6 ambient-shadow">
+        <div className="space-y-2">
+          <Label htmlFor="azienda-select">Seleziona Azienda</Label>
+          {loadingAziende ? (
+            <p className="text-sm text-on-surface-variant">Caricamento aziende...</p>
+          ) : aziende.length === 0 ? (
+            <p className="text-sm text-on-surface-variant">
+              Nessuna azienda registrata. Aggiungi un&apos;azienda per iniziare.
+            </p>
+          ) : (
+            <select
+              id="azienda-select"
+              value={selectedAziendaId}
+              onChange={(e) => setSelectedAziendaId(e.target.value)}
+              className="w-full max-w-md rounded-xl border-none bg-surface-low px-4 py-3 text-sm outline-none transition-all focus:ring-2 focus:ring-primary-container"
+            >
+              <option value="">-- Seleziona un&apos;azienda --</option>
+              {aziende.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.ragione_sociale}
+                  {a.sede_operativa_citta ? ` - ${a.sede_operativa_citta}` : ""}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      </div>
 
       {/* Document Grid */}
       {!selectedAziendaId ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <FileText className="mb-3 h-10 w-10 text-muted-foreground/50" />
-            <p className="text-muted-foreground">
-              Seleziona un&apos;azienda per visualizzare e generare i documenti
-            </p>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col items-center justify-center rounded-xl bg-white py-12 ambient-shadow">
+          <FileText className="mb-3 h-10 w-10 text-on-surface-variant opacity-40" />
+          <p className="text-on-surface-variant">
+            Seleziona un&apos;azienda per visualizzare e generare i documenti
+          </p>
+        </div>
       ) : loadingDocs ? (
         <p className="text-muted-foreground">Caricamento documenti...</p>
       ) : (

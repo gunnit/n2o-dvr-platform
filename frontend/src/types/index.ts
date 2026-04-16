@@ -14,7 +14,23 @@ export interface Azienda {
   descrizione_attivita: string | null;
   contesto_territoriale: string | null;
   data_scadenza_dvr: string | null;
-  survey_status: "draft" | "in_progress" | "completed";
+  // US-1.6: "firmato" is the post-signature state; "in_revisione" opens the
+  // audited edit window; the earlier lifecycle values stay valid for legacy
+  // rows. Keep this open-ended (string) to tolerate migration drift — the
+  // wizard only checks for "firmato" explicitly.
+  survey_status:
+    | "draft"
+    | "in_progress"
+    | "completed"
+    | "firmato"
+    | "in_revisione"
+    | string;
+  // US-1.6 signature metadata — populated server-side by
+  // POST /aziende/{id}/survey/sign. The PNG bytes themselves live on
+  // `aziende.firma_png` (deferred column) and are streamed via the
+  // signature download endpoint.
+  firma_signed_at?: string | null;
+  firma_signed_by_name?: string | null;
   // US-2.1 AC1: ISO timestamp set when a visura camerale PDF is uploaded.
   // The PDF + redacted snippet stay server-side; the frontend only uses
   // this field to render the "visura caricata" hint above the description

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   Card,
   CardContent,
@@ -35,8 +36,27 @@ import {
 import type { SurveyData } from "../survey-wizard";
 
 interface StepRiepilogoProps {
+  aziendaId?: string;
   data: SurveyData;
   onGoToStep: (step: number) => void;
+  // US-1.6 AC3: "Conferma firma" now POSTs through the wizard's handleSign
+  // → /api/v1/aziende/{id}/survey/sign → backend flips survey_status to
+  // "firmato" and returns a server-side timestamp. Kept optional so the
+  // component can still be mounted in isolation (tests / storybook).
+  isSigned?: boolean;
+  signedAt?: string | null;
+  signedByName?: string | null;
+  onSign?: (signature: {
+    dataUrl: string;
+    signedByName?: string | null;
+  }) => Promise<{
+    survey_status: string;
+    firma_signed_at: string;
+    firma_signed_by_name: string | null;
+  }>;
+  onOpenRevision?: () => Promise<void> | void;
+  // Legacy local-state callback kept as a back-compat no-op for older
+  // callers. Not used by the main wizard.
   onSignatureChange?: (
     signature: { dataUrl: string; timestamp: string } | null,
   ) => void;
@@ -101,6 +121,11 @@ function SectionHeader({
 export function StepRiepilogo({
   data,
   onGoToStep,
+  isSigned: isSignedProp,
+  signedAt: signedAtProp,
+  signedByName: signedByNameProp,
+  onSign,
+  onOpenRevision,
   onSignatureChange,
 }: StepRiepilogoProps) {
   const { azienda, persone, ambienti, attrezzature, valutazioni, sostanze } =
@@ -135,8 +160,16 @@ export function StepRiepilogo({
   // Signature state
   // ---------------------------------------------------------------------------
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
-  const [isSigned, setIsSigned] = useState(false);
+  const [localIsSigned, setLocalIsSigned] = useState(false);
   const [signedTimestamp, setSignedTimestamp] = useState<string | null>(null);
+  const [signing, setSigning] = useState(false);
+
+  // Wizard-level signed state (from `aziende.survey_status === "firmato"`)
+  // wins over local state; if the wizard prop is undefined (the component is
+  // mounted standalone) we fall back to the in-component flag so older
+  // callers keep working.
+  const isSigned = isSignedProp ?? localIsSigned;
+  const signedTimestampEffective = signedAtProp ?? signedTimestamp;
 
   // Canvas refs and drawing state
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -213,22 +246,69 @@ export function StepRiepilogo({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   };
 
-  const confirmSignature = () => {
+  // B-03 (US-1.6 AC3): the canvas must be non-empty before we POST to
+  // /survey/sign. We compare the drawn pixels against a freshly-cleared
+  // canvas of the same size so any stray ink triggers the accept path.
+  const isCanvasEmpty = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return true;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return true;
+    const blank = document.createElement("canvas");
+    blank.width = canvas.width;
+    blank.height = canvas.height;
+    return canvas.toDataURL() === blank.toDataURL();
+  }, []);
+
+  const confirmSignature = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    if (isCanvasEmpty()) {
+      toast.error("Disegna la firma prima di confermare");
+      return;
+    }
     const dataUrl = canvas.toDataURL("image/png");
-    const timestamp = new Date().toISOString();
+    // Back-compat: fire the legacy callback so any non-wizard mount keeps
+    // getting the local-state hook.
+    onSignatureChange?.({ dataUrl, timestamp: new Date().toISOString() });
+
+    if (onSign) {
+      // Wizard-driven path: POST through to the backend so survey_status
+      // flips to "firmato" and the server stamps the canonical timestamp.
+      setSigning(true);
+      try {
+        const payload = await onSign({
+          dataUrl,
+          signedByName: signedByNameProp ?? null,
+        });
+        setSignatureDataUrl(dataUrl);
+        setSignedTimestamp(payload.firma_signed_at);
+        toast.success("Firma registrata");
+      } catch (err) {
+        toast.error(
+          err instanceof Error
+            ? `Errore firma: ${err.message}`
+            : "Errore firma",
+        );
+      } finally {
+        setSigning(false);
+      }
+      return;
+    }
+
+    // Legacy standalone path (no wizard onSign prop): local-only state.
     setSignatureDataUrl(dataUrl);
-    setSignedTimestamp(timestamp);
-    setIsSigned(true);
-    onSignatureChange?.({ dataUrl, timestamp });
+    setSignedTimestamp(new Date().toISOString());
+    setLocalIsSigned(true);
   };
 
   return (
     <div className="space-y-4">
-      <div className="mb-2">
-        <h2 className="text-lg font-semibold">Riepilogo Sopralluogo</h2>
-        <p className="text-sm text-muted-foreground">
+      <div className="mb-4">
+        <h2 className="font-heading text-xl font-bold text-on-surface">
+          Riepilogo Sopralluogo
+        </h2>
+        <p className="mt-1 text-sm text-on-surface-variant">
           Verifica i dati inseriti prima di completare il sopralluogo
         </p>
       </div>
@@ -606,7 +686,17 @@ export function StepRiepilogo({
           ) : isSigned ? (
             /* Signed state */
             <div className="space-y-3">
-              <DetailRow label="Data e ora firma" value={formatTimestamp(signedTimestamp!)} />
+              <DetailRow
+                label="Data e ora firma (server)"
+                value={
+                  signedTimestampEffective
+                    ? formatTimestamp(signedTimestampEffective)
+                    : "-"
+                }
+              />
+              {signedByNameProp && (
+                <DetailRow label="Firmato da" value={signedByNameProp} />
+              )}
               {signatureDataUrl && (
                 <div className="rounded-lg border border-input bg-white p-2 dark:bg-muted/30">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -616,6 +706,16 @@ export function StepRiepilogo({
                     className="h-[200px] w-full object-contain"
                   />
                 </div>
+              )}
+              {onOpenRevision && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void onOpenRevision()}
+                >
+                  Apri revisione
+                </Button>
               )}
             </div>
           ) : (
@@ -648,15 +748,17 @@ export function StepRiepilogo({
                   variant="outline"
                   size="sm"
                   onClick={clearCanvas}
+                  disabled={signing}
                 >
                   Cancella firma
                 </Button>
                 <Button
                   type="button"
                   size="sm"
-                  onClick={confirmSignature}
+                  onClick={() => void confirmSignature()}
+                  disabled={signing}
                 >
-                  Conferma firma
+                  {signing ? "Registrazione..." : "Conferma firma"}
                 </Button>
               </div>
             </div>

@@ -1,13 +1,6 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,6 +23,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Pencil, Plus, Trash2, Users } from "lucide-react";
+import { useApi } from "@/hooks/use-api";
 import type { Ambiente, Persona } from "@/types";
 
 interface StepPersoneProps {
@@ -95,12 +89,16 @@ export function StepPersone({
   ambienti,
   onChange,
 }: StepPersoneProps) {
+  const { apiFetch } = useApi();
   // `editing` holds the staged draft when the modal is open.
   // `editingIndex === null` means we're adding a new persona; otherwise we're editing an existing row.
   const [editing, setEditing] = useState<Persona | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [cfError, setCfError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [deleteDialogIndex, setDeleteDialogIndex] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const ambienteById = useCallback(
     (id: string) => ambienti.find((a) => a.id === id),
@@ -111,6 +109,7 @@ export function StepPersone({
     setEditing(createEmptyPersona(aziendaId));
     setEditingIndex(null);
     setCfError(null);
+    setSaveError(null);
   }, [aziendaId]);
 
   const openEdit = useCallback(
@@ -119,6 +118,7 @@ export function StepPersone({
       setEditing({ ...persone[index] });
       setEditingIndex(index);
       setCfError(null);
+      setSaveError(null);
     },
     [persone],
   );
@@ -127,6 +127,7 @@ export function StepPersone({
     setEditing(null);
     setEditingIndex(null);
     setCfError(null);
+    setSaveError(null);
   }, []);
 
   const validateEditing = useCallback((p: Persona): string | null => {
@@ -136,7 +137,13 @@ export function StepPersone({
     return null;
   }, []);
 
-  const saveEditing = useCallback(() => {
+  // Derive CF validity synchronously from the staged value so the Save
+  // button reflects it without needing a blur event (H-01 fix).
+  const cfInvalid = !!(
+    editing?.codice_fiscale && !CF_REGEX.test(editing.codice_fiscale)
+  );
+
+  const saveEditing = useCallback(async () => {
     if (!editing) return;
     const err = validateEditing(editing);
     if (err) {
@@ -147,19 +154,89 @@ export function StepPersone({
       // Required field — surface inline by keeping the modal open.
       return;
     }
-    if (editingIndex === null) {
-      onChange([...persone, editing]);
-    } else {
-      onChange(persone.map((p, i) => (i === editingIndex ? editing : p)));
+    setSaveError(null);
+    setSaving(true);
+    try {
+      // Payload matches PersonaCreate / PersonaUpdate schemas on the backend.
+      const payload = {
+        nominativo: editing.nominativo,
+        codice_fiscale: editing.codice_fiscale,
+        mansione: editing.mansione,
+        tipologia_contrattuale: editing.tipologia_contrattuale,
+        sesso: editing.sesso,
+        fascia_eta: editing.fascia_eta,
+        ruolo_rspp: editing.ruolo_rspp,
+        ruolo_rls: editing.ruolo_rls,
+        ruolo_primo_soccorso: editing.ruolo_primo_soccorso,
+        ruolo_antincendio: editing.ruolo_antincendio,
+        ruolo_preposto: editing.ruolo_preposto,
+        ruolo_datore_lavoro: editing.ruolo_datore_lavoro,
+        qualifiche: editing.qualifiche,
+        ambiente_ids: editing.ambiente_ids,
+      };
+      if (editingIndex === null) {
+        const created = await apiFetch<Persona>(
+          `/api/v1/aziende/${aziendaId}/persone`,
+          {
+            method: "POST",
+            body: JSON.stringify(payload),
+          },
+        );
+        onChange([...persone, created]);
+      } else {
+        const existing = persone[editingIndex];
+        const updated = await apiFetch<Persona>(
+          `/api/v1/aziende/${aziendaId}/persone/${existing.id}`,
+          {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          },
+        );
+        onChange(persone.map((p, i) => (i === editingIndex ? updated : p)));
+      }
+      closeModal();
+    } catch (e) {
+      setSaveError(
+        e instanceof Error ? e.message : "Errore durante il salvataggio",
+      );
+    } finally {
+      setSaving(false);
     }
-    closeModal();
-  }, [editing, editingIndex, onChange, persone, validateEditing, closeModal]);
+  }, [
+    editing,
+    editingIndex,
+    onChange,
+    persone,
+    validateEditing,
+    closeModal,
+    apiFetch,
+    aziendaId,
+  ]);
 
   const removePersona = useCallback(
-    (index: number) => {
-      onChange(persone.filter((_, i) => i !== index));
+    async (index: number) => {
+      const target = persone[index];
+      setDeleting(true);
+      try {
+        await apiFetch(
+          `/api/v1/aziende/${aziendaId}/persone/${target.id}`,
+          { method: "DELETE" },
+        );
+        onChange(persone.filter((_, i) => i !== index));
+        setDeleteDialogIndex(null);
+      } catch (e) {
+        // Surface the failure via alert so the operator knows the server
+        // rejected the delete (e.g., FK constraint). Row stays in the table.
+        alert(
+          e instanceof Error
+            ? `Errore eliminazione: ${e.message}`
+            : "Errore eliminazione",
+        );
+      } finally {
+        setDeleting(false);
+      }
     },
-    [persone, onChange],
+    [persone, onChange, apiFetch, aziendaId],
   );
 
   const updateEditing = useCallback((fields: Partial<Persona>) => {
@@ -184,23 +261,23 @@ export function StepPersone({
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Persone</CardTitle>
-              <CardDescription>
-                Gestisci l&apos;elenco dei dipendenti e i relativi ruoli di
-                sicurezza
-              </CardDescription>
-            </div>
-            <Button onClick={openAdd}>
-              <Plus className="mr-2 h-4 w-4" />
-              Aggiungi persona
-            </Button>
+      <div>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h3 className="font-heading text-xl font-bold text-on-surface">
+              Persone
+            </h3>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Gestisci l&apos;elenco dei dipendenti e i relativi ruoli di
+              sicurezza
+            </p>
           </div>
-        </CardHeader>
-        <CardContent>
+          <Button onClick={openAdd}>
+            <Plus className="mr-2 h-4 w-4" />
+            Aggiungi persona
+          </Button>
+        </div>
+        <div>
           {persone.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 py-10 text-center text-muted-foreground">
               <Users className="h-10 w-10 opacity-40" />
@@ -278,8 +355,8 @@ export function StepPersone({
               </TableBody>
             </Table>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Add/Edit modal */}
       <Dialog
@@ -334,10 +411,18 @@ export function StepPersone({
                       }
                     }}
                     placeholder="Es. RSSMRA80A01H501U"
-                    className={cfError ? "border-destructive" : ""}
+                    maxLength={16}
+                    className={
+                      cfError || cfInvalid ? "border-destructive" : ""
+                    }
                   />
-                  {cfError && (
-                    <p className="text-xs text-destructive">{cfError}</p>
+                  {(cfError ||
+                    (cfInvalid &&
+                      "Codice fiscale non valido (16 caratteri alfanumerici)")) && (
+                    <p className="text-xs text-destructive">
+                      {cfError ??
+                        "Codice fiscale non valido (16 caratteri alfanumerici)"}
+                    </p>
                   )}
                 </div>
 
@@ -484,15 +569,23 @@ export function StepPersone({
             </div>
           )}
 
+          {saveError && (
+            <p className="text-sm text-destructive">{saveError}</p>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={closeModal}>
+            <Button variant="outline" onClick={closeModal} disabled={saving}>
               Annulla
             </Button>
             <Button
               onClick={saveEditing}
-              disabled={!editing || !editing.nominativo.trim()}
+              disabled={
+                !editing ||
+                !editing.nominativo.trim() ||
+                cfInvalid ||
+                saving
+              }
             >
-              Salva
+              {saving ? "Salvataggio..." : "Salva"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -502,7 +595,7 @@ export function StepPersone({
       <Dialog
         open={deleteDialogIndex !== null}
         onOpenChange={(open) => {
-          if (!open) setDeleteDialogIndex(null);
+          if (!open && !deleting) setDeleteDialogIndex(null);
         }}
       >
         <DialogContent showCloseButton={false}>
@@ -521,19 +614,20 @@ export function StepPersone({
             <Button
               variant="outline"
               onClick={() => setDeleteDialogIndex(null)}
+              disabled={deleting}
             >
               Annulla
             </Button>
             <Button
               variant="destructive"
+              disabled={deleting}
               onClick={() => {
                 if (deleteDialogIndex !== null) {
                   removePersona(deleteDialogIndex);
-                  setDeleteDialogIndex(null);
                 }
               }}
             >
-              Elimina
+              {deleting ? "Eliminazione..." : "Elimina"}
             </Button>
           </DialogFooter>
         </DialogContent>
