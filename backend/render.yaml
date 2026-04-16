@@ -1,8 +1,9 @@
 databases:
   - name: n2o-dvr-db
-    plan: starter
+    plan: basic-256mb  # legacy 'starter' was retired; basic-256mb is the new entry tier
     databaseName: n2o
     user: n2o_user
+    ipAllowList: []    # internal-only; reached by n2o-dvr-api + n2o-dvr-worker over private network
 
 services:
   - type: web
