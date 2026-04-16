@@ -93,6 +93,8 @@ services:
         generateValue: true
       - key: NEXTAUTH_URL
         value: https://n2o-dvr-frontend.onrender.com
+      - key: AUTH_TRUST_HOST
+        value: "true"  # Auth.js v5 requires this behind Render's reverse proxy (UntrustedHost error otherwise)
 
   - type: redis
     name: n2o-dvr-redis
