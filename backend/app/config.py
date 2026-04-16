@@ -13,7 +13,10 @@ class Settings(BaseSettings):
     # Auth
     AUTH_SECRET: str = "change-me-in-production"
     AUTH_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    # 7 days. NextAuth doesn't refresh the backend JWT on its own, so at a
+    # 60-min TTL users get bounced mid-session; 7d matches typical SaaS UX
+    # without a refresh endpoint.
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
 
     # OpenAI
     OPENAI_API_KEY: str = ""

@@ -10,7 +10,9 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
     full_name: str
-    organization_name: str
+    # Optional: the register form allows an empty "organization" input and
+    # sends null. The endpoint falls back to "{full_name}'s Organization".
+    organization_name: str | None = None
 
 
 class TokenResponse(BaseModel):

@@ -121,6 +121,18 @@ async def record_feedback(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> AiFeedback:
+    # Guard against feedback referencing an azienda from another org —
+    # without this check, an operator could write rows tagged with any
+    # azienda UUID they know.
+    if body.azienda_id is not None:
+        owner = await db.execute(
+            select(Azienda.organization_id).where(Azienda.id == body.azienda_id)
+        )
+        azienda_org = owner.scalar_one_or_none()
+        if azienda_org is None or azienda_org != user.organization_id:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Azienda not found")
+
     feedback = AiFeedback(
         organization_id=user.organization_id,
         azienda_id=body.azienda_id,
@@ -139,14 +151,14 @@ async def record_feedback(
 
 @router.get("/admin/summary", response_model=FeedbackSummary)
 async def get_feedback_summary(
-    _user: User = Depends(require_role("admin")),
+    user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> FeedbackSummary:
     """Per-entity-type counts of thumbs_down / thumbs_up.
 
     Drives the admin AI Feedback panel KPI cards so the team can see at a
     glance which AI surfaces (misure_suggerita, company_description, etc.)
-    are getting rejected most.
+    are getting rejected most. Scoped to the admin's organization.
     """
     stmt = (
         select(
@@ -154,6 +166,7 @@ async def get_feedback_summary(
             AiFeedback.signal,
             func.count(AiFeedback.id),
         )
+        .where(AiFeedback.organization_id == user.organization_id)
         .group_by(AiFeedback.entity_type, AiFeedback.signal)
     )
     result = await db.execute(stmt)
@@ -188,7 +201,7 @@ async def get_recent_feedback(
         description="Filter by signal kind. Default is thumbs_down so the panel surfaces rejections.",
     ),
     limit: int = Query(default=50, ge=1, le=200),
-    _user: User = Depends(require_role("admin")),
+    user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> list[RecentFeedbackRow]:
     """Recent feedback entries with joined azienda + user labels.
@@ -210,6 +223,7 @@ async def get_recent_feedback(
         )
         .join(Azienda, Azienda.id == AiFeedback.azienda_id, isouter=True)
         .join(User, User.id == AiFeedback.user_id, isouter=True)
+        .where(AiFeedback.organization_id == user.organization_id)
     )
     if signal is not None:
         stmt = stmt.where(AiFeedback.signal == signal)

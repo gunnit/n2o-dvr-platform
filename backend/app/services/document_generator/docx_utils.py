@@ -49,7 +49,19 @@ LIGHT_GRAY = RGBColor(0xF5, 0xF5, 0xF5)
 
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
 REPO_ROOT = BACKEND_ROOT.parent
-TEMPLATES_DIR = REPO_ROOT / "templates"
+
+
+def _resolve_templates_dir() -> Path:
+    # On Render the service root is `backend/`, so the sibling `templates/`
+    # folder only exists if the buildCommand copied it in. Prefer that
+    # in-backend copy; fall back to the repo-root location for local dev.
+    for candidate in (BACKEND_ROOT / "templates", REPO_ROOT / "templates"):
+        if candidate.is_dir():
+            return candidate
+    return REPO_ROOT / "templates"
+
+
+TEMPLATES_DIR = _resolve_templates_dir()
 LOGO_PATH = BACKEND_ROOT / "assets" / "logo.png"
 
 

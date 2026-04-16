@@ -24,21 +24,26 @@ log = logging.getLogger(__name__)
 
 
 def _token_path() -> Path:
-    """Resolve the token.json location."""
-    # Try env override first
+    """Resolve the token.json location.
+
+    Priority: GOOGLE_DRIVE_TOKEN_JSON env var (used on Render to point at a
+    mounted Secret File) → `backend/../credentials/token.json` for local dev.
+    """
     env = os.environ.get("GOOGLE_DRIVE_TOKEN_JSON")
     if env:
         p = Path(env)
         if p.exists():
             return p
-    # Common location inside repo
-    for candidate in [
-        Path("/mnt/c/Dev/dlg/credentials/token.json"),
-        Path(__file__).resolve().parents[3] / "credentials" / "token.json",
-    ]:
-        if candidate.exists():
-            return candidate
+    local = Path(__file__).resolve().parents[3] / "credentials" / "token.json"
+    if local.exists():
+        return local
     return Path("/does-not-exist")
+
+
+def _escape_drive_query_literal(value: str) -> str:
+    # Drive's v3 `q=` filters wrap string literals in single quotes. An
+    # unescaped apostrophe in e.g. "S'AGOSTINO SRL" crashes the request.
+    return value.replace("\\", "\\\\").replace("'", "\\'")
 
 
 def _load_credentials():
@@ -72,10 +77,12 @@ def _load_credentials():
 
 def _get_or_create_folder(service, parent_folder_id: str, folder_name: str) -> Optional[str]:
     """Return folder id; create under parent if missing."""
+    safe_name = _escape_drive_query_literal(folder_name)
+    safe_parent = _escape_drive_query_literal(parent_folder_id)
     query = (
-        f"name = '{folder_name}' and "
+        f"name = '{safe_name}' and "
         f"mimeType = 'application/vnd.google-apps.folder' and "
-        f"'{parent_folder_id}' in parents and trashed = false"
+        f"'{safe_parent}' in parents and trashed = false"
     )
     resp = service.files().list(q=query, spaces="drive", fields="files(id, name)").execute()
     files = resp.get("files", [])
@@ -112,7 +119,9 @@ def _upload_sync(doc_tipo: str, azienda_ragione_sociale: str, local_path: str) -
 
         filename = os.path.basename(local_path)
         # Check if file with same name already exists in folder (for versioning)
-        query = f"name = '{filename}' and '{company_folder_id}' in parents and trashed = false"
+        safe_filename = _escape_drive_query_literal(filename)
+        safe_folder = _escape_drive_query_literal(company_folder_id)
+        query = f"name = '{safe_filename}' and '{safe_folder}' in parents and trashed = false"
         existing = service.files().list(q=query, fields="files(id)").execute().get("files", [])
         if existing:
             # Skip re-upload; return existing id

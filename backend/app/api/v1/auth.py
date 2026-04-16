@@ -18,7 +18,8 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    org = Organization(name=body.organization_name)
+    org_name = (body.organization_name or "").strip() or f"{body.full_name}'s Organization"
+    org = Organization(name=org_name)
     db.add(org)
     await db.flush()
 
