@@ -1,6 +1,7 @@
 databases:
   - name: n2o-dvr-db
     plan: basic-256mb  # legacy 'starter' was retired; basic-256mb is the new entry tier
+    region: frankfurt  # EU region — N2O client is Italian
     databaseName: n2o
     user: n2o_user
     ipAllowList: []    # internal-only; reached by n2o-dvr-api + n2o-dvr-worker over private network
@@ -10,6 +11,7 @@ services:
     name: n2o-dvr-api
     runtime: python
     plan: starter
+    region: frankfurt
     # The docx generators read real .docx templates from backend/templates.
     # The repo keeps them at the root — copy into the build root so they're
     # available at runtime. See docx_utils._resolve_templates_dir.
@@ -43,6 +45,7 @@ services:
     name: n2o-dvr-worker
     runtime: python
     plan: starter
+    region: frankfurt
     buildCommand: cp -r ../templates ./templates && pip install -r requirements.txt
     startCommand: celery -A app.celery_app worker --loglevel=info --concurrency=2
     envVars:
@@ -74,5 +77,6 @@ services:
   - type: redis
     name: n2o-dvr-redis
     plan: starter
+    region: frankfurt
     maxmemoryPolicy: noeviction
     ipAllowList: []  # internal-only; reached by n2o-dvr-api + n2o-dvr-worker over private network
