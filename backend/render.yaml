@@ -12,9 +12,10 @@ services:
     runtime: python
     plan: starter
     region: frankfurt
+    rootDir: backend
     # The docx generators read real .docx templates from backend/templates.
-    # The repo keeps them at the root — copy into the build root so they're
-    # available at runtime. See docx_utils._resolve_templates_dir.
+    # The repo keeps them at the root — rootDir is backend/, so ../templates
+    # resolves to the repo's templates/ dir. See docx_utils._resolve_templates_dir.
     buildCommand: cp -r ../templates ./templates && pip install -r requirements.txt
     preDeployCommand: alembic upgrade head
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
@@ -46,6 +47,7 @@ services:
     runtime: python
     plan: starter
     region: frankfurt
+    rootDir: backend
     buildCommand: cp -r ../templates ./templates && pip install -r requirements.txt
     startCommand: celery -A app.celery_app worker --loglevel=info --concurrency=2
     envVars:
