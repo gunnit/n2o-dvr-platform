@@ -7,10 +7,13 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.config import settings
 from app.db.base import Base
+from app.db.session import _normalize_async_url
 from app.models import *  # noqa: F401, F403 — ensure all models are registered
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Render hands us postgres://… — normalize to postgresql+asyncpg:// so alembic
+# doesn't try to import psycopg2. See session.py for the same normalization.
+config.set_main_option("sqlalchemy.url", _normalize_async_url(settings.DATABASE_URL))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
