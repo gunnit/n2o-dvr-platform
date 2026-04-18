@@ -74,7 +74,7 @@ export default function MicroclimaAssessmentPage() {
             <Badge variant="secondary">Allegato Microclima</Badge>
             <span>D.Lgs. 81/2008 · ISO 7730 / ISO 7933</span>
           </div>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">
+          <h1 className="mt-2 type-h1">
             Valutazione Microclima
           </h1>
           <p className="text-sm text-muted-foreground">{pageSubtitle}</p>

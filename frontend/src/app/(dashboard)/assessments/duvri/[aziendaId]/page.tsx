@@ -463,7 +463,7 @@ export default function DuvriListPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">DUVRI - Appalti</h1>
+          <h1 className="type-h1">DUVRI - Appalti</h1>
           <p className="text-sm text-muted-foreground">
             Un documento DUVRI per ogni contratto di appalto. I dati del
             committente sono ereditati automaticamente dall&apos;azienda.

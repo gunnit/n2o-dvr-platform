@@ -98,7 +98,7 @@ export default function SurveyAziendaPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="type-h1">
             Sopralluogo
           </h1>
           <p className="text-muted-foreground">Caricamento in corso...</p>
@@ -114,7 +114,7 @@ export default function SurveyAziendaPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="type-h1">
             Sopralluogo
           </h1>
           <p className="text-muted-foreground">
@@ -131,7 +131,7 @@ export default function SurveyAziendaPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="type-h1">
           Sopralluogo
         </h1>
         <p className="text-muted-foreground">

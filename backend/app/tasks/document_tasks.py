@@ -85,6 +85,15 @@ async def _run_generation(document_id: uuid.UUID) -> None:
 
             doc.status = "completed"
             doc.file_path = output_path
+            doc.file_name = os.path.basename(output_path)
+            # Store bytes in Postgres so the API service can serve downloads
+            # without needing access to the worker's filesystem (on Render
+            # they run on separate disks).
+            try:
+                with open(output_path, "rb") as f:
+                    doc.file_content = f.read()
+            except OSError as read_err:
+                logger.warning("Could not read generated file into DB: %s", read_err)
             doc.generation_completed_at = datetime.utcnow()
             # US-5.2 AC2 — re-hash and flag drift. If the survey changed
             # while the generator was running, the documents page will
@@ -134,6 +143,8 @@ async def _run_generation(document_id: uuid.UUID) -> None:
 
             doc.status = "bozza"
             doc.file_path = None
+            doc.file_content = None
+            doc.file_name = None
             doc.error_message = _friendly_error_for(e)
             doc.generation_completed_at = datetime.utcnow()
             await db.commit()

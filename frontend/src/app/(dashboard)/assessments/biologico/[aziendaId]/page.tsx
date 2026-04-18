@@ -172,7 +172,7 @@ export default function BiologicoAssessmentPage({
               </Badge>
             )}
           </div>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">
+          <h1 className="mt-2 type-h1">
             Valutazione Rischio Biologico
           </h1>
           <p className="text-sm text-muted-foreground">{pageSubtitle}</p>

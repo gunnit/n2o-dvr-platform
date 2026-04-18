@@ -17,22 +17,22 @@ export function Header({
   actions?: React.ReactNode;
 }) {
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center justify-between bg-white/80 px-8 font-heading text-sm tracking-tight shadow-sm backdrop-blur-xl">
-      <nav className="flex min-w-0 items-center gap-2 text-on-surface-variant" aria-label="Breadcrumb">
+    <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-[#e5edf5] bg-white/90 px-8 text-[13px] backdrop-blur-xl">
+      <nav className="flex min-w-0 items-center gap-2 text-[#64748d]" aria-label="Breadcrumb">
         {breadcrumbs.length === 0 ? (
-          <span className="font-bold text-primary-container">Dashboard</span>
+          <span className="font-medium text-[#061b31]">Dashboard</span>
         ) : (
           breadcrumbs.map((crumb, i) => {
             const isLast = i === breadcrumbs.length - 1;
             return (
               <span key={`${crumb.label}-${i}`} className="flex items-center gap-2">
-                {i > 0 && <ChevronRight className="h-4 w-4 shrink-0 text-on-surface-variant/50" strokeWidth={2} />}
+                {i > 0 && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#c2c6d2]" strokeWidth={2} />}
                 {isLast ? (
-                  <span className="truncate font-bold text-primary-container">{crumb.label}</span>
+                  <span className="truncate font-medium text-[#061b31]">{crumb.label}</span>
                 ) : crumb.href ? (
                   <Link
                     href={crumb.href}
-                    className="truncate transition-colors hover:text-primary-container"
+                    className="truncate transition-colors hover:text-primary"
                   >
                     {crumb.label}
                   </Link>

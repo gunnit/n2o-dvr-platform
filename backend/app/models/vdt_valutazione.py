@@ -4,14 +4,20 @@ Lavoratore esposto se uso VDT >= 20 ore/settimana (D.Lgs. 81/2008 art. 173).
 One row per workstation/worker.
 """
 
+from __future__ import annotations
+
 import uuid
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.azienda import Azienda
 
 
 class VdtValutazione(Base):
@@ -19,6 +25,7 @@ class VdtValutazione(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     azienda_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("aziende.id", ondelete="CASCADE"))
+    azienda: Mapped[Azienda] = relationship(lazy="raise")
     persona_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("persone.id", ondelete="SET NULL"))
     ambiente_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("ambienti.id", ondelete="SET NULL"))
     postazione: Mapped[str] = mapped_column(String, nullable=False)

@@ -264,7 +264,7 @@ export default function PosDpiMatrixPage() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">POS — Cantiere</h1>
+        <h1 className="type-h1">POS — Cantiere</h1>
         <p className="text-sm text-muted-foreground">
           Costruisci le fasi lavorative del cantiere (US-4.7) e personalizza
           la matrice DPI per ruolo / fase (US-4.8). Le modifiche al phase

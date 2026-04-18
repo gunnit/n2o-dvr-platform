@@ -109,10 +109,10 @@ export default function NewAziendaPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Nuova Azienda</h1>
-        <p className="text-muted-foreground">Registra una nuova azienda cliente</p>
+        <h1 className="type-h1">Nuova Azienda</h1>
+        <p className="type-body mt-2">Registra una nuova azienda cliente</p>
       </div>
 
       <Card>
@@ -120,7 +120,7 @@ export default function NewAziendaPage() {
           <CardTitle>Dati Azienda</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-7">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="ragione_sociale">Ragione Sociale *</Label>
@@ -167,10 +167,10 @@ export default function NewAziendaPage() {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold">Sede Legale</h3>
+            <div className="space-y-3 border-t border-[#e5edf5] pt-6">
+              <h3 className="type-eyebrow">Sede Legale</h3>
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="sede_legale_via">Via / Indirizzo</Label>
                   <Input
                     id="sede_legale_via"
@@ -178,7 +178,7 @@ export default function NewAziendaPage() {
                     placeholder="Es. Via dei Chiosi 4"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="sede_legale_citta">Citt&agrave;</Label>
                   <Input
                     id="sede_legale_citta"
@@ -189,10 +189,10 @@ export default function NewAziendaPage() {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold">Sede Operativa</h3>
+            <div className="space-y-3 border-t border-[#e5edf5] pt-6">
+              <h3 className="type-eyebrow">Sede Operativa</h3>
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="sede_operativa_via">Via / Indirizzo</Label>
                   <Input
                     id="sede_operativa_via"
@@ -200,7 +200,7 @@ export default function NewAziendaPage() {
                     placeholder="Es. Via Milano 5"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="sede_operativa_citta">Citt&agrave;</Label>
                   <Input
                     id="sede_operativa_citta"
@@ -211,8 +211,8 @@ export default function NewAziendaPage() {
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="space-y-2">
+            <div className="grid gap-4 border-t border-[#e5edf5] pt-6 sm:grid-cols-3">
+              <div className="space-y-1.5">
                 <Label htmlFor="orario_lavoro">Orario di Lavoro</Label>
                 <Input
                   id="orario_lavoro"
@@ -220,7 +220,7 @@ export default function NewAziendaPage() {
                   placeholder="Es. 08:00 - 17:00"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="metratura_totale">Metratura Totale (mq)</Label>
                 <Input
                   id="metratura_totale"
@@ -229,14 +229,15 @@ export default function NewAziendaPage() {
                   step="0.1"
                   min="0"
                   placeholder="Es. 250"
+                  className="tnum"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="zona_sismica">Zona Sismica</Label>
                 <select
                   id="zona_sismica"
                   name="zona_sismica"
-                  className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  className="h-10 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-3 py-2 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                   defaultValue=""
                 >
                   <option value="">Seleziona zona</option>
@@ -249,7 +250,7 @@ export default function NewAziendaPage() {
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <div className="flex gap-3">
+            <div className="flex gap-3 border-t border-[#e5edf5] pt-6">
               <Button type="submit" disabled={loading}>
                 {loading ? "Salvataggio..." : "Salva Azienda"}
               </Button>

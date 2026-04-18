@@ -1,10 +1,11 @@
+import io
 import os
 import shutil
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -98,7 +99,13 @@ async def download_document(
     org_id: uuid.UUID = Depends(get_current_org),
     db: AsyncSession = Depends(get_db),
 ):
-    """Stream back the generated file (.docx or .zip)."""
+    """Stream back the generated file (.docx or .zip).
+
+    Prefers the ``file_content`` bytes stored in Postgres (works across
+    Render's separate API / Worker disks). Falls back to ``file_path``
+    on the local filesystem for backwards compatibility with documents
+    generated before the DB-storage migration.
+    """
     result = await db.execute(
         select(DocumentoGenerato)
         .join(Azienda, Azienda.id == DocumentoGenerato.azienda_id)
@@ -107,16 +114,30 @@ async def download_document(
     doc = result.scalar_one_or_none()
     if not doc:
         raise NotFoundError("Document not found")
-    if doc.status != "completed" or not doc.file_path:
+    if doc.status != "completed":
         raise NotFoundError("Document not ready yet")
-    if not os.path.exists(doc.file_path):
-        raise NotFoundError("File missing on disk")
 
-    media_type = "application/zip" if doc.file_path.endswith(".zip") else (
+    # Determine filename and MIME type from whichever source is available
+    filename = doc.file_name or (os.path.basename(doc.file_path) if doc.file_path else None)
+    if not filename:
+        raise NotFoundError("Document not ready yet")
+    media_type = "application/zip" if filename.endswith(".zip") else (
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
-    filename = os.path.basename(doc.file_path)
-    return FileResponse(doc.file_path, media_type=media_type, filename=filename)
+
+    # Prefer DB content (works cross-service on Render)
+    if doc.file_content:
+        return StreamingResponse(
+            io.BytesIO(doc.file_content),
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    # Fallback: serve from local disk (pre-migration documents or local dev)
+    if doc.file_path and os.path.exists(doc.file_path):
+        return FileResponse(doc.file_path, media_type=media_type, filename=filename)
+
+    raise NotFoundError("File non disponibile. Rigenera il documento.")
 
 
 async def _get_azienda(azienda_id: uuid.UUID, org_id: uuid.UUID, db: AsyncSession) -> Azienda:
@@ -334,7 +355,15 @@ async def get_document_snapshot(
     doc = result.scalar_one_or_none()
     if not doc:
         raise NotFoundError("Document not found")
-    if not doc.file_path or not os.path.exists(doc.file_path):
+
+    # Resolve the document source — DB content or disk file
+    file_source: io.BytesIO | str | None = None
+    filename = doc.file_name or (os.path.basename(doc.file_path) if doc.file_path else "")
+    if doc.file_content:
+        file_source = io.BytesIO(doc.file_content)
+    elif doc.file_path and os.path.exists(doc.file_path):
+        file_source = doc.file_path
+    else:
         raise NotFoundError("Snapshot non disponibile per questo documento")
 
     paragraphs: list[str] = []
@@ -342,11 +371,11 @@ async def get_document_snapshot(
     # Only parse .docx files; .zip bundles (e.g. haccp_forms) are not
     # structurally diffable — fall back to empty lists so the frontend
     # can still show the metadata header.
-    if doc.file_path.endswith(".docx"):
+    if filename.endswith(".docx"):
         try:
             from docx import Document
 
-            document = Document(doc.file_path)
+            document = Document(file_source)
             paragraphs = [p.text for p in document.paragraphs if p.text.strip()]
             for table in document.tables:
                 rows: list[list[str]] = []
@@ -397,7 +426,7 @@ async def restore_document(
     source = result.scalar_one_or_none()
     if not source:
         raise NotFoundError("Document not found")
-    if not source.file_path or not os.path.exists(source.file_path):
+    if not source.file_content and (not source.file_path or not os.path.exists(source.file_path)):
         raise BadRequestError("Impossibile ripristinare una bozza")
 
     # Next version number for this document type
@@ -413,16 +442,34 @@ async def restore_document(
     latest = result.scalar_one_or_none()
     next_version = (latest.versione + 1) if latest else 1
 
-    # Fresh copy on disk — isolate the new version from the source file
-    # so later regenerations / deletes don't affect it.
-    src_dir, src_name = os.path.split(source.file_path)
+    # Build restored filename
+    src_name = source.file_name or (os.path.basename(source.file_path) if source.file_path else f"{source.tipo_documento}_v{source.versione}")
     stem, ext = os.path.splitext(src_name)
     new_name = f"{stem}_v{next_version}_restored{ext}"
-    new_path = os.path.join(src_dir, new_name)
-    try:
-        shutil.copy2(source.file_path, new_path)
-    except OSError as exc:  # pragma: no cover — filesystem-level failure
-        raise BadRequestError(f"Copia del file fallita: {exc}") from exc
+
+    # Copy the file content (prefer DB, fall back to disk)
+    restored_content: bytes | None = source.file_content
+    new_path: str | None = None
+    if not restored_content and source.file_path and os.path.exists(source.file_path):
+        try:
+            with open(source.file_path, "rb") as f:
+                restored_content = f.read()
+        except OSError as exc:
+            raise BadRequestError(f"Copia del file fallita: {exc}") from exc
+
+    # Also write to disk if local filesystem is available (backwards compat)
+    if source.file_path:
+        src_dir = os.path.dirname(source.file_path)
+        new_path = os.path.join(src_dir, new_name)
+        try:
+            if restored_content:
+                os.makedirs(src_dir, exist_ok=True)
+                with open(new_path, "wb") as f:
+                    f.write(restored_content)
+            elif os.path.exists(source.file_path):
+                shutil.copy2(source.file_path, new_path)
+        except OSError:
+            new_path = None  # disk write failed, DB content will suffice
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     new_doc = DocumentoGenerato(
@@ -431,6 +478,8 @@ async def restore_document(
         versione=next_version,
         status="completed",
         file_path=new_path,
+        file_content=restored_content,
+        file_name=new_name,
         error_message=None,
         generated_by=user.id,
         generation_started_at=now,

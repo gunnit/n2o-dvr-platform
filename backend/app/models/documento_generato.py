@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, ForeignKey, Integer, LargeBinary, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +22,11 @@ class DocumentoGenerato(Base):
     # carries a short Italian explanation for the operator.
     status: Mapped[str] = mapped_column(String, default="pending")
     file_path: Mapped[str | None] = mapped_column(String)
+    # Document bytes stored in Postgres so the API service can serve downloads
+    # without sharing a filesystem with the Celery worker (Render deploys them
+    # on separate disks).
+    file_content: Mapped[bytes | None] = mapped_column(LargeBinary)
+    file_name: Mapped[str | None] = mapped_column(String)
     gdrive_file_id: Mapped[str | None] = mapped_column(String)
     error_message: Mapped[str | None] = mapped_column(Text)
     # US-4.4: optional per-generation configuration dict. Currently used by

@@ -146,7 +146,7 @@ export default function VdtAssessmentPage() {
             <Badge variant="secondary">Allegato Rischio VDT</Badge>
             <span>D.Lgs. 81/2008 Titolo VII · ISO 9241</span>
           </div>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">
+          <h1 className="mt-2 type-h1">
             Valutazione Esposizione Videoterminali
           </h1>
           <p className="text-sm text-muted-foreground">{pageSubtitle}</p>

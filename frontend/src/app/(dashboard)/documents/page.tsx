@@ -50,25 +50,66 @@ const documentTypes = [
 ];
 
 const complexityColors: Record<string, string> = {
-  Alta: "bg-red-100 text-red-700",
-  Media: "bg-yellow-100 text-yellow-700",
-  Bassa: "bg-green-100 text-green-700",
+  Alta: "bg-[rgba(186,26,26,0.1)] text-[#ba1a1a] border border-[rgba(186,26,26,0.3)]",
+  Media:
+    "bg-[rgba(245,158,11,0.12)] text-[#9b6829] border border-[rgba(245,158,11,0.3)]",
+  Bassa:
+    "bg-[rgba(21,190,83,0.2)] text-[#108c3d] border border-[rgba(21,190,83,0.4)]",
 };
 
 const statusConfig: Record<string, { color: string; label: string; icon: typeof Clock }> = {
-  pending: { color: "bg-gray-100 text-gray-700", label: "In attesa", icon: Clock },
-  in_progress: { color: "bg-yellow-100 text-yellow-700", label: "In generazione", icon: Loader2 },
-  generating: { color: "bg-yellow-100 text-yellow-700", label: "In generazione", icon: Loader2 },
-  completed: { color: "bg-green-100 text-green-700", label: "Pronto", icon: CheckCircle2 },
-  ready: { color: "bg-green-100 text-green-700", label: "Pronto", icon: CheckCircle2 },
+  pending: {
+    color: "bg-[#f6f9fc] text-[#273951] border border-[#e5edf5]",
+    label: "In attesa",
+    icon: Clock,
+  },
+  in_progress: {
+    color:
+      "bg-[rgba(245,158,11,0.12)] text-[#9b6829] border border-[rgba(245,158,11,0.3)]",
+    label: "In generazione",
+    icon: Loader2,
+  },
+  generating: {
+    color:
+      "bg-[rgba(245,158,11,0.12)] text-[#9b6829] border border-[rgba(245,158,11,0.3)]",
+    label: "In generazione",
+    icon: Loader2,
+  },
+  completed: {
+    color:
+      "bg-[rgba(21,190,83,0.2)] text-[#108c3d] border border-[rgba(21,190,83,0.4)]",
+    label: "Pronto",
+    icon: CheckCircle2,
+  },
+  ready: {
+    color:
+      "bg-[rgba(21,190,83,0.2)] text-[#108c3d] border border-[rgba(21,190,83,0.4)]",
+    label: "Pronto",
+    icon: CheckCircle2,
+  },
   // US-2.8 AC3: a failed attempt is rolled back to "bozza" — partial
   // file discarded, record retained so the operator can retry without
   // starting from scratch. Amber rather than red because the record is
   // still usable (retry is available); red is reserved for non-recoverable
   // legacy "failed" rows that predate the rollback logic.
-  bozza: { color: "bg-amber-100 text-amber-800", label: "Bozza", icon: AlertCircle },
-  failed: { color: "bg-red-100 text-red-700", label: "Errore", icon: AlertCircle },
-  error: { color: "bg-red-100 text-red-700", label: "Errore", icon: AlertCircle },
+  bozza: {
+    color:
+      "bg-[rgba(245,158,11,0.12)] text-[#9b6829] border border-[rgba(245,158,11,0.3)]",
+    label: "Bozza",
+    icon: AlertCircle,
+  },
+  failed: {
+    color:
+      "bg-[rgba(186,26,26,0.1)] text-[#ba1a1a] border border-[rgba(186,26,26,0.3)]",
+    label: "Errore",
+    icon: AlertCircle,
+  },
+  error: {
+    color:
+      "bg-[rgba(186,26,26,0.1)] text-[#ba1a1a] border border-[rgba(186,26,26,0.3)]",
+    label: "Errore",
+    icon: AlertCircle,
+  },
 };
 
 export default function DocumentsPage() {
@@ -265,12 +306,10 @@ export default function DocumentsPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-6">
         <div>
-          <h1 className="font-heading text-3xl font-bold text-on-surface">
-            Documenti
-          </h1>
-          <p className="mt-1 text-sm text-on-surface-variant">
+          <h1 className="type-h1">Documenti</h1>
+          <p className="type-body mt-2">
             Genera i documenti di sicurezza per le aziende clienti
           </p>
         </div>
@@ -279,7 +318,7 @@ export default function DocumentsPage() {
             type="button"
             onClick={handleGenerateAll}
             disabled={generatingAll}
-            className="flex items-center gap-2 rounded-lg bg-primary-container px-5 py-2.5 text-sm font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white shadow-stripe-ambient transition-colors hover:bg-[#1b5594] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {generatingAll ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -292,13 +331,13 @@ export default function DocumentsPage() {
       </div>
 
       {/* Azienda Selector */}
-      <div className="rounded-xl bg-white p-6 ambient-shadow">
+      <div className="rounded-md border border-[#e5edf5] bg-white p-6 shadow-stripe-ambient">
         <div className="space-y-2">
           <Label htmlFor="azienda-select">Seleziona Azienda</Label>
           {loadingAziende ? (
-            <p className="text-sm text-on-surface-variant">Caricamento aziende...</p>
+            <p className="text-sm text-[#64748d]">Caricamento aziende...</p>
           ) : aziende.length === 0 ? (
-            <p className="text-sm text-on-surface-variant">
+            <p className="text-sm text-[#64748d]">
               Nessuna azienda registrata. Aggiungi un&apos;azienda per iniziare.
             </p>
           ) : (
@@ -323,8 +362,8 @@ export default function DocumentsPage() {
       {/* Document Grid */}
       {!selectedAziendaId ? (
         <div className="flex flex-col items-center justify-center rounded-xl bg-white py-12 ambient-shadow">
-          <FileText className="mb-3 h-10 w-10 text-on-surface-variant opacity-40" />
-          <p className="text-on-surface-variant">
+          <FileText className="mb-3 h-10 w-10 text-[#64748d] opacity-40" />
+          <p className="text-[#64748d]">
             Seleziona un&apos;azienda per visualizzare e generare i documenti
           </p>
         </div>

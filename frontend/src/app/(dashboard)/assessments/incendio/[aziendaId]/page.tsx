@@ -188,7 +188,7 @@ export default function IncendioAssessmentPage() {
             <Badge variant="secondary">Allegato Rischio Incendio</Badge>
             <span>D.Lgs. 81/2008 · D.M. 03/09/2021</span>
           </div>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">
+          <h1 className="mt-2 type-h1">
             Valutazione Rischio Incendio
           </h1>
           <p className="text-sm text-muted-foreground">{pageSubtitle}</p>

@@ -131,7 +131,7 @@ export default function MmcAssessmentPage() {
             <Badge variant="secondary">Allegato Rischio MMC</Badge>
             <span>D.Lgs. 81/2008 · NIOSH ISO 11228-1</span>
           </div>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">
+          <h1 className="mt-2 type-h1">
             Valutazione Movimentazione Manuale dei Carichi
           </h1>
           <p className="text-sm text-muted-foreground">{pageSubtitle}</p>

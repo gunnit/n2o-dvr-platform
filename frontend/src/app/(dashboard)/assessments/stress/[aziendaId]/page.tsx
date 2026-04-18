@@ -392,7 +392,7 @@ export default function StressAssessmentPage() {
             <Badge variant="secondary">Allegato Stress Lavoro-Correlato</Badge>
             <span>D.Lgs. 81/2008 · INAIL Metodo Indicatori Oggettivi</span>
           </div>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">
+          <h1 className="mt-2 type-h1">
             Valutazione Stress Lavoro-Correlato
           </h1>
           <p className="text-sm text-muted-foreground">{pageSubtitle}</p>

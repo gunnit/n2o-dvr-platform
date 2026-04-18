@@ -49,9 +49,12 @@ type SortKey =
 type SortDir = "asc" | "desc";
 
 const statusColors: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-700",
-  in_progress: "bg-yellow-100 text-yellow-700",
-  completed: "bg-green-100 text-green-700",
+  draft:
+    "bg-[#f6f9fc] text-[#273951] border border-[#e5edf5]",
+  in_progress:
+    "bg-[rgba(245,158,11,0.12)] text-[#9b6829] border border-[rgba(245,158,11,0.3)]",
+  completed:
+    "bg-[rgba(21,190,83,0.2)] text-[#108c3d] border border-[rgba(21,190,83,0.4)]",
 };
 
 const statusLabels: Record<string, string> = {
@@ -79,10 +82,14 @@ function daysUntil(iso: string | null): number | null {
 }
 
 function scadenzaChipClass(days: number | null): string {
-  if (days === null) return "bg-gray-100 text-gray-500";
-  if (days <= 7) return "bg-red-100 text-red-700";
-  if (days <= 30) return "bg-amber-100 text-amber-700";
-  return "bg-gray-100 text-gray-600";
+  const base = "tnum border";
+  if (days === null)
+    return `${base} bg-[#f6f9fc] text-[#64748d] border-[#e5edf5]`;
+  if (days <= 7)
+    return `${base} bg-[rgba(186,26,26,0.1)] text-[#ba1a1a] border-[rgba(186,26,26,0.3)]`;
+  if (days <= 30)
+    return `${base} bg-[rgba(245,158,11,0.12)] text-[#9b6829] border-[rgba(245,158,11,0.3)]`;
+  return `${base} bg-[#f6f9fc] text-[#64748d] border-[#e5edf5]`;
 }
 
 export default function DashboardPage() {
@@ -134,35 +141,35 @@ export default function DashboardPage() {
         value: total,
         icon: Building2,
         description: "Aziende registrate",
-        accent: "text-blue-600",
+        accent: "text-primary",
       },
       {
         name: "Sopralluoghi in corso",
         value: inProgress,
         icon: Users,
         description: "In fase di compilazione",
-        accent: "text-yellow-600",
+        accent: "text-[#9b6829]",
       },
       {
         name: "Sopralluoghi completati",
         value: completed,
         icon: FileCheck,
         description: "Pronti per generazione",
-        accent: "text-green-600",
+        accent: "text-[#108c3d]",
       },
       {
         name: "Bozze",
         value: drafts,
         icon: FileText,
         description: "Da completare",
-        accent: "text-gray-500",
+        accent: "text-[#64748d]",
       },
       {
         name: "Scadenze imminenti",
         value: scadenze,
         icon: Clock,
         description: "DVR in scadenza entro 30 giorni",
-        accent: "text-orange-600",
+        accent: "text-[#ba1a1a]",
       },
     ];
   }, [aziende, kpis]);
@@ -228,52 +235,44 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-start justify-between">
+    <div className="space-y-10">
+      <div className="flex items-start justify-between gap-6">
         <div>
-          <h1 className="font-heading text-3xl font-bold text-on-surface">
-            Dashboard
-          </h1>
-          <p className="mt-1 text-sm text-on-surface-variant">
+          <h1 className="type-h1">Dashboard</h1>
+          <p className="type-body mt-2">
             Panoramica dell&apos;attivit&agrave;
           </p>
         </div>
         {isAdmin && (
           <Link
             href="/aziende/new"
-            className="flex items-center gap-2 rounded-lg bg-primary-container px-5 py-2.5 text-sm font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-primary-container/30 active:translate-y-0"
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-[#1b5594] shadow-stripe-ambient"
           >
-            <Plus className="h-4 w-4" strokeWidth={2.5} />
+            <Plus className="h-4 w-4" strokeWidth={2} />
             Aggiungi cliente
           </Link>
         )}
       </div>
 
       {loading ? (
-        <p className="text-on-surface-variant">Caricamento...</p>
+        <p className="type-body">Caricamento...</p>
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
             {stats.map((stat) => (
               <div
                 key={stat.name}
-                className="rounded-xl bg-white p-5 ambient-shadow transition-transform hover:-translate-y-0.5"
+                className="group rounded-md border border-[#e5edf5] bg-white p-5 shadow-stripe-ambient transition-[box-shadow,transform] duration-200 hover:shadow-stripe-elevated hover:-translate-y-0.5"
               >
-                <div className="mb-4 flex items-start justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
-                    {stat.name}
-                  </span>
+                <div className="mb-5 flex items-start justify-between">
+                  <span className="type-eyebrow">{stat.name}</span>
                   <stat.icon
                     className={`h-4 w-4 ${stat.accent}`}
-                    strokeWidth={2}
+                    strokeWidth={1.75}
                   />
                 </div>
-                <div className="font-heading text-3xl font-bold tracking-tight text-on-surface">
-                  {stat.value}
-                </div>
-                <p className="mt-1 text-xs text-on-surface-variant">
-                  {stat.description}
-                </p>
+                <div className="type-numeral">{stat.value}</div>
+                <p className="type-caption mt-2">{stat.description}</p>
               </div>
             ))}
           </div>
@@ -282,24 +281,22 @@ export default function DashboardPage() {
               there's nothing to flag — no empty-state clutter. */}
           <SurveillanceAlerts />
 
-          <div className="rounded-xl bg-white p-6 ambient-shadow">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-heading text-xl font-bold text-on-surface">
-                Aziende Clienti
-              </h2>
+          <div className="rounded-md border border-[#e5edf5] bg-white p-6 shadow-stripe-ambient">
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="type-h2">Aziende Clienti</h2>
             </div>
-            <div className="relative mb-4">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
+            <div className="relative mb-5">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748d]" />
               <input
                 placeholder="Cerca per ragione sociale, partita IVA, comune..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-xl border-none bg-surface-low px-10 py-3 text-sm outline-none transition-all focus:ring-2 focus:ring-primary-container"
+                className="w-full rounded-md border border-[#e5edf5] bg-white px-10 py-2.5 text-sm text-[#061b31] placeholder:text-[#64748d] outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </div>
             <div>
               {sortedAndFiltered.length === 0 ? (
-                <p className="py-6 text-center text-on-surface-variant">
+                <p className="py-8 text-center type-body">
                   {aziende.length === 0
                     ? "Nessuna azienda registrata"
                     : "Nessun risultato trovato"}
@@ -353,10 +350,10 @@ export default function DashboardPage() {
                               {azienda.ragione_sociale}
                             </Link>
                           </TableCell>
-                          <TableCell className="text-muted-foreground">
+                          <TableCell className="tnum text-[#64748d]">
                             {azienda.codice_ateco || "-"}
                           </TableCell>
-                          <TableCell className="text-muted-foreground">
+                          <TableCell className="text-[#64748d]">
                             {azienda.sede_operativa_citta ||
                               azienda.sede_legale_citta ||
                               "-"}
@@ -368,7 +365,7 @@ export default function DashboardPage() {
                               {statusLabels[azienda.survey_status]}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-muted-foreground">
+                          <TableCell className="tnum text-[#64748d]">
                             {formatDate(azienda.updated_at)}
                           </TableCell>
                           <TableCell>
@@ -377,7 +374,7 @@ export default function DashboardPage() {
                                 {formatDate(azienda.data_scadenza_dvr)}
                               </Badge>
                             ) : (
-                              <span className="text-muted-foreground">-</span>
+                              <span className="text-[#64748d]">-</span>
                             )}
                           </TableCell>
                         </TableRow>

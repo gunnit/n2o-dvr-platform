@@ -316,7 +316,7 @@ export default function PeeProceduresPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Procedure di emergenza (PEE)</h1>
+          <h1 className="type-h1">Procedure di emergenza (PEE)</h1>
           <p className="text-sm text-muted-foreground">
             Cinque scenari, cinque fasi A-E ciascuno. Modifica i testi dove serve
             — le modifiche vengono salvate solo per questa azienda. Il pulsante

@@ -207,6 +207,28 @@ export default function AziendaDetailPage() {
               try {
                 await apiCall(`/api/v1/aziende/${id}/documents/batch`, {
                   method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    tipi_documento: [
+                      "dvr_master",
+                      "allegato_mmc",
+                      "allegato_vdt",
+                      "allegato_stress",
+                      "allegato_gestanti",
+                      "allegato_incendio",
+                      "allegato_microclima",
+                      "allegato_microclima_severo",
+                      "allegato_biologico_alimentare",
+                      "allegato_biologico_asilo",
+                      "allegato_biologico_dentisti",
+                      "pee_azienda",
+                      "pee_comune",
+                      "haccp",
+                      "haccp_forms",
+                      "duvri",
+                      "pos",
+                    ],
+                  }),
                 });
                 fetchData();
               } catch {

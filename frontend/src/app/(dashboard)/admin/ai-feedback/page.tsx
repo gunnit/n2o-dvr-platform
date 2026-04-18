@@ -153,7 +153,7 @@ export default function AdminAIFeedbackPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="type-h1">
             Feedback AI
           </h1>
           <p className="text-muted-foreground">
@@ -190,7 +190,7 @@ export default function AdminAIFeedbackPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-semibold">
+            <p className="type-numeral">
               {summary?.total_thumbs_down ?? "—"}
             </p>
             <p className="text-xs text-muted-foreground">
@@ -206,7 +206,7 @@ export default function AdminAIFeedbackPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-semibold">
+            <p className="type-numeral">
               {summary?.total_thumbs_up ?? "—"}
             </p>
             <p className="text-xs text-muted-foreground">
@@ -222,7 +222,7 @@ export default function AdminAIFeedbackPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-semibold">
+            <p className="type-numeral">
               {summary?.rows.length ?? "—"}
             </p>
             <p className="text-xs text-muted-foreground">

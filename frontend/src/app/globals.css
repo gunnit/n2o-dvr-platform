@@ -2,123 +2,241 @@
 
 @source "../**/*.{ts,tsx,js,jsx}";
 
-@theme {
-  --color-background: #f8f9fc;
-  --color-foreground: #191c1e;
+/* ===========================================================================
+   Theme tokens -- Stripe-inspired, N2O-branded.
+   See ./DESIGN.md (§0 overrides) for why colours and type diverge from pure
+   Stripe. Structural DNA (weight 300 display type, blue-tinted layered
+   shadows, 4-8px radius, slate body / navy headings) is preserved verbatim.
+   =========================================================================== */
 
+@theme {
+  /* --- Canvas & surface ------------------------------------------------- */
+  --color-background: #ffffff;            /* Stripe canvas */
+  --color-surface: #ffffff;
+  --color-surface-low: #f6f9fc;           /* muted panels, inputs */
+  --color-surface-high: #eef2f7;
+  --color-surface-highest: #e5edf5;
+
+  /* --- Text palette (Stripe-aligned) ----------------------------------- */
+  --color-foreground: #061b31;            /* Deep navy headings */
+  --color-heading: #061b31;
+  --color-label: #273951;                 /* Form labels, secondary heads */
+  --color-body: #64748d;                  /* Slate body / captions */
+  --color-on-surface: #061b31;
+  --color-on-surface-variant: #64748d;
+  --color-muted-foreground: #64748d;
+
+  /* --- Brand (N2O navy, kept in place of Stripe purple) ---------------- */
   --color-primary: #003d74;
   --color-primary-foreground: #ffffff;
+  --color-primary-hover: #1b5594;
   --color-primary-container: #1b5594;
   --color-primary-container-foreground: #ffffff;
   --color-primary-light: #a5c8ff;
 
+  /* --- Sidebar (unchanged N2O dark indigo) ----------------------------- */
   --color-sidebar: #18244e;
   --color-sidebar-foreground: #ffffff;
 
-  --color-surface: #ffffff;
-  --color-surface-low: #f2f3f6;
-  --color-surface-high: #e7e8eb;
-  --color-surface-highest: #e1e2e5;
+  /* --- Borders (Stripe soft-blue) -------------------------------------- */
+  --color-border: #e5edf5;
+  --color-outline: #e5edf5;
+  --color-outline-variant: #eef2f7;
 
-  --color-on-surface: #191c1e;
-  --color-on-surface-variant: #424750;
-
-  --color-outline: #727781;
-  --color-outline-variant: #c2c6d2;
-
-  --color-success: #22c55e;
-  --color-warning: #f59e0b;
+  /* --- Status -- Stripe success green, kept N2O warning/danger --------- */
+  --color-success: #108c3d;
+  --color-success-bg: rgba(21, 190, 83, 0.2);
+  --color-success-border: rgba(21, 190, 83, 0.4);
+  --color-warning: #9b6829;               /* Stripe "lemon" */
   --color-danger: #ba1a1a;
   --color-info: #1b5594;
 
-  --color-risk-green: #22c55e;
+  /* Risk chip scale (N2O domain-specific, unchanged) */
+  --color-risk-green: #15be53;
   --color-risk-yellow: #f59e0b;
   --color-risk-orange: #f97316;
   --color-risk-red: #ef4444;
 
+  /* --- shadcn / component tokens -------------------------------------- */
   --color-card: #ffffff;
-  --color-card-foreground: #191c1e;
-  --color-muted: #f2f3f6;
-  --color-muted-foreground: #424750;
-  --color-border: #e1e2e5;
-  --color-input: #f2f3f6;
+  --color-card-foreground: #061b31;
+  --color-muted: #f6f9fc;
+  --color-input: #ffffff;
   --color-ring: #003d74;
-  --color-accent: #f2f3f6;
-  --color-accent-foreground: #191c1e;
-  --color-secondary: #f2f3f6;
-  --color-secondary-foreground: #191c1e;
+  --color-accent: #f6f9fc;
+  --color-accent-foreground: #061b31;
+  --color-secondary: #f6f9fc;
+  --color-secondary-foreground: #061b31;
   --color-destructive: #ba1a1a;
   --color-destructive-foreground: #ffffff;
   --color-popover: #ffffff;
-  --color-popover-foreground: #191c1e;
+  --color-popover-foreground: #061b31;
 
+  /* --- Type ------------------------------------------------------------ */
   --font-heading: "Plus Jakarta Sans", system-ui, sans-serif;
   --font-body: "Inter", system-ui, sans-serif;
+
+  /* --- Radius scale (Stripe: conservative 4-8px, never pill) ---------- */
+  --radius-sm: 4px;
+  --radius: 6px;                          /* default card / nav */
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 8px;
 }
 
 :root {
-  --color-background: #f8f9fc;
-  --color-foreground: #191c1e;
-  --color-primary: #003d74;
-  --color-primary-foreground: #ffffff;
-  --color-primary-container: #1b5594;
-  --color-primary-container-foreground: #ffffff;
-  --color-primary-light: #a5c8ff;
-  --color-sidebar: #18244e;
-  --color-sidebar-foreground: #ffffff;
-  --color-surface: #ffffff;
-  --color-surface-low: #f2f3f6;
-  --color-surface-high: #e7e8eb;
-  --color-surface-highest: #e1e2e5;
-  --color-on-surface: #191c1e;
-  --color-on-surface-variant: #424750;
-  --color-outline: #727781;
-  --color-outline-variant: #c2c6d2;
-  --color-success: #22c55e;
-  --color-warning: #f59e0b;
-  --color-danger: #ba1a1a;
-  --color-info: #1b5594;
-  --color-card: #ffffff;
-  --color-card-foreground: #191c1e;
-  --color-muted: #f2f3f6;
-  --color-muted-foreground: #424750;
-  --color-border: #e1e2e5;
-  --color-input: #f2f3f6;
-  --color-ring: #003d74;
-  --color-accent: #f2f3f6;
-  --color-accent-foreground: #191c1e;
-  --color-secondary: #f2f3f6;
-  --color-secondary-foreground: #191c1e;
-  --color-destructive: #ba1a1a;
-  --color-destructive-foreground: #ffffff;
-  --color-popover: #ffffff;
-  --color-popover-foreground: #191c1e;
+  color-scheme: light;
 }
 
 body {
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-body);
+  font-feature-settings: "ss01", "cv11";  /* Plus Jakarta Sans alt glyphs */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* -----------------------------------------------------------------------
+   Typography utilities
+   Stripe's signature: weight-300 display + negative letter-spacing.
+   Plus Jakarta Sans has no sohne ss01 set, so we lean on weight + tracking
+   alone.
+   ----------------------------------------------------------------------- */
+
 .font-heading {
   font-family: var(--font-heading);
-  letter-spacing: -0.02em;
 }
 
-.glass-card {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 4px 24px rgba(25, 28, 30, 0.04);
+/* Display hero: 48-56px weight 300 tight-tracked */
+.type-display {
+  font-family: var(--font-heading);
+  font-weight: 300;
+  font-size: clamp(2.25rem, 4vw, 3rem);   /* 36-48px */
+  line-height: 1.05;
+  letter-spacing: -0.03em;
 }
 
+/* Page H1: 30-36px weight 300 */
+.type-h1 {
+  font-family: var(--font-heading);
+  font-weight: 300;
+  font-size: 1.875rem;                    /* 30px */
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  color: var(--color-heading);
+}
+
+/* Section heading: 22-26px weight 300 */
+.type-h2 {
+  font-family: var(--font-heading);
+  font-weight: 400;
+  font-size: 1.375rem;                    /* 22px */
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  color: var(--color-heading);
+}
+
+/* Card / sub-section: 18px weight 500 -- Plus Jakarta holds bolder at mid */
+.type-h3 {
+  font-family: var(--font-heading);
+  font-weight: 500;
+  font-size: 1.125rem;                    /* 18px */
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--color-heading);
+}
+
+/* KPI numeral: very large, weight 300, tabular */
+.type-numeral {
+  font-family: var(--font-heading);
+  font-weight: 300;
+  font-size: 2.5rem;                      /* 40px */
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-heading);
+}
+
+/* Uppercase micro-label (KPI caption, table meta) */
+.type-eyebrow {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.6875rem;                   /* 11px */
+  line-height: 1.1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-body);
+}
+
+/* Body copy */
+.type-body {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 0.9375rem;                   /* 15px */
+  line-height: 1.45;
+  color: var(--color-body);
+}
+
+.type-caption {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 0.8125rem;                   /* 13px */
+  line-height: 1.4;
+  color: var(--color-body);
+}
+
+/* Tabular-nums utility for any numeric cell */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* -----------------------------------------------------------------------
+   Shadows -- Stripe's signature blue-tinted multi-layer system.
+   rgba(50,50,93,...) is the far "brand atmosphere" layer; rgba(0,0,0,...)
+   is the near "crispness" layer. Never use neutral gray shadows.
+   ----------------------------------------------------------------------- */
+
+.shadow-stripe-ambient {
+  box-shadow: 0px 3px 6px rgba(23, 23, 23, 0.06);
+}
+
+.shadow-stripe-standard {
+  box-shadow: 0px 15px 35px rgba(23, 23, 23, 0.08);
+}
+
+.shadow-stripe-elevated {
+  box-shadow:
+    rgba(50, 50, 93, 0.25) 0px 30px 45px -30px,
+    rgba(0, 0, 0, 0.1) 0px 18px 36px -18px;
+}
+
+.shadow-stripe-deep {
+  box-shadow:
+    rgba(3, 3, 39, 0.25) 0px 14px 21px -14px,
+    rgba(0, 0, 0, 0.1) 0px 8px 17px -8px;
+}
+
+/* Legacy names kept so untouched components still render */
 .ambient-shadow {
-  box-shadow: 0 4px 24px rgba(25, 28, 30, 0.04);
+  box-shadow: 0px 3px 6px rgba(23, 23, 23, 0.06);
 }
 
 .sidebar-shadow {
   box-shadow: 0 10px 40px rgba(24, 36, 78, 0.2);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0px 15px 35px rgba(23, 23, 23, 0.08);
+}
+
+/* Keyboard-focus ring (Stripe: 2px solid primary outline) */
+:where(a, button, [role="button"], input, select, textarea):focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
