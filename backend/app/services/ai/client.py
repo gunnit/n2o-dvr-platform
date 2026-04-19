@@ -51,11 +51,17 @@ async def generate_text(
     system: str | None = None,
     model: str | None = None,
     max_output_tokens: int | None = None,
+    reasoning_effort: str = "minimal",
 ) -> str:
     """Simple text generation via the Responses API.
 
     Use for short Italian boilerplate (company descriptions, etc.).
     Defaults to OPENAI_MODEL_GENERATION (gpt-5-nano).
+
+    `gpt-5*` models are reasoning models: `max_output_tokens` caps the sum of
+    reasoning AND visible output, so we pin effort to "minimal" for plain
+    boilerplate — otherwise reasoning silently eats the whole budget and
+    `output_text` comes back empty.
     """
     client = get_client()
     input_messages: list[dict] = []
@@ -68,12 +74,29 @@ async def generate_text(
             model=model or settings.OPENAI_MODEL_GENERATION,
             input=input_messages,
             max_output_tokens=max_output_tokens,
+            reasoning={"effort": reasoning_effort},
         )
     except OpenAIError as exc:
         logger.exception("OpenAI generate_text failed")
         raise AIError(f"AI generation failed: {exc}") from exc
 
-    return response.output_text
+    text = response.output_text or ""
+    status = getattr(response, "status", None)
+    incomplete = getattr(response, "incomplete_details", None)
+    if status == "incomplete" or not text.strip():
+        reason = getattr(incomplete, "reason", None) if incomplete else None
+        logger.error(
+            "generate_text returned no usable text (status=%s, reason=%s, len=%d)",
+            status,
+            reason,
+            len(text),
+        )
+        raise AIError(
+            "L'AI ha terminato senza produrre testo"
+            + (f" (motivo: {reason})" if reason else "")
+            + ". Riprova o aumenta il budget di token."
+        )
+    return text
 
 
 async def generate_structured(

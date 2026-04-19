@@ -63,7 +63,14 @@ export function DescriptionEditor({
   const [visuraNotice, setVisuraNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Only follow the parent's provenance on initial mount; after that the
+  // component is the source of truth (otherwise the "Generato da AI" badge
+  // vanishes the moment the parent re-renders with a non-empty descrizione,
+  // because `initialProvenance` flips to "edited").
+  const didInitRef = useRef(false);
   useEffect(() => {
+    if (didInitRef.current) return;
+    didInitRef.current = true;
     setProvenance(initialProvenance);
   }, [initialProvenance]);
 
@@ -85,7 +92,13 @@ export function DescriptionEditor({
         `/api/v1/aziende/${aziendaId}/genera-descrizione`,
         { method: "POST" }
       );
-      onChange(res.description, "ai");
+      const generated = (res.description ?? "").trim();
+      if (!generated) {
+        throw new Error(
+          "L'AI ha risposto senza testo. Riprova o modifica manualmente."
+        );
+      }
+      onChange(generated, "ai");
       setProvenance("ai");
       setLastGeneratedAt(new Date().toISOString());
       bumpHistory();

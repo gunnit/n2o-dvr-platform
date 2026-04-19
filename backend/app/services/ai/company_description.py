@@ -89,9 +89,10 @@ async def generate_company_description(azienda: Azienda) -> str:
         azienda.ragione_sociale,
         len(context),
     )
+    # 400 Italian words ~ 800-1000 tokens; add headroom for minimal reasoning.
     text = await generate_text(
         prompt=f"Dati dell'azienda:\n{context}\n\nScrivi la descrizione dell'attivita'.",
         system=SYSTEM_PROMPT,
-        max_output_tokens=800,
+        max_output_tokens=2000,
     )
     return text.strip()
