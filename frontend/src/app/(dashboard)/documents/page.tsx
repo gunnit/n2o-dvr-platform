@@ -588,7 +588,12 @@ export default function DocumentsPage() {
                       </p>
                     )}
                   </CardContent>
-                  <CardFooter className="gap-2">
+                  {/* Primary action stays as a labeled button; secondary actions
+                      collapse to icon-only + native tooltip so a card with the
+                      full Google Docs round-trip stack (Modifica / Sync /
+                      Scarta / Storia) still fits in a 3-column grid without
+                      clipping. */}
+                  <CardFooter className="flex-wrap gap-1.5">
                     <Button
                       size="sm"
                       variant={(existing?.status === "ready" || existing?.status === "completed") ? "outline" : "default"}
@@ -608,8 +613,10 @@ export default function DocumentsPage() {
                     </Button>
                     {(existing?.status === "ready" || existing?.status === "completed") && existing.file_path && (
                       <Button
-                        size="sm"
+                        size="icon-sm"
                         variant="ghost"
+                        title="Scarica"
+                        aria-label="Scarica"
                         onClick={async () => {
                           try {
                             await downloadFile(`/api/v1/documenti/${existing.id}/download`);
@@ -618,60 +625,56 @@ export default function DocumentsPage() {
                           }
                         }}
                       >
-                        <Download className="mr-1.5 h-3 w-3" />
-                        Scarica
+                        <Download className="h-4 w-4" />
                       </Button>
                     )}
-                    {/* Google Docs round-trip editing — DVR Master only for now.
-                        "Modifica" creates (or reopens) an editable Google Doc;
-                        "Scarica modifiche" pulls edits back as a new version. */}
                     {docType.key === "dvr_master" &&
                       (existing?.status === "ready" || existing?.status === "completed") && (
                         <>
                           <Button
-                            size="sm"
+                            size="icon-sm"
                             variant="ghost"
                             onClick={() => handleOpenInGoogleDocs(existing)}
                             disabled={openingGdoc.has(existing.id)}
+                            title="Modifica in Google Docs"
                             aria-label="Modifica in Google Docs"
                           >
                             {openingGdoc.has(existing.id) ? (
-                              <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                              <Loader2 className="animate-spin" />
                             ) : (
-                              <Pencil className="mr-1.5 h-3 w-3" />
+                              <Pencil />
                             )}
-                            Modifica in Google Docs
                           </Button>
                           {existing.gdoc_file_id && (
                             <>
                               <Button
-                                size="sm"
+                                size="icon-sm"
                                 variant="ghost"
                                 onClick={() => handleSyncFromGoogleDocs(existing)}
                                 disabled={syncingGdoc.has(existing.id)}
+                                title="Scarica modifiche da Google Docs"
                                 aria-label="Scarica modifiche da Google Docs"
                               >
                                 {syncingGdoc.has(existing.id) ? (
-                                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                                  <Loader2 className="animate-spin" />
                                 ) : (
-                                  <CloudDownload className="mr-1.5 h-3 w-3" />
+                                  <CloudDownload />
                                 )}
-                                Scarica modifiche
                               </Button>
                               <Button
-                                size="sm"
+                                size="icon-sm"
                                 variant="ghost"
+                                className="text-[#ba1a1a] hover:text-[#ba1a1a]"
                                 onClick={() => setDiscardTarget(existing)}
                                 disabled={discardingGdoc.has(existing.id)}
+                                title="Scarta modifiche Google Docs"
                                 aria-label="Scarta modifiche Google Docs"
-                                className="text-[#ba1a1a] hover:text-[#ba1a1a]"
                               >
                                 {discardingGdoc.has(existing.id) ? (
-                                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                                  <Loader2 className="animate-spin" />
                                 ) : (
-                                  <Trash2 className="mr-1.5 h-3 w-3" />
+                                  <Trash2 />
                                 )}
-                                Scarta
                               </Button>
                             </>
                           )}
@@ -681,11 +684,13 @@ export default function DocumentsPage() {
                       <Button
                         size="sm"
                         variant="ghost"
+                        className="h-8 px-2"
                         onClick={() => setHistoryTipo(docType.key)}
+                        title={`Storia versioni (${versionCount})`}
                         aria-label={`Storia versioni ${docType.name}`}
                       >
-                        <History className="mr-1.5 h-3 w-3" />
-                        Storia (v{versionCount})
+                        <History className="mr-1 h-4 w-4" />
+                        v{versionCount}
                       </Button>
                     )}
                   </CardFooter>
