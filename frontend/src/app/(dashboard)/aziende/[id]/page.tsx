@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   Building2,
   MapPin,
@@ -18,10 +19,6 @@ import {
   ShieldAlert,
   XCircle,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
   Tabs,
   TabsList,
@@ -48,10 +45,14 @@ import { apiCall } from "@/lib/api-client";
 import { DescriptionEditor } from "@/components/ai/description-editor";
 import { MeasuresPanel } from "@/components/ai/measures-panel";
 
-const surveyStatusColors: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-700",
-  in_progress: "bg-blue-100 text-blue-700",
-  completed: "bg-green-100 text-green-700",
+// DESIGN.md §0 + §2 — N2O navy primary + success green per brand override.
+const surveyStatusStyles: Record<string, string> = {
+  draft:
+    "bg-[#f6f9fc] text-[#273951] border border-[#e5edf5]",
+  in_progress:
+    "bg-[rgba(0,61,116,0.08)] text-primary border border-[rgba(0,61,116,0.2)]",
+  completed:
+    "bg-[rgba(21,190,83,0.2)] text-[#108c3d] border border-[rgba(21,190,83,0.4)]",
 };
 
 const surveyStatusLabels: Record<string, string> = {
@@ -60,11 +61,15 @@ const surveyStatusLabels: Record<string, string> = {
   completed: "Completato",
 };
 
-const docStatusColors: Record<string, string> = {
-  pending: "bg-gray-100 text-gray-700",
-  generating: "bg-yellow-100 text-yellow-700",
-  ready: "bg-green-100 text-green-700",
-  error: "bg-red-100 text-red-700",
+const docStatusStyles: Record<string, string> = {
+  pending:
+    "bg-[#f6f9fc] text-[#273951] border border-[#e5edf5]",
+  generating:
+    "bg-[rgba(155,104,41,0.12)] text-[#9b6829] border border-[rgba(155,104,41,0.3)]",
+  ready:
+    "bg-[rgba(21,190,83,0.2)] text-[#108c3d] border border-[rgba(21,190,83,0.4)]",
+  error:
+    "bg-[rgba(234,34,97,0.08)] text-[#b51648] border border-[rgba(234,34,97,0.25)]",
 };
 
 const docStatusLabels: Record<string, string> = {
@@ -74,11 +79,61 @@ const docStatusLabels: Record<string, string> = {
   error: "Errore",
 };
 
-function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
+// Risk-level chip palette — navy for critical, green for accettabile,
+// per DESIGN.md §0 (no pink accents in safety domain).
+const riskLevelStyles: Record<string, string> = {
+  ACCETTABILE:
+    "bg-[rgba(21,190,83,0.2)] text-[#108c3d] border border-[rgba(21,190,83,0.4)]",
+  MODESTO:
+    "bg-[rgba(155,104,41,0.12)] text-[#9b6829] border border-[rgba(155,104,41,0.3)]",
+  GRAVE:
+    "bg-[rgba(0,61,116,0.12)] text-primary border border-[rgba(0,61,116,0.3)]",
+  GRAVISSIMO:
+    "bg-[rgba(234,34,97,0.08)] text-[#b51648] border border-[rgba(234,34,97,0.3)]",
+};
+
+function StatusPill({
+  className,
+  children,
+}: {
+  className: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <span className="text-sm">{value || "-"}</span>
+    <span
+      className={
+        "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium " +
+        className
+      }
+    >
+      {children}
+    </span>
+  );
+}
+
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return <p className="type-eyebrow">{children}</p>;
+}
+
+function InfoRow({
+  label,
+  value,
+  tnum = false,
+}: {
+  label: string;
+  value: string | null | undefined;
+  tnum?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="type-eyebrow">{label}</span>
+      <span
+        className={
+          "text-[14px] leading-[1.4] text-[#061b31] " + (tnum ? "tnum" : "")
+        }
+      >
+        {value || "-"}
+      </span>
     </div>
   );
 }
@@ -94,15 +149,59 @@ function PersonaRoleBadges({ persona }: { persona: Persona }) {
   ];
 
   const activeRoles = roles.filter((r) => persona[r.key] === true);
-  if (activeRoles.length === 0) return <span className="text-muted-foreground">-</span>;
+  if (activeRoles.length === 0) return <span className="text-[#64748d]">-</span>;
 
   return (
     <div className="flex flex-wrap gap-1">
       {activeRoles.map((r) => (
-        <Badge key={r.key} variant="secondary" className="text-xs">
+        <StatusPill
+          key={r.key}
+          className="bg-[rgba(0,61,116,0.06)] text-primary border border-[rgba(0,61,116,0.15)]"
+        >
           {r.label}
-        </Badge>
+        </StatusPill>
       ))}
+    </div>
+  );
+}
+
+function Panel({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={
+        "rounded-md border border-[#e5edf5] bg-white shadow-stripe-ambient " +
+        className
+      }
+    >
+      {children}
+    </div>
+  );
+}
+
+function PanelHeader({
+  icon: Icon,
+  title,
+  action,
+}: {
+  icon?: typeof Building2;
+  title: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-[#e5edf5] px-6 py-4">
+      <div className="flex items-center gap-2">
+        {Icon && <Icon className="h-4 w-4 text-[#64748d]" strokeWidth={1.75} />}
+        <h3 className="font-heading text-[15px] font-medium tracking-[-0.005em] text-[#061b31]">
+          {title}
+        </h3>
+      </div>
+      {action}
     </div>
   );
 }
@@ -121,6 +220,7 @@ export default function AziendaDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [expandedRisk, setExpandedRisk] = useState<string | null>(null);
+  const [generatingDocs, setGeneratingDocs] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -150,10 +250,51 @@ export default function AziendaDetailPage() {
     fetchData();
   }, [fetchData]);
 
+  const handleGenerateDocs = async () => {
+    setGeneratingDocs(true);
+    try {
+      await apiCall(`/api/v1/aziende/${id}/documents/batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipi_documento: [
+            "dvr_master",
+            "allegato_mmc",
+            "allegato_vdt",
+            "allegato_stress",
+            "allegato_gestanti",
+            "allegato_incendio",
+            "allegato_microclima",
+            "allegato_microclima_severo",
+            "allegato_biologico_alimentare",
+            "allegato_biologico_asilo",
+            "allegato_biologico_dentisti",
+            "pee_azienda",
+            "pee_comune",
+            "haccp",
+            "haccp_forms",
+            "duvri",
+            "pos",
+          ],
+        }),
+      });
+      toast.success("Generazione documenti avviata");
+      fetchData();
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Generazione documenti fallita. Riprova."
+      );
+    } finally {
+      setGeneratingDocs(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
-        <p className="text-muted-foreground">Caricamento...</p>
+        <p className="type-body">Caricamento...</p>
       </div>
     );
   }
@@ -161,206 +302,213 @@ export default function AziendaDetailPage() {
   if (error || !azienda) {
     return (
       <div className="space-y-6">
-        <Button variant="ghost" nativeButton={false} render={<Link href="/aziende" />}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
+        <Link
+          href="/aziende"
+          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#64748d] transition-colors hover:text-[#061b31]"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
           Torna alle aziende
-        </Button>
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <p className="text-destructive">{error || "Azienda non trovata"}</p>
-          </CardContent>
-        </Card>
+        </Link>
+        <div className="rounded-md border border-[rgba(234,34,97,0.25)] bg-[rgba(234,34,97,0.04)] p-10 text-center shadow-stripe-ambient">
+          <p className="text-[14px] text-[#b51648]">
+            {error || "Azienda non trovata"}
+          </p>
+        </div>
       </div>
     );
   }
 
+  const city =
+    azienda.sede_operativa_citta || azienda.sede_legale_citta || "Sede non specificata";
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {/* Breadcrumb back */}
+      <Link
+        href="/aziende"
+        className="-mb-2 inline-flex items-center gap-1.5 text-[13px] font-medium text-[#64748d] transition-colors hover:text-[#061b31]"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
+        Aziende
+      </Link>
+
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" nativeButton={false} render={<Link href="/aziende" />}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                {azienda.ragione_sociale}
-              </h1>
-              <Badge className={surveyStatusColors[azienda.survey_status]}>
-                {surveyStatusLabels[azienda.survey_status]}
-              </Badge>
-            </div>
-            <p className="text-muted-foreground">
-              {azienda.sede_operativa_citta || azienda.sede_legale_citta || "Sede non specificata"}
-              {azienda.codice_ateco ? ` \u00b7 ATECO ${azienda.codice_ateco}` : ""}
-            </p>
+      <div className="flex items-start justify-between gap-6">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="type-h1 truncate">{azienda.ragione_sociale}</h1>
+            <StatusPill className={surveyStatusStyles[azienda.survey_status]}>
+              {surveyStatusLabels[azienda.survey_status]}
+            </StatusPill>
           </div>
+          <p className="type-body mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <MapPin className="h-3.5 w-3.5 text-[#64748d]" strokeWidth={1.75} />
+            <span>{city}</span>
+            {azienda.codice_ateco && (
+              <>
+                <span className="text-[#c2c6d2]">·</span>
+                <span className="type-eyebrow !tracking-wider">ATECO</span>
+                <span className="tnum text-[13px] text-[#273951]">
+                  {azienda.codice_ateco}
+                </span>
+              </>
+            )}
+          </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => router.push(`/survey/${id}`)}>
-            <ClipboardList className="mr-2 h-4 w-4" />
-            Inizia Sopralluogo
-          </Button>
-          <Button
-            onClick={async () => {
-              try {
-                await apiCall(`/api/v1/aziende/${id}/documents/batch`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    tipi_documento: [
-                      "dvr_master",
-                      "allegato_mmc",
-                      "allegato_vdt",
-                      "allegato_stress",
-                      "allegato_gestanti",
-                      "allegato_incendio",
-                      "allegato_microclima",
-                      "allegato_microclima_severo",
-                      "allegato_biologico_alimentare",
-                      "allegato_biologico_asilo",
-                      "allegato_biologico_dentisti",
-                      "pee_azienda",
-                      "pee_comune",
-                      "haccp",
-                      "haccp_forms",
-                      "duvri",
-                      "pos",
-                    ],
-                  }),
-                });
-                fetchData();
-              } catch {
-                // silently handle
-              }
-            }}
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => router.push(`/survey/${id}`)}
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-[#e5edf5] bg-white px-4 text-[14px] font-medium text-[#273951] transition-colors hover:bg-[#f6f9fc]"
           >
-            <FileText className="mr-2 h-4 w-4" />
-            Genera Documenti
-          </Button>
+            <ClipboardList className="h-4 w-4" strokeWidth={1.75} />
+            Inizia Sopralluogo
+          </button>
+          <button
+            type="button"
+            onClick={handleGenerateDocs}
+            disabled={generatingDocs}
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-[14px] font-medium text-white shadow-stripe-ambient transition-colors hover:bg-[#1b5594] disabled:opacity-60"
+          >
+            <FileText className="h-4 w-4" strokeWidth={1.75} />
+            {generatingDocs ? "Avvio in corso..." : "Genera Documenti"}
+          </button>
         </div>
       </div>
 
       {/* Tabs */}
       <Tabs defaultValue="panoramica">
-        <TabsList>
-          <TabsTrigger value="panoramica">
+        <TabsList
+          variant="line"
+          className="h-auto w-full justify-start gap-6 border-b border-[#e5edf5] pb-0"
+        >
+          <TabsTrigger
+            value="panoramica"
+            className="text-[13px] font-medium text-[#64748d] data-active:text-[#061b31]"
+          >
             <Building2 className="mr-1.5 h-3.5 w-3.5" />
             Panoramica
           </TabsTrigger>
-          <TabsTrigger value="persone">
+          <TabsTrigger
+            value="persone"
+            className="text-[13px] font-medium text-[#64748d] data-active:text-[#061b31]"
+          >
             <Users className="mr-1.5 h-3.5 w-3.5" />
             Persone
             {persone.length > 0 && (
-              <Badge variant="secondary" className="ml-1.5 text-[10px]">
+              <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-sm bg-[#f6f9fc] px-1 text-[10px] font-medium text-[#273951] tnum">
                 {persone.length}
-              </Badge>
+              </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="ambienti">
+          <TabsTrigger
+            value="ambienti"
+            className="text-[13px] font-medium text-[#64748d] data-active:text-[#061b31]"
+          >
             <Warehouse className="mr-1.5 h-3.5 w-3.5" />
             Ambienti
             {ambienti.length > 0 && (
-              <Badge variant="secondary" className="ml-1.5 text-[10px]">
+              <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-sm bg-[#f6f9fc] px-1 text-[10px] font-medium text-[#273951] tnum">
                 {ambienti.length}
-              </Badge>
+              </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="attrezzature">
+          <TabsTrigger
+            value="attrezzature"
+            className="text-[13px] font-medium text-[#64748d] data-active:text-[#061b31]"
+          >
             <Wrench className="mr-1.5 h-3.5 w-3.5" />
             Attrezzature
             {attrezzature.length > 0 && (
-              <Badge variant="secondary" className="ml-1.5 text-[10px]">
+              <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-sm bg-[#f6f9fc] px-1 text-[10px] font-medium text-[#273951] tnum">
                 {attrezzature.length}
-              </Badge>
+              </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="rischi">
+          <TabsTrigger
+            value="rischi"
+            className="text-[13px] font-medium text-[#64748d] data-active:text-[#061b31]"
+          >
             <ShieldAlert className="mr-1.5 h-3.5 w-3.5" />
             Rischi
             {rischi.length > 0 && (
-              <Badge variant="secondary" className="ml-1.5 text-[10px]">
+              <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-sm bg-[#f6f9fc] px-1 text-[10px] font-medium text-[#273951] tnum">
                 {rischi.length}
-              </Badge>
+              </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="documenti">
+          <TabsTrigger
+            value="documenti"
+            className="text-[13px] font-medium text-[#64748d] data-active:text-[#061b31]"
+          >
             <FileText className="mr-1.5 h-3.5 w-3.5" />
             Documenti
             {documenti.length > 0 && (
-              <Badge variant="secondary" className="ml-1.5 text-[10px]">
+              <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-sm bg-[#f6f9fc] px-1 text-[10px] font-medium text-[#273951] tnum">
                 {documenti.length}
-              </Badge>
+              </span>
             )}
           </TabsTrigger>
         </TabsList>
 
         {/* Panoramica Tab */}
-        <TabsContent value="panoramica">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <Building2 className="h-4 w-4 text-muted-foreground" />
-                  Dati Azienda
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-3 sm:grid-cols-2">
+        <TabsContent value="panoramica" className="mt-6">
+          <div className="grid gap-5 md:grid-cols-2">
+            <Panel>
+              <PanelHeader icon={Building2} title="Dati Azienda" />
+              <div className="grid gap-5 p-6 sm:grid-cols-2">
                 <InfoRow label="Ragione Sociale" value={azienda.ragione_sociale} />
-                <InfoRow label="Codice ATECO" value={azienda.codice_ateco} />
-                <InfoRow label="Attivit&agrave;" value={azienda.attivita} />
+                <InfoRow
+                  label="Codice ATECO"
+                  value={azienda.codice_ateco}
+                  tnum
+                />
+                <InfoRow label="Attivita'" value={azienda.attivita} />
                 <InfoRow label="Orario di Lavoro" value={azienda.orario_lavoro} />
                 <InfoRow
                   label="Metratura Totale"
-                  value={azienda.metratura_totale ? `${azienda.metratura_totale} mq` : null}
+                  value={
+                    azienda.metratura_totale
+                      ? `${azienda.metratura_totale} mq`
+                      : null
+                  }
+                  tnum
                 />
                 <InfoRow
                   label="Zona Sismica"
                   value={azienda.zona_sismica ? `Zona ${azienda.zona_sismica}` : null}
                 />
-              </CardContent>
-            </Card>
+              </div>
+            </Panel>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  Sedi
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <Panel>
+              <PanelHeader icon={MapPin} title="Sedi" />
+              <div className="space-y-5 p-6">
                 <div>
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">
-                    Sede Legale
-                  </p>
-                  <p className="text-sm">
+                  <Eyebrow>Sede Legale</Eyebrow>
+                  <p className="mt-1 text-[14px] text-[#061b31]">
                     {azienda.sede_legale_via || "-"}
                   </p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-[13px] text-[#64748d]">
                     {azienda.sede_legale_citta || "-"}
                   </p>
                 </div>
-                <Separator />
+                <div className="h-px bg-[#e5edf5]" />
                 <div>
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">
-                    Sede Operativa
-                  </p>
-                  <p className="text-sm">
+                  <Eyebrow>Sede Operativa</Eyebrow>
+                  <p className="mt-1 text-[14px] text-[#061b31]">
                     {azienda.sede_operativa_via || "-"}
                   </p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-[13px] text-[#64748d]">
                     {azienda.sede_operativa_citta || "-"}
                   </p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </Panel>
 
-            <Card className="md:col-span-2">
-              <CardHeader>
-                <CardTitle className="text-sm">Descrizione</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
+            <Panel className="md:col-span-2">
+              <PanelHeader icon={FileText} title="Descrizione" />
+              <div className="space-y-6 p-6">
                 <DescriptionEditor
                   aziendaId={azienda.id}
                   value={azienda.descrizione_attivita ?? ""}
@@ -372,182 +520,188 @@ export default function AziendaDetailPage() {
                     // Optimistic local update
                     setAzienda({ ...azienda, descrizione_attivita: text });
                     try {
-                      await apiCall<Azienda>(`/api/v1/aziende/${azienda.id}`, {
-                        method: "PUT",
-                        body: JSON.stringify({ descrizione_attivita: text }),
-                      });
-                    } catch {
-                      // ignore; user can retry
+                      await apiCall<Azienda>(
+                        `/api/v1/aziende/${azienda.id}`,
+                        {
+                          method: "PUT",
+                          body: JSON.stringify({
+                            descrizione_attivita: text,
+                          }),
+                        }
+                      );
+                    } catch (err) {
+                      toast.error(
+                        err instanceof Error
+                          ? err.message
+                          : "Salvataggio descrizione fallito. Riprova."
+                      );
                     }
                   }}
                 />
                 {azienda.contesto_territoriale && (
                   <div>
-                    <p className="mb-1 text-xs font-medium text-muted-foreground">
-                      Contesto Territoriale
-                    </p>
-                    <p className="text-sm leading-relaxed">
+                    <Eyebrow>Contesto Territoriale</Eyebrow>
+                    <p className="mt-2 text-[14px] leading-relaxed text-[#273951]">
                       {azienda.contesto_territoriale}
                     </p>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </Panel>
           </div>
         </TabsContent>
 
         {/* Persone Tab */}
-        <TabsContent value="persone">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Personale</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {persone.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  Nessuna persona registrata. Avvia il sopralluogo per aggiungere il personale.
-                </p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nominativo</TableHead>
-                      <TableHead>Mansione</TableHead>
-                      <TableHead>Contratto</TableHead>
-                      <TableHead>Sesso</TableHead>
-                      <TableHead>Ruoli</TableHead>
+        <TabsContent value="persone" className="mt-6">
+          <Panel>
+            <PanelHeader icon={Users} title="Personale" />
+            {persone.length === 0 ? (
+              <p className="py-12 text-center text-[14px] text-[#64748d]">
+                Nessuna persona registrata. Avvia il sopralluogo per aggiungere
+                il personale.
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nominativo</TableHead>
+                    <TableHead>Mansione</TableHead>
+                    <TableHead>Contratto</TableHead>
+                    <TableHead>Sesso</TableHead>
+                    <TableHead>Ruoli</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {persone.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-medium text-[#061b31]">
+                        {p.nominativo}
+                      </TableCell>
+                      <TableCell className="text-[#273951]">
+                        {p.mansione || "-"}
+                      </TableCell>
+                      <TableCell className="text-[#64748d]">
+                        {p.tipologia_contrattuale || "-"}
+                      </TableCell>
+                      <TableCell className="text-[#64748d]">
+                        {p.sesso || "-"}
+                      </TableCell>
+                      <TableCell>
+                        <PersonaRoleBadges persona={p} />
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {persone.map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell className="font-medium">{p.nominativo}</TableCell>
-                        <TableCell>{p.mansione || "-"}</TableCell>
-                        <TableCell>{p.tipologia_contrattuale || "-"}</TableCell>
-                        <TableCell>{p.sesso || "-"}</TableCell>
-                        <TableCell>
-                          <PersonaRoleBadges persona={p} />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </Panel>
         </TabsContent>
 
         {/* Ambienti Tab */}
-        <TabsContent value="ambienti">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Ambienti di Lavoro</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {ambienti.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  Nessun ambiente registrato. Avvia il sopralluogo per aggiungere gli ambienti.
-                </p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Superficie</TableHead>
-                      <TableHead>Attivit&agrave;</TableHead>
+        <TabsContent value="ambienti" className="mt-6">
+          <Panel>
+            <PanelHeader icon={Warehouse} title="Ambienti di Lavoro" />
+            {ambienti.length === 0 ? (
+              <p className="py-12 text-center text-[14px] text-[#64748d]">
+                Nessun ambiente registrato. Avvia il sopralluogo per aggiungere
+                gli ambienti.
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Superficie</TableHead>
+                    <TableHead>Attivita'</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ambienti.map((a) => (
+                    <TableRow key={a.id}>
+                      <TableCell className="font-medium text-[#061b31]">
+                        {a.nome}
+                      </TableCell>
+                      <TableCell className="text-[#273951]">{a.tipo}</TableCell>
+                      <TableCell className="tnum text-[#273951]">
+                        {a.superficie_mq ? `${a.superficie_mq} mq` : "-"}
+                      </TableCell>
+                      <TableCell className="max-w-[320px] truncate text-[#64748d]">
+                        {a.descrizione_attivita || "-"}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {ambienti.map((a) => (
-                      <TableRow key={a.id}>
-                        <TableCell className="font-medium">{a.nome}</TableCell>
-                        <TableCell>{a.tipo}</TableCell>
-                        <TableCell>
-                          {a.superficie_mq ? `${a.superficie_mq} mq` : "-"}
-                        </TableCell>
-                        <TableCell className="max-w-[300px] truncate">
-                          {a.descrizione_attivita || "-"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </Panel>
         </TabsContent>
 
         {/* Attrezzature Tab */}
-        <TabsContent value="attrezzature">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Attrezzature</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {attrezzature.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  Nessuna attrezzatura registrata. Avvia il sopralluogo per aggiungere le attrezzature.
-                </p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Descrizione</TableHead>
-                      <TableHead>Marcatura CE</TableHead>
-                      <TableHead>Verifiche Periodiche</TableHead>
+        <TabsContent value="attrezzature" className="mt-6">
+          <Panel>
+            <PanelHeader icon={Wrench} title="Attrezzature" />
+            {attrezzature.length === 0 ? (
+              <p className="py-12 text-center text-[14px] text-[#64748d]">
+                Nessuna attrezzatura registrata. Avvia il sopralluogo per
+                aggiungere le attrezzature.
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Descrizione</TableHead>
+                    <TableHead>Marcatura CE</TableHead>
+                    <TableHead>Verifiche Periodiche</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {attrezzature.map((a) => (
+                    <TableRow key={a.id}>
+                      <TableCell className="font-medium text-[#061b31]">
+                        {a.descrizione}
+                      </TableCell>
+                      <TableCell>
+                        {a.marcatura_ce ? (
+                          <span className="inline-flex items-center gap-1 text-[13px] font-medium text-[#108c3d]">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Si
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[13px] font-medium text-[#b51648]">
+                            <XCircle className="h-3.5 w-3.5" />
+                            No
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {a.verifiche_periodiche ? (
+                          <span className="inline-flex items-center gap-1 text-[13px] font-medium text-[#108c3d]">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Si
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[13px] font-medium text-[#b51648]">
+                            <XCircle className="h-3.5 w-3.5" />
+                            No
+                          </span>
+                        )}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {attrezzature.map((a) => (
-                      <TableRow key={a.id}>
-                        <TableCell className="font-medium">{a.descrizione}</TableCell>
-                        <TableCell>
-                          {a.marcatura_ce ? (
-                            <span className="flex items-center gap-1 text-green-600">
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                              S&igrave;
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-red-600">
-                              <XCircle className="h-3.5 w-3.5" />
-                              No
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {a.verifiche_periodiche ? (
-                            <span className="flex items-center gap-1 text-green-600">
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                              S&igrave;
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-red-600">
-                              <XCircle className="h-3.5 w-3.5" />
-                              No
-                            </span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </Panel>
         </TabsContent>
 
         {/* Rischi Tab — AI measures panel per risk (US-2.6) */}
-        <TabsContent value="rischi">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">
-                Valutazioni del rischio
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+        <TabsContent value="rischi" className="mt-6">
+          <Panel>
+            <PanelHeader icon={ShieldAlert} title="Valutazioni del rischio" />
+            <div className="space-y-3 p-6">
               {rischi.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
+                <p className="py-8 text-center text-[14px] text-[#64748d]">
                   Nessun rischio registrato. Completa il sopralluogo per
                   valutare i rischi.
                 </p>
@@ -559,66 +713,78 @@ export default function AziendaDetailPage() {
                     return (
                       <div
                         key={r.id}
-                        className="rounded-lg border border-input"
+                        className="rounded-md border border-[#e5edf5] bg-white shadow-stripe-ambient"
                       >
                         <button
                           type="button"
                           onClick={() =>
                             setExpandedRisk(isOpen ? null : r.id)
                           }
-                          className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left hover:bg-muted/50"
+                          className="flex w-full items-center justify-between gap-3 px-5 py-3.5 text-left transition-colors hover:bg-[#f6f9fc]"
                         >
                           <div className="flex flex-1 flex-wrap items-center gap-2">
-                            <span className="text-sm font-medium">
+                            <span className="text-[14px] font-medium text-[#061b31]">
                               {r.categoria_rischio}
                             </span>
                             {r.pericolo && (
-                              <span className="text-xs text-muted-foreground">
-                                - {r.pericolo}
+                              <span className="text-[13px] text-[#64748d]">
+                                · {r.pericolo}
                               </span>
                             )}
                             {r.livello_rischio && (
-                              <Badge
-                                variant="secondary"
+                              <StatusPill
                                 className={
-                                  r.livello_rischio === "ACCETTABILE"
-                                    ? "bg-emerald-100 text-emerald-800"
-                                    : r.livello_rischio === "MODESTO"
-                                    ? "bg-amber-100 text-amber-800"
-                                    : r.livello_rischio === "GRAVE"
-                                    ? "bg-orange-100 text-orange-800"
-                                    : "bg-red-100 text-red-800"
+                                  riskLevelStyles[r.livello_rischio] ||
+                                  "bg-[#f6f9fc] text-[#273951] border border-[#e5edf5]"
                                 }
                               >
-                                {r.livello_rischio} (I={r.indice_i})
-                              </Badge>
+                                {r.livello_rischio}
+                                <span className="ml-1 tnum opacity-70">
+                                  I={r.indice_i}
+                                </span>
+                              </StatusPill>
                             )}
                           </div>
                           {isOpen ? (
-                            <ChevronUp className="h-4 w-4 flex-shrink-0" />
+                            <ChevronUp
+                              className="h-4 w-4 flex-shrink-0 text-[#64748d]"
+                              strokeWidth={1.75}
+                            />
                           ) : (
-                            <ChevronDown className="h-4 w-4 flex-shrink-0" />
+                            <ChevronDown
+                              className="h-4 w-4 flex-shrink-0 text-[#64748d]"
+                              strokeWidth={1.75}
+                            />
                           )}
                         </button>
                         {isOpen && (
-                          <div className="border-t border-input p-4">
+                          <div className="border-t border-[#e5edf5] p-5">
                             <MeasuresPanel
                               aziendaId={azienda.id}
                               rischioId={r.id}
                               categoriaRischio={r.categoria_rischio}
                               initialText={r.misure_prevenzione ?? ""}
                               onSave={async (text) => {
-                                await apiCall(
-                                  `/api/v1/aziende/${azienda.id}/ambienti/${r.ambiente_id}/rischi/${r.id}`,
-                                  {
-                                    method: "PUT",
-                                    body: JSON.stringify({
-                                      misure_prevenzione: text,
-                                    }),
-                                  }
-                                );
-                                // refresh so the new text shows under initialText
-                                fetchData();
+                                try {
+                                  await apiCall(
+                                    `/api/v1/aziende/${azienda.id}/ambienti/${r.ambiente_id}/rischi/${r.id}`,
+                                    {
+                                      method: "PUT",
+                                      body: JSON.stringify({
+                                        misure_prevenzione: text,
+                                      }),
+                                    }
+                                  );
+                                  toast.success("Misure salvate");
+                                  fetchData();
+                                } catch (err) {
+                                  toast.error(
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Salvataggio misure fallito. Riprova."
+                                  );
+                                  throw err;
+                                }
                               }}
                             />
                           </div>
@@ -627,31 +793,29 @@ export default function AziendaDetailPage() {
                     );
                   })
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </Panel>
         </TabsContent>
 
         {/* Documenti Tab */}
-        <TabsContent value="documenti">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Documenti Generati</CardTitle>
-            </CardHeader>
-            <CardContent>
+        <TabsContent value="documenti" className="mt-6">
+          <Panel>
+            <PanelHeader icon={FileText} title="Documenti Generati" />
+            <div className="p-6">
               {documenti.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
+                <p className="py-8 text-center text-[14px] text-[#64748d]">
                   Nessun documento generato. Clicca &quot;Genera Documenti&quot; per iniziare.
                 </p>
               ) : (
                 <>
                   {documenti.some((d) => d.stale_snapshot) && (
                     <div
-                      className="mb-3 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                      className="mb-4 flex items-start gap-2 rounded-md border border-[rgba(155,104,41,0.3)] bg-[rgba(155,104,41,0.06)] px-3 py-2.5 text-[13px] text-[#9b6829]"
                       role="status"
                     >
                       <ShieldAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
                       <span className="flex-1">
-                        Il sopralluogo &egrave; stato modificato dopo
+                        Il sopralluogo e&apos; stato modificato dopo
                         l&apos;ultima generazione di alcuni documenti — i
                         contenuti potrebbero essere disallineati. Rigenera i
                         documenti contrassegnati per aggiornarli.
@@ -671,29 +835,33 @@ export default function AziendaDetailPage() {
                       {documenti.map((d) => (
                         <TableRow
                           key={d.id}
-                          className={d.stale_snapshot ? "bg-amber-50/40" : ""}
+                          className={
+                            d.stale_snapshot
+                              ? "bg-[rgba(155,104,41,0.04)]"
+                              : ""
+                          }
                         >
-                          <TableCell className="font-medium">
-                            <span className="flex items-center gap-1.5">
+                          <TableCell className="font-medium text-[#061b31]">
+                            <span className="flex items-center gap-2">
                               {d.tipo_documento}
                               {d.stale_snapshot && (
-                                <Badge
-                                  variant="secondary"
-                                  className="bg-amber-100 text-amber-800 text-[10px]"
-                                  title="Il sopralluogo e' cambiato dopo questa generazione — rigenera per aggiornare"
+                                <StatusPill
+                                  className="bg-[rgba(155,104,41,0.12)] text-[#9b6829] border border-[rgba(155,104,41,0.3)]"
                                 >
                                   Da rigenerare
-                                </Badge>
+                                </StatusPill>
                               )}
                             </span>
                           </TableCell>
-                          <TableCell>v{d.versione}</TableCell>
-                          <TableCell>
-                            <Badge className={docStatusColors[d.status]}>
-                              {docStatusLabels[d.status]}
-                            </Badge>
+                          <TableCell className="tnum text-[#273951]">
+                            v{d.versione}
                           </TableCell>
                           <TableCell>
+                            <StatusPill className={docStatusStyles[d.status]}>
+                              {docStatusLabels[d.status]}
+                            </StatusPill>
+                          </TableCell>
+                          <TableCell className="tnum text-[#64748d]">
                             {new Date(d.created_at).toLocaleDateString("it-IT")}
                           </TableCell>
                         </TableRow>
@@ -702,8 +870,8 @@ export default function AziendaDetailPage() {
                   </Table>
                 </>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </Panel>
         </TabsContent>
       </Tabs>
     </div>
