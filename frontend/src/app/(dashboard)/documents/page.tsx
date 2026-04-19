@@ -11,6 +11,8 @@ import {
   Clock,
   History,
   User as UserIcon,
+  Pencil,
+  CloudDownload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -121,6 +123,11 @@ export default function DocumentsPage() {
   const [generatingAll, setGeneratingAll] = useState(false);
   const [generatingTypes, setGeneratingTypes] = useState<Set<string>>(new Set());
   const [historyTipo, setHistoryTipo] = useState<string | null>(null);
+  // Per-document pending states for the Google Docs round-trip flow
+  // (keyed by documento_generato.id). `openingGdoc` = creating/opening the
+  // editable Doc; `syncingGdoc` = pulling the edited version back.
+  const [openingGdoc, setOpeningGdoc] = useState<Set<string>>(new Set());
+  const [syncingGdoc, setSyncingGdoc] = useState<Set<string>>(new Set());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch aziende list
@@ -282,6 +289,61 @@ export default function DocumentsPage() {
       return;
     }
     await postGenerate("haccp_forms", { selected_codes: codes });
+  }
+
+  // Open a DVR document in Google Docs for in-browser editing. First call
+  // creates the Google Doc (DOCX -> GDoc conversion ~2-5s); subsequent calls
+  // return the cached edit URL immediately. On success we refresh the
+  // documents list so the sibling "Scarica modifiche" button appears.
+  async function handleOpenInGoogleDocs(doc: DocumentoGenerato) {
+    setGenerateError(null);
+    setOpeningGdoc((prev) => new Set(prev).add(doc.id));
+    try {
+      const result = await apiCall<{ gdoc_file_id: string; edit_url: string }>(
+        `/api/v1/documenti/${doc.id}/open-for-editing`,
+        { method: "POST" },
+      );
+      window.open(result.edit_url, "_blank", "noopener,noreferrer");
+      await fetchDocumenti();
+    } catch (err) {
+      setGenerateError(
+        err instanceof Error
+          ? err.message
+          : "Impossibile aprire il documento in Google Docs",
+      );
+    } finally {
+      setOpeningGdoc((prev) => {
+        const next = new Set(prev);
+        next.delete(doc.id);
+        return next;
+      });
+    }
+  }
+
+  // Pull the latest Google Doc content back into the app as a new version.
+  // Backend inserts a new DocumentoGenerato row with incremented `versione`
+  // and `options.edited_in_gdocs = true`; refreshing the list surfaces it.
+  async function handleSyncFromGoogleDocs(doc: DocumentoGenerato) {
+    setGenerateError(null);
+    setSyncingGdoc((prev) => new Set(prev).add(doc.id));
+    try {
+      await apiCall(`/api/v1/documenti/${doc.id}/sync-from-gdoc`, {
+        method: "POST",
+      });
+      await fetchDocumenti();
+    } catch (err) {
+      setGenerateError(
+        err instanceof Error
+          ? err.message
+          : "Sincronizzazione da Google Docs non riuscita",
+      );
+    } finally {
+      setSyncingGdoc((prev) => {
+        const next = new Set(prev);
+        next.delete(doc.id);
+        return next;
+      });
+    }
   }
 
   async function handleGenerateAll() {
@@ -497,6 +559,44 @@ export default function DocumentsPage() {
                         Scarica
                       </Button>
                     )}
+                    {/* Google Docs round-trip editing — DVR Master only for now.
+                        "Modifica" creates (or reopens) an editable Google Doc;
+                        "Scarica modifiche" pulls edits back as a new version. */}
+                    {docType.key === "dvr_master" &&
+                      (existing?.status === "ready" || existing?.status === "completed") && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleOpenInGoogleDocs(existing)}
+                            disabled={openingGdoc.has(existing.id)}
+                            aria-label="Modifica in Google Docs"
+                          >
+                            {openingGdoc.has(existing.id) ? (
+                              <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                            ) : (
+                              <Pencil className="mr-1.5 h-3 w-3" />
+                            )}
+                            Modifica in Google Docs
+                          </Button>
+                          {existing.gdoc_file_id && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleSyncFromGoogleDocs(existing)}
+                              disabled={syncingGdoc.has(existing.id)}
+                              aria-label="Scarica modifiche da Google Docs"
+                            >
+                              {syncingGdoc.has(existing.id) ? (
+                                <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                              ) : (
+                                <CloudDownload className="mr-1.5 h-3 w-3" />
+                              )}
+                              Scarica modifiche
+                            </Button>
+                          )}
+                        </>
+                      )}
                     {versionCount > 0 && (
                       <Button
                         size="sm"

@@ -37,6 +37,15 @@ services:
         value: '["https://n2o-dvr-frontend.onrender.com"]'
       - key: FILE_STORAGE_PATH
         value: /data
+      # The DVR Google Docs editing endpoints (/documenti/{id}/open-for-editing
+      # + /sync-from-gdoc) run on the API service and need the same Drive
+      # credentials + target folder as the worker. Upload a Secret File
+      # named `token.json` to this service via the Render dashboard; without
+      # it the endpoints return 503 with an Italian error message.
+      - key: GOOGLE_DRIVE_FOLDER_ID
+        value: 13aHCy8D78JwJzgffxYbqe7Nmyed84may
+      - key: GOOGLE_DRIVE_TOKEN_JSON
+        value: /etc/secrets/token.json
     disk:
       name: n2o-data
       mountPath: /data

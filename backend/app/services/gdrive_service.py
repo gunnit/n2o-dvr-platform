@@ -156,3 +156,124 @@ async def upload_generated_document(doc: DocumentoGenerato, local_path: str) -> 
     # Run the blocking sync call in a thread
     file_id = await asyncio.to_thread(_upload_sync, doc.tipo_documento, rs, local_path)
     return file_id
+
+
+# ---------------------------------------------------------------------------
+# Google Doc (editable) conversion, sharing, export
+# ---------------------------------------------------------------------------
+
+DOCX_MIMETYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+GDOC_MIMETYPE = "application/vnd.google-apps.document"
+
+
+def _create_gdoc_sync(
+    docx_bytes: bytes,
+    filename: str,
+    azienda_ragione_sociale: str,
+) -> Optional[str]:
+    """Upload docx_bytes and trigger Drive's auto-conversion to Google Docs."""
+    creds = _load_credentials()
+    if creds is None:
+        return None
+    try:
+        import io
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaIoBaseUpload
+    except ImportError:
+        log.warning("google-api-python-client not available")
+        return None
+
+    try:
+        service = build("drive", "v3", credentials=creds, cache_discovery=False)
+        parent = settings.GOOGLE_DRIVE_FOLDER_ID
+        company_folder_id = _get_or_create_folder(service, parent, azienda_ragione_sociale)
+        if not company_folder_id:
+            return None
+
+        # Strip .docx extension so the Google Doc name doesn't show as "foo.docx"
+        display_name = filename[:-5] if filename.lower().endswith(".docx") else filename
+        # Suffix to distinguish editable copies from archival .docx uploads
+        display_name = f"{display_name} (modificabile)"
+
+        meta = {
+            "name": display_name,
+            "parents": [company_folder_id],
+            # Target mimeType triggers Drive's DOCX -> Google Doc conversion
+            "mimeType": GDOC_MIMETYPE,
+        }
+        media = MediaIoBaseUpload(io.BytesIO(docx_bytes), mimetype=DOCX_MIMETYPE, resumable=True)
+        result = service.files().create(body=meta, media_body=media, fields="id").execute()
+        file_id = result.get("id")
+        log.info("Created Google Doc %s from %s", file_id, filename)
+        return file_id
+    except Exception as e:
+        log.warning("Google Doc creation failed: %s", e)
+        return None
+
+
+def _share_anyone_with_link_sync(file_id: str) -> bool:
+    creds = _load_credentials()
+    if creds is None:
+        return False
+    try:
+        from googleapiclient.discovery import build
+        from googleapiclient.errors import HttpError
+    except ImportError:
+        return False
+
+    try:
+        service = build("drive", "v3", credentials=creds, cache_discovery=False)
+        service.permissions().create(
+            fileId=file_id,
+            body={"role": "writer", "type": "anyone"},
+            fields="id",
+        ).execute()
+        return True
+    except HttpError as e:
+        # 400 "cannotShareTeamDriveWithNonGoogleAccounts" etc. — log and carry on;
+        # for our case duplicate permissions simply no-op on Drive v3.
+        log.warning("share_anyone_with_link failed for %s: %s", file_id, e)
+        return False
+    except Exception as e:
+        log.warning("share_anyone_with_link unexpected error: %s", e)
+        return False
+
+
+def _export_gdoc_sync(file_id: str) -> Optional[bytes]:
+    creds = _load_credentials()
+    if creds is None:
+        return None
+    try:
+        from googleapiclient.discovery import build
+    except ImportError:
+        return None
+
+    try:
+        service = build("drive", "v3", credentials=creds, cache_discovery=False)
+        data = service.files().export_media(fileId=file_id, mimeType=DOCX_MIMETYPE).execute()
+        # export_media returns bytes directly on success
+        return data if isinstance(data, (bytes, bytearray)) else None
+    except Exception as e:
+        log.warning("export_gdoc_as_docx failed for %s: %s", file_id, e)
+        return None
+
+
+async def create_gdoc_from_docx_bytes(
+    docx_bytes: bytes,
+    filename: str,
+    azienda_ragione_sociale: str,
+) -> Optional[str]:
+    """Create an editable Google Doc from .docx bytes. Returns Doc file ID or None."""
+    return await asyncio.to_thread(
+        _create_gdoc_sync, docx_bytes, filename, azienda_ragione_sociale
+    )
+
+
+async def share_anyone_with_link(file_id: str) -> bool:
+    """Grant 'anyone with link' writer access to a Drive file. True on success."""
+    return await asyncio.to_thread(_share_anyone_with_link_sync, file_id)
+
+
+async def export_gdoc_as_docx(file_id: str) -> Optional[bytes]:
+    """Export a Google Doc as .docx bytes. None on error."""
+    return await asyncio.to_thread(_export_gdoc_sync, file_id)

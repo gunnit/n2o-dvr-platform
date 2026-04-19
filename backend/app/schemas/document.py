@@ -25,6 +25,10 @@ class DocumentResponse(BaseModel):
     status: str
     file_path: str | None = None
     gdrive_file_id: str | None = None
+    # Google Doc (editable) file ID + derived edit URL. Populated when the
+    # user has opened this document for in-browser editing via Google Docs.
+    gdoc_file_id: str | None = None
+    gdoc_edit_url: str | None = None
     # User-facing error line shown next to "bozza" status (US-2.8 AC3).
     # None on success, and non-None on any failed-and-rolled-back record.
     error_message: str | None = None
@@ -38,6 +42,11 @@ class DocumentResponse(BaseModel):
     stale_snapshot: bool = False
 
     model_config = {"from_attributes": True}
+
+
+class DocumentEditLinkResponse(BaseModel):
+    gdoc_file_id: str
+    edit_url: str
 
 
 class DocumentSnapshotResponse(BaseModel):

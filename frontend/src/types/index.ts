@@ -105,6 +105,12 @@ export interface DocumentoGenerato {
     | "error";
   file_path: string | null;
   gdrive_file_id: string | null;
+  // Editable Google Doc ID + derived edit URL, populated after the user
+  // has opened this document for in-browser editing. Both null on a fresh
+  // generation; the documents page toggles the "Modifica in Google Docs"
+  // button state on gdoc_file_id presence.
+  gdoc_file_id?: string | null;
+  gdoc_edit_url?: string | null;
   // User-facing explanation when status === "bozza" (US-2.8 AC3).
   error_message?: string | null;
   created_at: string;

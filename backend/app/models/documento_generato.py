@@ -28,6 +28,10 @@ class DocumentoGenerato(Base):
     file_content: Mapped[bytes | None] = mapped_column(LargeBinary)
     file_name: Mapped[str | None] = mapped_column(String)
     gdrive_file_id: Mapped[str | None] = mapped_column(String)
+    # Google Doc (editable) file ID, set when the user opens the document
+    # for in-browser editing. Distinct from gdrive_file_id which points to
+    # the archival .docx upload.
+    gdoc_file_id: Mapped[str | None] = mapped_column(String)
     error_message: Mapped[str | None] = mapped_column(Text)
     # US-4.4: optional per-generation configuration dict. Currently used by
     # the HACCP forms generator to pick a subset of SA-01..SA-16 forms via

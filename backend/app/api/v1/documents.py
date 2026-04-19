@@ -17,6 +17,7 @@ from app.models.documento_generato import DocumentoGenerato
 from app.models.user import User
 from app.schemas.document import (
     DocumentBatchRequest,
+    DocumentEditLinkResponse,
     DocumentGenerateRequest,
     DocumentResponse,
     DocumentSnapshotResponse,
@@ -30,6 +31,11 @@ def _doc_to_response(doc: DocumentoGenerato, generated_by_name: str | None) -> D
     the caller (US-2.9) since SQLAlchemy relationships for `generated_by`
     aren't wired on the model.
     """
+    gdoc_file_id = getattr(doc, "gdoc_file_id", None)
+    gdoc_edit_url = (
+        f"https://docs.google.com/document/d/{gdoc_file_id}/edit"
+        if gdoc_file_id else None
+    )
     return DocumentResponse(
         id=doc.id,
         azienda_id=doc.azienda_id,
@@ -38,6 +44,8 @@ def _doc_to_response(doc: DocumentoGenerato, generated_by_name: str | None) -> D
         status=doc.status,
         file_path=doc.file_path,
         gdrive_file_id=doc.gdrive_file_id,
+        gdoc_file_id=gdoc_file_id,
+        gdoc_edit_url=gdoc_edit_url,
         error_message=doc.error_message,
         created_at=doc.created_at,
         generated_by_name=generated_by_name,
@@ -481,6 +489,167 @@ async def restore_document(
         file_content=restored_content,
         file_name=new_name,
         error_message=None,
+        generated_by=user.id,
+        generation_started_at=now,
+        generation_completed_at=now,
+    )
+    db.add(new_doc)
+    await db.commit()
+    await db.refresh(new_doc)
+
+    return _doc_to_response(new_doc, await _resolve_user_name(new_doc.generated_by, db))
+
+
+# ---------------------------------------------------------------------------
+# Google Docs round-trip: open-for-editing + sync-from-gdoc (DVR Master only)
+# ---------------------------------------------------------------------------
+
+# Document types eligible for the in-browser Google Docs editing flow.
+# Start with DVR Master; add attachments once the round-trip is proven.
+_GDOC_EDITABLE_TYPES: set[str] = {"dvr_master"}
+
+
+@download_router.post("/{document_id}/open-for-editing", response_model=DocumentEditLinkResponse)
+async def open_document_for_editing(
+    document_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return an editable Google Docs URL for the document.
+
+    First call: upload the .docx bytes to Drive with conversion to Google Doc,
+    grant "anyone with link can edit" permission, persist the new Google Doc
+    file ID on the row, and return the edit URL.
+    Subsequent calls: return the existing edit URL (idempotent).
+    """
+    from fastapi import HTTPException, status
+
+    result = await db.execute(
+        select(DocumentoGenerato)
+        .join(Azienda, Azienda.id == DocumentoGenerato.azienda_id)
+        .where(DocumentoGenerato.id == document_id, Azienda.organization_id == org_id)
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise NotFoundError("Document not found")
+
+    if doc.tipo_documento not in _GDOC_EDITABLE_TYPES:
+        raise BadRequestError(
+            "La modifica in Google Docs è disponibile solo per il DVR Master"
+        )
+    if doc.status != "completed":
+        raise NotFoundError("Document not ready yet")
+
+    # Idempotent reopen: if we already have the Google Doc, just return its URL.
+    if doc.gdoc_file_id:
+        return DocumentEditLinkResponse(
+            gdoc_file_id=doc.gdoc_file_id,
+            edit_url=f"https://docs.google.com/document/d/{doc.gdoc_file_id}/edit",
+        )
+
+    if not doc.file_content:
+        raise NotFoundError("File non disponibile. Rigenera il documento.")
+
+    # Resolve the azienda name for the Drive folder
+    azienda_result = await db.execute(select(Azienda).where(Azienda.id == doc.azienda_id))
+    azienda = azienda_result.scalar_one()
+
+    from app.services.gdrive_service import (
+        create_gdoc_from_docx_bytes,
+        share_anyone_with_link,
+    )
+
+    filename = doc.file_name or f"{doc.tipo_documento}_v{doc.versione}.docx"
+    gdoc_id = await create_gdoc_from_docx_bytes(
+        doc.file_content, filename, azienda.ragione_sociale[:100]
+    )
+    if not gdoc_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google Drive non configurato o errore di conversione",
+        )
+
+    await share_anyone_with_link(gdoc_id)
+
+    doc.gdoc_file_id = gdoc_id
+    await db.commit()
+    await db.refresh(doc)
+
+    return DocumentEditLinkResponse(
+        gdoc_file_id=gdoc_id,
+        edit_url=f"https://docs.google.com/document/d/{gdoc_id}/edit",
+    )
+
+
+@download_router.post(
+    "/{document_id}/sync-from-gdoc", response_model=DocumentResponse, status_code=201
+)
+async def sync_document_from_gdoc(
+    document_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Pull the latest Google Doc content back into a new version row.
+
+    Exports the live Google Doc as .docx via Drive API, inserts a new
+    DocumentoGenerato row with incremented `versione` and status=completed,
+    and tags `options.edited_in_gdocs=True` for the version history UI.
+    """
+    from fastapi import HTTPException, status
+
+    result = await db.execute(
+        select(DocumentoGenerato)
+        .join(Azienda, Azienda.id == DocumentoGenerato.azienda_id)
+        .where(DocumentoGenerato.id == document_id, Azienda.organization_id == org_id)
+    )
+    source = result.scalar_one_or_none()
+    if not source:
+        raise NotFoundError("Document not found")
+
+    if not source.gdoc_file_id:
+        raise BadRequestError("Nessuna modifica in Google Docs da sincronizzare")
+
+    from app.services.gdrive_service import export_gdoc_as_docx
+
+    exported = await export_gdoc_as_docx(source.gdoc_file_id)
+    if not exported:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Impossibile esportare il documento da Google Docs",
+        )
+
+    # Next version for this document type
+    result = await db.execute(
+        select(DocumentoGenerato)
+        .where(
+            DocumentoGenerato.azienda_id == source.azienda_id,
+            DocumentoGenerato.tipo_documento == source.tipo_documento,
+        )
+        .order_by(DocumentoGenerato.versione.desc())
+        .limit(1)
+    )
+    latest = result.scalar_one_or_none()
+    next_version = (latest.versione + 1) if latest else 1
+
+    # Build filename: append -edited to stem
+    src_name = source.file_name or f"{source.tipo_documento}_v{source.versione}.docx"
+    stem, ext = os.path.splitext(src_name)
+    new_name = f"{stem}_v{next_version}_edited{ext or '.docx'}"
+
+    merged_options = dict(source.options or {})
+    merged_options["edited_in_gdocs"] = True
+    merged_options["source_version_id"] = str(source.id)
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    new_doc = DocumentoGenerato(
+        azienda_id=source.azienda_id,
+        tipo_documento=source.tipo_documento,
+        versione=next_version,
+        status="completed",
+        file_content=exported,
+        file_name=new_name,
+        options=merged_options,
         generated_by=user.id,
         generation_started_at=now,
         generation_completed_at=now,
