@@ -129,7 +129,11 @@ async def create_azienda(
     db: AsyncSession = Depends(get_db),
 ):
     _require_admin(user)
-    azienda = Azienda(**body.model_dump(), organization_id=user.organization_id)
+    azienda = Azienda(
+        **body.model_dump(),
+        organization_id=user.organization_id,
+        created_by_user_id=user.id,
+    )
     db.add(azienda)
     await db.commit()
     await db.refresh(azienda)

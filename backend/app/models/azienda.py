@@ -38,6 +38,9 @@ class Azienda(Base):
     visura_pdf_path: Mapped[str | None] = mapped_column(Text)
     visura_extracted_text: Mapped[str | None] = mapped_column(Text)
     visura_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 

@@ -12,6 +12,7 @@ import {
   LogOut,
   Settings,
   Shield,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,10 @@ const navigation = [
   { name: "Documenti", href: "/documents", icon: FileText },
   { name: "Valutazioni", href: "/assessments", icon: FlaskConical },
   { name: "Impostazioni", href: "/settings", icon: Settings },
+];
+
+const adminNavigation = [
+  { name: "Utenti", href: "/admin/users", icon: Users },
 ];
 
 type SidebarUser = {
@@ -70,6 +75,33 @@ export function Sidebar({ user }: { user: SidebarUser }) {
             </Link>
           );
         })}
+
+        {user.role === "admin" && (
+          <>
+            <div className="mt-6 mb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-white/40">
+              Amministrazione
+            </div>
+            {adminNavigation.map((item) => {
+              const isActive = pathname?.startsWith(item.href);
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-3 rounded-md px-3 py-2 transition-colors",
+                    isActive
+                      ? "bg-white/10 font-medium text-white"
+                      : "text-white/65 hover:bg-white/5 hover:text-white"
+                  )}
+                >
+                  <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                  <span>{item.name}</span>
+                </Link>
+              );
+            })}
+          </>
+        )}
       </nav>
 
       <div className="mt-auto border-t border-white/10 px-4 pt-4">
