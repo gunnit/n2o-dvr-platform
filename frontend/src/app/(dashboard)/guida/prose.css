@@ -1,0 +1,199 @@
+/* Scoped prose styles for the user guide.
+   Matches DESIGN.md (N2O navy brand + Plus Jakarta Sans / Inter).
+   Hand-tuned rather than pulling in @tailwindcss/typography. */
+
+.guida-prose {
+  color: #273951;
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  line-height: 1.65;
+}
+
+.guida-prose h1 {
+  font-family: var(--font-heading);
+  font-weight: 300;
+  font-size: 2rem;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  color: #061b31;
+  margin: 0 0 0.75rem;
+}
+
+.guida-prose h2 {
+  font-family: var(--font-heading);
+  font-weight: 400;
+  font-size: 1.5rem;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: #061b31;
+  margin: 2.5rem 0 1rem;
+  padding-top: 0.5rem;
+  scroll-margin-top: 80px;
+}
+
+.guida-prose h3 {
+  font-family: var(--font-heading);
+  font-weight: 500;
+  font-size: 1.125rem;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: #061b31;
+  margin: 1.75rem 0 0.5rem;
+  scroll-margin-top: 80px;
+}
+
+.guida-prose h4 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: #273951;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.guida-prose p {
+  margin: 0 0 1rem;
+  color: #273951;
+}
+
+.guida-prose strong {
+  color: #061b31;
+  font-weight: 600;
+}
+
+.guida-prose a {
+  color: #003d74;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(0, 61, 116, 0.35);
+  transition: text-decoration-color 160ms;
+}
+
+.guida-prose a:hover {
+  text-decoration-color: #003d74;
+}
+
+.guida-prose ul,
+.guida-prose ol {
+  margin: 0 0 1rem;
+  padding-left: 1.5rem;
+}
+
+.guida-prose ul {
+  list-style: disc outside;
+}
+
+.guida-prose ol {
+  list-style: decimal outside;
+}
+
+.guida-prose ul ul {
+  list-style: circle outside;
+  margin: 0.25rem 0;
+}
+
+.guida-prose li {
+  margin: 0.25rem 0;
+  display: list-item;
+}
+
+.guida-prose li::marker {
+  color: #64748d;
+}
+
+.guida-prose li > p {
+  margin: 0;
+}
+
+.guida-prose code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.875em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: #f6f9fc;
+  color: #273951;
+  border: 1px solid #e5edf5;
+}
+
+.guida-prose pre {
+  background: #f6f9fc;
+  border: 1px solid #e5edf5;
+  border-radius: 8px;
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.guida-prose pre code {
+  padding: 0;
+  background: transparent;
+  border: none;
+  font-size: inherit;
+}
+
+.guida-prose blockquote {
+  border-left: 3px solid #003d74;
+  margin: 1rem 0;
+  padding: 0.5rem 1rem;
+  background: #f6f9fc;
+  color: #273951;
+  border-radius: 0 4px 4px 0;
+}
+
+.guida-prose blockquote p {
+  margin: 0;
+}
+
+.guida-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.875rem;
+}
+
+.guida-prose th,
+.guida-prose td {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #e5edf5;
+  text-align: left;
+  vertical-align: top;
+}
+
+.guida-prose th {
+  background: #f6f9fc;
+  font-weight: 600;
+  color: #273951;
+}
+
+.guida-prose hr {
+  border: 0;
+  border-top: 1px solid #e5edf5;
+  margin: 2.5rem 0;
+}
+
+.guida-prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid #e5edf5;
+  box-shadow:
+    rgba(50, 50, 93, 0.12) 0px 12px 24px -18px,
+    rgba(0, 0, 0, 0.06) 0px 8px 16px -12px;
+  display: block;
+  margin: 1.25rem auto;
+}
+
+.guida-prose .heading-anchor {
+  color: #cbd5e1;
+  text-decoration: none;
+  margin-left: 0.5rem;
+  font-weight: 300;
+  opacity: 0;
+  transition: opacity 160ms;
+}
+
+.guida-prose h2:hover .heading-anchor,
+.guida-prose h3:hover .heading-anchor {
+  opacity: 1;
+}

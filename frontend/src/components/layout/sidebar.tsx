@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
+  BookOpen,
   Building2,
   ClipboardList,
   FileText,
@@ -22,6 +23,7 @@ const navigation = [
   { name: "Sopralluoghi", href: "/survey", icon: ClipboardList },
   { name: "Documenti", href: "/documents", icon: FileText },
   { name: "Valutazioni", href: "/assessments", icon: FlaskConical },
+  { name: "Guida", href: "/guida", icon: BookOpen },
   { name: "Impostazioni", href: "/settings", icon: Settings },
 ];
 
