@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { toast } from "sonner";
 import {
   FileText,
   RefreshCw,
@@ -13,6 +14,7 @@ import {
   User as UserIcon,
   Pencil,
   CloudDownload,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -125,9 +127,14 @@ export default function DocumentsPage() {
   const [historyTipo, setHistoryTipo] = useState<string | null>(null);
   // Per-document pending states for the Google Docs round-trip flow
   // (keyed by documento_generato.id). `openingGdoc` = creating/opening the
-  // editable Doc; `syncingGdoc` = pulling the edited version back.
+  // editable Doc; `syncingGdoc` = pulling the edited version back;
+  // `discardingGdoc` = deleting the Doc without syncing.
   const [openingGdoc, setOpeningGdoc] = useState<Set<string>>(new Set());
   const [syncingGdoc, setSyncingGdoc] = useState<Set<string>>(new Set());
+  const [discardingGdoc, setDiscardingGdoc] = useState<Set<string>>(new Set());
+  // Confirm dialog for "Scarta modifiche" — stores the doc whose edits
+  // will be discarded, cleared on confirm/cancel.
+  const [discardTarget, setDiscardTarget] = useState<DocumentoGenerato | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch aziende list
@@ -293,20 +300,42 @@ export default function DocumentsPage() {
 
   // Open a DVR document in Google Docs for in-browser editing. First call
   // creates the Google Doc (DOCX -> GDoc conversion ~2-5s); subsequent calls
-  // return the cached edit URL immediately. On success we refresh the
-  // documents list so the sibling "Scarica modifiche" button appears.
+  // return the cached edit URL immediately. Retries once on network failure
+  // since Render's API service can return a transient 502 on cold-start
+  // right after a redeploy.
   async function handleOpenInGoogleDocs(doc: DocumentoGenerato) {
-    setGenerateError(null);
     setOpeningGdoc((prev) => new Set(prev).add(doc.id));
-    try {
-      const result = await apiCall<{ gdoc_file_id: string; edit_url: string }>(
+    const isFirstOpen = !doc.gdoc_file_id;
+    const convertingToast = isFirstOpen
+      ? toast.loading("Conversione in Google Docs in corso...")
+      : null;
+
+    const openOnce = () =>
+      apiCall<{ gdoc_file_id: string; edit_url: string }>(
         `/api/v1/documenti/${doc.id}/open-for-editing`,
         { method: "POST" },
       );
+
+    try {
+      let result: { gdoc_file_id: string; edit_url: string };
+      try {
+        result = await openOnce();
+      } catch (first) {
+        // Retry once after 2s for transient network / cold-start errors
+        // (502/504 preflight). Surface anything that fails twice.
+        const msg = first instanceof Error ? first.message : "";
+        const looksTransient = /fetch|502|503|504|network/i.test(msg);
+        if (!looksTransient) throw first;
+        await new Promise((r) => setTimeout(r, 2000));
+        result = await openOnce();
+      }
       window.open(result.edit_url, "_blank", "noopener,noreferrer");
+      if (convertingToast) toast.dismiss(convertingToast);
+      if (isFirstOpen) toast.success("Documento aperto in Google Docs");
       await fetchDocumenti();
     } catch (err) {
-      setGenerateError(
+      if (convertingToast) toast.dismiss(convertingToast);
+      toast.error(
         err instanceof Error
           ? err.message
           : "Impossibile aprire il documento in Google Docs",
@@ -322,17 +351,23 @@ export default function DocumentsPage() {
 
   // Pull the latest Google Doc content back into the app as a new version.
   // Backend inserts a new DocumentoGenerato row with incremented `versione`
-  // and `options.edited_in_gdocs = true`; refreshing the list surfaces it.
+  // and `options.edited_in_gdocs = true`. Backend rejects with 409 when no
+  // edits are detected in the Google Doc — we surface the Italian message
+  // from the server as a toast instead of a generic error.
   async function handleSyncFromGoogleDocs(doc: DocumentoGenerato) {
-    setGenerateError(null);
     setSyncingGdoc((prev) => new Set(prev).add(doc.id));
+    const syncingToast = toast.loading("Sincronizzazione in corso...");
     try {
-      await apiCall(`/api/v1/documenti/${doc.id}/sync-from-gdoc`, {
-        method: "POST",
-      });
+      const synced = await apiCall<DocumentoGenerato>(
+        `/api/v1/documenti/${doc.id}/sync-from-gdoc`,
+        { method: "POST" },
+      );
+      toast.dismiss(syncingToast);
+      toast.success(`Nuova versione v${synced.versione} creata`);
       await fetchDocumenti();
     } catch (err) {
-      setGenerateError(
+      toast.dismiss(syncingToast);
+      toast.error(
         err instanceof Error
           ? err.message
           : "Sincronizzazione da Google Docs non riuscita",
@@ -343,6 +378,34 @@ export default function DocumentsPage() {
         next.delete(doc.id);
         return next;
       });
+    }
+  }
+
+  // Delete the editable Google Doc without importing its content. Used when
+  // the user decides the in-browser edits aren't worth keeping — backend
+  // removes the Drive file and clears gdoc_file_id so the sync/discard
+  // buttons disappear.
+  async function handleDiscardGdocEdits(doc: DocumentoGenerato) {
+    setDiscardingGdoc((prev) => new Set(prev).add(doc.id));
+    try {
+      await apiCall<DocumentoGenerato>(`/api/v1/documenti/${doc.id}/gdoc`, {
+        method: "DELETE",
+      });
+      toast.success("Modifiche in Google Docs scartate");
+      await fetchDocumenti();
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Impossibile scartare le modifiche",
+      );
+    } finally {
+      setDiscardingGdoc((prev) => {
+        const next = new Set(prev);
+        next.delete(doc.id);
+        return next;
+      });
+      setDiscardTarget(null);
     }
   }
 
@@ -580,20 +643,37 @@ export default function DocumentsPage() {
                             Modifica in Google Docs
                           </Button>
                           {existing.gdoc_file_id && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleSyncFromGoogleDocs(existing)}
-                              disabled={syncingGdoc.has(existing.id)}
-                              aria-label="Scarica modifiche da Google Docs"
-                            >
-                              {syncingGdoc.has(existing.id) ? (
-                                <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-                              ) : (
-                                <CloudDownload className="mr-1.5 h-3 w-3" />
-                              )}
-                              Scarica modifiche
-                            </Button>
+                            <>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleSyncFromGoogleDocs(existing)}
+                                disabled={syncingGdoc.has(existing.id)}
+                                aria-label="Scarica modifiche da Google Docs"
+                              >
+                                {syncingGdoc.has(existing.id) ? (
+                                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                                ) : (
+                                  <CloudDownload className="mr-1.5 h-3 w-3" />
+                                )}
+                                Scarica modifiche
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setDiscardTarget(existing)}
+                                disabled={discardingGdoc.has(existing.id)}
+                                aria-label="Scarta modifiche Google Docs"
+                                className="text-[#ba1a1a] hover:text-[#ba1a1a]"
+                              >
+                                {discardingGdoc.has(existing.id) ? (
+                                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Trash2 className="mr-1.5 h-3 w-3" />
+                                )}
+                                Scarta
+                              </Button>
+                            </>
                           )}
                         </>
                       )}
@@ -615,6 +695,43 @@ export default function DocumentsPage() {
           </div>
         </>
       )}
+
+      {/* Confirm "Scarta modifiche" — destructive action (deletes the Google
+          Doc on Drive and the user's in-browser edits) so a confirm dialog is
+          warranted rather than a silent click. */}
+      <Dialog
+        open={discardTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDiscardTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Scartare le modifiche?</DialogTitle>
+            <DialogDescription>
+              Le modifiche fatte in Google Docs verranno eliminate
+              definitivamente e il documento condiviso verrà rimosso da Drive.
+              Questa azione non può essere annullata.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDiscardTarget(null)}>
+              Annulla
+            </Button>
+            <Button
+              onClick={() => {
+                if (discardTarget) void handleDiscardGdocEdits(discardTarget);
+              }}
+              disabled={
+                discardTarget !== null && discardingGdoc.has(discardTarget.id)
+              }
+              className="bg-[#ba1a1a] text-white hover:bg-[#9b1515]"
+            >
+              Scarta modifiche
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* US-4.4: HACCP forms subset selection. Defaults to all 16 + index. */}
       <Dialog open={haccpDialogOpen} onOpenChange={setHaccpDialogOpen}>

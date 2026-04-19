@@ -29,6 +29,11 @@ class DocumentResponse(BaseModel):
     # user has opened this document for in-browser editing via Google Docs.
     gdoc_file_id: str | None = None
     gdoc_edit_url: str | None = None
+    # True when this row was produced by syncing edits back from Google Docs.
+    # Derived server-side from options.edited_in_gdocs so the frontend can
+    # surface a "Modificato in Google Docs" badge on the version history row
+    # without re-parsing the options JSON.
+    edited_in_gdocs: bool = False
     # User-facing error line shown next to "bozza" status (US-2.8 AC3).
     # None on success, and non-None on any failed-and-rolled-back record.
     error_message: str | None = None

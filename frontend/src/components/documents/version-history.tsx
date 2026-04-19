@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, FileText, GitCompare, History, RotateCcw } from "lucide-react";
+import { Download, FileText, GitCompare, History, RotateCcw, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -396,6 +396,19 @@ export function VersionHistory({
                             <span className="text-xs font-medium text-primary">
                               Versione corrente
                             </span>
+                          )}
+                          {/* Distinguish human-edited versions (synced from
+                              Google Docs) from the AI-generated originals.
+                              Reviewers reviewing a run need to know at a
+                              glance which versions had hand corrections. */}
+                          {version.edited_in_gdocs && (
+                            <Badge
+                              className="bg-[rgba(66,100,251,0.1)] text-[#2e48b0] border border-[rgba(66,100,251,0.3)]"
+                              title="Versione importata dopo modifiche in Google Docs"
+                            >
+                              <Pencil className="mr-1 h-2.5 w-2.5" />
+                              Modificato in Google Docs
+                            </Badge>
                           )}
                         </div>
 

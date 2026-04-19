@@ -36,6 +36,7 @@ def _doc_to_response(doc: DocumentoGenerato, generated_by_name: str | None) -> D
         f"https://docs.google.com/document/d/{gdoc_file_id}/edit"
         if gdoc_file_id else None
     )
+    edited_in_gdocs = bool((getattr(doc, "options", None) or {}).get("edited_in_gdocs"))
     return DocumentResponse(
         id=doc.id,
         azienda_id=doc.azienda_id,
@@ -46,6 +47,7 @@ def _doc_to_response(doc: DocumentoGenerato, generated_by_name: str | None) -> D
         gdrive_file_id=doc.gdrive_file_id,
         gdoc_file_id=gdoc_file_id,
         gdoc_edit_url=gdoc_edit_url,
+        edited_in_gdocs=edited_in_gdocs,
         error_message=doc.error_message,
         created_at=doc.created_at,
         generated_by_name=generated_by_name,
@@ -610,7 +612,30 @@ async def sync_document_from_gdoc(
     if not source.gdoc_file_id:
         raise BadRequestError("Nessuna modifica in Google Docs da sincronizzare")
 
-    from app.services.gdrive_service import export_gdoc_as_docx
+    from app.services.gdrive_service import (
+        delete_gdoc,
+        export_gdoc_as_docx,
+        get_gdoc_times,
+    )
+
+    # Dirty-check: if the Google Doc's modifiedTime is within a few seconds of
+    # its createdTime, the user never actually edited. Reject so double-clicks
+    # or stale sync attempts don't produce a spurious v+1 identical to v.
+    times = await get_gdoc_times(source.gdoc_file_id)
+    if times is not None:
+        from datetime import datetime as _dt
+        try:
+            created_dt = _dt.fromisoformat(times[0].replace("Z", "+00:00"))
+            modified_dt = _dt.fromisoformat(times[1].replace("Z", "+00:00"))
+            # 5s tolerance covers Drive's own post-conversion writes.
+            if (modified_dt - created_dt).total_seconds() < 5:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Nessuna modifica rilevata in Google Docs",
+                )
+        except ValueError:
+            # Fall through if Drive returned something we couldn't parse.
+            pass
 
     exported = await export_gdoc_as_docx(source.gdoc_file_id)
     if not exported:
@@ -655,7 +680,64 @@ async def sync_document_from_gdoc(
         generation_completed_at=now,
     )
     db.add(new_doc)
+    # Self-cleanup: once we've captured the edits as a new DB-backed version,
+    # the Google Doc is no longer authoritative. Clear the source row's
+    # gdoc_file_id and delete the Drive file so the UI stops offering sync on
+    # a stale link. Best-effort — a Drive delete failure is logged and the
+    # commit still proceeds (the user can manually clean up from Drive).
+    stale_gdoc_id = source.gdoc_file_id
+    source.gdoc_file_id = None
     await db.commit()
     await db.refresh(new_doc)
+    try:
+        await delete_gdoc(stale_gdoc_id)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Post-sync Drive cleanup failed for %s", stale_gdoc_id
+        )
 
     return _doc_to_response(new_doc, await _resolve_user_name(new_doc.generated_by, db))
+
+
+@download_router.delete("/{document_id}/gdoc", response_model=DocumentResponse)
+async def discard_gdoc_edits(
+    document_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete the editable Google Doc for this row without importing its content.
+
+    Used when the user realises they don't want to keep the in-browser edits —
+    removes the Drive file and clears ``gdoc_file_id`` so the UI hides the
+    sync/discard buttons. Idempotent: if the Doc is already gone on Drive,
+    still clears the DB state.
+    """
+    result = await db.execute(
+        select(DocumentoGenerato)
+        .join(Azienda, Azienda.id == DocumentoGenerato.azienda_id)
+        .where(DocumentoGenerato.id == document_id, Azienda.organization_id == org_id)
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise NotFoundError("Document not found")
+    if not doc.gdoc_file_id:
+        # Nothing to discard — return current state without error so the
+        # frontend treats a double-click as a no-op.
+        return _doc_to_response(doc, await _resolve_user_name(doc.generated_by, db))
+
+    from app.services.gdrive_service import delete_gdoc as _delete_gdoc
+
+    stale_id = doc.gdoc_file_id
+    doc.gdoc_file_id = None
+    await db.commit()
+    await db.refresh(doc)
+    try:
+        await _delete_gdoc(stale_id)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Drive delete failed on discard for %s", stale_id
+        )
+
+    return _doc_to_response(doc, await _resolve_user_name(doc.generated_by, db))

@@ -111,6 +111,11 @@ export interface DocumentoGenerato {
   // button state on gdoc_file_id presence.
   gdoc_file_id?: string | null;
   gdoc_edit_url?: string | null;
+  // True when this row was produced by syncing edits back from Google Docs
+  // (i.e. options.edited_in_gdocs was set during generation). Surfaced in
+  // the version-history drawer as a "Modificato in Google Docs" badge so
+  // reviewers can distinguish AI-generated versions from human-edited ones.
+  edited_in_gdocs?: boolean;
   // User-facing explanation when status === "bozza" (US-2.8 AC3).
   error_message?: string | null;
   created_at: string;

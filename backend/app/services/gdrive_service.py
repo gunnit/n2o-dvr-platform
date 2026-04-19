@@ -277,3 +277,63 @@ async def share_anyone_with_link(file_id: str) -> bool:
 async def export_gdoc_as_docx(file_id: str) -> Optional[bytes]:
     """Export a Google Doc as .docx bytes. None on error."""
     return await asyncio.to_thread(_export_gdoc_sync, file_id)
+
+
+def _gdoc_times_sync(file_id: str) -> Optional[tuple[str, str]]:
+    """Return (createdTime, modifiedTime) ISO strings, or None on failure."""
+    creds = _load_credentials()
+    if creds is None:
+        return None
+    try:
+        from googleapiclient.discovery import build
+    except ImportError:
+        return None
+    try:
+        service = build("drive", "v3", credentials=creds, cache_discovery=False)
+        meta = service.files().get(
+            fileId=file_id, fields="createdTime,modifiedTime"
+        ).execute()
+        created = meta.get("createdTime")
+        modified = meta.get("modifiedTime")
+        if not created or not modified:
+            return None
+        return (created, modified)
+    except Exception as e:
+        log.warning("get_gdoc_times failed for %s: %s", file_id, e)
+        return None
+
+
+def _delete_gdoc_sync(file_id: str) -> bool:
+    creds = _load_credentials()
+    if creds is None:
+        return False
+    try:
+        from googleapiclient.discovery import build
+        from googleapiclient.errors import HttpError
+    except ImportError:
+        return False
+    try:
+        service = build("drive", "v3", credentials=creds, cache_discovery=False)
+        service.files().delete(fileId=file_id).execute()
+        return True
+    except HttpError as e:
+        # 404 = already gone; treat as success so the caller can still clear state.
+        if getattr(e, "status_code", None) == 404 or "404" in str(e):
+            return True
+        log.warning("delete_gdoc failed for %s: %s", file_id, e)
+        return False
+    except Exception as e:
+        log.warning("delete_gdoc unexpected error: %s", e)
+        return False
+
+
+async def get_gdoc_times(file_id: str) -> Optional[tuple[str, str]]:
+    """Fetch (createdTime, modifiedTime) for a Google Doc. Used by the
+    dirty-check in sync-from-gdoc — if modifiedTime is within a few seconds
+    of createdTime, the user never edited and the sync should be rejected."""
+    return await asyncio.to_thread(_gdoc_times_sync, file_id)
+
+
+async def delete_gdoc(file_id: str) -> bool:
+    """Delete a Google Doc from Drive. True on success or if already gone."""
+    return await asyncio.to_thread(_delete_gdoc_sync, file_id)
