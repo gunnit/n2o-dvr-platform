@@ -15,11 +15,19 @@ import {
   Pencil,
   CloudDownload,
   Trash2,
+  ShieldAlert,
+  Paperclip,
+  Siren,
+  Utensils,
+  Handshake,
+  Construction,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Monogram, type AccentKey } from "@/components/cards/Monogram";
+import { formatRelative } from "@/lib/ui/relative-time";
 import {
   Dialog,
   DialogContent,
@@ -33,25 +41,46 @@ import type { Azienda, DocumentoGenerato } from "@/types";
 import { apiCall, downloadFile } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
-const documentTypes = [
-  { key: "dvr_master", name: "DVR Master", pages: "~187", complexity: "Alta" },
-  { key: "allegato_mmc", name: "Allegato MMC", pages: "~30", complexity: "Media" },
-  { key: "allegato_vdt", name: "Allegato VDT", pages: "~25", complexity: "Media" },
-  { key: "allegato_stress", name: "Allegato Stress", pages: "~20", complexity: "Media" },
-  { key: "allegato_gestanti", name: "Allegato Gestanti", pages: "~10", complexity: "Bassa" },
-  { key: "allegato_incendio", name: "Allegato Incendio", pages: "~15", complexity: "Media" },
-  { key: "allegato_microclima", name: "Microclima Moderato", pages: "~15", complexity: "Alta" },
-  { key: "allegato_microclima_severo", name: "Microclima Caldo Severo", pages: "~12", complexity: "Alta" },
-  { key: "allegato_biologico_alimentare", name: "Biologico Alimentare", pages: "~25", complexity: "Media" },
-  { key: "allegato_biologico_asilo", name: "Biologico Asilo", pages: "~20", complexity: "Media" },
-  { key: "allegato_biologico_dentisti", name: "Biologico Dentisti", pages: "~30", complexity: "Alta" },
-  { key: "pee_azienda", name: "PEE Aziendale", pages: "~25", complexity: "Media" },
-  { key: "pee_comune", name: "PEE Edificio/Comune", pages: "~40", complexity: "Media" },
-  { key: "haccp", name: "HACCP Manuale", pages: "~90", complexity: "Media" },
-  { key: "haccp_forms", name: "HACCP Schede (16)", pages: "~25", complexity: "Bassa" },
-  { key: "duvri", name: "DUVRI", pages: "~45", complexity: "Media" },
-  { key: "pos", name: "POS", pages: "~110", complexity: "Alta" },
+type DocCategory = "dvr" | "allegati" | "emergenza" | "haccp" | "contratti";
+
+type DocType = {
+  key: string;
+  name: string;
+  pages: string;
+  complexity: "Bassa" | "Media" | "Alta";
+  category: DocCategory;
+  icon: LucideIcon;
+};
+
+const CATEGORY_META: Record<DocCategory, { label: string; accent: AccentKey; rail: string }> = {
+  dvr: { label: "Documento principale", accent: "navy", rail: "bg-[#003d74]" },
+  allegati: { label: "Allegati DVR", accent: "sky", rail: "bg-[#0ea5e9]" },
+  emergenza: { label: "Piani di emergenza", accent: "amber", rail: "bg-[#d97706]" },
+  haccp: { label: "HACCP — alimentare", accent: "emerald", rail: "bg-[#059669]" },
+  contratti: { label: "Appalti e cantieri", accent: "violet", rail: "bg-[#7c3aed]" },
+};
+
+const documentTypes: DocType[] = [
+  { key: "dvr_master", name: "DVR Master", pages: "~187", complexity: "Alta", category: "dvr", icon: ShieldAlert },
+  { key: "allegato_mmc", name: "Allegato MMC", pages: "~30", complexity: "Media", category: "allegati", icon: Paperclip },
+  { key: "allegato_vdt", name: "Allegato VDT", pages: "~25", complexity: "Media", category: "allegati", icon: Paperclip },
+  { key: "allegato_stress", name: "Allegato Stress", pages: "~20", complexity: "Media", category: "allegati", icon: Paperclip },
+  { key: "allegato_gestanti", name: "Allegato Gestanti", pages: "~10", complexity: "Bassa", category: "allegati", icon: Paperclip },
+  { key: "allegato_incendio", name: "Allegato Incendio", pages: "~15", complexity: "Media", category: "allegati", icon: Paperclip },
+  { key: "allegato_microclima", name: "Microclima Moderato", pages: "~15", complexity: "Alta", category: "allegati", icon: Paperclip },
+  { key: "allegato_microclima_severo", name: "Microclima Caldo Severo", pages: "~12", complexity: "Alta", category: "allegati", icon: Paperclip },
+  { key: "allegato_biologico_alimentare", name: "Biologico Alimentare", pages: "~25", complexity: "Media", category: "allegati", icon: Paperclip },
+  { key: "allegato_biologico_asilo", name: "Biologico Asilo", pages: "~20", complexity: "Media", category: "allegati", icon: Paperclip },
+  { key: "allegato_biologico_dentisti", name: "Biologico Dentisti", pages: "~30", complexity: "Alta", category: "allegati", icon: Paperclip },
+  { key: "pee_azienda", name: "PEE Aziendale", pages: "~25", complexity: "Media", category: "emergenza", icon: Siren },
+  { key: "pee_comune", name: "PEE Edificio/Comune", pages: "~40", complexity: "Media", category: "emergenza", icon: Siren },
+  { key: "haccp", name: "HACCP Manuale", pages: "~90", complexity: "Media", category: "haccp", icon: Utensils },
+  { key: "haccp_forms", name: "HACCP Schede (16)", pages: "~25", complexity: "Bassa", category: "haccp", icon: Utensils },
+  { key: "duvri", name: "DUVRI", pages: "~45", complexity: "Media", category: "contratti", icon: Handshake },
+  { key: "pos", name: "POS", pages: "~110", complexity: "Alta", category: "contratti", icon: Construction },
 ];
+
+const CATEGORY_ORDER: DocCategory[] = ["dvr", "allegati", "emergenza", "haccp", "contratti"];
 
 const complexityColors: Record<string, string> = {
   Alta: "bg-[rgba(186,26,26,0.1)] text-[#ba1a1a] border border-[rgba(186,26,26,0.3)]",
@@ -513,190 +542,262 @@ export default function DocumentsPage() {
               </button>
             </div>
           )}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {documentTypes.map((docType) => {
-              const existing = getDocStatus(docType.key);
-              const isGenerating = generatingTypes.has(docType.key);
-              const status = existing?.status;
-              const config = status ? statusConfig[status] : null;
-              const versionCount = documenti.filter(
-                (d) => d.tipo_documento === docType.key
-              ).length;
-              // US-4.1: visually mark PEE cards as blocked when the DVR
-              // Master has not yet been generated. The generate button stays
-              // clickable so the Italian error message can still surface; the
-              // block itself is enforced by the backend.
-              const blockedByDvr =
-                DVR_DEPENDENT_TYPES.has(docType.key) && !dvrReady;
+          <div className="space-y-8">
+          {CATEGORY_ORDER.map((category) => {
+            const items = documentTypes.filter((d) => d.category === category);
+            if (items.length === 0) return null;
+            const catMeta = CATEGORY_META[category];
+            return (
+              <div key={category} className="space-y-3">
+                <div className="flex items-baseline gap-3 border-b border-dashed border-[#e5edf5] pb-2">
+                  <span className={cn("h-2 w-2 rounded-full", catMeta.rail)} />
+                  <h3 className="font-heading text-[14px] font-semibold text-[#061b31]">
+                    {catMeta.label}
+                  </h3>
+                  <span className="tnum text-[12px] text-[#94a3b8]">
+                    {items.length} document{items.length === 1 ? "o" : "i"}
+                  </span>
+                </div>
 
-              return (
-                <Card
-                  key={docType.key}
-                  className={cn(blockedByDvr && "opacity-75")}
-                >
-                  <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-muted-foreground" />
-                        <CardTitle className="text-sm">{docType.name}</CardTitle>
-                      </div>
-                      <Badge className={complexityColors[docType.complexity]}>
-                        {docType.complexity}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <p className="text-xs text-muted-foreground">{docType.pages} pagine</p>
-                    {blockedByDvr && (
-                      <p className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800">
-                        Genera prima il DVR Master
-                      </p>
-                    )}
-                    {existing && config && (
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          className={config.color}
-                          // Surface the short Italian error line from the
-                          // worker (US-2.8 AC3) via native tooltip rather
-                          // than wiring a Popover — single-line content.
-                          title={
-                            status === "bozza" && existing.error_message
-                              ? existing.error_message
-                              : undefined
-                          }
-                        >
-                          {(status === "generating" || status === "in_progress") && (
-                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                          )}
-                          {config.label}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          v{existing.versione} &middot;{" "}
-                          {new Date(existing.created_at).toLocaleDateString("it-IT")}
-                        </span>
-                      </div>
-                    )}
-                    {existing?.generated_by_name && (
-                      <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <UserIcon className="h-3 w-3" />
-                        Generato da {existing.generated_by_name}
-                      </p>
-                    )}
-                    {status === "bozza" && existing?.error_message && (
-                      <p className="text-xs text-amber-700 dark:text-amber-400">
-                        {existing.error_message}
-                      </p>
-                    )}
-                  </CardContent>
-                  {/* Primary action stays as a labeled button; secondary actions
-                      collapse to icon-only + native tooltip so a card with the
-                      full Google Docs round-trip stack (Modifica / Sync /
-                      Scarta / Storia) still fits in a 3-column grid without
-                      clipping. */}
-                  <CardFooter className="flex-wrap gap-1.5">
-                    <Button
-                      size="sm"
-                      variant={(existing?.status === "ready" || existing?.status === "completed") ? "outline" : "default"}
-                      onClick={() => handleGenerate(docType.key)}
-                      disabled={isGenerating || status === "generating" || status === "in_progress"}
-                    >
-                      {isGenerating || status === "generating" || status === "in_progress" ? (
-                        <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-                      ) : (
-                        <RefreshCw className="mr-1.5 h-3 w-3" />
-                      )}
-                      {existing?.status === "ready" || existing?.status === "completed"
-                        ? "Rigenera"
-                        : existing?.status === "bozza"
-                        ? "Riprova"
-                        : "Genera"}
-                    </Button>
-                    {(existing?.status === "ready" || existing?.status === "completed") && existing.file_path && (
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        title="Scarica"
-                        aria-label="Scarica"
-                        onClick={async () => {
-                          try {
-                            await downloadFile(`/api/v1/documenti/${existing.id}/download`);
-                          } catch (e) {
-                            alert((e as Error).message || "Download fallito");
-                          }
-                        }}
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {items.map((docType) => {
+                    const existing = getDocStatus(docType.key);
+                    const isGenerating = generatingTypes.has(docType.key);
+                    const status = existing?.status;
+                    const config = status ? statusConfig[status] : null;
+                    const versionCount = documenti.filter(
+                      (d) => d.tipo_documento === docType.key,
+                    ).length;
+                    // US-4.1: visually mark PEE cards as blocked when the DVR
+                    // Master has not yet been generated. The generate button
+                    // stays clickable so the Italian error message can still
+                    // surface; the block itself is enforced by the backend.
+                    const blockedByDvr =
+                      DVR_DEPENDENT_TYPES.has(docType.key) && !dvrReady;
+                    const ActionIcon = docType.icon;
+                    const isReady =
+                      existing?.status === "ready" ||
+                      existing?.status === "completed";
+
+                    return (
+                      <div
+                        key={docType.key}
+                        className={cn(
+                          "group relative overflow-hidden rounded-md border border-[#e5edf5] bg-white shadow-stripe-ambient transition-[box-shadow,border-color] hover:border-[#d1d9e3] hover:shadow-stripe-elevated",
+                          blockedByDvr && "opacity-75",
+                        )}
                       >
-                        <Download className="h-4 w-4" />
-                      </Button>
-                    )}
-                    {docType.key === "dvr_master" &&
-                      (existing?.status === "ready" || existing?.status === "completed") && (
-                        <>
-                          <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            onClick={() => handleOpenInGoogleDocs(existing)}
-                            disabled={openingGdoc.has(existing.id)}
-                            title="Modifica in Google Docs"
-                            aria-label="Modifica in Google Docs"
-                          >
-                            {openingGdoc.has(existing.id) ? (
-                              <Loader2 className="animate-spin" />
-                            ) : (
-                              <Pencil />
+                        <span
+                          className={cn(
+                            "absolute inset-y-0 left-0 w-[3px]",
+                            catMeta.rail,
+                          )}
+                          aria-hidden
+                        />
+                        <div className="flex flex-col gap-3 p-[18px] pl-[22px]">
+                          <div className="flex items-start gap-3">
+                            <Monogram accent={catMeta.accent}>
+                              <ActionIcon className="h-5 w-5" strokeWidth={1.75} />
+                            </Monogram>
+                            <div className="min-w-0 flex-1">
+                              <h4 className="font-heading text-[14.5px] font-semibold leading-[1.25] tracking-[-0.005em] text-[#061b31]">
+                                {docType.name}
+                              </h4>
+                              <p className="mt-0.5 text-[11.5px] font-medium uppercase tracking-[0.04em] text-[#94a3b8]">
+                                <span className="tnum">{docType.pages}</span>{" "}
+                                pagine
+                              </p>
+                            </div>
+                            <Badge
+                              className={cn(
+                                complexityColors[docType.complexity],
+                                "shrink-0",
+                              )}
+                            >
+                              {docType.complexity}
+                            </Badge>
+                          </div>
+
+                          {blockedByDvr && (
+                            <p className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11.5px] text-amber-800">
+                              Genera prima il DVR Master
+                            </p>
+                          )}
+
+                          {existing && config ? (
+                            <div className="grid grid-cols-2 gap-3 border-t border-[#eef2f7] pt-3">
+                              <div className="min-w-0">
+                                <div className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
+                                  Stato
+                                </div>
+                                <div className="mt-0.5">
+                                  <Badge
+                                    className={config.color}
+                                    title={
+                                      status === "bozza" && existing.error_message
+                                        ? existing.error_message
+                                        : undefined
+                                    }
+                                  >
+                                    {(status === "generating" ||
+                                      status === "in_progress") && (
+                                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                    )}
+                                    {config.label}
+                                  </Badge>
+                                </div>
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
+                                  Versione · aggiornato
+                                </div>
+                                <div className="mt-0.5 truncate text-[13px] font-semibold text-[#273951]">
+                                  <span className="tnum">v{existing.versione}</span>{" "}
+                                  <span className="font-normal text-[#64748d]">
+                                    · {formatRelative(existing.created_at)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-[12px] text-[#94a3b8]">
+                              Mai generato
+                            </p>
+                          )}
+
+                          {existing?.generated_by_name && (
+                            <p className="flex items-center gap-1 text-[11.5px] text-[#64748d]">
+                              <UserIcon className="h-3 w-3" strokeWidth={1.75} />
+                              {existing.generated_by_name}
+                            </p>
+                          )}
+
+                          {status === "bozza" && existing?.error_message && (
+                            <p className="text-[11.5px] text-amber-700">
+                              {existing.error_message}
+                            </p>
+                          )}
+
+                          <div className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-[#eef2f7] pt-3">
+                            <Button
+                              size="sm"
+                              variant={isReady ? "outline" : "default"}
+                              onClick={() => handleGenerate(docType.key)}
+                              disabled={
+                                isGenerating ||
+                                status === "generating" ||
+                                status === "in_progress"
+                              }
+                            >
+                              {isGenerating ||
+                              status === "generating" ||
+                              status === "in_progress" ? (
+                                <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                              ) : (
+                                <RefreshCw className="mr-1.5 h-3 w-3" />
+                              )}
+                              {isReady
+                                ? "Rigenera"
+                                : existing?.status === "bozza"
+                                  ? "Riprova"
+                                  : "Genera"}
+                            </Button>
+                            {isReady && existing.file_path && (
+                              <Button
+                                size="icon-sm"
+                                variant="ghost"
+                                title="Scarica"
+                                aria-label="Scarica"
+                                onClick={async () => {
+                                  try {
+                                    await downloadFile(
+                                      `/api/v1/documenti/${existing.id}/download`,
+                                    );
+                                  } catch (e) {
+                                    alert(
+                                      (e as Error).message || "Download fallito",
+                                    );
+                                  }
+                                }}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
                             )}
-                          </Button>
-                          {existing.gdoc_file_id && (
-                            <>
-                              <Button
-                                size="icon-sm"
-                                variant="ghost"
-                                onClick={() => handleSyncFromGoogleDocs(existing)}
-                                disabled={syncingGdoc.has(existing.id)}
-                                title="Scarica modifiche da Google Docs"
-                                aria-label="Scarica modifiche da Google Docs"
-                              >
-                                {syncingGdoc.has(existing.id) ? (
-                                  <Loader2 className="animate-spin" />
-                                ) : (
-                                  <CloudDownload />
+                            {docType.key === "dvr_master" && isReady && (
+                              <>
+                                <Button
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  onClick={() => handleOpenInGoogleDocs(existing)}
+                                  disabled={openingGdoc.has(existing.id)}
+                                  title="Modifica in Google Docs"
+                                  aria-label="Modifica in Google Docs"
+                                >
+                                  {openingGdoc.has(existing.id) ? (
+                                    <Loader2 className="animate-spin" />
+                                  ) : (
+                                    <Pencil />
+                                  )}
+                                </Button>
+                                {existing.gdoc_file_id && (
+                                  <>
+                                    <Button
+                                      size="icon-sm"
+                                      variant="ghost"
+                                      onClick={() =>
+                                        handleSyncFromGoogleDocs(existing)
+                                      }
+                                      disabled={syncingGdoc.has(existing.id)}
+                                      title="Scarica modifiche da Google Docs"
+                                      aria-label="Scarica modifiche da Google Docs"
+                                    >
+                                      {syncingGdoc.has(existing.id) ? (
+                                        <Loader2 className="animate-spin" />
+                                      ) : (
+                                        <CloudDownload />
+                                      )}
+                                    </Button>
+                                    <Button
+                                      size="icon-sm"
+                                      variant="ghost"
+                                      className="text-[#ba1a1a] hover:text-[#ba1a1a]"
+                                      onClick={() => setDiscardTarget(existing)}
+                                      disabled={discardingGdoc.has(existing.id)}
+                                      title="Scarta modifiche Google Docs"
+                                      aria-label="Scarta modifiche Google Docs"
+                                    >
+                                      {discardingGdoc.has(existing.id) ? (
+                                        <Loader2 className="animate-spin" />
+                                      ) : (
+                                        <Trash2 />
+                                      )}
+                                    </Button>
+                                  </>
                                 )}
-                              </Button>
+                              </>
+                            )}
+                            {versionCount > 0 && (
                               <Button
-                                size="icon-sm"
+                                size="sm"
                                 variant="ghost"
-                                className="text-[#ba1a1a] hover:text-[#ba1a1a]"
-                                onClick={() => setDiscardTarget(existing)}
-                                disabled={discardingGdoc.has(existing.id)}
-                                title="Scarta modifiche Google Docs"
-                                aria-label="Scarta modifiche Google Docs"
+                                className="ml-auto h-8 px-2"
+                                onClick={() => setHistoryTipo(docType.key)}
+                                title={`Storia versioni (${versionCount})`}
+                                aria-label={`Storia versioni ${docType.name}`}
                               >
-                                {discardingGdoc.has(existing.id) ? (
-                                  <Loader2 className="animate-spin" />
-                                ) : (
-                                  <Trash2 />
-                                )}
+                                <History className="mr-1 h-4 w-4" />
+                                v{versionCount}
                               </Button>
-                            </>
-                          )}
-                        </>
-                      )}
-                    {versionCount > 0 && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 px-2"
-                        onClick={() => setHistoryTipo(docType.key)}
-                        title={`Storia versioni (${versionCount})`}
-                        aria-label={`Storia versioni ${docType.name}`}
-                      >
-                        <History className="mr-1 h-4 w-4" />
-                        v{versionCount}
-                      </Button>
-                    )}
-                  </CardFooter>
-                </Card>
-              );
-            })}
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
           </div>
         </>
       )}

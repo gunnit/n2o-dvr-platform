@@ -165,20 +165,40 @@ function PersonaRoleBadges({ persona }: { persona: Persona }) {
   );
 }
 
+type PanelAccent = "navy" | "sky" | "violet" | "emerald" | "amber" | "slate";
+
+const PANEL_ACCENT: Record<PanelAccent, { rail: string; icon: string; bg: string }> = {
+  navy: { rail: "bg-[#003d74]", icon: "text-[#003d74]", bg: "bg-[rgba(0,61,116,0.08)]" },
+  sky: { rail: "bg-[#0ea5e9]", icon: "text-[#0ea5e9]", bg: "bg-[rgba(14,165,233,0.1)]" },
+  violet: { rail: "bg-[#7c3aed]", icon: "text-[#7c3aed]", bg: "bg-[rgba(124,58,237,0.1)]" },
+  emerald: { rail: "bg-[#059669]", icon: "text-[#059669]", bg: "bg-[rgba(5,150,105,0.1)]" },
+  amber: { rail: "bg-[#d97706]", icon: "text-[#d97706]", bg: "bg-[rgba(217,119,6,0.1)]" },
+  slate: { rail: "bg-[#94a3b8]", icon: "text-[#64748d]", bg: "bg-[#f6f9fc]" },
+};
+
 function Panel({
   children,
   className = "",
+  accent,
 }: {
   children: React.ReactNode;
   className?: string;
+  accent?: PanelAccent;
 }) {
+  const accentClass = accent ? PANEL_ACCENT[accent].rail : "";
   return (
     <div
       className={
-        "rounded-md border border-[#e5edf5] bg-white shadow-stripe-ambient " +
+        "relative overflow-hidden rounded-md border border-[#e5edf5] bg-white shadow-stripe-ambient " +
         className
       }
     >
+      {accent && (
+        <span
+          aria-hidden
+          className={"absolute inset-x-0 top-0 h-[2px] " + accentClass}
+        />
+      )}
       {children}
     </div>
   );
@@ -188,16 +208,35 @@ function PanelHeader({
   icon: Icon,
   title,
   action,
+  accent,
 }: {
   icon?: typeof Building2;
   title: string;
   action?: React.ReactNode;
+  accent?: PanelAccent;
 }) {
+  const accentMeta = accent ? PANEL_ACCENT[accent] : null;
   return (
     <div className="flex items-center justify-between gap-3 border-b border-[#e5edf5] px-6 py-4">
-      <div className="flex items-center gap-2">
-        {Icon && <Icon className="h-4 w-4 text-[#64748d]" strokeWidth={1.75} />}
-        <h3 className="font-heading text-[15px] font-medium tracking-[-0.005em] text-[#061b31]">
+      <div className="flex items-center gap-2.5">
+        {Icon && (
+          accentMeta ? (
+            <span
+              className={
+                "inline-flex h-7 w-7 items-center justify-center rounded-md " +
+                accentMeta.bg
+              }
+            >
+              <Icon
+                className={"h-3.5 w-3.5 " + accentMeta.icon}
+                strokeWidth={2}
+              />
+            </span>
+          ) : (
+            <Icon className="h-4 w-4 text-[#64748d]" strokeWidth={1.75} />
+          )
+        )}
+        <h3 className="font-heading text-[15px] font-semibold tracking-[-0.005em] text-[#061b31]">
           {title}
         </h3>
       </div>
@@ -454,8 +493,8 @@ export default function AziendaDetailPage() {
         {/* Panoramica Tab */}
         <TabsContent value="panoramica" className="mt-6">
           <div className="grid gap-5 md:grid-cols-2">
-            <Panel>
-              <PanelHeader icon={Building2} title="Dati Azienda" />
+            <Panel accent="navy">
+              <PanelHeader icon={Building2} title="Dati Azienda" accent="navy" />
               <div className="grid gap-5 p-6 sm:grid-cols-2">
                 <InfoRow label="Ragione Sociale" value={azienda.ragione_sociale} />
                 <InfoRow
@@ -481,8 +520,8 @@ export default function AziendaDetailPage() {
               </div>
             </Panel>
 
-            <Panel>
-              <PanelHeader icon={MapPin} title="Sedi" />
+            <Panel accent="sky">
+              <PanelHeader icon={MapPin} title="Sedi" accent="sky" />
               <div className="space-y-5 p-6">
                 <div>
                   <Eyebrow>Sede Legale</Eyebrow>
@@ -506,8 +545,8 @@ export default function AziendaDetailPage() {
               </div>
             </Panel>
 
-            <Panel className="md:col-span-2">
-              <PanelHeader icon={FileText} title="Descrizione" />
+            <Panel accent="violet" className="md:col-span-2">
+              <PanelHeader icon={FileText} title="Descrizione" accent="violet" />
               <div className="space-y-6 p-6">
                 <DescriptionEditor
                   aziendaId={azienda.id}
@@ -553,8 +592,8 @@ export default function AziendaDetailPage() {
 
         {/* Persone Tab */}
         <TabsContent value="persone" className="mt-6">
-          <Panel>
-            <PanelHeader icon={Users} title="Personale" />
+          <Panel accent="emerald">
+            <PanelHeader icon={Users} title="Personale" accent="emerald" />
             {persone.length === 0 ? (
               <p className="py-12 text-center text-[14px] text-[#64748d]">
                 Nessuna persona registrata. Avvia il sopralluogo per aggiungere
@@ -599,8 +638,8 @@ export default function AziendaDetailPage() {
 
         {/* Ambienti Tab */}
         <TabsContent value="ambienti" className="mt-6">
-          <Panel>
-            <PanelHeader icon={Warehouse} title="Ambienti di Lavoro" />
+          <Panel accent="amber">
+            <PanelHeader icon={Warehouse} title="Ambienti di Lavoro" accent="amber" />
             {ambienti.length === 0 ? (
               <p className="py-12 text-center text-[14px] text-[#64748d]">
                 Nessun ambiente registrato. Avvia il sopralluogo per aggiungere
@@ -639,8 +678,8 @@ export default function AziendaDetailPage() {
 
         {/* Attrezzature Tab */}
         <TabsContent value="attrezzature" className="mt-6">
-          <Panel>
-            <PanelHeader icon={Wrench} title="Attrezzature" />
+          <Panel accent="slate">
+            <PanelHeader icon={Wrench} title="Attrezzature" accent="slate" />
             {attrezzature.length === 0 ? (
               <p className="py-12 text-center text-[14px] text-[#64748d]">
                 Nessuna attrezzatura registrata. Avvia il sopralluogo per
@@ -697,8 +736,8 @@ export default function AziendaDetailPage() {
 
         {/* Rischi Tab — AI measures panel per risk (US-2.6) */}
         <TabsContent value="rischi" className="mt-6">
-          <Panel>
-            <PanelHeader icon={ShieldAlert} title="Valutazioni del rischio" />
+          <Panel accent="violet">
+            <PanelHeader icon={ShieldAlert} title="Valutazioni del rischio" accent="violet" />
             <div className="space-y-3 p-6">
               {rischi.length === 0 ? (
                 <p className="py-8 text-center text-[14px] text-[#64748d]">
@@ -799,8 +838,8 @@ export default function AziendaDetailPage() {
 
         {/* Documenti Tab */}
         <TabsContent value="documenti" className="mt-6">
-          <Panel>
-            <PanelHeader icon={FileText} title="Documenti Generati" />
+          <Panel accent="sky">
+            <PanelHeader icon={FileText} title="Documenti Generati" accent="sky" />
             <div className="p-6">
               {documenti.length === 0 ? (
                 <p className="py-8 text-center text-[14px] text-[#64748d]">

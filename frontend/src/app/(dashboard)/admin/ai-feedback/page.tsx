@@ -10,6 +10,7 @@ import {
   Sparkles,
   ThumbsDown,
   ThumbsUp,
+  type LucideIcon,
 } from "lucide-react";
 
 import {
@@ -181,55 +182,31 @@ export default function AdminAIFeedbackPage() {
       )}
 
       {/* Top-line totals */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <ThumbsDown className="h-4 w-4 text-rose-600" />
-              Rifiuti totali
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="type-numeral">
-              {summary?.total_thumbs_down ?? "—"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Suggerimenti AI scartati con &quot;Rifiuta&quot;.
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <ThumbsUp className="h-4 w-4 text-emerald-600" />
-              Accettazioni totali
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="type-numeral">
-              {summary?.total_thumbs_up ?? "—"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Suggerimenti AI accettati con segnale esplicito.
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Sparkles className="h-4 w-4 text-violet-600" />
-              Tipi di superficie
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="type-numeral">
-              {summary?.rows.length ?? "—"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Superfici AI distinte che hanno raccolto feedback.
-            </p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <KpiTile
+          label="Rifiuti totali"
+          value={summary?.total_thumbs_down}
+          description="Suggerimenti AI scartati con «Rifiuta»."
+          icon={ThumbsDown}
+          rail="bg-[#e11d48]"
+          iconClass="bg-[rgba(225,29,72,0.1)] text-[#e11d48]"
+        />
+        <KpiTile
+          label="Accettazioni totali"
+          value={summary?.total_thumbs_up}
+          description="Suggerimenti AI accettati con segnale esplicito."
+          icon={ThumbsUp}
+          rail="bg-[#059669]"
+          iconClass="bg-[rgba(5,150,105,0.1)] text-[#059669]"
+        />
+        <KpiTile
+          label="Tipi di superficie"
+          value={summary?.rows.length}
+          description="Superfici AI distinte che hanno raccolto feedback."
+          icon={Sparkles}
+          rail="bg-[#7c3aed]"
+          iconClass="bg-[rgba(124,58,237,0.1)] text-[#7c3aed]"
+        />
       </div>
 
       {/* Per-entity-type breakdown */}
@@ -390,6 +367,49 @@ export default function AdminAIFeedbackPage() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function KpiTile({
+  label,
+  value,
+  description,
+  icon: Icon,
+  rail,
+  iconClass,
+}: {
+  label: string;
+  value: number | undefined;
+  description: string;
+  icon: LucideIcon;
+  rail: string;
+  iconClass: string;
+}) {
+  const display = value === undefined || value === null ? "—" : value;
+  return (
+    <div className="relative overflow-hidden rounded-md border border-[#e5edf5] bg-white p-5 shadow-stripe-ambient">
+      <span
+        aria-hidden
+        className={"absolute inset-x-0 top-0 h-[2px] " + rail}
+      />
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
+          {label}
+        </span>
+        <span
+          className={
+            "inline-flex h-8 w-8 items-center justify-center rounded-md " +
+            iconClass
+          }
+        >
+          <Icon className="h-4 w-4" strokeWidth={2} />
+        </span>
+      </div>
+      <p className="tnum mt-3 font-heading text-[28px] font-bold leading-none tracking-[-0.02em] text-[#061b31]">
+        {display}
+      </p>
+      <p className="mt-2 text-[12px] text-[#64748d]">{description}</p>
     </div>
   );
 }
