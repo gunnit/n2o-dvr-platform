@@ -380,7 +380,31 @@ export function StepRiepilogo({
               Nessun dipendente inserito
             </p>
           ) : (
-            <Table>
+            <>
+              {/* H4 fix: warn operator if any persona has no ambiente assigned.
+                  This was the silent case where persone added before ambienti
+                  never got linked — their count came out as 0 in the DVR. */}
+              {persone.some((p) => (p.ambiente_ids ?? []).length === 0) && (
+                <div className="mb-4 flex items-start gap-2 rounded-md border border-[rgba(234,34,97,0.3)] bg-[rgba(234,34,97,0.06)] px-3 py-2 text-[13px] text-[#b51648]">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  <div className="space-y-1">
+                    <div className="font-medium">
+                      {
+                        persone.filter(
+                          (p) => (p.ambiente_ids ?? []).length === 0
+                        ).length
+                      }{" "}
+                      persona/e senza ambiente assegnato
+                    </div>
+                    <div className="text-[12px] text-[#b51648]/80">
+                      Apri la persona dalla scheda Persone (passo 2) e spunta
+                      gli ambienti rilevanti per farla comparire nelle tabelle
+                      del DVR.
+                    </div>
+                  </div>
+                </div>
+              )}
+              <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Nominativo</TableHead>
@@ -428,6 +452,7 @@ export function StepRiepilogo({
                 })}
               </TableBody>
             </Table>
+            </>
           )}
         </CardContent>
       </Card>

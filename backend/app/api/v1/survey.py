@@ -1,4 +1,7 @@
+import base64
+import binascii
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -14,7 +17,14 @@ from app.models.azienda import Azienda
 from app.models.persona import Persona
 from app.models.sostanza_chimica import SostanzaChimica
 from app.models.valutazione_rischio import ValutazioneRischio
-from app.schemas.survey import SurveyCompleteResponse, SurveyResponse, SurveyStepData
+from app.schemas.survey import (
+    SurveyCompleteResponse,
+    SurveyResponse,
+    SurveyRevisionResponse,
+    SurveySignRequest,
+    SurveySignResponse,
+    SurveyStepData,
+)
 
 router = APIRouter(prefix="/aziende/{azienda_id}/survey", tags=["survey"])
 
@@ -146,3 +156,56 @@ async def complete_survey(
         message="Survey completed successfully",
         survey_status="completed",
     )
+
+
+@router.post("/sign", response_model=SurveySignResponse)
+async def sign_survey(
+    azienda_id: uuid.UUID,
+    body: SurveySignRequest,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Persist the client signature PNG + server-side timestamp.
+
+    US-1.6 AC3: once signed the survey moves to status "firmato". The wizard
+    gates navigation on this status.
+    """
+    azienda = await _get_azienda(azienda_id, org_id, db)
+
+    # Strip the "data:image/png;base64," prefix if present.
+    raw = body.signature_data_url
+    if "," in raw:
+        raw = raw.split(",", 1)[1]
+    try:
+        png_bytes = base64.b64decode(raw, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise BadRequestError(f"Firma non valida: {exc}")
+    if len(png_bytes) < 32:
+        raise BadRequestError("Firma troppo breve o canvas vuoto")
+
+    azienda.firma_png = png_bytes
+    azienda.firma_signed_at = datetime.now(timezone.utc)
+    azienda.firma_signed_by_name = body.signed_by_name
+    azienda.survey_status = "firmato"
+    await db.commit()
+
+    return SurveySignResponse(
+        survey_status=azienda.survey_status,
+        firma_signed_at=azienda.firma_signed_at,
+        firma_signed_by_name=azienda.firma_signed_by_name,
+    )
+
+
+@router.post("/revision", response_model=SurveyRevisionResponse)
+async def open_revision(
+    azienda_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """US-1.6 AC4: flip status from "firmato" back to "in_revisione" so the
+    wizard re-enables nav. The PNG stays on disk as a prior-signature record.
+    """
+    azienda = await _get_azienda(azienda_id, org_id, db)
+    azienda.survey_status = "in_revisione"
+    await db.commit()
+    return SurveyRevisionResponse(survey_status=azienda.survey_status)

@@ -13,6 +13,10 @@ from app.data.regional_regulations import get_regulations_for_comune
 from app.data.seismic_zones import lookup_regione, lookup_zone
 from app.dependencies import get_current_user
 from app.models.user import User
+from app.services.reference_data import (
+    get_dpi_catalog_grouped,
+    get_rischi_specifici_catalog_grouped,
+)
 
 router = APIRouter(prefix="/lookup", tags=["lookup"])
 
@@ -142,3 +146,57 @@ async def field_dependencies(
             dependencies={field: dependencies_for(field)}
         )
     return FieldDependenciesResponse(dependencies=all_field_dependencies())
+
+
+# ---------------------------------------------------------------------------
+# DPI + Rischi Specifici catalogs (per-mansione sorveglianza sanitaria)
+# ---------------------------------------------------------------------------
+
+
+class CatalogItem(BaseModel):
+    code: str
+    etichetta: str
+
+
+class DpiCatalogGroup(BaseModel):
+    area: str
+    items: list[CatalogItem]
+
+
+class DpiCatalogResponse(BaseModel):
+    groups: list[DpiCatalogGroup]
+
+
+class RischiSpecificiCatalogGroup(BaseModel):
+    macro: str
+    items: list[CatalogItem]
+
+
+class RischiSpecificiCatalogResponse(BaseModel):
+    groups: list[RischiSpecificiCatalogGroup]
+
+
+@router.get("/dpi-catalog", response_model=DpiCatalogResponse)
+async def dpi_catalog(
+    _: User = Depends(get_current_user),
+) -> DpiCatalogResponse:
+    """Return the full DPI catalog grouped by body area.
+
+    Consumed by the survey wizard's Sorveglianza step to render the
+    checkbox matrix per mansione. The payload is small (<5 KB), so we
+    ship the whole catalog every time rather than paging.
+    """
+    return DpiCatalogResponse(groups=get_dpi_catalog_grouped())
+
+
+@router.get(
+    "/rischi-specifici-catalog",
+    response_model=RischiSpecificiCatalogResponse,
+)
+async def rischi_specifici_catalog(
+    _: User = Depends(get_current_user),
+) -> RischiSpecificiCatalogResponse:
+    """Return rischi specifici (D.Lgs. 81/08) grouped by macro."""
+    return RischiSpecificiCatalogResponse(
+        groups=get_rischi_specifici_catalog_grouped()
+    )

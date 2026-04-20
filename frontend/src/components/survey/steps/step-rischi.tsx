@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import { useApi } from "@/hooks/use-api";
 import {
   Card,
   CardContent,
@@ -306,6 +308,22 @@ const DEFAULT_RISK_SCORES: Record<string, Record<CategoriaRischio, [number, numb
     Psicologici: [1, 2],
     Ergonomici: [2, 3],
   },
+  // L2 fix — Officina was defaulting to "altro" (all 1,2 → I=3 Accettabile)
+  // which is unrealistic for a workshop. These defaults mirror "produzione"
+  // with minor tweaks for a mechanical shop context.
+  officina: {
+    Strutture: [2, 2],
+    Macchine: [2, 3],
+    Elettrici: [2, 3],
+    Incendio: [2, 3],
+    Chimici: [2, 2],
+    Fisici: [2, 3],
+    Biologici: [1, 1],
+    Cancerogeni: [1, 2],
+    Organizzazione: [2, 2],
+    Psicologici: [1, 2],
+    Ergonomici: [2, 3],
+  },
   cucina: {
     Strutture: [2, 2],
     Macchine: [2, 2],
@@ -462,6 +480,7 @@ function initValutazioni(
 }
 
 export function StepRischi({
+  aziendaId,
   ambienti,
   attrezzature,
   valutazioni,
@@ -469,9 +488,18 @@ export function StepRischi({
   acknowledgedAmbientiSig,
   onAcknowledgeAmbienti,
 }: StepRischiProps) {
+  const { apiFetch } = useApi();
   const [selectedAmbienteIndex, setSelectedAmbienteIndex] = useState(0);
   const [mostraTutti, setMostraTutti] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+
+  // Debounced batch-save per ambiente. When the operator changes a slider we
+  // schedule a POST to /rischi/batch 800ms later so rapid drag-updates coalesce.
+  // This replaces the implicit "bozza salvata" label (which was a lie for
+  // this step — see QA H5/B3 notes in the report) with an actual round-trip.
+  const saveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map()
+  );
 
   // US-1.5 AC3: ack-sig is owned by the wizard so it survives this
   // component's unmount/remount across step navigation. A fresh
@@ -559,6 +587,63 @@ export function StepRischi({
     return { total, selected, gravissimo, grave, modesto, accettabile };
   }, [visibleValutazioni]);
 
+  const scheduleAmbienteSave = useCallback(
+    (ambienteId: string, rows: ValutazioneRischio[]) => {
+      const timers = saveTimersRef.current;
+      const existing = timers.get(ambienteId);
+      if (existing) clearTimeout(existing);
+      const handle = setTimeout(async () => {
+        timers.delete(ambienteId);
+        try {
+          const payload = {
+            items: rows.map((r) => ({
+              id: r.id,
+              categoria_rischio: r.categoria_rischio,
+              applicabile: r.applicabile,
+              pericolo: r.pericolo ?? null,
+              condizioni_esposizione: r.condizioni_esposizione ?? null,
+              rischio: r.rischio ?? null,
+              misure_prevenzione: r.misure_prevenzione ?? null,
+              probabilita_p: r.probabilita_p ?? null,
+              danno_d: r.danno_d ?? null,
+            })),
+          };
+          const saved = await apiFetch<ValutazioneRischio[]>(
+            `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/rischi/batch`,
+            { method: "POST", body: JSON.stringify(payload) }
+          );
+          // Merge server-returned ids back into local state so subsequent
+          // PUTs use the persisted id, not the client-side placeholder.
+          const byCat = new Map(saved.map((s) => [s.categoria_rischio, s]));
+          onChange(
+            allValutazioni.map((v) => {
+              if (v.ambiente_id !== ambienteId) return v;
+              const s = byCat.get(v.categoria_rischio);
+              return s ? { ...v, id: s.id } : v;
+            })
+          );
+        } catch (err) {
+          toast.error(
+            err instanceof Error
+              ? err.message
+              : "Errore nel salvataggio delle valutazioni rischio"
+          );
+        }
+      }, 800);
+      timers.set(ambienteId, handle);
+    },
+    [apiFetch, aziendaId, allValutazioni, onChange]
+  );
+
+  // Flush any pending saves when the component unmounts or the azienda
+  // changes so edits made right before step-nav don't get lost.
+  useEffect(() => {
+    const timers = saveTimersRef.current;
+    return () => {
+      for (const handle of timers.values()) clearTimeout(handle);
+    };
+  }, []);
+
   const updateValutazione = useCallback(
     (valId: string, fields: Partial<ValutazioneRischio>) => {
       const updated = allValutazioni.map((v) => {
@@ -577,8 +662,17 @@ export function StepRischi({
         return merged;
       });
       onChange(updated);
+
+      // Persist the whole ambiente's valutazioni (debounced).
+      const touched = updated.find((v) => v.id === valId);
+      if (touched) {
+        const ambienteRows = updated.filter(
+          (v) => v.ambiente_id === touched.ambiente_id
+        );
+        scheduleAmbienteSave(touched.ambiente_id, ambienteRows);
+      }
     },
-    [allValutazioni, onChange]
+    [allValutazioni, onChange, scheduleAmbienteSave]
   );
 
   // Apply default scoring matrix to every row of the selected ambiente.
@@ -600,7 +694,11 @@ export function StepRischi({
       };
     });
     onChange(updated);
-  }, [allValutazioni, onChange, selectedAmbiente]);
+    const ambienteRows = updated.filter(
+      (v) => v.ambiente_id === selectedAmbiente.id
+    );
+    scheduleAmbienteSave(selectedAmbiente.id, ambienteRows);
+  }, [allValutazioni, onChange, selectedAmbiente, scheduleAmbienteSave]);
 
   if (ambienti.length === 0) {
     return (

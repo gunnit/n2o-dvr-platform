@@ -239,6 +239,42 @@ export type {
   ZonaNiosh,
 } from "@/components/assessments/pos/phase-schema";
 
+// Per-mansione DPI + rischi specifici (sorveglianza sanitaria).
+// Backend model: MansioneSorveglianza. Keyed by (azienda_id, mansione_nome).
+export interface MansioneSorveglianza {
+  id: string;
+  azienda_id: string;
+  mansione_nome: string;
+  dpi_codes: string[];
+  rischi_specifici_codes: string[];
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CatalogItem {
+  code: string;
+  etichetta: string;
+}
+
+export interface DpiCatalogGroup {
+  area: string;
+  items: CatalogItem[];
+}
+
+export interface DpiCatalogResponse {
+  groups: DpiCatalogGroup[];
+}
+
+export interface RischiSpecificiCatalogGroup {
+  macro: string;
+  items: CatalogItem[];
+}
+
+export interface RischiSpecificiCatalogResponse {
+  groups: RischiSpecificiCatalogGroup[];
+}
+
 // US-3.8 stress per-client measures library
 export interface StressMisuraLibreria {
   id: string;

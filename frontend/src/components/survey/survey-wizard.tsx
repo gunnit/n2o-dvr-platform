@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   FlaskConical,
   ClipboardCheck,
+  Stethoscope,
   ChevronLeft,
   ChevronRight,
   Check,
@@ -25,6 +26,7 @@ import type {
   Persona,
   Ambiente,
   Attrezzatura,
+  MansioneSorveglianza,
   ValutazioneRischio,
   SostanzaChimica,
 } from "@/types";
@@ -33,6 +35,7 @@ import { StepAzienda } from "./steps/step-azienda";
 import { StepPersone } from "./steps/step-persone";
 import { StepAmbienti } from "./steps/step-ambienti";
 import { StepAttrezzature } from "./steps/step-attrezzature";
+import { StepDpiRischi } from "./steps/step-dpi-rischi";
 import { StepRischi, ambientiSignature } from "./steps/step-rischi";
 import { StepSostanze } from "./steps/step-sostanze";
 import { StepRiepilogo } from "./steps/step-riepilogo";
@@ -44,6 +47,7 @@ const STEPS = [
   { key: "persone", label: "Persone", icon: Users },
   { key: "ambienti", label: "Ambienti", icon: MapPin },
   { key: "attrezzature", label: "Attrezzature", icon: Wrench },
+  { key: "dpi_rischi", label: "DPI & Rischi Specifici", icon: Stethoscope },
   { key: "rischi", label: "Valutazione Rischi", icon: ShieldAlert },
   { key: "sostanze", label: "Sostanze Chimiche", icon: FlaskConical },
   { key: "riepilogo", label: "Riepilogo", icon: ClipboardCheck },
@@ -54,6 +58,7 @@ export interface SurveyData {
   persone: Persona[];
   ambienti: Ambiente[];
   attrezzature: Attrezzatura[];
+  mansioniSorveglianza: MansioneSorveglianza[];
   valutazioni: ValutazioneRischio[];
   sostanze: SostanzaChimica[];
 }
@@ -83,15 +88,20 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
   const initialSignedAt = initialData?.azienda?.firma_signed_at ?? null;
 
   // US-1.6: if the survey arrives already "firmato" the wizard locks nav
-  // to Step 7 until the operator opens an audited revision. Anything else
-  // (draft, step_1..7, in_revisione, completed) allows free navigation.
+  // to the last (riepilogo) step until the operator opens an audited
+  // revision. Anything else (draft, step_1..n, in_revisione, completed)
+  // allows free navigation. Index stays in sync with STEPS.length-1 so
+  // inserting a new step doesn't break the lock.
   const [surveyStatus, setSurveyStatus] =
     useState<string>(initialSurveyStatus);
   const [signedAt, setSignedAt] = useState<string | null>(initialSignedAt);
 
   const isSigned = surveyStatus === "firmato";
+  const riepilogoIndex = STEPS.length - 1;
 
-  const [currentStep, setCurrentStep] = useState(isSigned ? 6 : 0);
+  const [currentStep, setCurrentStep] = useState(
+    isSigned ? riepilogoIndex : 0
+  );
   const [direction, setDirection] = useState(0);
   const [saving, setSaving] = useState(false);
   // B-01 (US-1.1): when the operator clicks "Avanti" on a step with
@@ -106,6 +116,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
     persone: initialData?.persone ?? [],
     ambienti: initialData?.ambienti ?? [],
     attrezzature: initialData?.attrezzature ?? [],
+    mansioniSorveglianza: initialData?.mansioniSorveglianza ?? [],
     valutazioni: initialData?.valutazioni ?? [],
     sostanze: initialData?.sostanze ?? [],
   });
@@ -125,12 +136,12 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
   // Keep the wizard pinned on the Riepilogo step whenever the survey is
   // signed — step-navigation handlers short-circuit below, but if the
   // user arrives deep-linked to an earlier step we still want to bounce
-  // them to Step 7.
+  // them to the last step.
   useEffect(() => {
-    if (isSigned && currentStep !== 6) {
-      setCurrentStep(6);
+    if (isSigned && currentStep !== riepilogoIndex) {
+      setCurrentStep(riepilogoIndex);
     }
-  }, [isSigned, currentStep]);
+  }, [isSigned, currentStep, riepilogoIndex]);
 
   const updateAzienda = useCallback(
     (fields: Partial<Azienda>) => {
@@ -154,6 +165,13 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
   const updateValutazioni = useCallback((valutazioni: ValutazioneRischio[]) => {
     setData((prev) => ({ ...prev, valutazioni }));
   }, []);
+
+  const updateMansioniSorveglianza = useCallback(
+    (mansioniSorveglianza: MansioneSorveglianza[]) => {
+      setData((prev) => ({ ...prev, mansioniSorveglianza }));
+    },
+    []
+  );
 
   const updateSostanze = useCallback((sostanze: SostanzaChimica[]) => {
     setData((prev) => ({ ...prev, sostanze }));
@@ -203,13 +221,13 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
   const goToStep = useCallback(
     (step: number) => {
       // US-1.6 AC4: when the survey is firmato, the only reachable step
-      // is Step 7 (Riepilogo). Any navigation attempt bounces there.
-      if (isSigned && step !== 6) return;
+      // is Riepilogo. Any navigation attempt bounces there.
+      if (isSigned && step !== riepilogoIndex) return;
       setDirection(step > currentStep ? 1 : -1);
       setCurrentStep(step);
       setShowValidationErrors(false);
     },
-    [currentStep, isSigned]
+    [currentStep, isSigned, riepilogoIndex]
   );
 
   const goNext = useCallback(() => {
@@ -420,6 +438,15 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
         );
       case 4:
         return (
+          <StepDpiRischi
+            aziendaId={aziendaId}
+            persone={data.persone}
+            mansioniSorveglianza={data.mansioniSorveglianza}
+            onChange={updateMansioniSorveglianza}
+          />
+        );
+      case 5:
+        return (
           <StepRischi
             aziendaId={aziendaId}
             ambienti={data.ambienti}
@@ -430,7 +457,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             onAcknowledgeAmbienti={acknowledgeAmbienti}
           />
         );
-      case 5:
+      case 6:
         return (
           <StepSostanze
             aziendaId={aziendaId}
@@ -438,7 +465,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             onChange={updateSostanze}
           />
         );
-      case 6:
+      case 7:
         return (
           <StepRiepilogo
             aziendaId={aziendaId}
@@ -488,7 +515,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
           {STEPS.map((step, index) => {
             const isActive = index === currentStep;
             const isCompleted = index < currentStep;
-            const navDisabled = isSigned && index !== 6;
+            const navDisabled = isSigned && index !== riepilogoIndex;
 
             return (
               <button
@@ -680,8 +707,13 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
           ) : (
             <Button
               onClick={handleComplete}
-              disabled={saving || isSigned}
-              className="rounded-lg bg-primary-container px-8 py-2 text-sm font-bold text-white shadow-lg hover:-translate-y-0.5"
+              disabled={saving || isSigned || completionIssues.length > 0}
+              title={
+                completionIssues.length > 0
+                  ? `Prerequisiti mancanti: ${completionIssues.join(" • ")}`
+                  : undefined
+              }
+              className="rounded-lg bg-primary-container px-8 py-2 text-sm font-bold text-white shadow-lg hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {saving ? "Salvataggio..." : "Completa Sopralluogo"}
               {!saving && <Check className="ml-1 h-4 w-4" />}

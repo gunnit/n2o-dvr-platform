@@ -13,6 +13,7 @@ from app.api.v1.duvri import router as duvri_router
 from app.api.v1.gestanti import router as gestanti_router
 from app.api.v1.haccp import router as haccp_router
 from app.api.v1.lookups import router as lookups_router
+from app.api.v1.mansioni_sorveglianza import router as mansioni_sorveglianza_router
 from app.api.v1.pee_procedures import router as pee_procedures_router
 from app.api.v1.persone import router as persone_router
 from app.api.v1.pos import router as pos_router
@@ -42,6 +43,7 @@ api_router.include_router(gestanti_router)
 api_router.include_router(haccp_router)
 api_router.include_router(pee_procedures_router)
 api_router.include_router(lookups_router)
+api_router.include_router(mansioni_sorveglianza_router)
 api_router.include_router(duvri_router)
 api_router.include_router(sorveglianza_router)
 api_router.include_router(pos_router)

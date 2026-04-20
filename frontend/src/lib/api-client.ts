@@ -11,12 +11,14 @@ export async function apiCall<T>(
   options?: RequestInit
 ): Promise<T> {
   const token = await getToken();
+  const { headers: callerHeaders, ...rest } = options ?? {};
   const res = await fetch(`${API_URL}${path}`, {
+    ...rest,
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(callerHeaders as Record<string, string> | undefined),
     },
-    ...options,
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

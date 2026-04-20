@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/sidebar";
-import { Header } from "@/components/layout/header";
+import { AutoBreadcrumbs } from "@/components/layout/auto-breadcrumbs";
 import { Providers } from "@/components/providers";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -21,7 +21,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <div className="min-h-screen bg-background">
         <Sidebar user={user} />
         <div className="ml-64 flex min-h-screen flex-col">
-          <Header />
+          <AutoBreadcrumbs />
           <main className="mx-auto w-full max-w-screen-xl flex-1 px-8 py-8">{children}</main>
         </div>
       </div>

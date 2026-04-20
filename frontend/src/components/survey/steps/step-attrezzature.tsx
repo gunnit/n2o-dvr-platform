@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState, useMemo } from "react";
+import { toast } from "sonner";
 import {
   Card,
   CardContent,
@@ -14,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Plus, Trash2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useApi } from "@/hooks/use-api";
 import type { Ambiente, Attrezzatura } from "@/types";
 
 interface StepAttrezzatureProps {
@@ -51,6 +53,23 @@ const EQUIPMENT_BY_TYPE: Record<string, string[]> = {
     "Trapano a colonna",
     "Nastro trasportatore",
     "Carroponte",
+  ],
+  Officina: [
+    "Tornio",
+    "Fresa",
+    "Trapano a colonna",
+    "Mola da banco",
+    "Sega a nastro",
+    "Saldatrice",
+    "Compressore",
+    "Pressa idraulica",
+    "Carrello elevatore",
+    "Transpallet",
+    "Ponte sollevatore",
+    "Nastro trasportatore",
+    "Carroponte",
+    "Banco da lavoro",
+    "Aspiratore/Estrattore fumi",
   ],
   Cucina: [
     "Forno industriale",
@@ -101,9 +120,46 @@ export function StepAttrezzature({
   attrezzature,
   onChange,
 }: StepAttrezzatureProps) {
+  const { apiFetch } = useApi();
   const [selectedAmbienteIndex, setSelectedAmbienteIndex] = useState(0);
 
   const selectedAmbiente = ambienti[selectedAmbienteIndex];
+
+  const basePath = `/api/v1/aziende/${aziendaId}/attrezzature`;
+
+  // H5 fix: persist attrezzature to the backend so the DVR generator sees them.
+  // Local state (onChange) is still updated optimistically; on failure we roll
+  // back and surface the error.
+  const persistCreate = useCallback(
+    async (payload: {
+      descrizione: string;
+      marcatura_ce: boolean;
+      verifiche_periodiche: boolean;
+    }) => {
+      return await apiFetch<Attrezzatura>(basePath, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
+    [apiFetch, basePath]
+  );
+
+  const persistUpdate = useCallback(
+    async (id: string, fields: Partial<Attrezzatura>) => {
+      return await apiFetch<Attrezzatura>(`${basePath}/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(fields),
+      });
+    },
+    [apiFetch, basePath]
+  );
+
+  const persistDelete = useCallback(
+    async (id: string) => {
+      await apiFetch<void>(`${basePath}/${id}`, { method: "DELETE" });
+    },
+    [apiFetch, basePath]
+  );
 
   // Get suggested equipment list for the currently selected environment type
   const suggestedEquipment = useMemo(() => {
@@ -119,25 +175,55 @@ export function StepAttrezzature({
 
   // Toggle a suggested equipment item on/off
   const toggleSuggested = useCallback(
-    (descrizione: string) => {
+    async (descrizione: string) => {
       if (selectedDescriptions.has(descrizione)) {
-        // Remove it
-        onChange(attrezzature.filter((a) => a.descrizione !== descrizione));
+        const target = attrezzature.find((a) => a.descrizione === descrizione);
+        if (!target) return;
+        const next = attrezzature.filter((a) => a.id !== target.id);
+        onChange(next);
+        try {
+          // Server-generated ids have a UUID v4 shape; client-side stubs do
+          // too, so we just attempt the delete and swallow 404 to tolerate
+          // stale local rows that were never persisted.
+          await persistDelete(target.id);
+        } catch (e) {
+          toast.error(
+            e instanceof Error ? e.message : "Errore nella rimozione"
+          );
+          onChange(attrezzature);
+        }
       } else {
-        // Add it with defaults
-        onChange([
-          ...attrezzature,
-          {
-            id: crypto.randomUUID(),
-            azienda_id: aziendaId,
+        const optimistic: Attrezzatura = {
+          id: crypto.randomUUID(),
+          azienda_id: aziendaId,
+          descrizione,
+          marcatura_ce: false,
+          verifiche_periodiche: false,
+        };
+        onChange([...attrezzature, optimistic]);
+        try {
+          const created = await persistCreate({
             descrizione,
             marcatura_ce: false,
             verifiche_periodiche: false,
-          },
-        ]);
+          });
+          onChange([...attrezzature, created]);
+        } catch (e) {
+          toast.error(
+            e instanceof Error ? e.message : "Errore nel salvataggio"
+          );
+          onChange(attrezzature);
+        }
       }
     },
-    [attrezzature, onChange, aziendaId, selectedDescriptions]
+    [
+      attrezzature,
+      onChange,
+      aziendaId,
+      selectedDescriptions,
+      persistCreate,
+      persistDelete,
+    ]
   );
 
   // Custom equipment = items whose descrizione is NOT in ANY suggested list
@@ -156,25 +242,89 @@ export function StepAttrezzature({
     [attrezzature, allSuggestedNames]
   );
 
-  const addCustomAttrezzatura = useCallback(() => {
+  const addCustomAttrezzatura = useCallback(async () => {
+    // Add optimistically; defer server create until the descrizione is
+    // actually populated (updateAttrezzatura handles that).
     onChange([...attrezzature, createEmptyAttrezzatura(aziendaId)]);
   }, [attrezzature, onChange, aziendaId]);
 
   const removeAttrezzatura = useCallback(
-    (id: string) => {
-      onChange(attrezzature.filter((a) => a.id !== id));
+    async (id: string) => {
+      const target = attrezzature.find((a) => a.id === id);
+      const next = attrezzature.filter((a) => a.id !== id);
+      onChange(next);
+      if (!target || !target.descrizione) {
+        // Never persisted (empty custom row) — nothing to delete server-side.
+        return;
+      }
+      try {
+        await persistDelete(id);
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "Errore nella rimozione"
+        );
+        onChange(attrezzature);
+      }
     },
-    [attrezzature, onChange]
+    [attrezzature, onChange, persistDelete]
   );
 
+  // Custom rows need lazy persistence: create on first save when descrizione
+  // becomes non-empty; afterwards switch to PUT. `persisted` is a set of ids
+  // that exist server-side (i.e. have been POSTed at least once).
+  const [persistedIds, setPersistedIds] = useState<Set<string>>(() => {
+    // Anything loaded from the server is already persisted; we can't tell
+    // for certain here but the refetch path seeds this from initial data
+    // elsewhere. For new rows, callers will add the id on first PUT/POST.
+    return new Set(attrezzature.map((a) => a.id));
+  });
+
   const updateAttrezzatura = useCallback(
-    (id: string, fields: Partial<Attrezzatura>) => {
+    async (id: string, fields: Partial<Attrezzatura>) => {
       const updated = attrezzature.map((a) =>
         a.id === id ? { ...a, ...fields } : a
       );
       onChange(updated);
+
+      const row = updated.find((a) => a.id === id);
+      if (!row || !row.descrizione?.trim()) {
+        // Nothing usable to persist yet.
+        return;
+      }
+      try {
+        if (persistedIds.has(id)) {
+          const saved = await persistUpdate(id, {
+            descrizione: row.descrizione,
+            marcatura_ce: row.marcatura_ce,
+            verifiche_periodiche: row.verifiche_periodiche,
+          });
+          onChange(
+            updated.map((a) => (a.id === id ? { ...a, ...saved } : a))
+          );
+        } else {
+          const created = await persistCreate({
+            descrizione: row.descrizione,
+            marcatura_ce: row.marcatura_ce,
+            verifiche_periodiche: row.verifiche_periodiche,
+          });
+          // Swap the optimistic client id for the server id.
+          onChange(
+            updated.map((a) => (a.id === id ? { ...created } : a))
+          );
+          setPersistedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            next.add(created.id);
+            return next;
+          });
+        }
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "Errore nel salvataggio"
+        );
+      }
     },
-    [attrezzature, onChange]
+    [attrezzature, onChange, persistCreate, persistUpdate, persistedIds]
   );
 
   if (ambienti.length === 0) {

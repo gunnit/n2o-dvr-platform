@@ -64,19 +64,19 @@ const surveyStatusLabels: Record<string, string> = {
 const docStatusStyles: Record<string, string> = {
   pending:
     "bg-[#f6f9fc] text-[#273951] border border-[#e5edf5]",
-  generating:
+  in_progress:
     "bg-[rgba(155,104,41,0.12)] text-[#9b6829] border border-[rgba(155,104,41,0.3)]",
-  ready:
+  completed:
     "bg-[rgba(21,190,83,0.2)] text-[#108c3d] border border-[rgba(21,190,83,0.4)]",
-  error:
+  failed:
     "bg-[rgba(234,34,97,0.08)] text-[#b51648] border border-[rgba(234,34,97,0.25)]",
 };
 
 const docStatusLabels: Record<string, string> = {
   pending: "In attesa",
-  generating: "In generazione",
-  ready: "Pronto",
-  error: "Errore",
+  in_progress: "In generazione",
+  completed: "Pronto",
+  failed: "Errore",
 };
 
 // Risk-level chip palette — navy for critical, green for accettabile,
@@ -897,8 +897,16 @@ export default function AziendaDetailPage() {
                           </TableCell>
                           <TableCell>
                             <StatusPill className={docStatusStyles[d.status]}>
-                              {docStatusLabels[d.status]}
+                              {docStatusLabels[d.status] ?? d.status}
                             </StatusPill>
+                            {d.error_message && (
+                              <div
+                                className="mt-1 text-[11px] text-[#b51648]"
+                                title={d.error_message}
+                              >
+                                {d.error_message}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell className="tnum text-[#64748d]">
                             {new Date(d.created_at).toLocaleDateString("it-IT")}

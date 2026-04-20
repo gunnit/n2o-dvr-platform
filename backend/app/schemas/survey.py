@@ -1,6 +1,7 @@
+from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.schemas.ambiente import AmbienteResponse
 from app.schemas.attrezzatura import AttrezzaturaResponse
@@ -27,4 +28,20 @@ class SurveyStepData(BaseModel):
 
 class SurveyCompleteResponse(BaseModel):
     message: str
+    survey_status: str
+
+
+class SurveySignRequest(BaseModel):
+    # data URL: "data:image/png;base64,iVBORw0KG..."
+    signature_data_url: str = Field(..., min_length=30)
+    signed_by_name: str | None = None
+
+
+class SurveySignResponse(BaseModel):
+    survey_status: str
+    firma_signed_at: datetime
+    firma_signed_by_name: str | None = None
+
+
+class SurveyRevisionResponse(BaseModel):
     survey_status: str

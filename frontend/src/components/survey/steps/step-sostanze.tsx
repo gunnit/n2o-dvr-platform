@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   Card,
   CardContent,
@@ -515,11 +516,17 @@ export function StepSostanze({
       const items = await apiFetch<SostanzaChimica[]>(
         `/api/v1/aziende/${aziendaId}/sostanze-chimiche`
       );
-      onChange(items);
+      // M2 fix: merge. A sostanza is considered "server-side" iff its id
+      // appears in the fetched list. Any local-only rows (manual entries
+      // the user is still editing, before first save) are preserved so the
+      // newly-AI-extracted sostanze from a PDF upload don't overwrite them.
+      const serverIds = new Set(items.map((s) => s.id));
+      const localOnly = sostanze.filter((s) => !serverIds.has(s.id));
+      onChange([...items, ...localOnly]);
     } catch (err) {
       console.error("refresh sostanze failed", err);
     }
-  }, [aziendaId, apiFetch, isAuthenticated, onChange]);
+  }, [aziendaId, apiFetch, isAuthenticated, onChange, sostanze]);
 
   // Pull persisted sostanze on mount so AI-extracted rows appear even after
   // a page refresh mid-batch.
@@ -528,6 +535,16 @@ export function StepSostanze({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
 
+  // Track which manual rows exist on the server. AI-extracted rows are
+  // already persisted when they arrive. Manual rows start local and flip
+  // to persisted after the first PUT/POST succeeds.
+  const [persistedManualIds, setPersistedManualIds] = useState<Set<string>>(
+    () => new Set()
+  );
+  const saveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map()
+  );
+
   const addSostanza = useCallback(() => {
     onChange([...sostanze, createEmptySostanza(aziendaId)]);
   }, [sostanze, onChange, aziendaId]);
@@ -535,21 +552,84 @@ export function StepSostanze({
   const removeSostanza = useCallback(
     async (index: number) => {
       const s = sostanze[index];
-      // Persisted row (AI-extracted or previously saved) — delete on server
-      if (s && s.ai_extracted) {
+      const isPersisted =
+        !!s && (s.ai_extracted || persistedManualIds.has(s.id));
+      onChange(sostanze.filter((_, i) => i !== index));
+      if (isPersisted) {
         try {
           await apiFetch(
             `/api/v1/aziende/${aziendaId}/sostanze-chimiche/${s.id}`,
             { method: "DELETE" }
           );
+          setPersistedManualIds((prev) => {
+            const n = new Set(prev);
+            n.delete(s.id);
+            return n;
+          });
         } catch (err) {
           console.error("delete sostanza failed", err);
         }
       }
-      onChange(sostanze.filter((_, i) => i !== index));
     },
-    [sostanze, onChange, apiFetch, aziendaId]
+    [sostanze, onChange, apiFetch, aziendaId, persistedManualIds]
   );
+
+  const scheduleSostanzaSave = useCallback(
+    (row: SostanzaChimica) => {
+      const timers = saveTimersRef.current;
+      const prev = timers.get(row.id);
+      if (prev) clearTimeout(prev);
+      const handle = setTimeout(async () => {
+        timers.delete(row.id);
+        if (!row.nome_prodotto?.trim()) return;
+        const payload = {
+          nome_prodotto: row.nome_prodotto,
+          produttore: row.produttore ?? null,
+          stato_miscela: row.stato_miscela ?? null,
+          pittogrammi: row.pittogrammi ?? [],
+          frasi_h: row.frasi_h ?? [],
+          frasi_p: row.frasi_p ?? [],
+        };
+        try {
+          if (row.ai_extracted || persistedManualIds.has(row.id)) {
+            await apiFetch<SostanzaChimica>(
+              `/api/v1/aziende/${aziendaId}/sostanze-chimiche/${row.id}`,
+              { method: "PUT", body: JSON.stringify(payload) }
+            );
+          } else {
+            const created = await apiFetch<SostanzaChimica>(
+              `/api/v1/aziende/${aziendaId}/sostanze-chimiche`,
+              { method: "POST", body: JSON.stringify(payload) }
+            );
+            onChange(
+              sostanze.map((s) => (s.id === row.id ? { ...s, ...created } : s))
+            );
+            setPersistedManualIds((prev) => {
+              const n = new Set(prev);
+              n.delete(row.id);
+              n.add(created.id);
+              return n;
+            });
+          }
+        } catch (err) {
+          toast.error(
+            err instanceof Error
+              ? err.message
+              : "Errore nel salvataggio della sostanza"
+          );
+        }
+      }, 800);
+      timers.set(row.id, handle);
+    },
+    [apiFetch, aziendaId, sostanze, onChange, persistedManualIds]
+  );
+
+  useEffect(() => {
+    const timers = saveTimersRef.current;
+    return () => {
+      for (const h of timers.values()) clearTimeout(h);
+    };
+  }, []);
 
   const updateSostanza = useCallback(
     (index: number, fields: Partial<SostanzaChimica>) => {
@@ -557,8 +637,10 @@ export function StepSostanze({
         i === index ? { ...s, ...fields } : s
       );
       onChange(updated);
+      const row = updated[index];
+      if (row) scheduleSostanzaSave(row);
     },
-    [sostanze, onChange]
+    [sostanze, onChange, scheduleSostanzaSave]
   );
 
   const togglePittogramma = useCallback(

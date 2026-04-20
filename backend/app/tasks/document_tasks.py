@@ -13,6 +13,7 @@ import traceback
 import uuid
 from datetime import datetime, timezone
 
+from celery.exceptions import SoftTimeLimitExceeded
 from sqlalchemy import select
 
 from app.celery_app import celery_app
@@ -35,8 +36,8 @@ def _friendly_error_for(exc: Exception) -> str:
         return "Template mancante o file di supporto non trovato. Contatta l'amministratore."
     if isinstance(exc, PermissionError):
         return "Permessi insufficienti sul disco di output. Contatta l'amministratore."
-    if isinstance(exc, TimeoutError):
-        return "Timeout durante la generazione. Riprova tra qualche minuto."
+    if isinstance(exc, (TimeoutError, SoftTimeLimitExceeded)):
+        return "Timeout durante la generazione (oltre 10 minuti). Riprova tra qualche minuto."
     # Generic fallback: expose just the exception class — never the message,
     # which can leak stack traces or SQL fragments.
     return f"Generazione non riuscita ({name}). Riprova o contatta l'amministratore."
@@ -150,7 +151,16 @@ async def _run_generation(document_id: uuid.UUID) -> None:
             await db.commit()
 
 
-@celery_app.task(name="app.tasks.document_tasks.generate_document_task")
+# B2 fix: large docs (POS ~110 pages, HACCP ~90 pages) can take a while.
+# `soft_time_limit` raises SoftTimeLimitExceeded inside the task so the
+# generic except in _run_generation can still roll the row back to "bozza"
+# with a "timeout" error_message instead of leaving it in_progress forever.
+# `time_limit` is the hard ceiling — the worker is killed past that.
+@celery_app.task(
+    name="app.tasks.document_tasks.generate_document_task",
+    soft_time_limit=600,  # 10 min — triggers a catchable exception
+    time_limit=660,       # 11 min — hard kill (worker process terminated)
+)
 def generate_document_task(document_id: str) -> str:
     """Entry point from the API layer. Runs the async workflow in a new loop.
 

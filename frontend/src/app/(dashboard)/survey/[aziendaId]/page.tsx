@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { SurveyWizard } from "@/components/survey/survey-wizard";
 import type { SurveyData } from "@/components/survey/survey-wizard";
-import type { Azienda } from "@/types";
+import type { Azienda, MansioneSorveglianza } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -60,17 +60,27 @@ export default function SurveyAziendaPage() {
         // uses `sostanze` and `valutazioni`. Normalise here (B-03 fix for
         // the "Riepilogo shows 0 valutazioni / 0 sostanze" regression).
         try {
-          const surveyData = await apiCall<
-            Partial<SurveyData> & {
-              sostanze_chimiche?: SurveyData["sostanze"];
-              rischi?: SurveyData["valutazioni"];
-            }
-          >(`/api/v1/aziende/${aziendaId}/survey`, token);
+          const [surveyData, mansioniData] = await Promise.all([
+            apiCall<
+              Partial<SurveyData> & {
+                sostanze_chimiche?: SurveyData["sostanze"];
+                rischi?: SurveyData["valutazioni"];
+              }
+            >(`/api/v1/aziende/${aziendaId}/survey`, token),
+            // The /mansioni-sorveglianza endpoint is additive — if it fails
+            // (e.g. older backend without the migration applied) the wizard
+            // still loads the rest of the survey with an empty list.
+            apiCall<MansioneSorveglianza[]>(
+              `/api/v1/aziende/${aziendaId}/mansioni-sorveglianza`,
+              token
+            ).catch(() => [] as MansioneSorveglianza[]),
+          ]);
           setInitialData({
             azienda: aziendaData,
             persone: surveyData.persone ?? [],
             ambienti: surveyData.ambienti ?? [],
             attrezzature: surveyData.attrezzature ?? [],
+            mansioniSorveglianza: mansioniData,
             sostanze:
               surveyData.sostanze ?? surveyData.sostanze_chimiche ?? [],
             valutazioni:

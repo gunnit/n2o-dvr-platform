@@ -336,25 +336,86 @@ export function StepAmbienti({
   ambienti,
   onChange,
 }: StepAmbientiProps) {
+  const { apiFetch } = useApi();
+  const basePath = `/api/v1/aziende/${aziendaId}/ambienti`;
+
+  // Track which rows have been POSTed to the server. Rows loaded from the
+  // survey endpoint are all persisted; locally-added rows start unpersisted
+  // and flip to persisted after the first successful create. We use a ref
+  // (not state) so that updates inside async callbacks don't trigger renders,
+  // and because we never read the value during render.
+  const persistedIdsRef = useRef<Set<string>>(
+    new Set(ambienti.map((a) => a.id))
+  );
+
   const addAmbiente = useCallback(() => {
     onChange([...ambienti, createEmptyAmbiente(aziendaId)]);
   }, [ambienti, onChange, aziendaId]);
 
   const removeAmbiente = useCallback(
-    (index: number) => {
-      onChange(ambienti.filter((_, i) => i !== index));
+    async (index: number) => {
+      const target = ambienti[index];
+      const next = ambienti.filter((_, i) => i !== index);
+      onChange(next);
+      if (!target) return;
+      if (persistedIdsRef.current.has(target.id)) {
+        try {
+          await apiFetch(`${basePath}/${target.id}`, { method: "DELETE" });
+          persistedIdsRef.current.delete(target.id);
+        } catch (err) {
+          toast.error(
+            err instanceof Error ? err.message : "Errore nella rimozione"
+          );
+          onChange(ambienti);
+        }
+      }
     },
-    [ambienti, onChange]
+    [ambienti, onChange, apiFetch, basePath]
   );
 
   const updateAmbiente = useCallback(
-    (index: number, fields: Partial<Ambiente>) => {
+    async (index: number, fields: Partial<Ambiente>) => {
       const updated = ambienti.map((a, i) =>
         i === index ? { ...a, ...fields } : a
       );
       onChange(updated);
+
+      const row = updated[index];
+      if (!row || !row.nome?.trim()) {
+        // Not ready to persist — server requires a non-empty nome.
+        return;
+      }
+      try {
+        const payload = {
+          nome: row.nome,
+          tipo: row.tipo,
+          superficie_mq: row.superficie_mq,
+          descrizione_attivita: row.descrizione_attivita,
+        };
+        if (persistedIdsRef.current.has(row.id)) {
+          const saved = await apiFetch<Ambiente>(`${basePath}/${row.id}`, {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          });
+          onChange(
+            updated.map((a, i) => (i === index ? { ...a, ...saved } : a))
+          );
+        } else {
+          const created = await apiFetch<Ambiente>(basePath, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          onChange(updated.map((a, i) => (i === index ? created : a)));
+          persistedIdsRef.current.delete(row.id);
+          persistedIdsRef.current.add(created.id);
+        }
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Errore nel salvataggio"
+        );
+      }
     },
-    [ambienti, onChange]
+    [ambienti, onChange, apiFetch, basePath]
   );
 
   return (

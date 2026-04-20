@@ -564,6 +564,7 @@ DEFAULT_ENVIRONMENT_TIPI: list[str] = [
     "ufficio",
     "magazzino",
     "produzione",
+    "officina",
     "cucina",
     "laboratorio",
     "esterno",
@@ -608,6 +609,19 @@ DEFAULT_RISK_SCORES: dict[tuple[str, str], tuple[int, int]] = {
     ("produzione", "Organizzazione"): (2, 2),
     ("produzione", "Psicologici"): (1, 2),
     ("produzione", "Ergonomici"): (2, 3),
+    # Officina -- mechanical workshop (L2 fix — was defaulting to "altro"
+    # so every category rendered Accettabile, which is unrealistic).
+    ("officina", "Strutture"): (2, 2),
+    ("officina", "Macchine"): (2, 3),
+    ("officina", "Elettrici"): (2, 3),
+    ("officina", "Incendio"): (2, 3),
+    ("officina", "Chimici"): (2, 2),
+    ("officina", "Fisici"): (2, 3),
+    ("officina", "Biologici"): (1, 1),
+    ("officina", "Cancerogeni"): (1, 2),
+    ("officina", "Organizzazione"): (2, 2),
+    ("officina", "Psicologici"): (1, 2),
+    ("officina", "Ergonomici"): (2, 3),
     # Cucina -- food preparation
     ("cucina", "Strutture"): (2, 2),
     ("cucina", "Macchine"): (2, 2),
@@ -699,3 +713,533 @@ def get_default_risk_matrix() -> dict[tuple[str, str], tuple[int, int]]:
     currently embeds the same shape client-side to avoid a runtime fetch.
     """
     return dict(DEFAULT_RISK_SCORES)
+
+
+# ---------------------------------------------------------------------------
+# DPI (Dispositivi di Protezione Individuale) catalog — per-mansione
+#
+# Source: elenco DPI fornito da N2O (Luca Marchetti) il 2026-04. Questo
+# catalogo e' pensato per la scheda di valutazione in campo: l'operatore
+# "flagra" i DPI in uso per ciascuna mansione, il Medico del Lavoro usa
+# il risultato per tarare il protocollo delle visite mediche.
+#
+# Differente da `services.dpi_rules.DPI_CATALOG` che e' molto piu' ristretto
+# (10 voci con codici EN) e riservato al motore DPI x fase del POS (US-4.8).
+# I due cataloghi convivono perche' servono casi d'uso diversi; nessuna
+# logica condivisa. Se in futuro si vogliono unificare, mappare i codici EN
+# del POS dentro questo superset.
+# ---------------------------------------------------------------------------
+
+# Body area groups — canonical order for UI rendering
+DPI_BODY_AREAS: list[str] = [
+    "Testa",
+    "Vista",
+    "Viso",
+    "Udito",
+    "Vie Respiratorie",
+    "Mani",
+    "Piedi",
+    "Corpo",
+    "Anticaduta",
+]
+
+# Catalog items: code -> {etichetta, area}
+# Codes are stable slugs (snake_case, no accents, no spaces). Labels are the
+# Italian strings Luca sent verbatim (only light punctuation tweaks for
+# consistency). Never rename a code in place — add a new one and deprecate.
+DPI_CATALOG: dict[str, dict[str, str]] = {
+    # Testa
+    "caschi_industria": {
+        "etichetta": "Caschi di protezione per l'industria",
+        "area": "Testa",
+    },
+    "copricapo_leggero": {
+        "etichetta": "Copricapo leggero per proteggere il cuoio capelluto",
+        "area": "Testa",
+    },
+    "copricapo_protezione": {
+        "etichetta": "Copricapo di protezione",
+        "area": "Testa",
+    },
+    # Vista
+    "occhiali_stanghette": {
+        "etichetta": "Occhiali a stanghette",
+        "area": "Vista",
+    },
+    "occhiali_maschera": {
+        "etichetta": "Occhiali a maschera",
+        "area": "Vista",
+    },
+    "occhiali_raggi": {
+        "etichetta": (
+            "Occhiali di protezione contro raggi X, laser, UV, IR e visibili"
+        ),
+        "area": "Vista",
+    },
+    "occhiali_uv": {
+        "etichetta": "Occhiali protettivi UV",
+        "area": "Vista",
+    },
+    # Viso
+    "schermo_facciale": {
+        "etichetta": "Schermi facciali",
+        "area": "Viso",
+    },
+    "visiera_protettiva": {
+        "etichetta": "Visiera protettiva",
+        "area": "Viso",
+    },
+    "maschera_saldatura_arco": {
+        "etichetta": "Maschera e caschi per saldatura ad arco",
+        "area": "Viso",
+    },
+    "maschera_saldatura_cristalli_liquidi": {
+        "etichetta": "Maschera per saldatrice con cristalli liquidi",
+        "area": "Viso",
+    },
+    "maschera_taglio_ferrite_filtri": {
+        "etichetta": "Maschera per taglio ferrite con filtri",
+        "area": "Viso",
+    },
+    # Udito
+    "cuffie_antirumore": {
+        "etichetta": "Cuffie antirumore",
+        "area": "Udito",
+    },
+    "cuffie_insonorizzate": {
+        "etichetta": "Cuffie insonorizzate",
+        "area": "Udito",
+    },
+    "otoprotettori": {
+        "etichetta": "Otoprotettori",
+        "area": "Udito",
+    },
+    # Vie Respiratorie
+    "mascherina_tnt_igienica": {
+        "etichetta": "Mascherina filtrante igienica in TNT",
+        "area": "Vie Respiratorie",
+    },
+    "mascherina_chirurgica": {
+        "etichetta": "Mascherina chirurgica",
+        "area": "Vie Respiratorie",
+    },
+    "mascherina_ffp2_ffp3": {
+        "etichetta": "Mascherina antipolvere FFP2/FFP3",
+        "area": "Vie Respiratorie",
+    },
+    "mascherina_carboni_attivi": {
+        "etichetta": "Mascherina ai carboni attivi",
+        "area": "Vie Respiratorie",
+    },
+    "mascherina_polvere_verniciatura": {
+        "etichetta": "Mascherina di protezione da polvere di verniciatura",
+        "area": "Vie Respiratorie",
+    },
+    "maschera_verniciatura_ffa1p2": {
+        "etichetta": "Maschera per verniciatura FFA1P2",
+        "area": "Vie Respiratorie",
+    },
+    "maschera_pieno_facciale_filtro": {
+        "etichetta": "Maschera a pieno facciale con filtro",
+        "area": "Vie Respiratorie",
+    },
+    "maschera_pieno_facciale_aria": {
+        "etichetta": "Maschera a pieno facciale con aria respirabile",
+        "area": "Vie Respiratorie",
+    },
+    "respiratore_saldatura_amovibile": {
+        "etichetta": "Apparecchi respiratori con maschera per saldatura amovibile",
+        "area": "Vie Respiratorie",
+    },
+    # Mani
+    "guanti_pvc": {
+        "etichetta": "Guanti in PVC",
+        "area": "Mani",
+    },
+    "guanti_lattice": {
+        "etichetta": "Guanti in lattice",
+        "area": "Mani",
+    },
+    "guanti_vinile": {
+        "etichetta": "Guanti in vinile",
+        "area": "Mani",
+    },
+    "guanti_nitrile": {
+        "etichetta": "Guanti in nitrile",
+        "area": "Mani",
+    },
+    "guanti_maglia_acciaio": {
+        "etichetta": "Guanti in maglia d'acciaio",
+        "area": "Mani",
+    },
+    "guanti_anticalore": {
+        "etichetta": "Guanti anticalore",
+        "area": "Mani",
+    },
+    "guanti_antitermici": {
+        "etichetta": "Guanti antitermici",
+        "area": "Mani",
+    },
+    "guanti_meccanici": {
+        "etichetta": "Guanti contro le aggressioni meccaniche",
+        "area": "Mani",
+    },
+    "guanti_chimici": {
+        "etichetta": "Guanti contro le aggressioni chimiche",
+        "area": "Mani",
+    },
+    "guanti_isolanti_elettrici": {
+        "etichetta": "Guanti isolanti per elettricisti",
+        "area": "Mani",
+    },
+    "guanti_antitaglio_affettatrice": {
+        "etichetta": "Guanti antitaglio per affettatrice",
+        "area": "Mani",
+    },
+    "guanti_lavaggio_verniciatura": {
+        "etichetta": "Guanti per lavaggio verniciatura",
+        "area": "Mani",
+    },
+    "guanti_mezze_dita": {
+        "etichetta": "Guanti a mezze dita",
+        "area": "Mani",
+    },
+    "ditali": {
+        "etichetta": "Ditali",
+        "area": "Mani",
+    },
+    "manicotti": {
+        "etichetta": "Manicotti",
+        "area": "Mani",
+    },
+    # Piedi
+    "scarpe_antisdrucciolevole": {
+        "etichetta": "Scarpe con suola antisdrucciolevole",
+        "area": "Piedi",
+    },
+    "scarpe_basse": {
+        "etichetta": "Scarpe basse",
+        "area": "Piedi",
+    },
+    "scarpe_punta_rinforzata": {
+        "etichetta": "Scarpe con protezione supplementare della punta del piede",
+        "area": "Piedi",
+    },
+    "scarpe_sganciamento_rapido": {
+        "etichetta": "Scarpe a sganciamento rapido",
+        "area": "Piedi",
+    },
+    "stivali_sicurezza": {
+        "etichetta": "Stivali di sicurezza",
+        "area": "Piedi",
+    },
+    "zoccolo_sanitario": {
+        "etichetta": "Zoccolo sanitario ad uso professionale",
+        "area": "Piedi",
+    },
+    # Corpo
+    "abbigliamento_da_lavoro": {
+        "etichetta": "Abbigliamento da lavoro",
+        "area": "Corpo",
+    },
+    "camice_da_lavoro": {
+        "etichetta": "Camice da lavoro",
+        "area": "Corpo",
+    },
+    "grembiuli_divisa": {
+        "etichetta": "Grembiuli e divisa",
+        "area": "Corpo",
+    },
+    "indumenti_due_pezzi": {
+        "etichetta": "Indumenti di lavoro a due pezzi",
+        "area": "Corpo",
+    },
+    "tuta_monouso": {
+        "etichetta": "Tuta intera da lavoro monouso",
+        "area": "Corpo",
+    },
+    "copri_barba_alimentare": {
+        "etichetta": "Copribarba per uso alimentare",
+        "area": "Corpo",
+    },
+    "grembiule_cerato": {
+        "etichetta": "Grembiule di lavoro cerato",
+        "area": "Corpo",
+    },
+    "grembiuli_meccanici": {
+        "etichetta": "Grembiuli contro le aggressioni meccaniche",
+        "area": "Corpo",
+    },
+    "grembiuli_chimici": {
+        "etichetta": "Grembiuli contro le aggressioni chimiche",
+        "area": "Corpo",
+    },
+    "indumenti_meccanici": {
+        "etichetta": "Indumenti di protezione contro le aggressioni meccaniche",
+        "area": "Corpo",
+    },
+    "indumenti_chimici": {
+        "etichetta": "Indumenti di protezione contro le aggressioni chimiche",
+        "area": "Corpo",
+    },
+    "indumenti_calore": {
+        "etichetta": "Indumenti di protezione contro il calore",
+        "area": "Corpo",
+    },
+    "indumenti_freddo": {
+        "etichetta": "Indumenti di protezione contro il freddo",
+        "area": "Corpo",
+    },
+    "indumenti_radioattiva": {
+        "etichetta": "Indumenti di protezione contro la contaminazione radioattiva",
+        "area": "Corpo",
+    },
+    "indumenti_antipolvere": {
+        "etichetta": "Indumenti antipolvere",
+        "area": "Corpo",
+    },
+    "indumenti_antigas": {
+        "etichetta": "Indumenti antigas",
+        "area": "Corpo",
+    },
+    "indumenti_fluorescenti": {
+        "etichetta": (
+            "Indumenti e accessori fluorescenti di segnalazione, catarifrangenti"
+        ),
+        "area": "Corpo",
+    },
+    "giubbotti_termici": {
+        "etichetta": "Giubbotti termici",
+        "area": "Corpo",
+    },
+    "abbigliamento_arco_elettrico": {
+        "etichetta": "Abbigliamento protettivo arco elettrico",
+        "area": "Corpo",
+    },
+    "abiti_anti_impigliamento": {
+        "etichetta": "Abiti anti-impigliamento",
+        "area": "Corpo",
+    },
+    "maniche_isolanti": {
+        "etichetta": "Maniche isolanti",
+        "area": "Corpo",
+    },
+    "ginocchiere": {
+        "etichetta": "Ginocchiere",
+        "area": "Corpo",
+    },
+    "creme_protettive": {
+        "etichetta": "Creme protettive",
+        "area": "Corpo",
+    },
+    # Anticaduta
+    "cintura_sicurezza_tronco": {
+        "etichetta": "Cintura di sicurezza del tronco",
+        "area": "Anticaduta",
+    },
+    "imbracatura_sicurezza": {
+        "etichetta": "Dispositivo di sostegno del corpo (imbracatura di sicurezza)",
+        "area": "Anticaduta",
+    },
+    "attrezzature_cadute": {
+        "etichetta": "Attrezzature di protezione contro le cadute",
+        "area": "Anticaduta",
+    },
+}
+
+
+def get_dpi_catalog_grouped() -> list[dict]:
+    """Return DPI catalog grouped by body area, in canonical order.
+
+    Shape: ``[{area: "Testa", items: [{code, etichetta}, ...]}, ...]``.
+    Used by the ``/lookup/dpi-catalog`` endpoint so the frontend can
+    render one section per body area without having to re-group.
+    """
+    by_area: dict[str, list[dict]] = {a: [] for a in DPI_BODY_AREAS}
+    for code, meta in DPI_CATALOG.items():
+        area = meta["area"]
+        if area not in by_area:
+            by_area[area] = []
+        by_area[area].append({"code": code, "etichetta": meta["etichetta"]})
+    return [
+        {"area": area, "items": by_area[area]}
+        for area in DPI_BODY_AREAS
+        if by_area.get(area)
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Rischi Specifici D.Lgs. 81/08 — per-mansione
+#
+# Source: elenco "RISCHI D.LGS. 81\08" fornito da N2O (Luca Marchetti) il
+# 2026-04. Questi sono rischi specifici (piu' granulari delle 11 macro
+# categorie di RISK_CATEGORIES) che l'operatore flagra per mansione per
+# abilitare il Medico del Lavoro a definire il protocollo delle visite.
+#
+# NB: sono complementari ai rischi generali per ambiente (ValutazioneRischio,
+# step Rischi del wizard) — non sostituiscono quelli. Qui si traccia "questa
+# mansione e' esposta al rumore", nel wizard Rischi si quantifica P/D per
+# ambiente.
+# ---------------------------------------------------------------------------
+
+RISCHI_SPECIFICI_MACRO: list[str] = [
+    "Ambienti e Luoghi",
+    "Attrezzature e Impianti",
+    "Incendio ed Esplosione",
+    "Agenti Fisici",
+    "Agenti Chimici e Biologici",
+    "Organizzazione e Fattori Umani",
+    "Movimentazione e Posture",
+    "Lavori in Quota e Veicoli",
+]
+
+RISCHI_SPECIFICI_CATALOG: dict[str, dict[str, str]] = {
+    # Ambienti e Luoghi
+    "luoghi_lavoro_strutture": {
+        "etichetta": "Luoghi di lavoro e Strutture",
+        "macro": "Ambienti e Luoghi",
+    },
+    "spazi_confinati": {
+        "etichetta": "Lavori in spazi confinati o sospetti di inquinamento",
+        "macro": "Ambienti e Luoghi",
+    },
+    "atmosfere_esplosive": {
+        "etichetta": "Atmosfere esplosive (ATEX)",
+        "macro": "Ambienti e Luoghi",
+    },
+    "lavoro_difficile": {
+        "etichetta": "Condizione di lavoro difficile",
+        "macro": "Ambienti e Luoghi",
+    },
+    # Attrezzature e Impianti
+    "utilizzo_attrezzature": {
+        "etichetta": "Utilizzo di attrezzature di lavoro",
+        "macro": "Attrezzature e Impianti",
+    },
+    "utilizzo_dpi": {
+        "etichetta": "Utilizzo di dispositivi di protezione individuale",
+        "macro": "Attrezzature e Impianti",
+    },
+    "apparecchiature_elettriche": {
+        "etichetta": "Utilizzo di apparecchiature elettriche",
+        "macro": "Attrezzature e Impianti",
+    },
+    "impianti_elettrici_elettrocuzione": {
+        "etichetta": "Impianti elettrici ed elettrocuzione",
+        "macro": "Attrezzature e Impianti",
+    },
+    # Incendio
+    "incendio_esplosioni": {
+        "etichetta": "Possibile insorgenza di incendi ed esplosioni",
+        "macro": "Incendio ed Esplosione",
+    },
+    # Agenti Fisici
+    "af_microclima": {
+        "etichetta": "Agenti fisici - Microclima",
+        "macro": "Agenti Fisici",
+    },
+    "af_rumore": {
+        "etichetta": "Agenti fisici - Rumore",
+        "macro": "Agenti Fisici",
+    },
+    "af_vibrazioni": {
+        "etichetta": "Agenti fisici - Vibrazioni",
+        "macro": "Agenti Fisici",
+    },
+    "af_campi_em": {
+        "etichetta": "Agenti fisici - Campi elettromagnetici",
+        "macro": "Agenti Fisici",
+    },
+    "af_radiazioni_ottiche": {
+        "etichetta": "Agenti fisici - Radiazioni ottiche artificiali",
+        "macro": "Agenti Fisici",
+    },
+    # Chimici e Biologici
+    "agenti_chimici": {
+        "etichetta": "Agenti chimici",
+        "macro": "Agenti Chimici e Biologici",
+    },
+    "cancerogeni_mutageni": {
+        "etichetta": "Agenti cancerogeni e mutageni",
+        "macro": "Agenti Chimici e Biologici",
+    },
+    "amianto": {
+        "etichetta": "Esposizione ad amianto",
+        "macro": "Agenti Chimici e Biologici",
+    },
+    "agenti_biologici": {
+        "etichetta": "Agenti biologici",
+        "macro": "Agenti Chimici e Biologici",
+    },
+    # Organizzazione e Fattori Umani
+    "organizzazione_lavoro": {
+        "etichetta": "Organizzazione del lavoro",
+        "macro": "Organizzazione e Fattori Umani",
+    },
+    "psicologici": {
+        "etichetta": "Fattori psicologici",
+        "macro": "Organizzazione e Fattori Umani",
+    },
+    "ergonomici": {
+        "etichetta": "Fattori ergonomici",
+        "macro": "Organizzazione e Fattori Umani",
+    },
+    # Movimentazione e Posture
+    "mmc": {
+        "etichetta": "Movimentazione manuale dei carichi (MMC)",
+        "macro": "Movimentazione e Posture",
+    },
+    "vdt": {
+        "etichetta": "Lavori ai videoterminali (VDT)",
+        "macro": "Movimentazione e Posture",
+    },
+    # Lavori in Quota e Veicoli
+    "lavori_quota": {
+        "etichetta": "Lavori in quota",
+        "macro": "Lavori in Quota e Veicoli",
+    },
+    "carrello_elevatore": {
+        "etichetta": "Utilizzo carrello elevatore",
+        "macro": "Lavori in Quota e Veicoli",
+    },
+    "ple": {
+        "etichetta": "Utilizzo piattaforma di lavoro elevabile (PLE)",
+        "macro": "Lavori in Quota e Veicoli",
+    },
+    "gru": {
+        "etichetta": "Utilizzo gru",
+        "macro": "Lavori in Quota e Veicoli",
+    },
+    "ruspa_escavatore": {
+        "etichetta": "Utilizzo ruspa / escavatore",
+        "macro": "Lavori in Quota e Veicoli",
+    },
+    "guida_automezzi_cde": {
+        "etichetta": "Guida automezzi (patente C-D-E)",
+        "macro": "Lavori in Quota e Veicoli",
+    },
+    "adr": {
+        "etichetta": "Trasporto ADR (merci pericolose)",
+        "macro": "Lavori in Quota e Veicoli",
+    },
+}
+
+
+def get_rischi_specifici_catalog_grouped() -> list[dict]:
+    """Return rischi specifici grouped by macro, in canonical order.
+
+    Shape: ``[{macro: "Agenti Fisici", items: [{code, etichetta}, ...]}, ...]``.
+    Mirrors ``get_dpi_catalog_grouped`` so the frontend can render both
+    with the same component.
+    """
+    by_macro: dict[str, list[dict]] = {m: [] for m in RISCHI_SPECIFICI_MACRO}
+    for code, meta in RISCHI_SPECIFICI_CATALOG.items():
+        macro = meta["macro"]
+        if macro not in by_macro:
+            by_macro[macro] = []
+        by_macro[macro].append({"code": code, "etichetta": meta["etichetta"]})
+    return [
+        {"macro": macro, "items": by_macro[macro]}
+        for macro in RISCHI_SPECIFICI_MACRO
+        if by_macro.get(macro)
+    ]

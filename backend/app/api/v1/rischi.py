@@ -44,6 +44,70 @@ async def list_rischi(
     return result.scalars().all()
 
 
+class RischiBatchItem(RischioCreate):
+    # Optional id — if present and matches an existing row, update in place;
+    # otherwise create. Lets the wizard sync its local state in one round-trip.
+    id: uuid.UUID | None = None
+
+
+class RischiBatchRequest(BaseModel):
+    items: list[RischiBatchItem]
+
+
+@router.post(
+    "/ambienti/{ambiente_id}/rischi/batch",
+    response_model=list[RischioResponse],
+)
+async def batch_upsert_rischi(
+    azienda_id: uuid.UUID,
+    ambiente_id: uuid.UUID,
+    body: RischiBatchRequest,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """US-2.3 companion — upsert all valutazioni for an ambiente in one call.
+
+    Matches existing rows by (ambiente_id, categoria_rischio) so the wizard
+    can send the whole snapshot of sliders without tracking id assignment.
+    """
+    await _verify_azienda(azienda_id, org_id, db)
+    result = await db.execute(
+        select(Ambiente).where(
+            Ambiente.id == ambiente_id, Ambiente.azienda_id == azienda_id
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise NotFoundError("Ambiente not found")
+
+    # Load existing rows keyed by categoria so we can decide create/update.
+    existing = (
+        await db.execute(
+            select(ValutazioneRischio).where(
+                ValutazioneRischio.ambiente_id == ambiente_id
+            )
+        )
+    ).scalars().all()
+    by_cat = {r.categoria_rischio: r for r in existing}
+
+    out: list[ValutazioneRischio] = []
+    for item in body.items:
+        row = by_cat.get(item.categoria_rischio)
+        payload = item.model_dump(exclude={"id"})
+        if row is None:
+            row = ValutazioneRischio(**payload, ambiente_id=ambiente_id)
+            db.add(row)
+            out.append(row)
+        else:
+            for field, value in payload.items():
+                setattr(row, field, value)
+            out.append(row)
+
+    await db.commit()
+    for r in out:
+        await db.refresh(r)
+    return out
+
+
 @router.post("/ambienti/{ambiente_id}/rischi", response_model=RischioResponse, status_code=201)
 async def create_rischio(
     azienda_id: uuid.UUID,
