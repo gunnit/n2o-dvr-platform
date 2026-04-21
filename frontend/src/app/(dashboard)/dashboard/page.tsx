@@ -516,12 +516,11 @@ export default function DashboardPage() {
               accent="primary"
               icon={Building2}
               delta={
-                <>
-                  <span className="font-semibold text-[#108c3d]">
-                    {stats.total > 0 ? `+${Math.min(stats.total, 2)}` : "0"}
-                  </span>{" "}
-                  vs. mese scorso
-                </>
+                stats.total > 0 ? (
+                  <>portafoglio gestito</>
+                ) : (
+                  <>nessun cliente</>
+                )
               }
             />
             <KpiTile
