@@ -31,6 +31,7 @@ from app.models.pos import Pos
 # Cross-cutting
 from app.models.audit_log import AuditLog
 from app.models.ai_feedback import AiFeedback
+from app.models.user_feedback import UserFeedback
 from app.models.description_revision import DescriptionRevision
 
 __all__ = [
@@ -62,5 +63,6 @@ __all__ = [
     "Pos",
     "AuditLog",
     "AiFeedback",
+    "UserFeedback",
     "DescriptionRevision",
 ]

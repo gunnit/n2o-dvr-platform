@@ -10,6 +10,7 @@ from app.api.v1.calculations import router as calculations_router
 from app.api.v1.documents import download_router as documents_download_router
 from app.api.v1.documents import router as documents_router
 from app.api.v1.duvri import router as duvri_router
+from app.api.v1.feedback import router as feedback_router
 from app.api.v1.gestanti import router as gestanti_router
 from app.api.v1.haccp import router as haccp_router
 from app.api.v1.lookups import router as lookups_router
@@ -39,6 +40,7 @@ api_router.include_router(documents_router)
 api_router.include_router(documents_download_router)
 api_router.include_router(calculations_router)
 api_router.include_router(ai_feedback_router)
+api_router.include_router(feedback_router)
 api_router.include_router(gestanti_router)
 api_router.include_router(haccp_router)
 api_router.include_router(pee_procedures_router)

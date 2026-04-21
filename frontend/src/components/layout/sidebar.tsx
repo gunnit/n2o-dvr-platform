@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -11,11 +12,14 @@ import {
   FlaskConical,
   LayoutDashboard,
   LogOut,
+  MessageSquarePlus,
+  MessagesSquare,
   Settings,
   Shield,
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FeedbackDialog } from "@/components/feedback/feedback-dialog";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -29,6 +33,7 @@ const navigation = [
 
 const adminNavigation = [
   { name: "Utenti", href: "/admin/users", icon: Users },
+  { name: "Feedback", href: "/admin/feedback", icon: MessagesSquare },
 ];
 
 type SidebarUser = {
@@ -39,6 +44,7 @@ type SidebarUser = {
 
 export function Sidebar({ user }: { user: SidebarUser }) {
   const pathname = usePathname();
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const initials = (user.name ?? user.email ?? "U")
     .split(/[\s@.]+/)
     .slice(0, 2)
@@ -77,6 +83,15 @@ export function Sidebar({ user }: { user: SidebarUser }) {
             </Link>
           );
         })}
+
+        <button
+          type="button"
+          onClick={() => setFeedbackOpen(true)}
+          className="mt-2 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-white/65 transition-colors hover:bg-white/5 hover:text-white"
+        >
+          <MessageSquarePlus className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+          <span>Segnala</span>
+        </button>
 
         {user.role === "admin" && (
           <>
@@ -128,6 +143,7 @@ export function Sidebar({ user }: { user: SidebarUser }) {
           </button>
         </div>
       </div>
+      <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
     </aside>
   );
 }
