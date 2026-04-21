@@ -50,12 +50,16 @@ function extractToc(markdown: string): TocItem[] {
 
     const h2 = /^##\s+(.+?)\s*$/.exec(line);
     const h3 = /^###\s+(.+?)\s*$/.exec(line);
+    const h4 = /^####\s+(.+?)\s*$/.exec(line);
     if (h2) {
       const text = h2[1].trim();
       items.push({ id: slugger.slug(text), text, level: 2 });
     } else if (h3) {
       const text = h3[1].trim();
       items.push({ id: slugger.slug(text), text, level: 3 });
+    } else if (h4) {
+      const text = h4[1].trim();
+      items.push({ id: slugger.slug(text), text, level: 4 });
     }
   }
   return items;

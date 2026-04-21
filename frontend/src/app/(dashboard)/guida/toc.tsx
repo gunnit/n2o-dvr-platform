@@ -6,7 +6,13 @@ import { cn } from "@/lib/utils";
 export type TocItem = {
   id: string;
   text: string;
-  level: 2 | 3;
+  level: 2 | 3 | 4;
+};
+
+const LEVEL_INDENT: Record<TocItem["level"], string> = {
+  2: "pl-3",
+  3: "pl-6",
+  4: "pl-9",
 };
 
 export function Toc({ items }: { items: TocItem[] }) {
@@ -45,7 +51,7 @@ export function Toc({ items }: { items: TocItem[] }) {
               href={`#${item.id}`}
               className={cn(
                 "block border-l-2 py-1 text-[13px] leading-snug transition-colors",
-                item.level === 2 ? "pl-3" : "pl-6",
+                LEVEL_INDENT[item.level],
                 activeId === item.id
                   ? "-ml-px border-primary font-medium text-primary"
                   : "-ml-px border-transparent text-[#64748d] hover:text-[#061b31]"
