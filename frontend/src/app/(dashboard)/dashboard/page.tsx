@@ -296,12 +296,19 @@ export default function DashboardPage() {
     const inProgress =
       kpis?.sopralluoghi_in_corso ??
       aziende.filter((a) => a.survey_status === "in_progress").length;
-    const completed =
-      kpis?.sopralluoghi_completati ??
-      aziende.filter(
-        (a) =>
-          a.survey_status === "completed" || a.survey_status === "firmato",
-      ).length;
+    // Bug C: a "firmato" sopralluogo is the completed state semantically
+    // (dashboard status pill, activity log "DVR completato", DVR 100%, and
+    // wizard progress all already treat firmato == completed). The backend
+    // KPI counter currently misses firmato, so we always count locally to
+    // include it; if the backend ever rolls firmato into its own count the
+    // Math.max keeps the higher of the two so we don't undercount.
+    const localCompleted = aziende.filter(
+      (a) =>
+        a.survey_status === "completed" || a.survey_status === "firmato",
+    ).length;
+    const completed = kpis?.sopralluoghi_completati
+      ? Math.max(kpis.sopralluoghi_completati, localCompleted)
+      : localCompleted;
     const drafts =
       kpis?.bozze ?? aziende.filter((a) => a.survey_status === "draft").length;
     return { total, inProgress, completed, drafts };

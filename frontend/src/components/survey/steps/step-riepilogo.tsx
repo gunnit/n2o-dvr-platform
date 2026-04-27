@@ -633,35 +633,52 @@ export function StepRiepilogo({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sostanze.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-medium">
-                      {s.nome_prodotto || "-"}
-                    </TableCell>
-                    <TableCell>{s.produttore || "-"}</TableCell>
-                    <TableCell>{s.stato_miscela || "-"}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {s.pittogrammi.length > 0
-                          ? s.pittogrammi.map((p) => (
-                              <Badge
-                                key={p}
-                                variant="outline"
-                                className="text-xs"
-                              >
-                                {p}
-                              </Badge>
-                            ))
-                          : "-"}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {s.frasi_h.length > 0
-                        ? s.frasi_h.join(", ")
-                        : "-"}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {sostanze.map((s) => {
+                  // Defensive: API/AI extraction can hand back null or a
+                  // single string instead of an array (B-02 family of bugs),
+                  // and the table cell's whitespace-nowrap default would
+                  // truncate multiple chips onto one line otherwise.
+                  const pittogrammi = Array.isArray(s.pittogrammi)
+                    ? s.pittogrammi
+                    : typeof s.pittogrammi === "string" && s.pittogrammi
+                    ? [s.pittogrammi]
+                    : [];
+                  const frasiH = Array.isArray(s.frasi_h)
+                    ? s.frasi_h
+                    : typeof s.frasi_h === "string" && s.frasi_h
+                    ? (s.frasi_h as string)
+                        .split(",")
+                        .map((v) => v.trim())
+                        .filter(Boolean)
+                    : [];
+                  return (
+                    <TableRow key={s.id}>
+                      <TableCell className="font-medium">
+                        {s.nome_prodotto || "-"}
+                      </TableCell>
+                      <TableCell>{s.produttore || "-"}</TableCell>
+                      <TableCell>{s.stato_miscela || "-"}</TableCell>
+                      <TableCell className="!whitespace-normal">
+                        <div className="flex flex-wrap gap-1">
+                          {pittogrammi.length > 0
+                            ? pittogrammi.map((p) => (
+                                <Badge
+                                  key={p}
+                                  variant="outline"
+                                  className="text-xs"
+                                >
+                                  {p}
+                                </Badge>
+                              ))
+                            : "-"}
+                        </div>
+                      </TableCell>
+                      <TableCell className="!whitespace-normal">
+                        {frasiH.length > 0 ? frasiH.join(", ") : "-"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

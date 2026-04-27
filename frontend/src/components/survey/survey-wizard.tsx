@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -708,10 +709,24 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
               Avanti
               <ChevronRight className="h-[18px] w-[18px]" strokeWidth={2.5} />
             </button>
+          ) : isSigned ? (
+            // B-03 (Bug B): once the survey is firmato the firma itself
+            // *is* the completion. The dashboard, activity log, and DVR
+            // progress all roll firmato up to "DVR completato 100%". So
+            // the bottom-right action no longer claims to "complete" —
+            // it confirms the completed state and routes back to the
+            // azienda page where documents and the firma badge live.
+            <Link
+              href={`/aziende/${aziendaId}`}
+              className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-8 py-2 text-sm font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-green-700"
+            >
+              <Check className="h-4 w-4" strokeWidth={2.5} />
+              Sopralluogo Completato
+            </Link>
           ) : (
             <Button
               onClick={handleComplete}
-              disabled={saving || isSigned || completionIssues.length > 0}
+              disabled={saving || completionIssues.length > 0}
               title={
                 completionIssues.length > 0
                   ? `Prerequisiti mancanti: ${completionIssues.join(" • ")}`

@@ -27,15 +27,48 @@ interface StepAmbientiProps {
   onChange: (ambienti: Ambiente[]) => void;
 }
 
+// Suggested ambiente types — used as datalist hints. The input accepts any
+// free-text value, so this list just speeds up the common cases. Ordered
+// roughly by frequency in Italian workplace surveys.
 const TIPI_AMBIENTE = [
   "Ufficio",
+  "Ufficio direzionale",
+  "Open space",
+  "Sala riunioni",
+  "Sala corsi / Aula formazione",
+  "Reception / Accoglienza",
+  "Sala d'attesa",
   "Magazzino",
+  "Deposito",
+  "Archivio",
+  "Area carico/scarico",
   "Cucina",
+  "Cucina industriale",
+  "Sala mensa / Refettorio",
+  "Bar / Caffetteria",
   "Laboratorio",
+  "Laboratorio chimico",
+  "Laboratorio analisi",
   "Officina",
-  "Sala Corsi",
-  "Esterno",
-  "Bagno/Spogliatoio",
+  "Officina meccanica",
+  "Officina elettrica",
+  "Capannone produttivo",
+  "Reparto produzione",
+  "Linea di assemblaggio",
+  "Showroom / Sala esposizione",
+  "Negozio / Punto vendita",
+  "Studio medico / Ambulatorio",
+  "Aula scolastica",
+  "Palestra",
+  "Bagno / Servizi igienici",
+  "Spogliatoio",
+  "Locale tecnico",
+  "Centrale termica",
+  "Cabina elettrica",
+  "Sala server / CED",
+  "Area esterna / Cortile",
+  "Parcheggio",
+  "Cantiere",
 ];
 
 const MAX_FOTO = 10;
@@ -348,6 +381,27 @@ export function StepAmbienti({
     new Set(ambienti.map((a) => a.id))
   );
 
+  // Bug A fix — serialize per-row writes. The autosave previously fired one
+  // POST per keystroke against an unpersisted row; multiple POSTs landed in
+  // flight before the first response could mark the row persisted, so each
+  // POST created a fresh row. We now keep a per-row promise chain: a POST is
+  // attempted at most once per row, and any concurrent updates queue behind
+  // it as PUTs against the server-assigned id.
+  const inflightCreateRef = useRef<Map<string, Promise<Ambiente | null>>>(
+    new Map()
+  );
+  // Latest pending payload per local row id — coalesced so that even if many
+  // keystrokes land while a POST is in flight, only the most recent payload
+  // is PUT after creation resolves.
+  const pendingPutRef = useRef<Map<string, Partial<Ambiente>>>(new Map());
+  // Always-current snapshot of the ambienti array. Async callbacks below
+  // patch by row id (not index) and need the latest list at resolve time so
+  // that out-of-order resolutions don't clobber sibling rows.
+  const ambientiRef = useRef<Ambiente[]>(ambienti);
+  useEffect(() => {
+    ambientiRef.current = ambienti;
+  }, [ambienti]);
+
   const addAmbiente = useCallback(() => {
     onChange([...ambienti, createEmptyAmbiente(aziendaId)]);
   }, [ambienti, onChange, aziendaId]);
@@ -358,10 +412,19 @@ export function StepAmbienti({
       const next = ambienti.filter((_, i) => i !== index);
       onChange(next);
       if (!target) return;
-      if (persistedIdsRef.current.has(target.id)) {
+      // If a POST is in flight for this row, wait for it before deleting so
+      // we have the real server id (and don't leak an orphan).
+      const inflight = inflightCreateRef.current.get(target.id);
+      let serverId = target.id;
+      if (inflight) {
+        const created = await inflight.catch(() => null);
+        if (created) serverId = created.id;
+      }
+      pendingPutRef.current.delete(target.id);
+      if (persistedIdsRef.current.has(serverId)) {
         try {
-          await apiFetch(`${basePath}/${target.id}`, { method: "DELETE" });
-          persistedIdsRef.current.delete(target.id);
+          await apiFetch(`${basePath}/${serverId}`, { method: "DELETE" });
+          persistedIdsRef.current.delete(serverId);
         } catch (err) {
           toast.error(
             err instanceof Error ? err.message : "Errore nella rimozione"
@@ -385,34 +448,90 @@ export function StepAmbienti({
         // Not ready to persist — server requires a non-empty nome.
         return;
       }
-      try {
-        const payload = {
-          nome: row.nome,
-          tipo: row.tipo,
-          superficie_mq: row.superficie_mq,
-          descrizione_attivita: row.descrizione_attivita,
-        };
-        if (persistedIdsRef.current.has(row.id)) {
-          const saved = await apiFetch<Ambiente>(`${basePath}/${row.id}`, {
+      const localId = row.id;
+      const payload = {
+        nome: row.nome,
+        tipo: row.tipo,
+        superficie_mq: row.superficie_mq,
+        descrizione_attivita: row.descrizione_attivita,
+      };
+
+      // Path A: row already persisted on the server — straight PUT.
+      if (persistedIdsRef.current.has(localId)) {
+        try {
+          const saved = await apiFetch<Ambiente>(`${basePath}/${localId}`, {
             method: "PUT",
             body: JSON.stringify(payload),
           });
           onChange(
-            updated.map((a, i) => (i === index ? { ...a, ...saved } : a))
+            ambientiRef.current.map((a) =>
+              a.id === localId ? { ...a, ...saved } : a
+            )
           );
-        } else {
+        } catch (err) {
+          toast.error(
+            err instanceof Error ? err.message : "Errore nel salvataggio"
+          );
+        }
+        return;
+      }
+
+      // Path B: row not yet persisted. If a POST is already in flight for
+      // this local id, just stash the latest payload — it will be flushed
+      // as a PUT once the POST resolves with the server id.
+      if (inflightCreateRef.current.has(localId)) {
+        pendingPutRef.current.set(localId, payload);
+        return;
+      }
+
+      // Path C: first POST for this row. We register the promise BEFORE
+      // awaiting so any concurrent keystroke takes Path B above instead of
+      // firing a second POST. Subsequent edits queued while we await are
+      // flushed once we know the server id.
+      const createPromise: Promise<Ambiente | null> = (async () => {
+        try {
           const created = await apiFetch<Ambiente>(basePath, {
             method: "POST",
             body: JSON.stringify(payload),
           });
-          onChange(updated.map((a, i) => (i === index ? created : a)));
-          persistedIdsRef.current.delete(row.id);
+          persistedIdsRef.current.delete(localId);
           persistedIdsRef.current.add(created.id);
+          // Swap local id → server id in the wizard state.
+          onChange(
+            ambientiRef.current.map((a) => (a.id === localId ? created : a))
+          );
+          return created;
+        } catch (err) {
+          toast.error(
+            err instanceof Error ? err.message : "Errore nel salvataggio"
+          );
+          return null;
         }
-      } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : "Errore nel salvataggio"
-        );
+      })();
+      inflightCreateRef.current.set(localId, createPromise);
+
+      const created = await createPromise;
+      inflightCreateRef.current.delete(localId);
+
+      // Drain any payload that was coalesced while POST was in flight.
+      const queued = pendingPutRef.current.get(localId);
+      pendingPutRef.current.delete(localId);
+      if (created && queued) {
+        try {
+          const saved = await apiFetch<Ambiente>(`${basePath}/${created.id}`, {
+            method: "PUT",
+            body: JSON.stringify(queued),
+          });
+          onChange(
+            ambientiRef.current.map((a) =>
+              a.id === created.id ? { ...a, ...saved } : a
+            )
+          );
+        } catch (err) {
+          toast.error(
+            err instanceof Error ? err.message : "Errore nel salvataggio"
+          );
+        }
       }
     },
     [ambienti, onChange, apiFetch, basePath]
@@ -429,6 +548,11 @@ export function StepAmbienti({
             Definisci gli ambienti di lavoro dell&apos;azienda
           </p>
         </div>
+        <datalist id="ambiente-tipi-suggestions">
+          {TIPI_AMBIENTE.map((tipo) => (
+            <option key={tipo} value={tipo} />
+          ))}
+        </datalist>
         <div className="space-y-6">
           {ambienti.length === 0 && (
             <p className="py-8 text-center text-muted-foreground">
@@ -473,28 +597,22 @@ export function StepAmbienti({
                     />
                   </div>
 
-                  {/* Tipo */}
+                  {/* Tipo — combobox with suggestions; free text allowed */}
                   <div className="space-y-2">
                     <Label htmlFor={`amb-tipo-${index}`}>
                       Tipo
                     </Label>
-                    <select
+                    <Input
                       id={`amb-tipo-${index}`}
+                      list="ambiente-tipi-suggestions"
                       value={ambiente.tipo}
                       onChange={(e) =>
                         updateAmbiente(index, {
                           tipo: e.target.value,
                         })
                       }
-                      className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                    >
-                      <option value="">Seleziona tipo</option>
-                      {TIPI_AMBIENTE.map((tipo) => (
-                        <option key={tipo} value={tipo}>
-                          {tipo}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Scrivi o seleziona (es. Ufficio, Magazzino, Altro...)"
+                    />
                   </div>
 
                   {/* Superficie */}

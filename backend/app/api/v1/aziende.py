@@ -127,7 +127,15 @@ async def dashboard_kpis(
         )
 
     in_progress = (await db.execute(_count_by_status("in_progress"))).scalar() or 0
-    completed = (await db.execute(_count_by_status("completed"))).scalar() or 0
+    # `firmato` (signed) is also a "completed" survey from the dashboard's
+    # POV — the activity log says "DVR completato" in that flow. Bucket both
+    # statuses into sopralluoghi_completati so the KPI matches the activity
+    # log instead of dropping signed surveys to zero.
+    completed_stmt = select(func.count(Azienda.id)).where(
+        Azienda.organization_id == org_id,
+        Azienda.survey_status.in_(("completed", "firmato")),
+    )
+    completed = (await db.execute(completed_stmt)).scalar() or 0
     drafts = (await db.execute(_count_by_status("draft"))).scalar() or 0
 
     today = date.today()

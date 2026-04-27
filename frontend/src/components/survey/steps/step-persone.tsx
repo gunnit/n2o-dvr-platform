@@ -373,7 +373,7 @@ export function StepPersone({
           if (!open) closeModal();
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl lg:max-w-5xl">
           <DialogHeader>
             <DialogTitle>
               {editingIndex === null ? "Aggiungi persona" : "Modifica persona"}
@@ -385,7 +385,7 @@ export function StepPersone({
 
           {editing && (
             <div className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-2">
                   <Label htmlFor="persona-nome">
                     Nominativo <span className="text-destructive">*</span>

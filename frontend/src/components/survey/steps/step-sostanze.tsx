@@ -451,16 +451,32 @@ function TagInput({
   placeholder: string;
   id: string;
 }) {
+  // Split a raw input string into deduped, uppercase, trimmed tags and
+  // append any new ones to `value`. Empty input is a no-op.
+  const flushInput = (input: HTMLInputElement) => {
+    const raw = input.value;
+    if (!raw.trim()) return;
+    const parts = raw
+      .split(",")
+      .map((p) => p.trim().toUpperCase())
+      .filter(Boolean);
+    if (parts.length === 0) return;
+    const merged = [...value];
+    for (const p of parts) {
+      if (!merged.includes(p)) merged.push(p);
+    }
+    onChange(merged);
+    input.value = "";
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
-      const input = e.currentTarget;
-      const val = input.value.trim().toUpperCase();
-      if (val && !value.includes(val)) {
-        onChange([...value, val]);
-        input.value = "";
-      }
+      flushInput(e.currentTarget);
     }
+  };
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    flushInput(e.currentTarget);
   };
   const removeTag = (tag: string) =>
     onChange(value.filter((v) => v !== tag));
@@ -488,12 +504,13 @@ function TagInput({
           id={id}
           type="text"
           onKeyDown={handleKeyDown}
+          onBlur={handleBlur}
           placeholder={value.length === 0 ? placeholder : ""}
           className="min-w-[120px] flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        Premi Invio o virgola per aggiungere
+        Premi Invio, virgola o esci dal campo per aggiungere
       </p>
     </div>
   );
@@ -544,6 +561,24 @@ export function StepSostanze({
   const saveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map()
   );
+  const inFlightSavesRef = useRef<Set<string>>(new Set());
+
+  // Refs mirroring the latest `sostanze` and `persistedManualIds` so the
+  // debounced autosave callback never reads stale snapshots when it fires
+  // (root cause of cards being clobbered on rapid creation / pittogrammi
+  // toggles being overwritten by stale POST-success merges).
+  const sostanzeRef = useRef(sostanze);
+  useEffect(() => {
+    sostanzeRef.current = sostanze;
+  }, [sostanze]);
+  const persistedManualIdsRef = useRef(persistedManualIds);
+  useEffect(() => {
+    persistedManualIdsRef.current = persistedManualIds;
+  }, [persistedManualIds]);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   const addSostanza = useCallback(() => {
     onChange([...sostanze, createEmptySostanza(aziendaId)]);
@@ -575,12 +610,23 @@ export function StepSostanze({
   );
 
   const scheduleSostanzaSave = useCallback(
-    (row: SostanzaChimica) => {
+    (rowId: string) => {
       const timers = saveTimersRef.current;
-      const prev = timers.get(row.id);
+      const prev = timers.get(rowId);
       if (prev) clearTimeout(prev);
       const handle = setTimeout(async () => {
-        timers.delete(row.id);
+        timers.delete(rowId);
+        // Coalesce: skip if a save for this row is already in flight; the
+        // next keystroke will reschedule once the prior request resolves.
+        if (inFlightSavesRef.current.has(rowId)) {
+          const latest = sostanzeRef.current.find((r) => r.id === rowId);
+          if (latest) scheduleSostanzaSave(rowId);
+          return;
+        }
+        // Read latest row from the ref so newly-typed values, freshly
+        // toggled pittogrammi, and just-added cards aren't lost.
+        const row = sostanzeRef.current.find((r) => r.id === rowId);
+        if (!row) return;
         if (!row.nome_prodotto?.trim()) return;
         const payload = {
           nome_prodotto: row.nome_prodotto,
@@ -590,8 +636,11 @@ export function StepSostanze({
           frasi_h: row.frasi_h ?? [],
           frasi_p: row.frasi_p ?? [],
         };
+        const isPersisted =
+          row.ai_extracted || persistedManualIdsRef.current.has(row.id);
+        inFlightSavesRef.current.add(rowId);
         try {
-          if (row.ai_extracted || persistedManualIds.has(row.id)) {
+          if (isPersisted) {
             await apiFetch<SostanzaChimica>(
               `/api/v1/aziende/${aziendaId}/sostanze-chimiche/${row.id}`,
               { method: "PUT", body: JSON.stringify(payload) }
@@ -601,9 +650,24 @@ export function StepSostanze({
               `/api/v1/aziende/${aziendaId}/sostanze-chimiche`,
               { method: "POST", body: JSON.stringify(payload) }
             );
-            onChange(
-              sostanze.map((s) => (s.id === row.id ? { ...s, ...created } : s))
+            // Merge against the latest sostanze (not a stale closure) and
+            // preserve any user edits made while the POST was in flight by
+            // overlaying server fields under the local row, not over it.
+            const current = sostanzeRef.current;
+            const next = current.map((s) =>
+              s.id === row.id
+                ? {
+                    ...created,
+                    nome_prodotto: s.nome_prodotto,
+                    produttore: s.produttore,
+                    stato_miscela: s.stato_miscela,
+                    pittogrammi: s.pittogrammi ?? created.pittogrammi ?? [],
+                    frasi_h: s.frasi_h ?? created.frasi_h ?? [],
+                    frasi_p: s.frasi_p ?? created.frasi_p ?? [],
+                  }
+                : s
             );
+            onChangeRef.current(next);
             setPersistedManualIds((prev) => {
               const n = new Set(prev);
               n.delete(row.id);
@@ -617,11 +681,13 @@ export function StepSostanze({
               ? err.message
               : "Errore nel salvataggio della sostanza"
           );
+        } finally {
+          inFlightSavesRef.current.delete(rowId);
         }
       }, 800);
-      timers.set(row.id, handle);
+      timers.set(rowId, handle);
     },
-    [apiFetch, aziendaId, sostanze, onChange, persistedManualIds]
+    [apiFetch, aziendaId]
   );
 
   useEffect(() => {
@@ -638,7 +704,7 @@ export function StepSostanze({
       );
       onChange(updated);
       const row = updated[index];
-      if (row) scheduleSostanzaSave(row);
+      if (row) scheduleSostanzaSave(row.id);
     },
     [sostanze, onChange, scheduleSostanzaSave]
   );
