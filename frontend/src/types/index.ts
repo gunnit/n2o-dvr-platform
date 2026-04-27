@@ -134,6 +134,10 @@ export interface DocumentoGenerato {
 export interface Attrezzatura {
   id: string;
   azienda_id: string;
+  // Phase 2.3 / bug B5 — every attrezzatura belongs to exactly one ambiente
+  // of its azienda. Required on create; settable on update to move between
+  // environments.
+  ambiente_id: string;
   descrizione: string;
   marcatura_ce: boolean;
   verifiche_periodiche: boolean;

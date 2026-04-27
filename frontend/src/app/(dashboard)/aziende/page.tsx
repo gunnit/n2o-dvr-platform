@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { Building2, MapPin, Plus, Search, CalendarClock } from "lucide-react";
+import { Building2, MapPin, Plus, Search, CalendarPlus } from "lucide-react";
 import type { Azienda } from "@/types";
 import { useApi } from "@/hooks/use-api";
 import { Monogram } from "@/components/cards/Monogram";
@@ -12,7 +12,6 @@ import { MetaCell } from "@/components/cards/MetaCell";
 import { AtecoPill } from "@/components/cards/AtecoPill";
 import { monogramFor } from "@/lib/ui/monogram";
 import { formatRelative } from "@/lib/ui/relative-time";
-import { formatScadenza } from "@/lib/ui/scadenza";
 import {
   SURVEY_STATUS_META,
   surveyStatusKey,
@@ -167,7 +166,13 @@ export default function AziendePage() {
             const meta = SURVEY_STATUS_META[surveyStatusKey(azienda.survey_status)];
             const city =
               azienda.sede_operativa_citta || azienda.sede_legale_citta || null;
-            const scad = formatScadenza(azienda.data_scadenza_dvr);
+            const createdLabel = azienda.created_at
+              ? new Date(azienda.created_at).toLocaleDateString("it-IT", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })
+              : null;
             const mono = monogramFor(azienda.ragione_sociale);
 
             return (
@@ -196,19 +201,16 @@ export default function AziendePage() {
                   <StatusBadge className={meta.badge}>{meta.label}</StatusBadge>
                 </div>
 
-                {(azienda.partita_iva || scad) && (
+                {(azienda.partita_iva || createdLabel) && (
                   <div className="grid grid-cols-2 gap-3 border-t border-[#eef2f7] pt-3">
                     <MetaCell label="P. IVA" tnum>
                       {azienda.partita_iva || "—"}
                     </MetaCell>
-                    <MetaCell
-                      label="Scadenza DVR"
-                      tone={scad?.tone ?? "muted"}
-                    >
-                      {scad ? (
+                    <MetaCell label="Creata il" tone="muted">
+                      {createdLabel ? (
                         <>
-                          <CalendarClock className="h-3 w-3" strokeWidth={2} />
-                          <span className="truncate">{scad.label}</span>
+                          <CalendarPlus className="h-3 w-3" strokeWidth={2} />
+                          <span className="truncate">{createdLabel}</span>
                         </>
                       ) : (
                         "—"

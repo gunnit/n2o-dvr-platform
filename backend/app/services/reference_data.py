@@ -83,6 +83,53 @@ RISK_CATEGORIES: list[dict] = [
 RISK_CATEGORY_NAMES: list[str] = [rc["categoria"] for rc in RISK_CATEGORIES]
 
 # ---------------------------------------------------------------------------
+# Short ↔ long category name mapping
+#
+# The frontend wizard (step-rischi.tsx) and the DB persist SHORT names
+# ("Elettrici", "Incendio", "Chimici", ...). The DVR template / hazard
+# library / RISK_CATEGORIES schema uses LONG names ("Impianti Elettrici",
+# "Incendio-Esplosioni", "Agenti Chimici", ...). Any code that crosses the
+# DB → DVR generator boundary MUST normalize through these maps, otherwise
+# the SI/NO checklist silently flags every category "NO" because the
+# lookup keys don't match. Found by Phase 8.3 audit.
+# ---------------------------------------------------------------------------
+
+CATEGORIA_SHORT_TO_LONG: dict[str, str] = {
+    "Strutture": "Strutture",
+    "Macchine": "Macchine",
+    "Elettrici": "Impianti Elettrici",
+    "Incendio": "Incendio-Esplosioni",
+    "Chimici": "Agenti Chimici",
+    "Fisici": "Agenti Fisici",
+    "Biologici": "Agenti Biologici",
+    "Cancerogeni": "Agenti Cancerogeni",
+    "Organizzazione": "Organizzazione del Lavoro",
+    "Psicologici": "Fattori Psicologici",
+    "Ergonomici": "Fattori Ergonomici",
+}
+
+CATEGORIA_LONG_TO_SHORT: dict[str, str] = {
+    long: short for short, long in CATEGORIA_SHORT_TO_LONG.items()
+}
+
+RISK_CATEGORY_SHORT_NAMES: list[str] = list(CATEGORIA_SHORT_TO_LONG.keys())
+
+
+def normalize_categoria_to_long(name: str | None) -> str | None:
+    """Convert a short DB name to its canonical long form.
+
+    Returns None if name is None/empty. Returns the input unchanged when
+    it's already a long name (idempotent) or unrecognized — defensive so
+    legacy rows that happen to have long names already don't get mangled.
+    """
+    if not name:
+        return None
+    stripped = name.strip()
+    if stripped in CATEGORIA_SHORT_TO_LONG:
+        return CATEGORIA_SHORT_TO_LONG[stripped]
+    return stripped
+
+# ---------------------------------------------------------------------------
 # Environment types
 # ---------------------------------------------------------------------------
 

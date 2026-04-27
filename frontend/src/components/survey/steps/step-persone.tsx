@@ -33,14 +33,22 @@ interface StepPersoneProps {
   onChange: (persone: Persona[]) => void;
 }
 
+// 12 voci confermate da Luca via email 2026-04-24 (Week 1 review).
+// "IMPIEGATO" è full-time per default; "IMPIEGATO PART-TIME" è voce separata.
+// "CO CO CO" = collaborazione coordinata e continuativa.
 const TIPOLOGIE_CONTRATTUALI = [
-  "Indeterminato",
-  "Determinato",
-  "Apprendistato",
-  "Somministrazione",
-  "Collaborazione",
-  "Stagionale",
-  "Tirocinio",
+  "OPERAIO",
+  "OPERAIO QUALIFICATO",
+  "COLLABORATORE ESTERNO",
+  "VOLONTARIO",
+  "TIROCINANTE",
+  "STAGISTA",
+  "COADIUVANTE FAMILIARE",
+  "IMPIEGATO",
+  "IMPIEGATO PART-TIME",
+  "OPERAIO EDILE",
+  "CO CO CO",
+  "DATORE DI LAVORO",
 ];
 
 const RUOLI = [
@@ -504,7 +512,7 @@ export function StepPersone({
                 <Label>Ambienti assegnati</Label>
                 {ambienti.length === 0 ? (
                   <p className="rounded-md border border-dashed border-input p-3 text-xs text-muted-foreground">
-                    Nessun ambiente ancora dichiarato. Torna allo Step 3
+                    Nessun ambiente ancora dichiarato. Torna allo Step 2
                     &quot;Ambienti&quot; per aggiungerli.
                   </p>
                 ) : (

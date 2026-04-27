@@ -29,7 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AlertTriangle, Wrench } from "lucide-react";
+import { AlertTriangle, Loader2, Sparkles, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Ambiente, Attrezzatura, ValutazioneRischio } from "@/types";
 
@@ -132,6 +132,106 @@ function getCategorieForTipo(tipo: string | undefined | null): CategoriaRischio[
   if (!tipo) return [...CATEGORIE_RISCHIO];
   const filtered = RISCHI_PER_AMBIENTE[tipo.toLowerCase()];
   return filtered ?? [...CATEGORIE_RISCHIO];
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2.4 / bug B3 — categories that are pre-flagged "applicabile" for a
+// given environment. This is *narrower* than what's visible: a category can
+// show up for review (RISCHI_PER_AMBIENTE) without being auto-checked.
+// Cancerogeni in particular must stay opt-in everywhere except laboratorio
+// — Luca surfaced "Cancerogeno default in sala consumazione" as a real
+// confused-the-client bug. Same protective treatment for high-impact rows
+// that should never be defaulted on for retail / food-service environments.
+// ---------------------------------------------------------------------------
+const DEFAULT_APPLICABLE_PER_AMBIENTE: Record<string, CategoriaRischio[]> = {
+  ufficio: [
+    "Strutture",
+    "Elettrici",
+    "Incendio",
+    "Fisici",
+    "Organizzazione",
+    "Psicologici",
+    "Ergonomici",
+  ],
+  magazzino: [
+    "Strutture",
+    "Macchine",
+    "Elettrici",
+    "Incendio",
+    "Fisici",
+    "Ergonomici",
+    "Organizzazione",
+  ],
+  cucina: [
+    "Strutture",
+    "Macchine",
+    "Elettrici",
+    "Incendio",
+    "Chimici",
+    "Fisici",
+    "Biologici",
+    "Ergonomici",
+    "Organizzazione",
+  ],
+  produzione: [
+    "Strutture",
+    "Macchine",
+    "Elettrici",
+    "Incendio",
+    "Chimici",
+    "Fisici",
+    "Organizzazione",
+    "Ergonomici",
+  ],
+  // Only place Cancerogeni / Biologici are auto-on by default.
+  laboratorio: [
+    "Strutture",
+    "Macchine",
+    "Elettrici",
+    "Incendio",
+    "Chimici",
+    "Fisici",
+    "Biologici",
+    "Cancerogeni",
+    "Organizzazione",
+    "Ergonomici",
+  ],
+  esterno: [
+    "Strutture",
+    "Fisici",
+    "Organizzazione",
+    "Ergonomici",
+    "Incendio",
+  ],
+  negozio: [
+    "Strutture",
+    "Elettrici",
+    "Incendio",
+    "Ergonomici",
+    "Organizzazione",
+  ],
+};
+
+// Conservative fallback for unknown ambiente tipos (operator-entered values
+// like "Sala consumazione", "Bar", "Reception"). Notably excludes
+// Cancerogeni, Biologici, Chimici, Macchine — those need explicit opt-in.
+const DEFAULT_APPLICABLE_FALLBACK: ReadonlyArray<CategoriaRischio> = [
+  "Strutture",
+  "Elettrici",
+  "Incendio",
+  "Fisici",
+  "Organizzazione",
+  "Ergonomici",
+];
+
+function getDefaultApplicable(
+  tipo: string | undefined | null
+): Set<CategoriaRischio> {
+  if (!tipo) return new Set(DEFAULT_APPLICABLE_FALLBACK);
+  return new Set(
+    DEFAULT_APPLICABLE_PER_AMBIENTE[tipo.toLowerCase()] ??
+      DEFAULT_APPLICABLE_FALLBACK
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +347,7 @@ function categoriesImpliedByAttrezzature(
 // ---------------------------------------------------------------------------
 // Ambienti-changed banner (US-1.5 AC3)
 //
-// When step 3 ambienti changed since the operator last reviewed step 5,
+// When step 2 ambienti changed since the operator last reviewed step 6,
 // show an amber banner prompting them to reconfirm. Signature is
 // {id, tipo} sorted by id — only changes that actually move the visible
 // risk subset count (added/removed ambienti, or tipo edits) flip it.
@@ -454,6 +554,7 @@ function initValutazioni(
   // the generic 1/1 placeholder — so the operator reviews, not enters.
   // Rows that already exist in `existing` (loaded from the backend or
   // authored in a previous session) are preserved as-is.
+  const defaultApplicable = getDefaultApplicable(ambienteTipo);
   return CATEGORIE_RISCHIO.map((cat) => {
     const found = existing.find(
       (v) =>
@@ -466,7 +567,9 @@ function initValutazioni(
       id: crypto.randomUUID(),
       ambiente_id: ambienteId,
       categoria_rischio: cat,
-      applicabile: true,
+      // Phase 2.4: only pre-flag categories appropriate for the env type.
+      // Unknown tipos use the conservative fallback (no Cancerogeni etc.).
+      applicabile: defaultApplicable.has(cat),
       pericolo: null,
       condizioni_esposizione: null,
       rischio: null,
@@ -492,6 +595,13 @@ export function StepRischi({
   const [selectedAmbienteIndex, setSelectedAmbienteIndex] = useState(0);
   const [mostraTutti, setMostraTutti] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  // Phase 8.3 — AI rischi suggester. Per-ambiente loading flag + last sintesi.
+  const [aiLoadingByAmbiente, setAiLoadingByAmbiente] = useState<
+    Record<string, boolean>
+  >({});
+  const [aiSintesiByAmbiente, setAiSintesiByAmbiente] = useState<
+    Record<string, string>
+  >({});
 
   // Debounced batch-save per ambiente. When the operator changes a slider we
   // schedule a POST to /rischi/batch 800ms later so rapid drag-updates coalesce.
@@ -500,12 +610,19 @@ export function StepRischi({
   const saveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map()
   );
+  // Phase 2.2 / bug B2 — flush-on-unmount needs the latest pending payload
+  // per ambiente, otherwise toggling "disabilita" and immediately stepping
+  // forward would silently drop the change. Mirrors saveTimersRef so the
+  // unmount handler can dispatch one final POST per pending ambiente.
+  const pendingPayloadsRef = useRef<
+    Map<string, { items: Array<Record<string, unknown>> }>
+  >(new Map());
 
   // US-1.5 AC3: ack-sig is owned by the wizard so it survives this
   // component's unmount/remount across step navigation. A fresh
   // page-load initialises the wizard's ack-sig from the initial
   // ambienti, so the banner does NOT show until the operator actually
-  // edits Step 3 during this session.
+  // edits Step 2 during this session.
   const currentAmbientiSig = useMemo(
     () => ambientiSignature(ambienti),
     [ambienti]
@@ -590,24 +707,29 @@ export function StepRischi({
   const scheduleAmbienteSave = useCallback(
     (ambienteId: string, rows: ValutazioneRischio[]) => {
       const timers = saveTimersRef.current;
+      const pending = pendingPayloadsRef.current;
       const existing = timers.get(ambienteId);
       if (existing) clearTimeout(existing);
+
+      const payload = {
+        items: rows.map((r) => ({
+          id: r.id,
+          categoria_rischio: r.categoria_rischio,
+          applicabile: r.applicabile,
+          pericolo: r.pericolo ?? null,
+          condizioni_esposizione: r.condizioni_esposizione ?? null,
+          rischio: r.rischio ?? null,
+          misure_prevenzione: r.misure_prevenzione ?? null,
+          probabilita_p: r.probabilita_p ?? null,
+          danno_d: r.danno_d ?? null,
+        })),
+      };
+      pending.set(ambienteId, payload);
+
       const handle = setTimeout(async () => {
         timers.delete(ambienteId);
+        pending.delete(ambienteId);
         try {
-          const payload = {
-            items: rows.map((r) => ({
-              id: r.id,
-              categoria_rischio: r.categoria_rischio,
-              applicabile: r.applicabile,
-              pericolo: r.pericolo ?? null,
-              condizioni_esposizione: r.condizioni_esposizione ?? null,
-              rischio: r.rischio ?? null,
-              misure_prevenzione: r.misure_prevenzione ?? null,
-              probabilita_p: r.probabilita_p ?? null,
-              danno_d: r.danno_d ?? null,
-            })),
-          };
           const saved = await apiFetch<ValutazioneRischio[]>(
             `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/rischi/batch`,
             { method: "POST", body: JSON.stringify(payload) }
@@ -635,12 +757,38 @@ export function StepRischi({
     [apiFetch, aziendaId, allValutazioni, onChange]
   );
 
-  // Flush any pending saves when the component unmounts or the azienda
-  // changes so edits made right before step-nav don't get lost.
+  // Phase 2.2 / bug B2 — flush (not cancel) any pending saves when the
+  // component unmounts. Without this, toggling a rischio's "applicabile"
+  // and immediately stepping forward dropped the change: the disabled
+  // rischio would still appear in the generated DVR. We keep latest
+  // payloads in pendingPayloadsRef and dispatch them fire-and-forget;
+  // the request stays in the network stack across the unmount.
+  // apiFetch / aziendaId are read from refs so the cleanup doesn't
+  // re-run on every render and pre-fire the saves.
+  const apiFetchRef = useRef(apiFetch);
+  const aziendaIdRef = useRef(aziendaId);
+  useEffect(() => {
+    apiFetchRef.current = apiFetch;
+    aziendaIdRef.current = aziendaId;
+  });
   useEffect(() => {
     const timers = saveTimersRef.current;
+    const pending = pendingPayloadsRef.current;
     return () => {
-      for (const handle of timers.values()) clearTimeout(handle);
+      for (const [ambienteId, payload] of pending) {
+        const handle = timers.get(ambienteId);
+        if (handle) clearTimeout(handle);
+        void apiFetchRef
+          .current(
+            `/api/v1/aziende/${aziendaIdRef.current}/ambienti/${ambienteId}/rischi/batch`,
+            { method: "POST", body: JSON.stringify(payload) }
+          )
+          .catch(() => {
+            // Fire-and-forget on unmount — no UI to notify.
+          });
+      }
+      pending.clear();
+      timers.clear();
     };
   }, []);
 
@@ -674,6 +822,84 @@ export function StepRischi({
     },
     [allValutazioni, onChange, scheduleAmbienteSave]
   );
+
+  // Phase 8.3 — fetch AI rischi suggestions for the selected ambiente.
+  // Merges into existing valutazioni (does NOT replace): AI sets applicabile,
+  // pericolo, P, D — operator-edited fields like misure_prevenzione and
+  // condizioni_esposizione are preserved untouched.
+  const fetchAIRischi = useCallback(async () => {
+    if (!selectedAmbiente) return;
+    const ambienteId = selectedAmbiente.id;
+    setAiLoadingByAmbiente((prev) => ({ ...prev, [ambienteId]: true }));
+    try {
+      const response = await apiFetch<{
+        items: Array<{
+          categoria_rischio: string;
+          applicabile: boolean;
+          pericolo: string;
+          probabilita_p: number;
+          danno_d: number;
+          motivazione: string;
+        }>;
+        sintesi: string;
+      }>(
+        `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/rischi/suggerisci`,
+        { method: "POST" },
+      );
+      const byCat = new Map(
+        response.items.map((s) => [s.categoria_rischio, s]),
+      );
+      let mergedCount = 0;
+      const updated = allValutazioni.map((v) => {
+        if (v.ambiente_id !== ambienteId) return v;
+        const ai = byCat.get(v.categoria_rischio);
+        if (!ai) return v;
+        const p = ai.probabilita_p;
+        const d = ai.danno_d;
+        const indice = calcIndice(p, d);
+        mergedCount += 1;
+        return {
+          ...v,
+          applicabile: ai.applicabile,
+          // Only overwrite pericolo when the operator hasn't authored one
+          // — protects manual edits from being clobbered by re-runs.
+          pericolo: v.pericolo && v.pericolo.trim().length > 0
+            ? v.pericolo
+            : (ai.pericolo || null),
+          probabilita_p: p,
+          danno_d: d,
+          indice_i: indice,
+          livello_rischio: getLivello(indice),
+        };
+      });
+      onChange(updated);
+      const ambienteRows = updated.filter(
+        (v) => v.ambiente_id === ambienteId,
+      );
+      scheduleAmbienteSave(ambienteId, ambienteRows);
+      setAiSintesiByAmbiente((prev) => ({
+        ...prev,
+        [ambienteId]: response.sintesi,
+      }));
+      const applicabili = response.items.filter((i) => i.applicabile).length;
+      toast.success(
+        `AI: ${applicabili} categorie applicabili, ${mergedCount} righe aggiornate.`,
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Errore nella generazione AI",
+      );
+    } finally {
+      setAiLoadingByAmbiente((prev) => ({ ...prev, [ambienteId]: false }));
+    }
+  }, [
+    apiFetch,
+    aziendaId,
+    selectedAmbiente,
+    allValutazioni,
+    onChange,
+    scheduleAmbienteSave,
+  ]);
 
   // Apply default scoring matrix to every row of the selected ambiente.
   const applyDefaults = useCallback(() => {
@@ -804,6 +1030,30 @@ export function StepRischi({
               type="button"
               variant="outline"
               size="sm"
+              onClick={fetchAIRischi}
+              disabled={
+                !selectedAmbiente ||
+                aiLoadingByAmbiente[selectedAmbiente.id] === true
+              }
+              className="border-violet-300 text-violet-700 hover:bg-violet-100 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-900/30"
+            >
+              {selectedAmbiente &&
+              aiLoadingByAmbiente[selectedAmbiente.id] ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Analisi...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                  Flegga rischi con AI
+                </>
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setResetDialogOpen(true)}
             >
               Reset al default
@@ -811,6 +1061,13 @@ export function StepRischi({
           </div>
         </CardHeader>
         <CardContent>
+          {/* Phase 8.3 — AI sintesi banner for the current ambiente */}
+          {selectedAmbiente && aiSintesiByAmbiente[selectedAmbiente.id] && (
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-violet-200 bg-violet-50/50 px-3 py-2 text-xs text-violet-900 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-200">
+              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-600" />
+              <p>{aiSintesiByAmbiente[selectedAmbiente.id]}</p>
+            </div>
+          )}
           {/* Summary bar */}
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 px-3 py-2 text-xs">
             <div className="font-medium">

@@ -10,7 +10,6 @@ import {
   Check,
   CheckCircle2,
   ChevronRight,
-  Clock,
   Download,
   FileCheck,
   FilePlus2,
@@ -130,16 +129,6 @@ function pickAccent(seed: string): AccentKey {
   return palette[h % palette.length];
 }
 
-function daysUntil(iso: string | null): number | null {
-  if (!iso) return null;
-  const target = new Date(iso);
-  if (Number.isNaN(target.getTime())) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  target.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - today.getTime()) / 86400000);
-}
-
 function formatShortIt(iso: string): string {
   const d = new Date(iso);
   const m = d
@@ -172,16 +161,6 @@ function progressFill(p: number): string {
   if (p >= 60) return "bg-primary";
   if (p >= 30) return "bg-[#9b6829]";
   return "bg-[#ba1a1a]";
-}
-
-function scadenzaTone(
-  days: number | null,
-): { color: string; label: string } {
-  if (days === null) return { color: "text-[#94a3b8]", label: "—" };
-  if (days < 0)
-    return { color: "text-[#ba1a1a] font-semibold", label: "scaduto" };
-  if (days <= 30) return { color: "text-[#9b6829] font-semibold", label: `${days}g` };
-  return { color: "text-[#273951]", label: `${days}g` };
 }
 
 // Decorative static sparklines (no time-series backend yet).
@@ -325,8 +304,7 @@ export default function DashboardPage() {
       ).length;
     const drafts =
       kpis?.bozze ?? aziende.filter((a) => a.survey_status === "draft").length;
-    const scadenze = kpis?.scadenze_imminenti ?? 0;
-    return { total, inProgress, completed, drafts, scadenze };
+    return { total, inProgress, completed, drafts };
   }, [aziende, kpis]);
 
   // Aziende panel: filter + search
@@ -354,7 +332,9 @@ export default function DashboardPage() {
     );
   }, [aziende, filter, search]);
 
-  // Da fare oggi — derived from drafts/in-progress + scadenze
+  // Da fare oggi — derived from drafts/in-progress sopralluoghi.
+  // (DVR-in-scadenza items removed in Week 1 review — N2O non usa l'app per
+  // i rinnovi annuali.)
   const todos = useMemo(() => {
     const items: Array<{
       id: string;
@@ -364,29 +344,6 @@ export default function DashboardPage() {
       pill: { label: string; tone: "soon" | "info" | "ok" };
     }> = [];
     for (const a of aziende) {
-      const days = daysUntil(a.data_scadenza_dvr);
-      if (days !== null && days <= 30) {
-        items.push({
-          id: `sc-${a.id}`,
-          aziendaId: a.id,
-          title: `DVR in scadenza · ${a.ragione_sociale}`,
-          sub:
-            days < 0
-              ? `Scaduto da ${Math.abs(days)}g`
-              : `Scadenza tra ${days}g · ${a.sede_operativa_citta ?? a.sede_legale_citta ?? ""}`,
-          pill: {
-            label:
-              days < 0
-                ? "scaduto"
-                : days === 0
-                  ? "oggi"
-                  : days <= 7
-                    ? `${days}g`
-                    : formatShortIt(a.data_scadenza_dvr!),
-            tone: days <= 7 ? "soon" : "info",
-          },
-        });
-      }
       if (a.survey_status === "draft" || a.survey_status === "in_progress") {
         items.push({
           id: `sv-${a.id}`,
@@ -403,7 +360,7 @@ export default function DashboardPage() {
         });
       }
     }
-    // De-dup and cap at 4
+    // Cap at 4
     return items.slice(0, 4);
   }, [aziende]);
 
@@ -436,7 +393,9 @@ export default function DashboardPage() {
     [],
   );
 
-  const hasUrgent = stats.scadenze > 0;
+  // Urgency banner now reflects open sopralluoghi instead of scadenze DVR
+  // (rimosse nel review Week 1 — N2O non usa l'app per i rinnovi annuali).
+  const hasUrgent = stats.inProgress > 0;
 
   return (
     <div className="space-y-5 text-[#061b31]">
@@ -509,7 +468,12 @@ export default function DashboardPage() {
       ) : (
         <>
           {/* --- KPI grid ------------------------------------------------ */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+          {/*
+            Scadenze DVR KPI removed in Week 1 review (2026-04-24): N2O gestisce
+            i rinnovi annuali con un foglio quote esterno, non vuole alert
+            scadenze nell'app. La colonna "data_scadenza_dvr" resta in DB.
+          */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <KpiTile
               label="Clienti attivi"
               value={stats.total}
@@ -569,24 +533,6 @@ export default function DashboardPage() {
                   </Link>
                 ) : (
                   <>tutte completate</>
-                )
-              }
-            />
-            <KpiTile
-              label="Scadenze"
-              value={stats.scadenze}
-              accent="rose"
-              icon={Clock}
-              delta={
-                stats.scadenze > 0 ? (
-                  <>
-                    DVR in scadenza ·{" "}
-                    <strong className="font-semibold text-[#ba1a1a]">
-                      30gg
-                    </strong>
-                  </>
-                ) : (
-                  <>nessuna urgenza</>
                 )
               }
             />
@@ -655,8 +601,9 @@ export default function DashboardPage() {
                     const accent = pickAccent(a.id);
                     const sm = statusMeta(a.survey_status);
                     const progress = progressForStatus(a.survey_status);
-                    const days = daysUntil(a.data_scadenza_dvr);
-                    const due = scadenzaTone(days);
+                    const createdLabel = a.created_at
+                      ? formatShortIt(a.created_at)
+                      : "—";
                     const city =
                       a.sede_operativa_citta ?? a.sede_legale_citta ?? "—";
                     return (
@@ -718,17 +665,10 @@ export default function DashboardPage() {
                           </div>
                           <div>
                             <div className="type-eyebrow mb-0.5 !text-[10px]">
-                              Scadenza
+                              Creata il
                             </div>
-                            <div
-                              className={cn(
-                                "text-[12.5px] tabular-nums",
-                                due.color,
-                              )}
-                            >
-                              {a.data_scadenza_dvr
-                                ? formatShortIt(a.data_scadenza_dvr)
-                                : due.label}
+                            <div className="text-[12.5px] tabular-nums text-[#273951]">
+                              {createdLabel}
                             </div>
                           </div>
                           <ChevronRight

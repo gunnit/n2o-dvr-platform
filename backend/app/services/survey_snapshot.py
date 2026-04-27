@@ -78,6 +78,7 @@ _AMBIENTE_FIELDS = (
     "descrizione_attivita",
 )
 _ATTREZZATURA_FIELDS = (
+    "ambiente_id",
     "descrizione",
     "marcatura_ce",
     "verifiche_periodiche",

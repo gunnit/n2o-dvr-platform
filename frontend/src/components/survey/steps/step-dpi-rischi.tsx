@@ -16,7 +16,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Copy, HardHat, ShieldAlert, Stethoscope } from "lucide-react";
+import {
+  Copy,
+  HardHat,
+  Loader2,
+  ShieldAlert,
+  Sparkles,
+  Stethoscope,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/hooks/use-api";
 import type {
@@ -93,6 +100,11 @@ export function StepDpiRischi({
   const [rischiCatalog, setRischiCatalog] =
     useState<RischiSpecificiCatalogResponse | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(true);
+  // Phase 5.1 + 5.2 — track AI generation per mansione so two mansioni
+  // can be in flight at once without their loading state colliding.
+  const [aiLoadingByMansione, setAiLoadingByMansione] = useState<
+    Record<string, boolean>
+  >({});
 
   const mansioni = useMemo(() => distinctMansioni(persone), [persone]);
   const [selectedMansione, setSelectedMansione] = useState<string | null>(null);
@@ -241,6 +253,69 @@ export function StepDpiRischi({
     [rowsByMansione, updateRow]
   );
 
+  // Phase 5.1 + 5.2 — ask the AI to propose DPI + rischi codes for the
+  // current mansione, then merge them into the row. Merge (not replace)
+  // so the operator's prior ticks survive and the AI never silently
+  // removes a deliberate selection.
+  const flagWithAi = useCallback(
+    async (mansioneNome: string) => {
+      const row = rowsByMansione.get(mansioneNome);
+      if (!row) return;
+      setAiLoadingByMansione((prev) => ({ ...prev, [mansioneNome]: true }));
+      try {
+        const result = await apiFetch<{
+          dpi_codes: string[];
+          rischi_specifici_codes: string[];
+          motivazione: string;
+        }>(
+          `/api/v1/aziende/${aziendaId}/mansioni-sorveglianza/suggerisci`,
+          {
+            method: "POST",
+            body: JSON.stringify({ mansione_nome: mansioneNome }),
+          },
+        );
+
+        const existingDpi = new Set(row.dpi_codes);
+        const existingRischi = new Set(row.rischi_specifici_codes);
+        const addedDpi = result.dpi_codes.filter((c) => !existingDpi.has(c));
+        const addedRischi = result.rischi_specifici_codes.filter(
+          (c) => !existingRischi.has(c),
+        );
+
+        if (addedDpi.length === 0 && addedRischi.length === 0) {
+          toast.info(
+            `L'AI non ha trovato suggerimenti aggiuntivi per "${mansioneNome}".`,
+          );
+          return;
+        }
+
+        updateRow(mansioneNome, {
+          dpi_codes: [...row.dpi_codes, ...addedDpi],
+          rischi_specifici_codes: [
+            ...row.rischi_specifici_codes,
+            ...addedRischi,
+          ],
+        });
+        toast.success(
+          `AI: +${addedDpi.length} DPI, +${addedRischi.length} rischi. ${result.motivazione}`,
+          { duration: 9000 },
+        );
+      } catch (err) {
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : "Errore nella generazione AI",
+        );
+      } finally {
+        setAiLoadingByMansione((prev) => ({
+          ...prev,
+          [mansioneNome]: false,
+        }));
+      }
+    },
+    [apiFetch, aziendaId, rowsByMansione, updateRow],
+  );
+
   const copyFromOther = useCallback(
     (toMansione: string, fromMansione: string) => {
       const source = rowsByMansione.get(fromMansione);
@@ -360,39 +435,62 @@ export function StepDpiRischi({
                   {currentRow.rischi_specifici_codes.length} rischi
                 </CardDescription>
               </div>
-              {otherMansioni.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    className="inline-flex h-8 items-center gap-2 rounded-md border border-[#e5edf5] bg-white px-3 text-xs font-medium text-[#273951] transition-colors hover:bg-[#f6f9fc]"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                    Copia da altra mansione
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {otherMansioni.map((other) => {
-                      const src = rowsByMansione.get(other);
-                      const count =
-                        (src?.dpi_codes.length ?? 0) +
-                        (src?.rischi_specifici_codes.length ?? 0);
-                      return (
-                        <DropdownMenuItem
-                          key={other}
-                          onClick={() => copyFromOther(selectedMansione, other)}
-                          disabled={count === 0}
-                        >
-                          <span className="mr-2">{other}</span>
-                          <Badge
-                            variant="outline"
-                            className="h-4 rounded-sm px-1 text-[10px] tnum"
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Phase 5.1 + 5.2 — Flegga con AI */}
+                <button
+                  type="button"
+                  onClick={() => flagWithAi(selectedMansione)}
+                  disabled={aiLoadingByMansione[selectedMansione] === true}
+                  className="inline-flex h-8 items-center gap-2 rounded-md border border-violet-300 bg-violet-50 px-3 text-xs font-medium text-violet-800 transition-colors hover:bg-violet-100 disabled:opacity-60 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-200 dark:hover:bg-violet-900/40"
+                >
+                  {aiLoadingByMansione[selectedMansione] ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Generazione...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Flegga con AI
+                    </>
+                  )}
+                </button>
+                {otherMansioni.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      className="inline-flex h-8 items-center gap-2 rounded-md border border-[#e5edf5] bg-white px-3 text-xs font-medium text-[#273951] transition-colors hover:bg-[#f6f9fc]"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      Copia da altra mansione
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {otherMansioni.map((other) => {
+                        const src = rowsByMansione.get(other);
+                        const count =
+                          (src?.dpi_codes.length ?? 0) +
+                          (src?.rischi_specifici_codes.length ?? 0);
+                        return (
+                          <DropdownMenuItem
+                            key={other}
+                            onClick={() =>
+                              copyFromOther(selectedMansione, other)
+                            }
+                            disabled={count === 0}
                           >
-                            {count}
-                          </Badge>
-                        </DropdownMenuItem>
-                      );
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+                            <span className="mr-2">{other}</span>
+                            <Badge
+                              variant="outline"
+                              className="h-4 rounded-sm px-1 text-[10px] tnum"
+                            >
+                              {count}
+                            </Badge>
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
             </CardHeader>
           </Card>
 

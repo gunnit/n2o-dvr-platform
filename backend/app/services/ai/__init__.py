@@ -1,3 +1,8 @@
+from app.services.ai.attrezzature_suggester import (
+    AttrezzaturaSuggerita,
+    AttrezzatureSuggerite,
+    suggest_attrezzature,
+)
 from app.services.ai.client import (
     extract_from_pdf,
     generate_structured,
@@ -9,6 +14,15 @@ from app.services.ai.improvement_measures import (
     MisuraSuggerita,
     MisureSuggerite,
     suggest_measures,
+)
+from app.services.ai.mansione_protocol_suggester import (
+    MansioneProtocolSuggerito,
+    suggest_mansione_protocol,
+)
+from app.services.ai.rischi_suggester import (
+    RischiSuggeriti,
+    RischioSuggerito,
+    suggest_rischi,
 )
 from app.services.ai.sds_extractor import (
     extract_sds,
@@ -34,4 +48,15 @@ __all__ = [
     "suggest_measures",
     "MisuraSuggerita",
     "MisureSuggerite",
+    # Attrezzature suggestions (Phase 5.3)
+    "suggest_attrezzature",
+    "AttrezzaturaSuggerita",
+    "AttrezzatureSuggerite",
+    # Mansione protocol suggestions (Phase 5.1 + 5.2)
+    "suggest_mansione_protocol",
+    "MansioneProtocolSuggerito",
+    # Rischi suggestions per ambiente (Phase 8.3)
+    "suggest_rischi",
+    "RischioSuggerito",
+    "RischiSuggeriti",
 ]

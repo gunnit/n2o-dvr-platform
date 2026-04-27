@@ -26,6 +26,7 @@ from app.schemas.description_revision import (
     VisuraUploadResponse,
 )
 from app.services.ai import generate_company_description
+from app.services.sector_prepopulator import gather_sector_summary
 from app.services.visura_extractor import extract_visura_text
 
 
@@ -39,6 +40,32 @@ class DashboardKpis(BaseModel):
     sopralluoghi_completati: int
     bozze: int
     scadenze_imminenti: int
+
+
+class SectorAttrezzatura(BaseModel):
+    descrizione: str
+    count: int
+
+
+class SectorRischio(BaseModel):
+    categoria_rischio: str
+    applicabile_count: int
+    total: int
+    avg_p: float | None = None
+    avg_d: float | None = None
+
+
+class SectorSostanza(BaseModel):
+    nome_prodotto: str
+    count: int
+
+
+class SectorSummaryResponse(BaseModel):
+    sector_size: int
+    ateco_prefix: str | None = None
+    attrezzature_by_tipo: dict[str, list[SectorAttrezzatura]]
+    rischi_by_tipo: dict[str, list[SectorRischio]]
+    top_sostanze: list[SectorSostanza]
 
 
 router = APIRouter(prefix="/aziende", tags=["aziende"])
@@ -455,3 +482,35 @@ async def restore_description_revision(
             created_at=new_rev.created_at,
         ),
     )
+
+
+@router.get(
+    "/{azienda_id}/sector-summary",
+    response_model=SectorSummaryResponse,
+)
+async def sector_summary(
+    azienda_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Phase 8.4 — aggregate sector data from prior DVRs in this org.
+
+    Returns counts of typical attrezzature and rischi categories per
+    ambiente.tipo, plus the most common sostanze chimiche, drawn from
+    other aziende in the same organization that share an ATECO prefix
+    (or an exact attivita string when ATECO is missing) AND have at
+    least one completed DVR.
+
+    The wizard uses this to offer pre-population suggestions; nothing
+    is auto-inserted server-side.
+    """
+    result = await db.execute(
+        select(Azienda).where(
+            Azienda.id == azienda_id, Azienda.organization_id == org_id
+        )
+    )
+    azienda = result.scalar_one_or_none()
+    if not azienda:
+        raise NotFoundError("Azienda not found")
+    summary = await gather_sector_summary(azienda, db)
+    return summary

@@ -27,7 +27,11 @@ from docx.shared import Cm, Inches, Mm, Pt, RGBColor
 
 from app.data.regional_regulations import get_regulations_for_comune
 from app.services.document_generator.base import BaseDocumentGenerator
-from app.services.reference_data import HAZARD_LIBRARY, RISK_CATEGORIES
+from app.services.reference_data import (
+    HAZARD_LIBRARY,
+    RISK_CATEGORIES,
+    normalize_categoria_to_long,
+)
 from app.services.risk_calculator import calculate_risk_index
 
 
@@ -257,11 +261,16 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         data = await self.load_data()
         azienda = data["azienda"]
 
+        # Look up the version BEFORE building the doc so the cover page
+        # can show it. Same value is used in the filename below — single
+        # source of truth.
+        version = await self._get_next_version()
+
         doc = Document()
         self._setup_styles(doc)
 
         # Build document sections
-        self._add_cover_page(doc, azienda, data["generated_at"])
+        self._add_cover_page(doc, azienda, data["generated_at"], version)
         self._add_table_of_contents(doc)
         self._add_pre_parte_i(doc, azienda, data["generated_at"])
         self._add_part_i(
@@ -273,16 +282,21 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             data["ambienti"],
         )
         self._add_part_ii(doc, azienda)
-        self._add_part_iii(doc, azienda, data["persone"], data["ambienti"])
+        self._add_part_iii(
+            doc,
+            azienda,
+            data["persone"],
+            data["ambienti"],
+            data["attrezzature"],
+        )
         self._add_part_iv(doc, azienda, data["persone"])
 
-        # Determine version and save with the filename pattern required
-        # by US-2.8 AC2: DVR_<ragione_sociale>_<YYYYMMDD>_v<N>.docx.
+        # Save with the filename pattern required by US-2.8 AC2:
+        # DVR_<ragione_sociale>_<YYYYMMDD>_v<N>.docx.
         # The <ragione_sociale> segment is slugified (lowercase,
         # alphanumeric + underscore) so the filename stays safe on both
         # POSIX and Windows checkouts. The date is the generation day
         # (UTC) so regenerations on the same day keep the same stamp.
-        version = await self._get_next_version()
         output_dir = self._get_output_dir()
         slug = self._slugify(azienda.ragione_sociale or "azienda")
         date_stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
@@ -350,11 +364,18 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     # ------------------------------------------------------------------
 
     def _add_cover_page(
-        self, doc: Document, azienda, generated_at: datetime
+        self, doc: Document, azienda, generated_at: datetime, version: int
     ) -> None:
-        """Add a professional cover page."""
-        # Spacer
-        for _ in range(6):
+        """Add a professional cover page.
+
+        Layout (top → bottom): logo, title block, company identity block
+        (name + address + P.IVA + ATECO), date+version footer.
+        Every field falls back gracefully when missing so generation
+        never crashes on a sparse survey.
+        """
+        # Top spacer — kept tight (3 lines) so the title sits above the
+        # vertical center, leaving room for the identity block below.
+        for _ in range(3):
             doc.add_paragraph("")
 
         # Logo: embed from assets/logo.png if available, otherwise fall back
@@ -393,17 +414,19 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         # Subtitle
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run("ai sensi del D.Lgs. 81/2008 e s.m.i.")
-        run.font.size = Pt(14)
+        run = p.add_run("ai sensi degli artt. 17 e 28 del D.Lgs. 81/2008 e s.m.i.")
+        run.font.size = Pt(13)
         run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
 
         doc.add_paragraph("")
         doc.add_paragraph("")
 
-        # Company name
+        # Company name — guard against None ragione_sociale (sparse surveys
+        # were crashing here previously with AttributeError on .upper()).
+        ragione = (azienda.ragione_sociale or "—").upper()
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(azienda.ragione_sociale.upper())
+        run = p.add_run(ragione)
         run.bold = True
         run.font.size = Pt(18)
 
@@ -420,15 +443,35 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             run.font.size = Pt(12)
             run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
 
-        # Spacer
-        for _ in range(4):
+        # Identity line: P.IVA + ATECO when available
+        identity_bits: list[str] = []
+        partita_iva = getattr(azienda, "partita_iva", None)
+        if partita_iva:
+            identity_bits.append(f"P.IVA {partita_iva}")
+        codice_ateco = getattr(azienda, "codice_ateco", None)
+        if codice_ateco:
+            identity_bits.append(f"ATECO {codice_ateco}")
+        if identity_bits:
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = p.add_run(" · ".join(identity_bits))
+            run.font.size = Pt(11)
+            run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+
+        # Spacer before footer
+        for _ in range(3):
             doc.add_paragraph("")
 
-        # Date and version info
+        # Date and version block — single centered paragraph with both bits.
+        # Format the version with a 2-digit pad (Rev. 01) to mirror the
+        # convention Luca uses on the master template.
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(f"Data: {generated_at.strftime('%d/%m/%Y')}")
+        run = p.add_run(
+            f"Revisione {version:02d} — {generated_at.strftime('%d/%m/%Y')}"
+        )
         run.font.size = Pt(12)
+        run.bold = True
 
         # Page break
         doc.add_page_break()
@@ -796,19 +839,84 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         self._add_data_table(doc, headers, rows)
 
     def _add_sostanze_table(self, doc: Document, sostanze: list) -> None:
-        """Template Table 14 — Sostanza/Prodotto | Produttore | Attivita."""
-        headers = ["Sostanza / Prodotto", "Produttore / Distributore", "Attivita"]
+        """Template Table 14 — chemical inventory + SDS hazard detail.
+
+        Two-block layout:
+          1. Inventory table (4 cols) — name, manufacturer, state, GHS
+             pictogram codes (joined). Uses SDS-extracted pittogrammi when
+             available; falls back to "—" for manually entered rows.
+          2. Per-sostanza H/P phrase detail block, emitted only for
+             sostanze that have at least one hazard phrase. Skipped
+             entirely when no SDS data exists, so manually-entered rows
+             stay compact.
+        """
+        headers = [
+            "Sostanza / Prodotto",
+            "Produttore / Distributore",
+            "Stato",
+            "Pittogrammi GHS",
+        ]
         if not sostanze:
-            rows = [["Nessuna sostanza chimica registrata.", "—", "—"]]
-        else:
-            rows = []
-            for s in sostanze:
-                rows.append([
-                    (s.nome_prodotto or "—").upper(),
-                    (s.produttore or "—").upper(),
-                    (getattr(s, "stato_miscela", None) or "—").upper(),
-                ])
+            rows = [["Nessuna sostanza chimica registrata.", "—", "—", "—"]]
+            self._add_data_table(doc, headers, rows)
+            return
+
+        rows = []
+        for s in sostanze:
+            pittogrammi = getattr(s, "pittogrammi", None) or []
+            pittogrammi_text = ", ".join(pittogrammi) if pittogrammi else "—"
+            rows.append([
+                (s.nome_prodotto or "—").upper(),
+                (s.produttore or "—").upper(),
+                (getattr(s, "stato_miscela", None) or "—").upper(),
+                pittogrammi_text,
+            ])
         self._add_data_table(doc, headers, rows)
+
+        # Phase 8.5 — emit per-sostanza H/P detail only when SDS data is
+        # present. We don't add a heading when nothing has SDS data, so the
+        # absence is invisible (operator-friendly).
+        sostanze_with_sds = [
+            s for s in sostanze
+            if (getattr(s, "frasi_h", None) or [])
+            or (getattr(s, "frasi_p", None) or [])
+        ]
+        if not sostanze_with_sds:
+            return
+
+        doc.add_paragraph("")
+        p = doc.add_paragraph()
+        run = p.add_run("Dettaglio frasi di pericolo (H) e consigli di prudenza (P)")
+        run.bold = True
+        run.font.size = Pt(10)
+        run.font.color.rgb = _HEADER_BG
+
+        for s in sostanze_with_sds:
+            frasi_h = getattr(s, "frasi_h", None) or []
+            frasi_p = getattr(s, "frasi_p", None) or []
+
+            p = doc.add_paragraph()
+            run = p.add_run((s.nome_prodotto or "—").upper())
+            run.bold = True
+            run.font.size = Pt(9)
+
+            if frasi_h:
+                p = doc.add_paragraph()
+                run = p.add_run("Frasi H: ")
+                run.bold = True
+                run.font.size = Pt(9)
+                run = p.add_run("; ".join(frasi_h))
+                run.font.size = Pt(9)
+
+            if frasi_p:
+                p = doc.add_paragraph()
+                run = p.add_run("Frasi P: ")
+                run.bold = True
+                run.font.size = Pt(9)
+                run = p.add_run("; ".join(frasi_p))
+                run.font.size = Pt(9)
+
+            doc.add_paragraph("")
 
     def _add_hazard_library_group(
         self, doc: Document, macro_label: str, categorie: list[str]
@@ -1003,15 +1111,20 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     # ------------------------------------------------------------------
 
     def _add_part_iii(
-        self, doc: Document, azienda, persone: list, ambienti: list
+        self,
+        doc: Document,
+        azienda,
+        persone: list,
+        ambienti: list,
+        attrezzature: list,
     ) -> None:
         """Add Part III: per-environment risk assessment block.
 
         Emits the template-shaped env block (tables 23–33 in DVR_TEMPLATE_MAPPING.md):
           - Table 23 (once): azienda identity header — Ragione Sociale + Sede.
-          - Per environment: 4 tables — identity, addetti, risk-category
-            checklist (SI/NO), and one 5-col risk table per applicable
-            macro-category.
+          - Per environment: 5 tables — identity, addetti, attrezzature
+            present (Phase 8.2 — DVR esploso), risk-category checklist
+            (SI/NO), and one 5-col risk table per applicable macro-category.
         """
         doc.add_heading(
             "PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO",
@@ -1027,9 +1140,23 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             doc.add_page_break()
             return
 
+        # Phase 8.2 — bucket attrezzature by ambiente_id once so each env
+        # section gets its own slice. Anything without an ambiente_id is
+        # silently skipped here (it still appears in the global Part I
+        # inventory table, so it isn't lost).
+        attrezzature_by_ambiente: dict = {}
+        for att in attrezzature:
+            amb_id = getattr(att, "ambiente_id", None)
+            if amb_id is None:
+                continue
+            attrezzature_by_ambiente.setdefault(amb_id, []).append(att)
+
         persone_by_id = {getattr(p, "id", None): p for p in persone}
         for ambiente in ambienti:
-            self._add_environment_section(doc, ambiente, persone_by_id)
+            env_attrezzature = attrezzature_by_ambiente.get(ambiente.id, [])
+            self._add_environment_section(
+                doc, ambiente, persone_by_id, env_attrezzature
+            )
 
     def _add_azienda_header_table(self, doc: Document, azienda) -> None:
         """Template Table 23 — Azienda / Sede identity block (once, at top of Parte III)."""
@@ -1047,18 +1174,28 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         self._add_key_value_table(doc, rows)
 
     def _add_environment_section(
-        self, doc: Document, ambiente, persone_by_id: dict
+        self,
+        doc: Document,
+        ambiente,
+        persone_by_id: dict,
+        attrezzature: list,
     ) -> None:
-        """Render the 4-block env section for a single environment.
+        """Render the env section for a single environment.
+
+        Phase 8.2 — DVR esploso per ambiente: now also lists the
+        attrezzature present in this ambiente (the global Part I inventory
+        stays in place; this is the per-env slice the operator asked for).
 
         Order mirrors tables 24–33 in the template:
           1. Identity (Table 24) — ambiente / preposto / descrizione.
           2. Addetti (Table 25) — nominativo / mansione.
-          3. Risk-category checklist (Table 26) — SI/NO per macro-area.
-          4. One 5-col risk table per applicable macro-category.
+          3. Attrezzature presenti in questo ambiente (Phase 8.2).
+          4. Risk-category checklist (Table 26) — SI/NO per macro-area.
+          5. One 5-col risk table per applicable macro-category.
         """
+        nome_ambiente = (ambiente.nome or "—").upper()
         doc.add_heading(
-            f"Identificazione dell'Ambiente di Lavoro e degli Addetti — {ambiente.nome.upper()}",
+            f"Identificazione dell'Ambiente di Lavoro e degli Addetti — {nome_ambiente}",
             level=2,
         )
 
@@ -1067,8 +1204,18 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         self._add_env_addetti_table(doc, ambiente)
         doc.add_paragraph("")
 
+        # Phase 8.2 — Attrezzature per ambiente. Reuses the same column
+        # shape as the global Part I inventory so the visual pattern is
+        # consistent. Empty slice → single placeholder row.
         doc.add_heading(
-            f"Identificazione dei Fattori di Rischio — {ambiente.nome.upper()}",
+            f"Macchine, Attrezzature ed Impianti — {nome_ambiente}",
+            level=3,
+        )
+        self._add_env_attrezzature_table(doc, attrezzature)
+        doc.add_paragraph("")
+
+        doc.add_heading(
+            f"Identificazione dei Fattori di Rischio — {nome_ambiente}",
             level=3,
         )
         self._add_env_risk_checklist(doc, ambiente)
@@ -1076,6 +1223,28 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         self._add_env_risk_tables(doc, ambiente)
         doc.add_page_break()
+
+    def _add_env_attrezzature_table(
+        self, doc: Document, attrezzature: list
+    ) -> None:
+        """Per-ambiente equipment table (Phase 8.2)."""
+        headers = [
+            "Macchine, Attrezzature ed Impianti",
+            "Marcata CE",
+            "Verifiche Periodiche",
+        ]
+        if not attrezzature:
+            rows = [["Nessuna attrezzatura associata a questo ambiente.", "—", "—"]]
+        else:
+            rows = [
+                [
+                    (a.descrizione or "—").upper(),
+                    "SI" if a.marcatura_ce else "NO",
+                    "SI" if a.verifiche_periodiche else "NO",
+                ]
+                for a in attrezzature
+            ]
+        self._add_data_table(doc, headers, rows)
 
     def _add_env_identity_table(
         self, doc: Document, ambiente, persone_by_id: dict
@@ -1122,8 +1291,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         derived from whether at least one applicable valutazione_rischio
         exists with that categoria in this ambiente.
         """
+        # Normalize short DB names ("Elettrici") to canonical long names
+        # ("Impianti Elettrici") so the lookup against _CATEGORY_ORDER keys
+        # actually matches. Without this every row silently shows NO.
         applicable_by_category = {
-            (r.categoria_rischio or "").strip(): True
+            normalize_categoria_to_long(r.categoria_rischio): True
             for r in ambiente.valutazioni_rischio
             if getattr(r, "applicabile", False)
         }
@@ -1176,11 +1348,15 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     def _add_env_risk_tables(self, doc: Document, ambiente) -> None:
         """Template Tables 27+ — one 5-col (PERICOLO/CONDIZIONI/RISCHIO/MISURE/I)
         table per applicable macro-category, emitted in the canonical order."""
+        # Normalize short DB names to canonical long names so the per-category
+        # tables actually emit (see _add_env_risk_checklist comment).
         by_category: dict[str, list] = {}
         for r in ambiente.valutazioni_rischio:
             if not getattr(r, "applicabile", False):
                 continue
-            key = (r.categoria_rischio or "").strip()
+            key = normalize_categoria_to_long(r.categoria_rischio)
+            if not key:
+                continue
             by_category.setdefault(key, []).append(r)
 
         ordered_keys = [cat for _, cat in _CATEGORY_ORDER if cat in by_category]

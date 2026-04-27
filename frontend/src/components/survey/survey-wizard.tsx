@@ -39,13 +39,14 @@ import { StepDpiRischi } from "./steps/step-dpi-rischi";
 import { StepRischi, ambientiSignature } from "./steps/step-rischi";
 import { StepSostanze } from "./steps/step-sostanze";
 import { StepRiepilogo } from "./steps/step-riepilogo";
+import { SectorSuggestions } from "./sector-suggestions";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const STEPS = [
   { key: "azienda", label: "Dati Azienda", icon: Building2 },
-  { key: "persone", label: "Persone", icon: Users },
   { key: "ambienti", label: "Ambienti", icon: MapPin },
+  { key: "persone", label: "Persone", icon: Users },
   { key: "attrezzature", label: "Attrezzature", icon: Wrench },
   { key: "dpi_rischi", label: "DPI & Rischi Specifici", icon: Stethoscope },
   { key: "rischi", label: "Valutazione Rischi", icon: ShieldAlert },
@@ -125,7 +126,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
   // on Step 5. Lives at wizard scope so it survives Step 5 unmount/
   // remount under <AnimatePresence mode="wait">. Lazy initializer seeds
   // it from the initial ambienti list, so a fresh page load does NOT
-  // surface the banner — only an in-session edit on Step 3 does.
+  // surface the banner — only an in-session edit on Step 2 does.
   const [acknowledgedAmbientiSig, setAcknowledgedAmbientiSig] =
     useState<string>(() => ambientiSignature(initialData?.ambienti ?? []));
 
@@ -412,19 +413,19 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
         );
       case 1:
         return (
+          <StepAmbienti
+            aziendaId={aziendaId}
+            ambienti={data.ambienti}
+            onChange={updateAmbienti}
+          />
+        );
+      case 2:
+        return (
           <StepPersone
             aziendaId={aziendaId}
             persone={data.persone}
             ambienti={data.ambienti}
             onChange={updatePersone}
-          />
-        );
-      case 2:
-        return (
-          <StepAmbienti
-            aziendaId={aziendaId}
-            ambienti={data.ambienti}
-            onChange={updateAmbienti}
           />
         );
       case 3:
@@ -561,7 +562,10 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
 
       {/* Two-column: main content + right sidebar panel */}
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
-        <div className="lg:col-span-8">
+        <div className="space-y-4 lg:col-span-8">
+          {/* Phase 8.4 — sector pre-population banner. Self-hides when
+              there are no peer DVRs in this org. */}
+          <SectorSuggestions aziendaId={aziendaId} />
           <section className="glass-card relative min-h-[500px] rounded-xl p-8">
             <AnimatePresence mode="wait" custom={direction}>
               <motion.div

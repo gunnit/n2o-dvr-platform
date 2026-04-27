@@ -248,16 +248,21 @@ export function computeMmc(values: MmcFormValues, effectiveCp?: number): MmcResu
   return { perLift, worst, unanswered: [], cp };
 }
 
+// Defaults are the NIOSH-optimal lifting position (all factors ≈ 1.0) with a
+// modest 10kg load, so the initial IR lands in the green zone (~0.4) and the
+// operator only sees red after entering parameters that warrant it. Previously
+// distanza=40 + peso=15 produced IR≈1.01 (red) on first render, which
+// confused operators on a fresh assessment (Luca review, 2026-04-24).
 export const DEFAULT_LIFT: LiftValues = {
   name: "",
   altezza: 75,
   dislocazione: 25,
-  distanza: 40,
+  distanza: 25,
   angolo: 0,
   presa: "buona",
   frequenza: 1,
   durata: "breve",
-  peso_reale: 15,
+  peso_reale: 10,
 };
 
 export const DEFAULT_INPUTS: MmcFormValues = {

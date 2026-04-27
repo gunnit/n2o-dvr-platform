@@ -24,3 +24,4 @@ class Ambiente(Base):
     azienda: Mapped["Azienda"] = relationship(back_populates="ambienti")
     persone: Mapped[list["Persona"]] = relationship(secondary=persone_ambienti, back_populates="ambienti")
     valutazioni_rischio: Mapped[list["ValutazioneRischio"]] = relationship(back_populates="ambiente", cascade="all, delete-orphan")
+    attrezzature: Mapped[list["Attrezzatura"]] = relationship(back_populates="ambiente", cascade="all, delete-orphan")

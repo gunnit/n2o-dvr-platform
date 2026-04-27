@@ -13,19 +13,32 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.db.session import get_db
 from app.dependencies import get_current_org
+from app.models.ambiente import Ambiente
+from app.models.attrezzatura import Attrezzatura
 from app.models.azienda import Azienda
 from app.models.mansione_sorveglianza import MansioneSorveglianza
+from app.models.persona import Persona
+from app.models.persone_ambienti import persone_ambienti
 from app.schemas.mansione_sorveglianza import (
     MansioneSorveglianzaResponse,
     MansioneSorveglianzaUpsert,
 )
+from app.services.ai import (
+    MansioneProtocolSuggerito,
+    suggest_mansione_protocol,
+)
+
+
+class SuggestProtocolRequest(BaseModel):
+    mansione_nome: str
 
 router = APIRouter(
     prefix="/aziende/{azienda_id}/mansioni-sorveglianza",
@@ -103,6 +116,78 @@ async def upsert_mansione_sorveglianza(
     await db.commit()
     await db.refresh(row)
     return row
+
+
+@router.post("/suggerisci", response_model=MansioneProtocolSuggerito)
+async def suggerisci_mansione_protocol(
+    azienda_id: uuid.UUID,
+    body: SuggestProtocolRequest,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Phase 5.1 + 5.2 — AI-suggest DPI + rischi specifici for a mansione.
+
+    Loads the relevant persone (matching mansione_nome), the ambienti they
+    operate in, and the equipment in those ambienti, then asks the model
+    to propose codes from the DPI / Rischi Specifici catalogs. Returns
+    only catalog-valid codes.
+    """
+    await _verify_azienda(azienda_id, org_id, db)
+
+    mansione_nome = body.mansione_nome.strip()
+    if not mansione_nome:
+        raise HTTPException(
+            status_code=422,
+            detail="mansione_nome must not be empty",
+        )
+
+    # Find personas with this mansione → their ambienti → attrezzature.
+    personas = (
+        await db.execute(
+            select(Persona).where(
+                Persona.azienda_id == azienda_id,
+                Persona.mansione == mansione_nome,
+            )
+        )
+    ).scalars().all()
+    persona_ids = [p.id for p in personas]
+
+    if persona_ids:
+        ambiente_rows = (
+            await db.execute(
+                select(Ambiente)
+                .join(persone_ambienti, persone_ambienti.c.ambiente_id == Ambiente.id)
+                .where(persone_ambienti.c.persona_id.in_(persona_ids))
+                .distinct()
+            )
+        ).scalars().all()
+    else:
+        # No persona matched (mansione typed but not yet linked to anyone) —
+        # fall back to all azienda ambienti so the model still gets context.
+        ambiente_rows = (
+            await db.execute(
+                select(Ambiente).where(Ambiente.azienda_id == azienda_id)
+            )
+        ).scalars().all()
+
+    ambiente_ids = [a.id for a in ambiente_rows]
+    attrezzature_rows = (
+        (
+            await db.execute(
+                select(Attrezzatura).where(
+                    Attrezzatura.ambiente_id.in_(ambiente_ids)
+                )
+            )
+        ).scalars().all()
+        if ambiente_ids
+        else []
+    )
+
+    return await suggest_mansione_protocol(
+        mansione_nome=mansione_nome,
+        ambienti=list(ambiente_rows),
+        attrezzature=list(attrezzature_rows),
+    )
 
 
 @router.delete("/{mansione_id}", status_code=204)

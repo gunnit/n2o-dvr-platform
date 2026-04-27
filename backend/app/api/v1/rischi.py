@@ -9,14 +9,25 @@ from app.core.exceptions import NotFoundError
 from app.db.session import get_db
 from app.dependencies import get_current_org
 from app.models.ambiente import Ambiente
+from app.models.attrezzatura import Attrezzatura
 from app.models.azienda import Azienda
 from app.models.valutazione_rischio import ValutazioneRischio
 from app.schemas.rischio import RischioCreate, RischioResponse, RischioUpdate
-from app.services.ai import MisuraSuggerita, suggest_measures
+from app.services.ai import (
+    MisuraSuggerita,
+    RischioSuggerito,
+    suggest_measures,
+    suggest_rischi,
+)
 
 
 class SuggestMeasuresResponse(BaseModel):
     misure: list[MisuraSuggerita]
+
+
+class SuggestRischiResponse(BaseModel):
+    items: list[RischioSuggerito]
+    sintesi: str
 
 router = APIRouter(prefix="/aziende/{azienda_id}", tags=["rischi"])
 
@@ -189,3 +200,52 @@ async def suggerisci_misure(
 
     misure = await suggest_measures(rischio)
     return SuggestMeasuresResponse(misure=misure)
+
+
+@router.post(
+    "/ambienti/{ambiente_id}/rischi/suggerisci",
+    response_model=SuggestRischiResponse,
+)
+async def suggerisci_rischi(
+    azienda_id: uuid.UUID,
+    ambiente_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Phase 8.3 — AI-suggest applicable risks + scoring for an ambiente.
+
+    Returns 11 entries (one per canonical category) with AI-proposed
+    applicabile flag, pericolo description, and starter P/D scores. The
+    endpoint never persists; the wizard merges accepted suggestions via
+    POST /aziende/{a}/ambienti/{e}/rischi/batch.
+    """
+    azienda = (
+        await db.execute(
+            select(Azienda).where(
+                Azienda.id == azienda_id, Azienda.organization_id == org_id
+            )
+        )
+    ).scalar_one_or_none()
+    if azienda is None:
+        raise NotFoundError("Azienda not found")
+
+    ambiente = (
+        await db.execute(
+            select(Ambiente).where(
+                Ambiente.id == ambiente_id, Ambiente.azienda_id == azienda_id
+            )
+        )
+    ).scalar_one_or_none()
+    if ambiente is None:
+        raise NotFoundError("Ambiente not found")
+
+    # Equipment context helps the model reason about exposures
+    # (e.g. cappa aspirante → chimici lower; saldatrice → fisici/chimici).
+    attrezzature = (
+        await db.execute(
+            select(Attrezzatura).where(Attrezzatura.ambiente_id == ambiente_id)
+        )
+    ).scalars().all()
+
+    response = await suggest_rischi(ambiente, azienda, list(attrezzature))
+    return SuggestRischiResponse(items=response.items, sintesi=response.sintesi)

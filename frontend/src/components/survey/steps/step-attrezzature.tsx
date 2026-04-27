@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useMemo } from "react";
+import { useCallback, useRef, useState, useMemo } from "react";
 import { toast } from "sonner";
 import {
   Card,
@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Trash2, Check } from "lucide-react";
+import { Plus, Trash2, Check, Sparkles, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/hooks/use-api";
 import type { Ambiente, Attrezzatura } from "@/types";
@@ -104,14 +104,23 @@ const EQUIPMENT_BY_TYPE: Record<string, string[]> = {
   ],
 };
 
-function createEmptyAttrezzatura(aziendaId: string): Attrezzatura {
+function createEmptyAttrezzatura(
+  aziendaId: string,
+  ambienteId: string,
+): Attrezzatura {
   return {
     id: crypto.randomUUID(),
     azienda_id: aziendaId,
+    ambiente_id: ambienteId,
     descrizione: "",
     marcatura_ce: false,
     verifiche_periodiche: false,
   };
+}
+
+interface AISuggestion {
+  descrizione: string;
+  motivazione: string;
 }
 
 export function StepAttrezzature({
@@ -127,11 +136,23 @@ export function StepAttrezzature({
 
   const basePath = `/api/v1/aziende/${aziendaId}/attrezzature`;
 
+  // Phase 5.3 — AI-suggested equipment per ambiente. Cleared when the
+  // operator switches ambiente so suggestions for "Cucina" don't leak into
+  // "Ufficio". Loading flag is per-ambiente too — clicking generate twice
+  // before the first response lands is a no-op.
+  const [aiSuggestionsByAmbiente, setAiSuggestionsByAmbiente] = useState<
+    Record<string, AISuggestion[]>
+  >({});
+  const [aiLoadingByAmbiente, setAiLoadingByAmbiente] = useState<
+    Record<string, boolean>
+  >({});
+
   // H5 fix: persist attrezzature to the backend so the DVR generator sees them.
   // Local state (onChange) is still updated optimistically; on failure we roll
   // back and surface the error.
   const persistCreate = useCallback(
     async (payload: {
+      ambiente_id: string;
       descrizione: string;
       marcatura_ce: boolean;
       verifiche_periodiche: boolean;
@@ -161,30 +182,55 @@ export function StepAttrezzature({
     [apiFetch, basePath]
   );
 
+  // Custom rows need lazy persistence: create on first save when descrizione
+  // becomes non-empty; afterwards switch to PUT. persistedIds is the set of
+  // ids that exist server-side (i.e. have been POSTed at least once).
+  const [persistedIds, setPersistedIds] = useState<Set<string>>(() => {
+    // Initial server-loaded rows are persisted. Locally-minted rows from
+    // toggleSuggested / addCustomAttrezzatura are added below on POST success.
+    return new Set(attrezzature.map((a) => a.id));
+  });
+
+  // Serialize concurrent saves per row id. Without this, fast keystrokes can
+  // fire two POSTs before the first one resolves and updates persistedIds —
+  // creating duplicate rows on the server. One promise chain per id.
+  const inFlightRef = useRef<Map<string, Promise<unknown>>>(new Map());
+
   // Get suggested equipment list for the currently selected environment type
   const suggestedEquipment = useMemo(() => {
     if (!selectedAmbiente) return [];
     return EQUIPMENT_BY_TYPE[selectedAmbiente.tipo] ?? [];
   }, [selectedAmbiente]);
 
-  // Set of currently selected equipment descriptions (for quick lookup)
-  const selectedDescriptions = useMemo(
-    () => new Set(attrezzature.map((a) => a.descrizione)),
-    [attrezzature]
+  // Phase 2.3 — equipment is now per-ambiente, so all "selected" lookups
+  // must scope to the currently visible ambiente. Switching ambienti hides
+  // the previous ambiente's selections instead of folding them together.
+  const ambienteAttrezzature = useMemo(
+    () =>
+      selectedAmbiente
+        ? attrezzature.filter((a) => a.ambiente_id === selectedAmbiente.id)
+        : [],
+    [attrezzature, selectedAmbiente]
   );
 
-  // Toggle a suggested equipment item on/off
+  const selectedDescriptions = useMemo(
+    () => new Set(ambienteAttrezzature.map((a) => a.descrizione)),
+    [ambienteAttrezzature]
+  );
+
+  // Toggle a suggested equipment item on/off (within the current ambiente)
   const toggleSuggested = useCallback(
     async (descrizione: string) => {
+      if (!selectedAmbiente) return;
+      const ambienteId = selectedAmbiente.id;
       if (selectedDescriptions.has(descrizione)) {
-        const target = attrezzature.find((a) => a.descrizione === descrizione);
+        const target = attrezzature.find(
+          (a) => a.ambiente_id === ambienteId && a.descrizione === descrizione,
+        );
         if (!target) return;
         const next = attrezzature.filter((a) => a.id !== target.id);
         onChange(next);
         try {
-          // Server-generated ids have a UUID v4 shape; client-side stubs do
-          // too, so we just attempt the delete and swallow 404 to tolerate
-          // stale local rows that were never persisted.
           await persistDelete(target.id);
         } catch (e) {
           toast.error(
@@ -196,6 +242,7 @@ export function StepAttrezzature({
         const optimistic: Attrezzatura = {
           id: crypto.randomUUID(),
           azienda_id: aziendaId,
+          ambiente_id: ambienteId,
           descrizione,
           marcatura_ce: false,
           verifiche_periodiche: false,
@@ -203,11 +250,17 @@ export function StepAttrezzature({
         onChange([...attrezzature, optimistic]);
         try {
           const created = await persistCreate({
+            ambiente_id: ambienteId,
             descrizione,
             marcatura_ce: false,
             verifiche_periodiche: false,
           });
           onChange([...attrezzature, created]);
+          setPersistedIds((prev) => {
+            const next = new Set(prev);
+            next.add(created.id);
+            return next;
+          });
         } catch (e) {
           toast.error(
             e instanceof Error ? e.message : "Errore nel salvataggio"
@@ -220,6 +273,7 @@ export function StepAttrezzature({
       attrezzature,
       onChange,
       aziendaId,
+      selectedAmbiente,
       selectedDescriptions,
       persistCreate,
       persistDelete,
@@ -237,26 +291,133 @@ export function StepAttrezzature({
     return names;
   }, []);
 
+  // Custom rows scoped to the current ambiente.
   const customAttrezzature = useMemo(
-    () => attrezzature.filter((a) => !allSuggestedNames.has(a.descrizione)),
-    [attrezzature, allSuggestedNames]
+    () =>
+      ambienteAttrezzature.filter(
+        (a) => !allSuggestedNames.has(a.descrizione)
+      ),
+    [ambienteAttrezzature, allSuggestedNames]
   );
 
   const addCustomAttrezzatura = useCallback(async () => {
+    if (!selectedAmbiente) return;
     // Add optimistically; defer server create until the descrizione is
-    // actually populated (updateAttrezzatura handles that).
-    onChange([...attrezzature, createEmptyAttrezzatura(aziendaId)]);
-  }, [attrezzature, onChange, aziendaId]);
+    // populated and the field blurs (commitAttrezzatura handles that).
+    onChange([
+      ...attrezzature,
+      createEmptyAttrezzatura(aziendaId, selectedAmbiente.id),
+    ]);
+  }, [attrezzature, onChange, aziendaId, selectedAmbiente]);
+
+  // Phase 5.3 — fetch AI suggestions for the current ambiente.
+  const fetchAISuggestions = useCallback(async () => {
+    if (!selectedAmbiente) return;
+    const ambienteId = selectedAmbiente.id;
+    setAiLoadingByAmbiente((prev) => ({ ...prev, [ambienteId]: true }));
+    try {
+      const response = await apiFetch<{ items: AISuggestion[] }>(
+        `${basePath}/suggerisci/${ambienteId}`,
+        { method: "POST" },
+      );
+      const existing = new Set(
+        attrezzature
+          .filter((a) => a.ambiente_id === ambienteId)
+          .map((a) => a.descrizione.toLowerCase().trim()),
+      );
+      const filtered = response.items.filter(
+        (i) => !existing.has(i.descrizione.toLowerCase().trim()),
+      );
+      setAiSuggestionsByAmbiente((prev) => ({
+        ...prev,
+        [ambienteId]: filtered,
+      }));
+      if (filtered.length === 0) {
+        toast.info(
+          "L'AI non ha trovato attrezzature aggiuntive da suggerire.",
+        );
+      }
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Errore nella generazione AI",
+      );
+    } finally {
+      setAiLoadingByAmbiente((prev) => ({ ...prev, [ambienteId]: false }));
+    }
+  }, [apiFetch, attrezzature, basePath, selectedAmbiente]);
+
+  // Add a single AI suggestion as a real attrezzatura, then remove it from
+  // the suggestion list so it doesn't appear twice.
+  const acceptAISuggestion = useCallback(
+    async (suggestion: AISuggestion) => {
+      if (!selectedAmbiente) return;
+      const ambienteId = selectedAmbiente.id;
+      const optimistic: Attrezzatura = {
+        id: crypto.randomUUID(),
+        azienda_id: aziendaId,
+        ambiente_id: ambienteId,
+        descrizione: suggestion.descrizione,
+        marcatura_ce: false,
+        verifiche_periodiche: false,
+      };
+      onChange([...attrezzature, optimistic]);
+      // Drop from AI suggestions immediately so the chip disappears.
+      setAiSuggestionsByAmbiente((prev) => {
+        const next = { ...prev };
+        next[ambienteId] = (next[ambienteId] ?? []).filter(
+          (s) => s.descrizione !== suggestion.descrizione,
+        );
+        return next;
+      });
+      try {
+        const created = await persistCreate({
+          ambiente_id: ambienteId,
+          descrizione: suggestion.descrizione,
+          marcatura_ce: false,
+          verifiche_periodiche: false,
+        });
+        onChange([...attrezzature, created]);
+        setPersistedIds((prev) => {
+          const next = new Set(prev);
+          next.add(created.id);
+          return next;
+        });
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "Errore nel salvataggio",
+        );
+        onChange(attrezzature);
+      }
+    },
+    [
+      attrezzature,
+      onChange,
+      aziendaId,
+      selectedAmbiente,
+      persistCreate,
+    ],
+  );
+
+  const dismissAISuggestions = useCallback(() => {
+    if (!selectedAmbiente) return;
+    const ambienteId = selectedAmbiente.id;
+    setAiSuggestionsByAmbiente((prev) => {
+      const next = { ...prev };
+      delete next[ambienteId];
+      return next;
+    });
+  }, [selectedAmbiente]);
 
   const removeAttrezzatura = useCallback(
     async (id: string) => {
       const target = attrezzature.find((a) => a.id === id);
       const next = attrezzature.filter((a) => a.id !== id);
       onChange(next);
-      if (!target || !target.descrizione) {
-        // Never persisted (empty custom row) — nothing to delete server-side.
-        return;
-      }
+      if (!target) return;
+      // With lazy persistence (commit-on-blur), a row may have a non-empty
+      // descrizione locally but no server row yet. persistedIds is the
+      // source of truth for "exists on server".
+      if (!persistedIds.has(id)) return;
       try {
         await persistDelete(id);
       } catch (e) {
@@ -266,62 +427,81 @@ export function StepAttrezzature({
         onChange(attrezzature);
       }
     },
-    [attrezzature, onChange, persistDelete]
+    [attrezzature, onChange, persistDelete, persistedIds]
   );
 
-  // Custom rows need lazy persistence: create on first save when descrizione
-  // becomes non-empty; afterwards switch to PUT. `persisted` is a set of ids
-  // that exist server-side (i.e. have been POSTed at least once).
-  const [persistedIds, setPersistedIds] = useState<Set<string>>(() => {
-    // Anything loaded from the server is already persisted; we can't tell
-    // for certain here but the refetch path seeds this from initial data
-    // elsewhere. For new rows, callers will add the id on first PUT/POST.
-    return new Set(attrezzature.map((a) => a.id));
-  });
-
-  const updateAttrezzatura = useCallback(
-    async (id: string, fields: Partial<Attrezzatura>) => {
-      const updated = attrezzature.map((a) =>
-        a.id === id ? { ...a, ...fields } : a
+  // Local-only update — touches React state, no API call. Use for keystrokes.
+  const updateLocal = useCallback(
+    (id: string, fields: Partial<Attrezzatura>) => {
+      onChange(
+        attrezzature.map((a) => (a.id === id ? { ...a, ...fields } : a))
       );
-      onChange(updated);
+    },
+    [attrezzature, onChange]
+  );
 
-      const row = updated.find((a) => a.id === id);
+  // Persist current state of a row to the backend. POST on first commit
+  // (lazy create), PUT thereafter. Serialised per row id so rapid commits
+  // don't double-create.
+  const commitAttrezzatura = useCallback(
+    async (id: string) => {
+      const row = attrezzature.find((a) => a.id === id);
       if (!row || !row.descrizione?.trim()) {
-        // Nothing usable to persist yet.
+        // Empty descrizione → nothing to persist (and never-persisted rows
+        // stay client-only, ready to be removed cleanly).
         return;
       }
+
+      const previous = inFlightRef.current.get(id) ?? Promise.resolve();
+      const next = previous
+        .catch(() => undefined)
+        .then(async () => {
+          // Re-read the row after awaiting — it may have changed.
+          const fresh = attrezzature.find((a) => a.id === id);
+          if (!fresh || !fresh.descrizione?.trim()) return;
+          try {
+            if (persistedIds.has(id)) {
+              const saved = await persistUpdate(id, {
+                descrizione: fresh.descrizione,
+                marcatura_ce: fresh.marcatura_ce,
+                verifiche_periodiche: fresh.verifiche_periodiche,
+              });
+              onChange(
+                attrezzature.map((a) =>
+                  a.id === id ? { ...a, ...saved } : a
+                )
+              );
+            } else {
+              const created = await persistCreate({
+                ambiente_id: fresh.ambiente_id,
+                descrizione: fresh.descrizione,
+                marcatura_ce: fresh.marcatura_ce,
+                verifiche_periodiche: fresh.verifiche_periodiche,
+              });
+              onChange(
+                attrezzature.map((a) => (a.id === id ? { ...created } : a))
+              );
+              setPersistedIds((prev) => {
+                const updated = new Set(prev);
+                updated.delete(id);
+                updated.add(created.id);
+                return updated;
+              });
+            }
+          } catch (e) {
+            toast.error(
+              e instanceof Error ? e.message : "Errore nel salvataggio"
+            );
+          }
+        });
+
+      inFlightRef.current.set(id, next);
       try {
-        if (persistedIds.has(id)) {
-          const saved = await persistUpdate(id, {
-            descrizione: row.descrizione,
-            marcatura_ce: row.marcatura_ce,
-            verifiche_periodiche: row.verifiche_periodiche,
-          });
-          onChange(
-            updated.map((a) => (a.id === id ? { ...a, ...saved } : a))
-          );
-        } else {
-          const created = await persistCreate({
-            descrizione: row.descrizione,
-            marcatura_ce: row.marcatura_ce,
-            verifiche_periodiche: row.verifiche_periodiche,
-          });
-          // Swap the optimistic client id for the server id.
-          onChange(
-            updated.map((a) => (a.id === id ? { ...created } : a))
-          );
-          setPersistedIds((prev) => {
-            const next = new Set(prev);
-            next.delete(id);
-            next.add(created.id);
-            return next;
-          });
+        await next;
+      } finally {
+        if (inFlightRef.current.get(id) === next) {
+          inFlightRef.current.delete(id);
         }
-      } catch (e) {
-        toast.error(
-          e instanceof Error ? e.message : "Errore nel salvataggio"
-        );
       }
     },
     [attrezzature, onChange, persistCreate, persistUpdate, persistedIds]
@@ -347,8 +527,8 @@ export function StepAttrezzature({
           </h3>
           <p className="mt-1 text-sm text-on-surface-variant">
             Seleziona un ambiente per visualizzare le attrezzature suggerite in
-            base alla tipologia. Le attrezzature selezionate sono condivise tra
-            tutti gli ambienti.
+            base alla tipologia. Ogni attrezzatura appartiene a un solo
+            ambiente: cambiando ambiente cambia l&apos;elenco visualizzato.
           </p>
         </div>
         <div>
@@ -418,19 +598,101 @@ export function StepAttrezzature({
         )}
       </Card>
 
-      {/* Selected equipment details */}
-      {attrezzature.length > 0 && (
+      {/* Phase 5.3 — AI-generated equipment suggestions */}
+      {selectedAmbiente && (() => {
+        const ambienteId = selectedAmbiente.id;
+        const aiLoading = aiLoadingByAmbiente[ambienteId] === true;
+        const aiSuggestions = aiSuggestionsByAmbiente[ambienteId] ?? [];
+        const hasSuggestions = aiSuggestions.length > 0;
+
+        return (
+          <Card className="border-violet-200 bg-violet-50/30 dark:border-violet-900/40 dark:bg-violet-950/10">
+            <CardHeader className="pb-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Sparkles className="h-4 w-4 text-violet-600" />
+                    Suggerisci con AI
+                  </CardTitle>
+                  <CardDescription>
+                    L&apos;AI propone attrezzature tipiche per {" "}
+                    <span className="font-medium">
+                      {selectedAmbiente.nome ||
+                        `Ambiente ${selectedAmbienteIndex + 1}`}
+                    </span>
+                    . Clicca su una proposta per aggiungerla.
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  {hasSuggestions && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={dismissAISuggestions}
+                    >
+                      <X className="mr-1 h-3.5 w-3.5" />
+                      Chiudi
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={fetchAISuggestions}
+                    disabled={aiLoading}
+                    className="border-violet-300 text-violet-700 hover:bg-violet-100 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-900/30"
+                  >
+                    {aiLoading ? (
+                      <>
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        Generazione...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                        {hasSuggestions ? "Rigenera" : "Genera con AI"}
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            {hasSuggestions && (
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {aiSuggestions.map((s) => (
+                    <button
+                      key={s.descrizione}
+                      type="button"
+                      onClick={() => acceptAISuggestion(s)}
+                      title={s.motivazione}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-3 py-2 text-sm font-medium text-violet-800 transition-colors hover:bg-violet-50 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-200 dark:hover:bg-violet-900/40"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      {s.descrizione}
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        );
+      })()}
+
+      {/* Selected equipment details — scoped to current ambiente */}
+      {ambienteAttrezzature.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Attrezzature selezionate ({attrezzature.length})
+              Attrezzature selezionate ({ambienteAttrezzature.length})
             </CardTitle>
             <CardDescription>
-              Imposta marcatura CE e verifiche periodiche per ogni attrezzatura
+              Imposta marcatura CE per ogni attrezzatura
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {attrezzature.map((att) => (
+            {ambienteAttrezzature.map((att) => (
               <div
                 key={att.id}
                 className="flex flex-wrap items-center gap-3 rounded-lg border border-input p-3"
@@ -443,28 +705,13 @@ export function StepAttrezzature({
                   <input
                     type="checkbox"
                     checked={att.marcatura_ce}
-                    onChange={(e) =>
-                      updateAttrezzatura(att.id, {
-                        marcatura_ce: e.target.checked,
-                      })
-                    }
+                    onChange={(e) => {
+                      updateLocal(att.id, { marcatura_ce: e.target.checked });
+                      void commitAttrezzatura(att.id);
+                    }}
                     className="accent-primary"
                   />
                   Marcatura CE
-                </label>
-
-                <label className="flex items-center gap-2 rounded-lg border border-input px-3 py-1.5 text-sm transition-colors hover:bg-muted has-[:checked]:border-primary has-[:checked]:bg-primary/5">
-                  <input
-                    type="checkbox"
-                    checked={att.verifiche_periodiche}
-                    onChange={(e) =>
-                      updateAttrezzatura(att.id, {
-                        verifiche_periodiche: e.target.checked,
-                      })
-                    }
-                    className="accent-primary"
-                  />
-                  Verifiche Periodiche
                 </label>
 
                 <Button
@@ -519,10 +766,17 @@ export function StepAttrezzature({
                         id={`att-desc-${att.id}`}
                         value={att.descrizione}
                         onChange={(e) =>
-                          updateAttrezzatura(att.id, {
+                          updateLocal(att.id, {
                             descrizione: e.target.value,
                           })
                         }
+                        onBlur={() => void commitAttrezzatura(att.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            (e.target as HTMLInputElement).blur();
+                          }
+                        }}
                         placeholder="Es. Carrello elevatore, Trapano a colonna"
                       />
                     </div>
@@ -532,28 +786,15 @@ export function StepAttrezzature({
                         <input
                           type="checkbox"
                           checked={att.marcatura_ce}
-                          onChange={(e) =>
-                            updateAttrezzatura(att.id, {
+                          onChange={(e) => {
+                            updateLocal(att.id, {
                               marcatura_ce: e.target.checked,
-                            })
-                          }
+                            });
+                            void commitAttrezzatura(att.id);
+                          }}
                           className="accent-primary"
                         />
                         Marcatura CE
-                      </label>
-
-                      <label className="flex items-center gap-2 rounded-lg border border-input px-4 py-2 text-sm transition-colors hover:bg-muted has-[:checked]:border-primary has-[:checked]:bg-primary/5">
-                        <input
-                          type="checkbox"
-                          checked={att.verifiche_periodiche}
-                          onChange={(e) =>
-                            updateAttrezzatura(att.id, {
-                              verifiche_periodiche: e.target.checked,
-                            })
-                          }
-                          className="accent-primary"
-                        />
-                        Verifiche Periodiche
                       </label>
                     </div>
                   </div>
