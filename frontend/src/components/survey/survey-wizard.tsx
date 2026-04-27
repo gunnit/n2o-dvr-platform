@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -44,15 +44,38 @@ import { SectorSuggestions } from "./sector-suggestions";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// `required` drives both progress % and the Avanti gate. Optional steps
+// (attrezzature, dpi_rischi, sostanze) don't block the wizard but still
+// surface a green check once the operator has visited them.
 const STEPS = [
-  { key: "azienda", label: "Dati Azienda", icon: Building2 },
-  { key: "ambienti", label: "Ambienti", icon: MapPin },
-  { key: "persone", label: "Persone", icon: Users },
-  { key: "attrezzature", label: "Attrezzature", icon: Wrench },
-  { key: "dpi_rischi", label: "DPI & Rischi Specifici", icon: Stethoscope },
-  { key: "rischi", label: "Valutazione Rischi", icon: ShieldAlert },
-  { key: "sostanze", label: "Sostanze Chimiche", icon: FlaskConical },
-  { key: "riepilogo", label: "Riepilogo", icon: ClipboardCheck },
+  { key: "azienda", label: "Dati Azienda", icon: Building2, required: true },
+  { key: "ambienti", label: "Ambienti", icon: MapPin, required: true },
+  { key: "persone", label: "Persone", icon: Users, required: true },
+  { key: "attrezzature", label: "Attrezzature", icon: Wrench, required: false },
+  {
+    key: "dpi_rischi",
+    label: "DPI & Rischi Specifici",
+    icon: Stethoscope,
+    required: false,
+  },
+  {
+    key: "rischi",
+    label: "Valutazione Rischi",
+    icon: ShieldAlert,
+    required: true,
+  },
+  {
+    key: "sostanze",
+    label: "Sostanze Chimiche",
+    icon: FlaskConical,
+    required: false,
+  },
+  {
+    key: "riepilogo",
+    label: "Riepilogo",
+    icon: ClipboardCheck,
+    required: true,
+  },
 ] as const;
 
 export interface SurveyData {
@@ -113,6 +136,13 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
   // the step so they don't stay highlighted between visits.
   const [showValidationErrors, setShowValidationErrors] = useState(false);
 
+  // H1: track which steps the operator has actually opened. Combined with
+  // content-based completion this lets us:
+  //  - mark optional steps "complete" only after a deliberate visit
+  //  - allow stepper-circle navigation only to already-seen steps
+  // Step 0 is always considered visited (it's the wizard's landing step).
+  const [visited, setVisited] = useState<Set<number>>(() => new Set([0]));
+
   const [data, setData] = useState<SurveyData>({
     azienda: initialData?.azienda ?? {},
     persone: initialData?.persone ?? [],
@@ -152,6 +182,81 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
     []
   );
 
+  // H6: autosave step-1 azienda edits to /api/v1/aziende/{id} so the
+  // canonical record (and dashboard / company detail screens) stays in
+  // sync with the wizard. Debounced 800ms; only fires when at least one
+  // editable field has changed from the initial snapshot. Backend uses
+  // `exclude_unset` so sending the partial payload is safe.
+  const initialAziendaRef = useRef<Partial<Azienda>>(initialData?.azienda ?? {});
+  // Only the fields the operator can edit on Step 1 — we deliberately
+  // skip server-managed columns (id, organization_id, survey_status,
+  // firma_*, timestamps, AI-generated descrizione_attivita) so autosave
+  // never accidentally clobbers them.
+  const AUTOSAVE_FIELDS: (keyof Azienda)[] = [
+    "ragione_sociale",
+    "partita_iva",
+    "codice_ateco",
+    "attivita",
+    "sede_legale_via",
+    "sede_legale_citta",
+    "sede_operativa_via",
+    "sede_operativa_citta",
+    "orario_lavoro",
+    "metratura_totale",
+    "zona_sismica",
+  ];
+  useEffect(() => {
+    if (isSigned) return;
+    const a = data.azienda;
+    const base = initialAziendaRef.current;
+    const diff: Partial<Azienda> = {};
+    let dirty = false;
+    for (const key of AUTOSAVE_FIELDS) {
+      const next = a[key];
+      const prev = base[key];
+      if (next !== prev) {
+        // @ts-expect-error indexed assignment across the union types is
+        // safe because we restrict `key` to AUTOSAVE_FIELDS above.
+        diff[key] = next;
+        dirty = true;
+      }
+    }
+    if (!dirty) return;
+    // Skip pushes when ragione_sociale is still empty — the record
+    // requires it server-side and we'd just get a 422.
+    if (!a.ragione_sociale?.trim()) return;
+    const handle = setTimeout(async () => {
+      setSaving(true);
+      try {
+        const sessionRes = await fetch("/api/auth/session");
+        const session = await sessionRes.json();
+        const token = session?.accessToken;
+        const res = await fetch(`${API_URL}/api/v1/aziende/${aziendaId}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(diff),
+        });
+        if (res.ok) {
+          // Reset the baseline so subsequent edits compute a fresh diff
+          // instead of re-sending the same fields on every keystroke.
+          initialAziendaRef.current = { ...initialAziendaRef.current, ...diff };
+        }
+      } catch {
+        // Silent — autosave is best-effort. The "Completa Sopralluogo"
+        // POST will surface any persistence errors loudly.
+      } finally {
+        setSaving(false);
+      }
+    }, 800);
+    return () => clearTimeout(handle);
+    // AUTOSAVE_FIELDS is a stable literal; only the live azienda payload
+    // and aziendaId can actually change here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.azienda, aziendaId, isSigned]);
+
   const updatePersone = useCallback((persone: Persona[]) => {
     setData((prev) => ({ ...prev, persone }));
   }, []);
@@ -179,12 +284,19 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
     setData((prev) => ({ ...prev, sostanze }));
   }, []);
 
-  // Per-step validation (US-1.1 B-01, extendable to later steps as new ACs
-  // tighten). Returns the list of operator-facing error messages for the
-  // step; empty list means the step is ready to advance.
+  // Per-step validation (H1/H2/H7). Returns the list of operator-facing
+  // error messages for the step; empty list means the step is ready to
+  // advance. Required-step content rules:
+  //  - 0 azienda: ragione sociale + valid P.IVA (11 digits) + valid ATECO
+  //    (NN.NN or NN.NN.NN)
+  //  - 1 ambienti: at least one record
+  //  - 2 persone: at least one record AND at least one with ruolo_rspp
+  //  - 5 valutazioni rischio: at least one applicable risk assessment
+  //  - 7 riepilogo: all upstream required steps complete + signature
+  // Optional steps (3, 4, 6) always pass.
   const validationForStep = useCallback(
-    (step: number): { field: string; message: string }[] => {
-      const errors: { field: string; message: string }[] = [];
+    (step: number): { field?: string; message: string }[] => {
+      const errors: { field?: string; message: string }[] = [];
       if (step === 0) {
         const a = data.azienda;
         if (!a.ragione_sociale || !a.ragione_sociale.trim()) {
@@ -193,27 +305,121 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             message: "Ragione sociale: campo obbligatorio",
           });
         }
-        if (a.partita_iva && a.partita_iva.trim() !== "") {
-          if (!/^\d{11}$/.test(a.partita_iva.trim())) {
-            errors.push({
-              field: "partita_iva",
-              message: "Partita IVA: deve essere di 11 cifre",
-            });
-          }
+        // P.IVA is required for the step to be "complete" (H1 spec). Match
+        // the 11-digit regex when present; treat empty as missing.
+        if (!a.partita_iva || !a.partita_iva.trim()) {
+          errors.push({
+            field: "partita_iva",
+            message: "Partita IVA: campo obbligatorio (11 cifre)",
+          });
+        } else if (!/^\d{11}$/.test(a.partita_iva.trim())) {
+          errors.push({
+            field: "partita_iva",
+            message: "Partita IVA: deve essere di 11 cifre",
+          });
         }
-        if (a.codice_ateco && a.codice_ateco.trim() !== "") {
-          if (!/^\d{2}\.\d{2}\.\d{2}$/.test(a.codice_ateco.trim())) {
-            errors.push({
-              field: "codice_ateco",
-              message: "Codice ATECO: formato richiesto NN.NN.NN",
-            });
-          }
+        if (!a.codice_ateco || !a.codice_ateco.trim()) {
+          errors.push({
+            field: "codice_ateco",
+            message: "Codice ATECO: campo obbligatorio (formato NN.NN o NN.NN.NN)",
+          });
+        } else if (!/^\d{2}\.\d{2}(\.\d{2})?$/.test(a.codice_ateco.trim())) {
+          errors.push({
+            field: "codice_ateco",
+            message: "Codice ATECO: formato richiesto NN.NN o NN.NN.NN",
+          });
+        }
+      } else if (step === 1) {
+        if (data.ambienti.length === 0) {
+          errors.push({
+            message: "Aggiungi almeno un ambiente per continuare",
+          });
+        }
+      } else if (step === 2) {
+        if (data.persone.length === 0) {
+          errors.push({
+            message: "Aggiungi almeno una persona per continuare",
+          });
+        } else if (!data.persone.some((p) => p.ruolo_rspp)) {
+          errors.push({
+            message: "Designa almeno un RSPP tra le persone inserite",
+          });
+        }
+      } else if (step === 5) {
+        const applicable = data.valutazioni.filter((v) => v.applicabile);
+        if (applicable.length === 0) {
+          errors.push({
+            message:
+              "Compila almeno una valutazione del rischio applicabile per continuare",
+          });
+        }
+      } else if (step === 7) {
+        // Riepilogo is "complete" only when every upstream required step
+        // is content-complete and the survey is signed. We don't recurse
+        // through validationForStep here because that would cause a
+        // dependency cycle; instead we re-check the invariants directly.
+        const a = data.azienda;
+        if (
+          !a.ragione_sociale?.trim() ||
+          !a.partita_iva ||
+          !/^\d{11}$/.test(a.partita_iva.trim()) ||
+          !a.codice_ateco ||
+          !/^\d{2}\.\d{2}(\.\d{2})?$/.test(a.codice_ateco.trim())
+        ) {
+          errors.push({
+            message: "Completa i dati azienda prima di firmare",
+          });
+        }
+        if (data.ambienti.length === 0) {
+          errors.push({
+            message: "Aggiungi almeno un ambiente prima di firmare",
+          });
+        }
+        if (data.persone.length === 0 || !data.persone.some((p) => p.ruolo_rspp)) {
+          errors.push({
+            message:
+              "Designa almeno un RSPP tra le persone prima di firmare",
+          });
+        }
+        if (data.valutazioni.filter((v) => v.applicabile).length === 0) {
+          errors.push({
+            message:
+              "Compila almeno una valutazione del rischio prima di firmare",
+          });
+        }
+        if (!isSigned) {
+          errors.push({ message: "Firma del cliente mancante" });
         }
       }
       return errors;
     },
-    [data.azienda],
+    [data, isSigned],
   );
+
+  // H1: a step is "complete" when (required ⇒ content-validated) or
+  // (optional ⇒ visited). Used by both stepper circles and sidebar list.
+  const isStepComplete = useCallback(
+    (step: number): boolean => {
+      const meta = STEPS[step];
+      if (!meta) return false;
+      if (meta.required) {
+        return validationForStep(step).length === 0;
+      }
+      return visited.has(step);
+    },
+    [validationForStep, visited],
+  );
+
+  // Progress % counts only required steps so optional ones (which a fast
+  // operator may legitimately skip) don't dilute the indicator.
+  const progressPct = useMemo(() => {
+    const required = STEPS.map((s, i) => ({ s, i })).filter(
+      ({ s }) => s.required,
+    );
+    if (required.length === 0) return 0;
+    const done = required.filter(({ i }) => isStepComplete(i)).length;
+    return Math.round((done / required.length) * 100);
+  }, [isStepComplete]);
 
   const currentStepErrors = useMemo(
     () => validationForStep(currentStep),
@@ -228,30 +434,68 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
       setDirection(step > currentStep ? 1 : -1);
       setCurrentStep(step);
       setShowValidationErrors(false);
+      setVisited((prev) => {
+        if (prev.has(step)) return prev;
+        const next = new Set(prev);
+        next.add(step);
+        return next;
+      });
     },
     [currentStep, isSigned, riepilogoIndex]
   );
 
+  // H7: when validation fails on Avanti, find the first invalid field DOM
+  // node (matching the validator's `field` key against an element id) and
+  // smooth-scroll it into view. We defer to a microtask so React has time
+  // to flip showValidationErrors and re-render the inline error markup
+  // before we read getBoundingClientRect.
+  const scrollFirstInvalidIntoView = useCallback(
+    (errors: { field?: string; message: string }[]) => {
+      if (typeof window === "undefined") return;
+      const firstWithField = errors.find((e) => e.field);
+      const targetId = firstWithField?.field;
+      requestAnimationFrame(() => {
+        const node = targetId ? document.getElementById(targetId) : null;
+        const firstInvalid: HTMLElement | null =
+          node ?? document.querySelector<HTMLElement>(".border-destructive");
+        firstInvalid?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    },
+    [],
+  );
+
   const goNext = useCallback(() => {
     if (isSigned) return;
-    // B-01: block advance on steps that fail per-AC validation.
+    const meta = STEPS[currentStep];
     const errors = validationForStep(currentStep);
-    if (errors.length > 0) {
+    // H2/H7: required steps must pass content validation before we let
+    // the operator advance. Optional steps fall through to the navigation
+    // path even when validationForStep returns issues (today none of the
+    // optional steps emit any, but we keep the gate explicit).
+    if (meta?.required && errors.length > 0) {
       setShowValidationErrors(true);
       toast.error(errors[0].message, {
         description:
           errors.length > 1
             ? `Altri ${errors.length - 1} campo/i da correggere prima di avanzare`
-            : undefined,
+            : "Compila i campi obbligatori prima di proseguire",
       });
+      scrollFirstInvalidIntoView(errors);
       return;
     }
     if (currentStep < STEPS.length - 1) {
       setDirection(1);
-      setCurrentStep((prev) => prev + 1);
+      const nextStep = currentStep + 1;
+      setCurrentStep(nextStep);
       setShowValidationErrors(false);
+      setVisited((prev) => {
+        if (prev.has(nextStep)) return prev;
+        const next = new Set(prev);
+        next.add(nextStep);
+        return next;
+      });
     }
-  }, [currentStep, isSigned, validationForStep]);
+  }, [currentStep, isSigned, validationForStep, scrollFirstInvalidIntoView]);
 
   const goPrev = useCallback(() => {
     if (isSigned) return;
@@ -485,10 +729,22 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
     }
   };
 
-  // Wave 2: Digital Guardian stepper + glass-cards
-  const progressPct = Math.round(((currentStep + 1) / STEPS.length) * 100);
+  // Wave 2: Digital Guardian stepper + glass-cards. progressPct is now
+  // computed above (content-based across required steps only).
   const circumference = 2 * Math.PI * 58;
   const progressDashOffset = circumference - (progressPct / 100) * circumference;
+
+  // H2/H7 — Avanti disabled when the current step is required and not
+  // yet content-complete. The tooltip surfaces the precise reason so the
+  // operator never sees a silently dead button.
+  const currentStepMeta = STEPS[currentStep];
+  const nextDisabled =
+    isSigned ||
+    (currentStepMeta?.required ?? false) && currentStepErrors.length > 0;
+  const nextDisabledReason =
+    !isSigned && currentStepErrors.length > 0
+      ? currentStepErrors[0].message
+      : "Compila i campi obbligatori prima di proseguire";
 
   return (
     <div className="space-y-10 pb-24">
@@ -516,8 +772,15 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
           />
           {STEPS.map((step, index) => {
             const isActive = index === currentStep;
-            const isCompleted = index < currentStep;
-            const navDisabled = isSigned && index !== riepilogoIndex;
+            const isCompleted = isStepComplete(index);
+            const isVisited = visited.has(index);
+            // M4: top-circle nav is allowed only for already-visited steps
+            // (so the operator can jump back), never to future steps. We
+            // also keep the existing "firmato" lock that pins everything
+            // outside Riepilogo.
+            const navDisabled =
+              (isSigned && index !== riepilogoIndex) ||
+              (!isVisited && !isActive);
 
             return (
               <button
@@ -525,9 +788,16 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
                 type="button"
                 onClick={() => goToStep(index)}
                 disabled={navDisabled}
+                title={
+                  navDisabled && !isSigned
+                    ? "Step non ancora visitato"
+                    : step.label
+                }
                 className={cn(
                   "group flex flex-col items-center gap-2",
-                  navDisabled && "cursor-not-allowed opacity-50"
+                  !navDisabled &&
+                    "cursor-pointer hover:opacity-90",
+                  navDisabled && "cursor-not-allowed opacity-60"
                 )}
               >
                 <div
@@ -535,11 +805,14 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
                     "flex h-10 w-10 items-center justify-center rounded-full shadow-lg transition-all duration-200",
                     isActive &&
                       "bg-primary-container text-white ring-4 ring-primary-container/20",
-                    isCompleted && "bg-green-500 text-white",
-                    !isActive && !isCompleted && "bg-slate-200 text-slate-500"
+                    !isActive && isCompleted && "bg-green-500 text-white",
+                    !isActive && !isCompleted && "bg-slate-200 text-slate-500",
+                    !navDisabled &&
+                      !isActive &&
+                      "group-hover:ring-2 group-hover:ring-primary-container/30"
                   )}
                 >
-                  {isCompleted ? (
+                  {!isActive && isCompleted ? (
                     <Check className="h-5 w-5" strokeWidth={2.5} />
                   ) : (
                     <span className="font-bold">{index + 1}</span>
@@ -549,7 +822,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
                   className={cn(
                     "hidden text-[11px] font-bold tracking-tight md:block",
                     isActive && "text-primary-container",
-                    isCompleted && "text-slate-600",
+                    !isActive && isCompleted && "text-slate-600",
                     !isActive && !isCompleted && "text-slate-400"
                   )}
                 >
@@ -627,7 +900,10 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             <ul className="space-y-2">
               {STEPS.map((step, index) => {
                 const isActive = index === currentStep;
-                const isCompleted = index < currentStep;
+                // H1: green check is content-driven, not "did the operator
+                // click past it". Active step never collapses to the
+                // completed badge so the "In corso" pill always wins.
+                const isCompleted = !isActive && isStepComplete(index);
                 return (
                   <li
                     key={step.key}
@@ -665,6 +941,11 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
                         )}
                       >
                         {step.label}
+                        {!step.required && (
+                          <span className="ml-1 text-[10px] font-medium uppercase text-slate-400">
+                            (opz.)
+                          </span>
+                        )}
                       </span>
                     </div>
                     {isActive && (
@@ -703,7 +984,8 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             <button
               type="button"
               onClick={goNext}
-              disabled={isSigned}
+              disabled={nextDisabled}
+              title={nextDisabled ? nextDisabledReason : undefined}
               className="flex items-center gap-2 rounded-lg bg-primary-container px-8 py-2 text-sm font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-primary-container/30 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Avanti

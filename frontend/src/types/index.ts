@@ -70,6 +70,12 @@ export interface Ambiente {
   descrizione_attivita: string | null;
 }
 
+export type LivelloRischio =
+  | "ACCETTABILE"
+  | "MODESTO"
+  | "GRAVE"
+  | "GRAVISSIMO";
+
 export interface ValutazioneRischio {
   id: string;
   ambiente_id: string;
@@ -82,7 +88,57 @@ export interface ValutazioneRischio {
   probabilita_p: number | null;
   danno_d: number | null;
   indice_i: number | null;
-  livello_rischio: "ACCETTABILE" | "MODESTO" | "GRAVE" | "GRAVISSIMO" | null;
+  livello_rischio: LivelloRischio | null;
+}
+
+// Phase 3 (1:N) — child of ValutazioneRischio. The DVR Schede Specifiche
+// expect N pericolo rows per (ambiente, categoria); each maps to a row in
+// pericoli_valutazione. Catalog rows live in PericoloLibreria; custom rows
+// have pericolo_libreria_id null and source "custom".
+export interface PericoloLibreria {
+  id: string;
+  code: string;
+  categoria: string;
+  macro_categoria: string;
+  pericolo: string;
+  condizioni_esposizione: string | null;
+  rischio: string | null;
+  misure_prevenzione: string | null;
+  p_default: number | null;
+  d_default: number | null;
+  valutazione_riferimento: string | null;
+  ambiente_tipi: string[];
+  attrezzatura_keywords: string[];
+}
+
+export interface PericoloSuggestionItem {
+  pericolo: PericoloLibreria;
+  matches_ambiente: boolean;
+  triggered_by_attrezzature: string[];
+}
+
+export interface PericoloSuggestionResponse {
+  ambiente_tipo: string | null;
+  attrezzature_count: number;
+  items: PericoloSuggestionItem[];
+}
+
+export interface PericoloValutazione {
+  id: string;
+  valutazione_rischio_id: string;
+  pericolo_libreria_id: string | null;
+  source: "catalog" | "custom";
+  pericolo: string;
+  condizioni_esposizione: string | null;
+  rischio: string | null;
+  misure_prevenzione: string | null;
+  probabilita_p: number | null;
+  danno_d: number | null;
+  valutazione_riferimento: string | null;
+  applicabile: boolean;
+  ordine: number;
+  indice_i: number | null;
+  livello_rischio: LivelloRischio | null;
 }
 
 export interface DocumentoGenerato {

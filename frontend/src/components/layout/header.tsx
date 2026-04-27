@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { AIFilterToggle } from "@/components/ai/ai-filter-context";
 
 export type Breadcrumb = {
   label: string;
@@ -46,7 +45,6 @@ export function Header({
       </nav>
 
       <div className="flex items-center gap-3">
-        <AIFilterToggle />
         {actions}
       </div>
     </header>

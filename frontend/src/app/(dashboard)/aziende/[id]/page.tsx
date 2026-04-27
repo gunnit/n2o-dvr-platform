@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import {
   Building2,
@@ -18,6 +19,9 @@ import {
   ChevronUp,
   ShieldAlert,
   XCircle,
+  Pencil,
+  Trash2,
+  Download,
 } from "lucide-react";
 import {
   Tabs,
@@ -41,26 +45,15 @@ import type {
   DocumentoGenerato,
   ValutazioneRischio,
 } from "@/types";
-import { apiCall } from "@/lib/api-client";
+import { apiCall, downloadFile } from "@/lib/api-client";
 import { DescriptionEditor } from "@/components/ai/description-editor";
 import { MeasuresPanel } from "@/components/ai/measures-panel";
+import { DeleteAziendaDialog } from "@/components/aziende/delete-azienda-dialog";
+import { surveyStatusMeta } from "@/lib/ui/status-map";
 
 // DESIGN.md §0 + §2 — N2O navy primary + success green per brand override.
-const surveyStatusStyles: Record<string, string> = {
-  draft:
-    "bg-[#f6f9fc] text-[#273951] border border-[#e5edf5]",
-  in_progress:
-    "bg-[rgba(0,61,116,0.08)] text-primary border border-[rgba(0,61,116,0.2)]",
-  completed:
-    "bg-[rgba(21,190,83,0.2)] text-[#108c3d] border border-[rgba(21,190,83,0.4)]",
-};
-
-const surveyStatusLabels: Record<string, string> = {
-  draft: "Bozza",
-  in_progress: "In corso",
-  completed: "Completato",
-};
-
+// Survey-status styling is centralized in `lib/ui/status-map.ts` so the
+// list and the detail page render the exact same pill — no drift.
 const docStatusStyles: Record<string, string> = {
   pending:
     "bg-[#f6f9fc] text-[#273951] border border-[#e5edf5]",
@@ -78,6 +71,40 @@ const docStatusLabels: Record<string, string> = {
   completed: "Pronto",
   failed: "Errore",
 };
+
+// Documents whose status indicates a downloadable file is available
+// on the server. Includes legacy "ready" rows and the Italian "pronto"
+// alias for forward-compat with backend renames.
+const DOWNLOADABLE_DOC_STATUSES = new Set([
+  "completed",
+  "ready",
+  "pronto",
+]);
+
+// Detail-page tab keys — shared between the trigger list and the
+// deep-link helpers below. Order mirrors the wizard (M3) minus
+// Sostanze and DPI which stay wizard-only for now.
+type DetailTabKey =
+  | "panoramica"
+  | "ambienti"
+  | "persone"
+  | "attrezzature"
+  | "rischi"
+  | "documenti";
+
+const DETAIL_TABS: ReadonlySet<DetailTabKey> = new Set([
+  "panoramica",
+  "ambienti",
+  "persone",
+  "attrezzature",
+  "rischi",
+  "documenti",
+]);
+
+function parseTabKey(raw: string | null | undefined): DetailTabKey {
+  if (raw && DETAIL_TABS.has(raw as DetailTabKey)) return raw as DetailTabKey;
+  return "panoramica";
+}
 
 // Risk-level chip palette — navy for critical, green for accettabile,
 // per DESIGN.md §0 (no pink accents in safety domain).
@@ -248,7 +275,12 @@ function PanelHeader({
 export default function AziendaDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = params.id as string;
+  const { data: session } = useSession();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const role = (session?.user as any)?.role as string | undefined;
+  const isAdmin = role === "admin";
 
   const [azienda, setAzienda] = useState<Azienda | null>(null);
   const [persone, setPersone] = useState<Persona[]>([]);
@@ -260,6 +292,35 @@ export default function AziendaDetailPage() {
   const [error, setError] = useState("");
   const [expandedRisk, setExpandedRisk] = useState<string | null>(null);
   const [generatingDocs, setGeneratingDocs] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [downloading, setDownloading] = useState<string | null>(null);
+
+  // M5 — read tab from `?tab=` so deep links and the back button work,
+  // and write back via router.replace on user switch.
+  const [activeTab, setActiveTab] = useState<DetailTabKey>(() =>
+    parseTabKey(searchParams?.get("tab")),
+  );
+
+  // Resync if the URL changes externally (e.g. browser back).
+  useEffect(() => {
+    const next = parseTabKey(searchParams?.get("tab"));
+    setActiveTab((prev) => (prev === next ? prev : next));
+  }, [searchParams]);
+
+  function handleTabChange(value: string) {
+    const next = parseTabKey(value);
+    setActiveTab(next);
+    const sp = new URLSearchParams(searchParams?.toString() ?? "");
+    if (next === "panoramica") {
+      sp.delete("tab");
+    } else {
+      sp.set("tab", next);
+    }
+    const qs = sp.toString();
+    router.replace(qs ? `/aziende/${id}?${qs}` : `/aziende/${id}`, {
+      scroll: false,
+    });
+  }
 
   const fetchData = useCallback(async () => {
     try {
@@ -320,6 +381,10 @@ export default function AziendaDetailPage() {
       toast.success("Generazione documenti avviata");
       fetchData();
     } catch (err) {
+      // B1 — surface the Italian "Sopralluogo incompleto: ..." gate
+      // message that the API returns as 409. apiCall throws Error with
+      // the server `detail` as the message, so the same toast covers
+      // both the precondition gate and any other failure.
       toast.error(
         err instanceof Error
           ? err.message
@@ -329,6 +394,51 @@ export default function AziendaDetailPage() {
       setGeneratingDocs(false);
     }
   };
+
+  // B1 — disable Genera Documenti while the sopralluogo hasn't been
+  // submitted at least once. Server-side gate is authoritative; this is
+  // just the UX guard so the button never looks clickable when it'd 409.
+  const generaDocsBlocked =
+    !azienda ||
+    azienda.survey_status === "draft" ||
+    azienda.survey_status?.startsWith("step_") === true ||
+    azienda.survey_status === "in_progress";
+  const generaDocsTitle = generaDocsBlocked
+    ? "Completa e firma il sopralluogo prima di generare i documenti"
+    : undefined;
+
+  // B4 — destructive action wired straight to the backend DELETE.
+  // The dialog component handles the confirmation flow + spinner.
+  async function handleDelete() {
+    try {
+      await apiCall(`/api/v1/aziende/${id}`, { method: "DELETE" });
+      toast.success("Azienda eliminata");
+      router.push("/aziende");
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Eliminazione fallita. Riprova.",
+      );
+      throw err;
+    }
+  }
+
+  // H12 — download a generated document. Uses the shared `downloadFile`
+  // helper which streams the file as a blob with the auth bearer token.
+  async function handleDownload(doc: DocumentoGenerato) {
+    if (downloading) return;
+    setDownloading(doc.id);
+    try {
+      await downloadFile(`/api/v1/documenti/${doc.id}/download`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Download fallito",
+      );
+    } finally {
+      setDownloading(null);
+    }
+  }
 
   if (loading) {
     return (
@@ -376,9 +486,12 @@ export default function AziendaDetailPage() {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="type-h1 truncate">{azienda.ragione_sociale}</h1>
-            <StatusPill className={surveyStatusStyles[azienda.survey_status]}>
-              {surveyStatusLabels[azienda.survey_status]}
-            </StatusPill>
+            {(() => {
+              const meta = surveyStatusMeta(azienda.survey_status);
+              return (
+                <StatusPill className={meta.badge}>{meta.label}</StatusPill>
+              );
+            })()}
           </div>
           <p className="type-body mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
             <MapPin className="h-3.5 w-3.5 text-[#64748d]" strokeWidth={1.75} />
@@ -394,7 +507,29 @@ export default function AziendaDetailPage() {
             )}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {isAdmin && (
+            <>
+              <button
+                type="button"
+                onClick={() => router.push(`/aziende/${id}/edit`)}
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-[#e5edf5] bg-white px-3.5 text-[14px] font-medium text-[#273951] transition-colors hover:bg-[#f6f9fc]"
+                title="Modifica anagrafica azienda"
+              >
+                <Pencil className="h-4 w-4" strokeWidth={1.75} />
+                Modifica
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteOpen(true)}
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-[rgba(234,34,97,0.25)] bg-white px-3.5 text-[14px] font-medium text-[#b51648] transition-colors hover:bg-[rgba(234,34,97,0.06)]"
+                title="Elimina azienda"
+              >
+                <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                Elimina
+              </button>
+            </>
+          )}
           <button
             type="button"
             onClick={() => router.push(`/survey/${id}`)}
@@ -406,8 +541,9 @@ export default function AziendaDetailPage() {
           <button
             type="button"
             onClick={handleGenerateDocs}
-            disabled={generatingDocs}
-            className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-[14px] font-medium text-white shadow-stripe-ambient transition-colors hover:bg-[#1b5594] disabled:opacity-60"
+            disabled={generatingDocs || generaDocsBlocked}
+            title={generaDocsTitle}
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-[14px] font-medium text-white shadow-stripe-ambient transition-colors hover:bg-[#1b5594] disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <FileText className="h-4 w-4" strokeWidth={1.75} />
             {generatingDocs ? "Avvio in corso..." : "Genera Documenti"}
@@ -415,8 +551,16 @@ export default function AziendaDetailPage() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="panoramica">
+      <DeleteAziendaDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        ragioneSociale={azienda.ragione_sociale}
+        onConfirm={handleDelete}
+      />
+
+      {/* Tabs — order matches the survey wizard (M3): Ambienti precedes
+           Persone. M5 keeps the active tab in sync with `?tab=`. */}
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList
           variant="line"
           className="h-auto w-full justify-start gap-6 border-b border-[#e5edf5] pb-0"
@@ -429,18 +573,6 @@ export default function AziendaDetailPage() {
             Panoramica
           </TabsTrigger>
           <TabsTrigger
-            value="persone"
-            className="text-[13px] font-medium text-[#64748d] data-active:text-[#061b31]"
-          >
-            <Users className="mr-1.5 h-3.5 w-3.5" />
-            Persone
-            {persone.length > 0 && (
-              <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-sm bg-[#f6f9fc] px-1 text-[10px] font-medium text-[#273951] tnum">
-                {persone.length}
-              </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger
             value="ambienti"
             className="text-[13px] font-medium text-[#64748d] data-active:text-[#061b31]"
           >
@@ -449,6 +581,18 @@ export default function AziendaDetailPage() {
             {ambienti.length > 0 && (
               <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-sm bg-[#f6f9fc] px-1 text-[10px] font-medium text-[#273951] tnum">
                 {ambienti.length}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger
+            value="persone"
+            className="text-[13px] font-medium text-[#64748d] data-active:text-[#061b31]"
+          >
+            <Users className="mr-1.5 h-3.5 w-3.5" />
+            Persone
+            {persone.length > 0 && (
+              <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-sm bg-[#f6f9fc] px-1 text-[10px] font-medium text-[#273951] tnum">
+                {persone.length}
               </span>
             )}
           </TabsTrigger>
@@ -497,6 +641,11 @@ export default function AziendaDetailPage() {
               <PanelHeader icon={Building2} title="Dati Azienda" accent="navy" />
               <div className="grid gap-5 p-6 sm:grid-cols-2">
                 <InfoRow label="Ragione Sociale" value={azienda.ragione_sociale} />
+                <InfoRow
+                  label="Partita IVA"
+                  value={azienda.partita_iva}
+                  tnum
+                />
                 <InfoRow
                   label="Codice ATECO"
                   value={azienda.codice_ateco}
@@ -868,51 +1017,82 @@ export default function AziendaDetailPage() {
                         <TableHead>Versione</TableHead>
                         <TableHead>Stato</TableHead>
                         <TableHead>Data Creazione</TableHead>
+                        <TableHead className="w-[120px] text-right">
+                          Azioni
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {documenti.map((d) => (
-                        <TableRow
-                          key={d.id}
-                          className={
-                            d.stale_snapshot
-                              ? "bg-[rgba(155,104,41,0.04)]"
-                              : ""
-                          }
-                        >
-                          <TableCell className="font-medium text-[#061b31]">
-                            <span className="flex items-center gap-2">
-                              {d.tipo_documento}
-                              {d.stale_snapshot && (
-                                <StatusPill
-                                  className="bg-[rgba(155,104,41,0.12)] text-[#9b6829] border border-[rgba(155,104,41,0.3)]"
+                      {documenti.map((d) => {
+                        const canDownload =
+                          DOWNLOADABLE_DOC_STATUSES.has(d.status) &&
+                          Boolean(d.file_path);
+                        const isDownloadingThis = downloading === d.id;
+                        return (
+                          <TableRow
+                            key={d.id}
+                            className={
+                              d.stale_snapshot
+                                ? "bg-[rgba(155,104,41,0.04)]"
+                                : ""
+                            }
+                          >
+                            <TableCell className="font-medium text-[#061b31]">
+                              <span className="flex items-center gap-2">
+                                {d.tipo_documento}
+                                {d.stale_snapshot && (
+                                  <StatusPill
+                                    className="bg-[rgba(155,104,41,0.12)] text-[#9b6829] border border-[rgba(155,104,41,0.3)]"
+                                  >
+                                    Da rigenerare
+                                  </StatusPill>
+                                )}
+                              </span>
+                            </TableCell>
+                            <TableCell className="tnum text-[#273951]">
+                              v{d.versione}
+                            </TableCell>
+                            <TableCell>
+                              <StatusPill className={docStatusStyles[d.status]}>
+                                {docStatusLabels[d.status] ?? d.status}
+                              </StatusPill>
+                              {d.error_message && (
+                                <div
+                                  className="mt-1 text-[11px] text-[#b51648]"
+                                  title={d.error_message}
                                 >
-                                  Da rigenerare
-                                </StatusPill>
+                                  {d.error_message}
+                                </div>
                               )}
-                            </span>
-                          </TableCell>
-                          <TableCell className="tnum text-[#273951]">
-                            v{d.versione}
-                          </TableCell>
-                          <TableCell>
-                            <StatusPill className={docStatusStyles[d.status]}>
-                              {docStatusLabels[d.status] ?? d.status}
-                            </StatusPill>
-                            {d.error_message && (
-                              <div
-                                className="mt-1 text-[11px] text-[#b51648]"
-                                title={d.error_message}
+                            </TableCell>
+                            <TableCell className="tnum text-[#64748d]">
+                              {new Date(d.created_at).toLocaleDateString(
+                                "it-IT",
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleDownload(d)}
+                                disabled={!canDownload || isDownloadingThis}
+                                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#e5edf5] bg-white px-2.5 text-[12.5px] font-medium text-[#273951] transition-colors hover:bg-[#f6f9fc] disabled:cursor-not-allowed disabled:opacity-50"
+                                title={
+                                  canDownload
+                                    ? "Scarica documento"
+                                    : "Documento non ancora pronto"
+                                }
+                                aria-label="Scarica documento"
                               >
-                                {d.error_message}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="tnum text-[#64748d]">
-                            {new Date(d.created_at).toLocaleDateString("it-IT")}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                                <Download
+                                  className="h-3.5 w-3.5"
+                                  strokeWidth={1.75}
+                                />
+                                {isDownloadingThis ? "..." : "Scarica"}
+                              </button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </>

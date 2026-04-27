@@ -3,6 +3,8 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
+import Link from "next/link";
+import { toast } from "sonner";
 import { CheckCircle2, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -101,7 +103,29 @@ function LoginForm() {
         >
           {loading ? "Accesso in corso..." : "Accedi"}
         </Button>
+        <div className="flex justify-center pt-1">
+          <button
+            type="button"
+            onClick={() =>
+              toast(
+                "La funzione sarà disponibile a breve. Contatta support@dvr-sicurezza.it",
+              )
+            }
+            className="text-[13px] font-medium text-primary hover:underline"
+          >
+            Password dimenticata?
+          </button>
+        </div>
       </form>
+      <p className="mt-5 text-center text-[13px] text-[#64748d]">
+        Non hai un account?{" "}
+        <Link
+          href="/register"
+          className="font-medium text-primary hover:underline"
+        >
+          Registrati
+        </Link>
+      </p>
     </div>
   );
 }

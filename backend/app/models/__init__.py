@@ -8,6 +8,8 @@ from app.models.persone_ambienti import persone_ambienti
 from app.models.attrezzatura import Attrezzatura
 from app.models.sostanza_chimica import SostanzaChimica
 from app.models.valutazione_rischio import ValutazioneRischio
+from app.models.pericolo_libreria import PericoloLibreria
+from app.models.pericolo_valutazione import PericoloValutazione
 from app.models.documento_generato import DocumentoGenerato
 
 # Assessment-specific models (Wave 1.1)
@@ -45,6 +47,8 @@ __all__ = [
     "Attrezzatura",
     "SostanzaChimica",
     "ValutazioneRischio",
+    "PericoloLibreria",
+    "PericoloValutazione",
     "DocumentoGenerato",
     "MmcValutazione",
     "VdtValutazione",

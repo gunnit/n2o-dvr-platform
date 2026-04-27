@@ -103,7 +103,11 @@ class BaseDocumentGenerator(ABC):
             select(Ambiente)
             .where(Ambiente.azienda_id == self.azienda_id)
             .options(
-                selectinload(Ambiente.valutazioni_rischio),
+                # Phase 3 (1:N): hydrate the per-pericolo children so the
+                # DVR generator can emit one row per pericolo_valutazione.
+                selectinload(Ambiente.valutazioni_rischio).selectinload(
+                    ValutazioneRischio.pericoli
+                ),
                 selectinload(Ambiente.persone),
             )
             .order_by(Ambiente.nome)

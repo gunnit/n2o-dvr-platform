@@ -18,6 +18,7 @@ from app.models.description_revision import (
     SOURCE_MANUAL,
     DescriptionRevision,
 )
+from app.models.documento_generato import DocumentoGenerato
 from app.models.user import User
 from app.schemas.azienda import AziendaCreate, AziendaResponse, AziendaUpdate
 from app.schemas.description_revision import (
@@ -40,6 +41,11 @@ class DashboardKpis(BaseModel):
     sopralluoghi_completati: int
     bozze: int
     scadenze_imminenti: int
+    # B5 — ops-only counter: aziende with a signed survey but no completed
+    # DVR yet. Surfaces the gap between "operator finished the sopralluogo"
+    # and "documents are actually produced", so dashboards stop claiming
+    # 100% Firmato when the documents tab is empty.
+    firmati_senza_documenti: int = 0
 
 
 class SectorAttrezzatura(BaseModel):
@@ -116,6 +122,13 @@ async def dashboard_kpis(
     Aggregates azienda survey_status counts and the "scadenze imminenti"
     figure — aziende whose DVR expires within the next 30 days (inclusive)
     and hasn't already expired. US-5.1 acceptance criteria.
+
+    M7 — "clienti_attivi" definition: every azienda row in the org that
+    isn't archived/deleted. We don't currently model an archived state so
+    in practice this is the same lifetime count as the admin "Clienti
+    Creati" stat (users.py /users/stats). The two figures must agree —
+    when archival lands (Phase 5) both queries need the same exclusion
+    predicate.
     """
     total_stmt = select(func.count(Azienda.id)).where(Azienda.organization_id == org_id)
     total = (await db.execute(total_stmt)).scalar() or 0
@@ -127,15 +140,34 @@ async def dashboard_kpis(
         )
 
     in_progress = (await db.execute(_count_by_status("in_progress"))).scalar() or 0
-    # `firmato` (signed) is also a "completed" survey from the dashboard's
-    # POV — the activity log says "DVR completato" in that flow. Bucket both
-    # statuses into sopralluoghi_completati so the KPI matches the activity
-    # log instead of dropping signed surveys to zero.
-    completed_stmt = select(func.count(Azienda.id)).where(
+    # B5 — "completati" must reflect documents-on-disk, not just a flag the
+    # operator clicked. We count aziende whose survey is at least signed
+    # AND that have at least one DVR Master in completed/ready state. This
+    # is the contract the dashboard implicitly promised; the previous
+    # implementation reported "Lavanderia completato" while its Documenti
+    # tab was empty.
+    completed_stmt = (
+        select(func.count(func.distinct(Azienda.id)))
+        .join(DocumentoGenerato, DocumentoGenerato.azienda_id == Azienda.id)
+        .where(
+            Azienda.organization_id == org_id,
+            Azienda.survey_status.in_(("completed", "firmato")),
+            DocumentoGenerato.tipo_documento == "dvr_master",
+            DocumentoGenerato.status.in_(("completed", "ready")),
+        )
+    )
+    completed = (await db.execute(completed_stmt)).scalar() or 0
+
+    # Operational gap: signed surveys without a generated DVR yet. Useful
+    # to spot stuck/abandoned generations without conflating them with
+    # "completati".
+    signed_total_stmt = select(func.count(Azienda.id)).where(
         Azienda.organization_id == org_id,
         Azienda.survey_status.in_(("completed", "firmato")),
     )
-    completed = (await db.execute(completed_stmt)).scalar() or 0
+    signed_total = (await db.execute(signed_total_stmt)).scalar() or 0
+    firmati_senza_documenti = max(signed_total - completed, 0)
+
     drafts = (await db.execute(_count_by_status("draft"))).scalar() or 0
 
     today = date.today()
@@ -154,6 +186,7 @@ async def dashboard_kpis(
         sopralluoghi_completati=completed,
         bozze=drafts,
         scadenze_imminenti=scadenze_imminenti,
+        firmati_senza_documenti=firmati_senza_documenti,
     )
 
 

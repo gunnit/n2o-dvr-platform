@@ -1406,24 +1406,44 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
             self._set_cell_bg(cell, _HEADER_BG)
 
+        # Phase 3 (1:N): when the parent valutazione_rischio has children
+        # in pericoli_valutazione, emit one row per child — that's the
+        # template-faithful layout. When no children exist (legacy data),
+        # fall back to the parent's single pericolo/condizioni/misure
+        # block so older DVRs still render.
+        rows_to_emit: list = []
         for risk in risks:
-            p_val = risk.probabilita_p
-            d_val = risk.danno_d
+            children = [
+                c for c in (getattr(risk, "pericoli", []) or [])
+                if getattr(c, "applicabile", True)
+            ]
+            if children:
+                rows_to_emit.extend(children)
+            else:
+                rows_to_emit.append(risk)
+
+        for source in rows_to_emit:
+            p_val = source.probabilita_p
+            d_val = source.danno_d
+            riferimento = getattr(source, "valutazione_riferimento", None)
             if p_val is not None and d_val is not None:
                 result = calculate_risk_index(p_val, d_val)
                 indice = result["indice_i"]
                 livello = result["livello_rischio"]
                 indice_text = f"P = {p_val}; D = {d_val}; I = {indice}; {livello}"
+            elif riferimento:
+                livello = None
+                indice_text = riferimento
             else:
                 livello = None
                 indice_text = "—"
 
             row = table.add_row()
             values = [
-                risk.pericolo or "—",
-                risk.condizioni_esposizione or "—",
-                risk.rischio or "—",
-                risk.misure_prevenzione or "—",
+                source.pericolo or "—",
+                source.condizioni_esposizione or "—",
+                source.rischio or "—",
+                source.misure_prevenzione or "—",
                 indice_text,
             ]
             for i, text in enumerate(values):

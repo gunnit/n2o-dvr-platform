@@ -10,14 +10,12 @@ import {
   Check,
   CheckCircle2,
   ChevronRight,
-  Download,
   FileCheck,
   FilePlus2,
   FileText,
   MapPin,
   Plus,
   Search,
-  Upload,
   Users,
 } from "lucide-react";
 
@@ -271,8 +269,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
-  // Period switch is purely visual today — KPIs aren't period-scoped server-side.
-  const [period, setPeriod] = useState<"7g" | "30g" | "90g">("30g");
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -434,30 +430,6 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex overflow-hidden rounded-md border border-[#e5edf5] bg-white">
-            {(["7g", "30g", "90g"] as const).map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setPeriod(p)}
-                className={cn(
-                  "border-l border-[#e5edf5] px-3 py-1.5 text-[12.5px] font-semibold first:border-l-0",
-                  period === p
-                    ? "bg-[#061b31] text-white"
-                    : "text-[#64748d] hover:text-[#273951]",
-                )}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-md border border-[#e5edf5] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#273951] hover:border-[#d6dde7]"
-          >
-            <Download className="h-3.5 w-3.5" strokeWidth={2} />
-            Esporta
-          </button>
           {isAdmin && (
             <Link
               href="/aziende/new"
@@ -736,13 +708,6 @@ function QuickActionsPanel() {
       accent: "violet",
       icon: FilePlus2,
     },
-    {
-      label: "Importa clienti",
-      sub: "CSV · prossimamente",
-      href: "/aziende",
-      accent: "amber",
-      icon: Upload,
-    },
   ];
   return (
     <section className="overflow-hidden rounded-md border border-[#e5edf5] bg-white shadow-stripe-ambient">
@@ -751,7 +716,7 @@ function QuickActionsPanel() {
           Azioni rapide
         </h3>
       </div>
-      <div className="grid grid-cols-2 gap-2 p-3">
+      <div className="grid grid-cols-3 gap-2 p-3">
         {actions.map((a) => {
           const Icon = a.icon;
           return (

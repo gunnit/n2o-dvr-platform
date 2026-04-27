@@ -4,16 +4,18 @@ import shutil
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.db.session import get_db
 from app.dependencies import get_current_org, get_current_user
+from app.models.ambiente import Ambiente
 from app.models.azienda import Azienda
 from app.models.documento_generato import DocumentoGenerato
+from app.models.persona import Persona
 from app.models.user import User
 from app.schemas.document import (
     DocumentBatchRequest,
@@ -285,6 +287,71 @@ async def get_document_status(
     return _doc_to_response(doc, name)
 
 
+# B1 — survey statuses that count as "submitted" for the Genera-Documenti
+# precondition. ``draft`` (the survey was never started) and ``in_progress``
+# (mid-wizard) both fail the gate; once /survey/complete or /survey/sign
+# has run we trust the operator decided the survey is fit to generate
+# against. Mirrors how survey.py advances the status (step_N -> completed
+# -> firmato -> in_revisione).
+_SURVEY_SUBMITTED_STATUSES: set[str] = {"completed", "firmato", "in_revisione"}
+
+
+async def _check_batch_preconditions(
+    azienda_id: uuid.UUID, db: AsyncSession
+) -> list[str]:
+    """Return a list of Italian descriptions for any missing prerequisites.
+
+    The batch generator is a foot-gun on an empty azienda — every dependent
+    document silently produces a placeholder file with "Nessun ambiente
+    registrato" boilerplate. We require the survey to be at least submitted
+    once and to carry the minimal entities the DVR Master needs (>=1
+    ambiente, >=1 persona, >=1 RSPP).
+    """
+    missing: list[str] = []
+
+    # Resolve the survey_status alongside the entity counts in three small
+    # queries instead of one mega-join — clearer and fast on the row counts
+    # we actually deal with (tens, not thousands).
+    az_status = (
+        await db.execute(
+            select(Azienda.survey_status).where(Azienda.id == azienda_id)
+        )
+    ).scalar_one_or_none()
+    if az_status is None or az_status not in _SURVEY_SUBMITTED_STATUSES:
+        missing.append("Sopralluogo non completato o non firmato")
+
+    ambienti_count = (
+        await db.execute(
+            select(func.count(Ambiente.id)).where(Ambiente.azienda_id == azienda_id)
+        )
+    ).scalar_one()
+    if not ambienti_count:
+        missing.append("Nessun ambiente di lavoro registrato")
+
+    persone_count = (
+        await db.execute(
+            select(func.count(Persona.id)).where(Persona.azienda_id == azienda_id)
+        )
+    ).scalar_one()
+    if not persone_count:
+        missing.append("Nessuna persona registrata")
+
+    # RSPP gate matches the survey/sign flow's expectation that the survey
+    # carries a designated safety manager before any document is produced.
+    rspp_count = (
+        await db.execute(
+            select(func.count(Persona.id)).where(
+                Persona.azienda_id == azienda_id,
+                Persona.ruolo_rspp.is_(True),
+            )
+        )
+    ).scalar_one()
+    if not rspp_count:
+        missing.append("Nessun RSPP designato")
+
+    return missing
+
+
 @router.post("/batch", response_model=list[DocumentResponse], status_code=202)
 async def batch_generate_documents(
     azienda_id: uuid.UUID,
@@ -295,6 +362,16 @@ async def batch_generate_documents(
 ):
     """Trigger async generation for multiple document types at once."""
     await _get_azienda(azienda_id, org_id, db)
+
+    # B1 — refuse to enqueue tasks against an incomplete sopralluogo. The
+    # frontend disables the button when survey_status == draft, but we
+    # double-check server-side because curl + stale tabs both bypass that.
+    missing = await _check_batch_preconditions(azienda_id, db)
+    if missing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Sopralluogo incompleto: {', '.join(missing)}",
+        )
 
     created_docs: list[DocumentoGenerato] = []
 

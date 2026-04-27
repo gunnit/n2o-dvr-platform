@@ -32,6 +32,24 @@ import {
 import { AlertTriangle, Loader2, Sparkles, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Ambiente, Attrezzatura, ValutazioneRischio } from "@/types";
+import { PericoliPanel } from "@/components/survey/pericoli-panel";
+
+// Map short category name (DB) → canonical long form used by the catalog
+// API (PericoloLibreria.categoria). Mirrors backend
+// reference_data.CATEGORIA_SHORT_TO_LONG.
+const CATEGORIA_LONG: Record<string, string> = {
+  Strutture: "Strutture",
+  Macchine: "Macchine",
+  Elettrici: "Impianti Elettrici",
+  Incendio: "Incendio-Esplosioni",
+  Chimici: "Agenti Chimici",
+  Fisici: "Agenti Fisici",
+  Biologici: "Agenti Biologici",
+  Cancerogeni: "Agenti Cancerogeni",
+  Organizzazione: "Organizzazione del Lavoro",
+  Psicologici: "Fattori Psicologici",
+  Ergonomici: "Fattori Ergonomici",
+};
 
 interface StepRischiProps {
   aziendaId: string;
@@ -1294,6 +1312,31 @@ export function StepRischi({
                   </TableRow>
                 );
               })}
+              {/* Phase 3 (1:N): for every applicable categoria, expose an
+                  expandable detail row hosting the per-pericolo editor. The
+                  editor lazy-loads the pericoli_libreria filtered to this
+                  ambiente.tipo + attrezzature combination on first open. */}
+              {visibleValutazioni
+                .filter((val) => val.applicabile && val.id)
+                .map((val) => {
+                  const long = CATEGORIA_LONG[val.categoria_rischio];
+                  if (!long) return null;
+                  return (
+                    <TableRow
+                      key={`pericoli-${val.id}`}
+                      className="hover:bg-transparent"
+                    >
+                      <TableCell colSpan={6} className="p-0">
+                        <PericoliPanel
+                          aziendaId={aziendaId}
+                          ambienteId={val.ambiente_id}
+                          valutazione={val}
+                          categoriaLong={long}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
             </TableBody>
           </Table>
 

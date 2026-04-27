@@ -37,7 +37,10 @@ def _friendly_error_for(exc: Exception) -> str:
     if isinstance(exc, PermissionError):
         return "Permessi insufficienti sul disco di output. Contatta l'amministratore."
     if isinstance(exc, (TimeoutError, SoftTimeLimitExceeded)):
-        return "Timeout durante la generazione (oltre 10 minuti). Riprova tra qualche minuto."
+        # B2 — POS / HACCP_forms / DVR Master are the long-runners.
+        # Surface a tight, actionable message (the operator clicks
+        # Genera again from the documents tab to retry).
+        return "Timeout generazione (riprovare)"
     # Generic fallback: expose just the exception class — never the message,
     # which can leak stack traces or SQL fragments.
     return f"Generazione non riuscita ({name}). Riprova o contatta l'amministratore."

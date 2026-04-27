@@ -8,6 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/use-api";
 import type { Azienda } from "@/types";
+import {
+  validatePartitaIva as runPartitaIvaValidator,
+  validateCodiceAteco as runAtecoValidator,
+  validateRagioneSociale as runRagioneValidator,
+} from "@/lib/validators/azienda";
 
 interface SeismicLookupResult {
   comune_query: string;
@@ -45,9 +50,6 @@ const ZONE_SISMICHE = [
   { value: 3, label: "Zona 3 - Bassa pericolosita" },
   { value: 4, label: "Zona 4 - Molto bassa pericolosita" },
 ];
-
-const PARTITA_IVA_REGEX = /^\d{11}$/;
-const CODICE_ATECO_REGEX = /^\d{2}\.\d{2}\.\d{2}$/;
 
 export function StepAzienda({
   data,
@@ -107,43 +109,31 @@ export function StepAzienda({
     lastLookupRef.current = null;
   }
 
-  function validateRagioneSociale(value: string | undefined) {
-    if (!value || value.trim() === "") {
-      setErrors((prev) => ({ ...prev, ragione_sociale: "Campo obbligatorio" }));
-    } else {
-      setErrors((prev) => {
-        const { ragione_sociale: _, ...rest } = prev;
-        return rest;
-      });
-    }
+  function validateRagioneSociale(value: string | undefined | null) {
+    const msg = runRagioneValidator(value);
+    setErrors((prev) => {
+      if (msg) return { ...prev, ragione_sociale: msg };
+      const { ragione_sociale: _omit, ...rest } = prev;
+      return rest;
+    });
   }
 
   function validatePartitaIva(value: string | undefined | null) {
-    if (value && value.trim() !== "" && !PARTITA_IVA_REGEX.test(value.trim())) {
-      setErrors((prev) => ({
-        ...prev,
-        partita_iva: "La partita IVA deve essere di 11 cifre",
-      }));
-    } else {
-      setErrors((prev) => {
-        const { partita_iva: _, ...rest } = prev;
-        return rest;
-      });
-    }
+    const msg = runPartitaIvaValidator(value);
+    setErrors((prev) => {
+      if (msg) return { ...prev, partita_iva: msg };
+      const { partita_iva: _omit, ...rest } = prev;
+      return rest;
+    });
   }
 
   function validateCodiceAteco(value: string | undefined | null) {
-    if (value && value.trim() !== "" && !CODICE_ATECO_REGEX.test(value.trim())) {
-      setErrors((prev) => ({
-        ...prev,
-        codice_ateco: "Formato non valido (es. 56.10.11)",
-      }));
-    } else {
-      setErrors((prev) => {
-        const { codice_ateco: _, ...rest } = prev;
-        return rest;
-      });
-    }
+    const msg = runAtecoValidator(value);
+    setErrors((prev) => {
+      if (msg) return { ...prev, codice_ateco: msg };
+      const { codice_ateco: _omit, ...rest } = prev;
+      return rest;
+    });
   }
 
   // Wave 3: no inner Card — survey-wizard glass-card is the container

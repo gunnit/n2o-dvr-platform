@@ -130,6 +130,7 @@ export default function AdminFeedbackPage() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (sessionStatus !== "authenticated") return;
@@ -265,85 +266,117 @@ export default function AdminFeedbackPage() {
               {loading ? "Caricamento..." : "Nessuna segnalazione."}
             </p>
           ) : (
-            <Table>
+            <Table className="table-fixed">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[120px]">Tipo</TableHead>
+                  <TableHead className="w-[110px]">Tipo</TableHead>
                   <TableHead>Descrizione</TableHead>
-                  <TableHead className="w-[180px]">Utente</TableHead>
-                  <TableHead className="w-[200px]">Pagina</TableHead>
-                  <TableHead className="w-[110px]">Data</TableHead>
-                  <TableHead className="w-[170px]">Stato</TableHead>
+                  <TableHead className="w-[150px]">Utente</TableHead>
+                  <TableHead className="w-[160px]">Pagina</TableHead>
+                  <TableHead className="w-[100px]">Data</TableHead>
+                  <TableHead className="w-[160px]">Stato</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((row) => (
-                  <TableRow key={row.id} className="align-top">
-                    <TableCell className="py-3">
-                      <TypeBadge type={row.type} />
-                    </TableCell>
-                    <TableCell className="max-w-xl py-3">
-                      <p className="whitespace-pre-wrap text-sm text-[#0f172a]">
-                        {row.description}
-                      </p>
-                      {row.user_agent && (
-                        <p className="mt-1 truncate text-[11px] text-muted-foreground">
-                          {row.user_agent}
+                {filtered.map((row) => {
+                  const expanded = expandedId === row.id;
+                  return (
+                    <TableRow key={row.id} className="align-top">
+                      <TableCell className="py-3">
+                        <TypeBadge type={row.type} />
+                      </TableCell>
+                      <TableCell className="py-3">
+                        <p
+                          className={cn(
+                            "text-sm text-[#0f172a]",
+                            expanded ? "whitespace-pre-wrap" : "line-clamp-2",
+                          )}
+                          title={row.description}
+                        >
+                          {row.description}
                         </p>
-                      )}
-                    </TableCell>
-                    <TableCell className="py-3 text-sm">
-                      {row.user_label ?? (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="py-3 text-sm">
-                      {row.route ? (
-                        <code className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-700">
-                          {row.route}
-                        </code>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                      {row.page_url && (
-                        <a
-                          href={row.page_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-1 block truncate text-[11px] text-primary hover:underline"
-                          title={row.page_url}
-                        >
-                          apri pagina
-                        </a>
-                      )}
-                    </TableCell>
-                    <TableCell className="py-3 text-sm text-muted-foreground">
-                      {formatDate(row.created_at)}
-                    </TableCell>
-                    <TableCell className="py-3">
-                      <div className="flex items-center gap-1.5">
-                        <select
-                          value={row.status}
-                          disabled={savingId === row.id}
-                          onChange={(e) =>
-                            changeStatus(row, e.target.value as FeedbackStatus)
-                          }
-                          className="h-8 rounded-md border border-[#e5edf5] bg-white px-2 text-xs text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
-                          aria-label={`Stato segnalazione: ${STATUS_LABEL[row.status]}`}
-                        >
-                          {STATUS_OPTIONS.map((s) => (
-                            <option key={s.value} value={s.value}>
-                              {s.label}
-                            </option>
-                          ))}
-                        </select>
-                        {savingId === row.id && (
-                          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                        {(row.description.length > 120 || row.user_agent) && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedId(expanded ? null : row.id)
+                            }
+                            className="mt-1 text-[11px] font-medium text-primary hover:underline"
+                          >
+                            {expanded ? "Nascondi dettagli" : "Dettagli"}
+                          </button>
                         )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                        {expanded && row.user_agent && (
+                          <p
+                            className="mt-2 break-all rounded bg-slate-50 px-2 py-1 text-[11px] text-muted-foreground"
+                            title={row.user_agent}
+                          >
+                            <span className="font-medium text-slate-600">
+                              UA:
+                            </span>{" "}
+                            {row.user_agent}
+                          </p>
+                        )}
+                      </TableCell>
+                      <TableCell className="truncate py-3 text-sm">
+                        {row.user_label ?? (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="py-3 text-sm">
+                        {row.route ? (
+                          <code
+                            className="block truncate rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-700"
+                            title={row.route}
+                          >
+                            {row.route}
+                          </code>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                        {row.page_url && (
+                          <a
+                            href={row.page_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-1 block truncate text-[11px] text-primary hover:underline"
+                            title={row.page_url}
+                          >
+                            apri pagina
+                          </a>
+                        )}
+                      </TableCell>
+                      <TableCell className="py-3 text-sm text-muted-foreground">
+                        {formatDate(row.created_at)}
+                      </TableCell>
+                      <TableCell className="py-3">
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            value={row.status}
+                            disabled={savingId === row.id}
+                            onChange={(e) =>
+                              changeStatus(
+                                row,
+                                e.target.value as FeedbackStatus,
+                              )
+                            }
+                            className="h-8 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-2 text-xs text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                            aria-label={`Stato segnalazione: ${STATUS_LABEL[row.status]}`}
+                          >
+                            {STATUS_OPTIONS.map((s) => (
+                              <option key={s.value} value={s.value}>
+                                {s.label}
+                              </option>
+                            ))}
+                          </select>
+                          {savingId === row.id && (
+                            <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

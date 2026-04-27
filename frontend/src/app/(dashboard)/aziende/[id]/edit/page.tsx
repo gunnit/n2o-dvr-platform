@@ -1,51 +1,84 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { apiCall } from "@/lib/api-client";
 import {
   validatePartitaIva,
   validateCodiceAteco,
   type AziendaFieldErrors,
 } from "@/lib/validators/azienda";
+import type { Azienda } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-export default function NewAziendaPage() {
+/**
+ * Edit page for an existing azienda. Mirrors `aziende/new` field-for-field
+ * but issues a PUT and pre-fills from the loaded record. Wired from the
+ * "Modifica" button in the detail header.
+ */
+export default function EditAziendaPage() {
   const router = useRouter();
+  const params = useParams();
+  const id = params.id as string;
   const { data: session, status } = useSession();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const role = (session?.user as any)?.role as string | undefined;
-  const [loading, setLoading] = useState(false);
+
+  const [azienda, setAzienda] = useState<Azienda | null>(null);
+  const [loadingData, setLoadingData] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<AziendaFieldErrors>({});
 
-  // US-5.1: non-admins cannot create clients. Bounce them with a toast.
+  // US-5.1 alignment: only admins can edit aziende.
   useEffect(() => {
     if (status === "loading") return;
     if (role && role !== "admin") {
-      toast.error("Solo gli amministratori possono creare nuovi clienti");
-      router.replace("/dashboard");
+      toast.error("Solo gli amministratori possono modificare i clienti");
+      router.replace(`/aziende/${id}`);
     }
-  }, [role, status, router]);
+  }, [role, status, router, id]);
 
-  function validateField(name: "partita_iva" | "codice_ateco", value: string) {
+  useEffect(() => {
+    let cancelled = false;
+    apiCall<Azienda>(`/api/v1/aziende/${id}`)
+      .then((a) => {
+        if (!cancelled) setAzienda(a);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError("Impossibile caricare l'azienda");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingData(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  function validateField(
+    name: "partita_iva" | "codice_ateco",
+    value: string,
+  ) {
     const msg =
       name === "partita_iva"
         ? validatePartitaIva(value)
         : validateCodiceAteco(value);
     setFieldErrors((prev) => {
       const next = { ...prev };
-      if (msg) {
-        next[name] = msg;
-      } else {
-        delete next[name];
-      }
+      if (msg) next[name] = msg;
+      else delete next[name];
       return next;
     });
   }
@@ -56,9 +89,6 @@ export default function NewAziendaPage() {
 
     const formData = new FormData(e.currentTarget);
 
-    // B3: re-run validators at submit time so a user who pastes a
-    // garbage value and presses Enter without ever blurring still
-    // gets blocked. Inline error stays visible until corrected.
     const pivaRaw = (formData.get("partita_iva") as string) || "";
     const atecoRaw = (formData.get("codice_ateco") as string) || "";
     const pivaErr = validatePartitaIva(pivaRaw);
@@ -75,24 +105,23 @@ export default function NewAziendaPage() {
       return;
     }
 
-    setLoading(true);
-
+    setSaving(true);
     try {
       const sessionRes = await fetch("/api/auth/session");
-      const session = await sessionRes.json();
-      const token = session?.accessToken;
+      const sess = await sessionRes.json();
+      const token = sess?.accessToken;
 
       if (!token) {
         setError("Sessione scaduta, effettua nuovamente il login");
-        setLoading(false);
+        setSaving(false);
         return;
       }
 
       const metratura = formData.get("metratura_totale") as string;
       const zonaSismica = formData.get("zona_sismica") as string;
 
-      const res = await fetch(`${API_URL}/api/v1/aziende`, {
-        method: "POST",
+      const res = await fetch(`${API_URL}/api/v1/aziende/${id}`, {
+        method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -117,19 +146,48 @@ export default function NewAziendaPage() {
         throw new Error(body.detail || `Errore: ${res.status}`);
       }
 
-      router.push("/aziende");
+      toast.success("Azienda aggiornata");
+      router.push(`/aziende/${id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Errore nella creazione");
+      setError(err instanceof Error ? err.message : "Errore nel salvataggio");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
+  }
+
+  if (loadingData) {
+    return <p className="type-body">Caricamento...</p>;
+  }
+
+  if (loadError || !azienda) {
+    return (
+      <div className="space-y-4">
+        <Link
+          href={`/aziende/${id}`}
+          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#64748d] hover:text-[#061b31]"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
+          Torna all&apos;azienda
+        </Link>
+        <p className="type-body text-destructive">
+          {loadError || "Azienda non trovata"}
+        </p>
+      </div>
+    );
   }
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
-      <div>
-        <h1 className="type-h1">Nuova Azienda</h1>
-        <p className="type-body mt-2">Registra una nuova azienda cliente</p>
+      <div className="space-y-2">
+        <Link
+          href={`/aziende/${id}`}
+          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#64748d] hover:text-[#061b31]"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
+          {azienda.ragione_sociale}
+        </Link>
+        <h1 className="type-h1">Modifica Azienda</h1>
+        <p className="type-body">Aggiorna i dati anagrafici del cliente</p>
       </div>
 
       <Card>
@@ -145,15 +203,8 @@ export default function NewAziendaPage() {
                   id="ragione_sociale"
                   name="ragione_sociale"
                   required
+                  defaultValue={azienda.ragione_sociale}
                   placeholder="Es. N2O SRL"
-                  onInvalid={(e) =>
-                    (e.currentTarget as HTMLInputElement).setCustomValidity(
-                      "Inserisci la ragione sociale",
-                    )
-                  }
-                  onInput={(e) =>
-                    (e.currentTarget as HTMLInputElement).setCustomValidity("")
-                  }
                 />
               </div>
               <div className="space-y-2">
@@ -161,12 +212,15 @@ export default function NewAziendaPage() {
                 <Input
                   id="partita_iva"
                   name="partita_iva"
+                  defaultValue={azienda.partita_iva ?? ""}
                   placeholder="Es. 12345678901"
                   onBlur={(e) => validateField("partita_iva", e.target.value)}
                   className={fieldErrors.partita_iva ? "border-destructive" : ""}
                 />
                 {fieldErrors.partita_iva && (
-                  <p className="text-xs text-destructive">{fieldErrors.partita_iva}</p>
+                  <p className="text-xs text-destructive">
+                    {fieldErrors.partita_iva}
+                  </p>
                 )}
               </div>
               <div className="space-y-2">
@@ -174,12 +228,15 @@ export default function NewAziendaPage() {
                 <Input
                   id="codice_ateco"
                   name="codice_ateco"
-                  placeholder="Es. 46.69.94"
+                  defaultValue={azienda.codice_ateco ?? ""}
+                  placeholder="Es. 56.10.11"
                   onBlur={(e) => validateField("codice_ateco", e.target.value)}
                   className={fieldErrors.codice_ateco ? "border-destructive" : ""}
                 />
                 {fieldErrors.codice_ateco && (
-                  <p className="text-xs text-destructive">{fieldErrors.codice_ateco}</p>
+                  <p className="text-xs text-destructive">
+                    {fieldErrors.codice_ateco}
+                  </p>
                 )}
               </div>
               <div className="space-y-2 sm:col-span-2">
@@ -187,6 +244,7 @@ export default function NewAziendaPage() {
                 <Input
                   id="attivita"
                   name="attivita"
+                  defaultValue={azienda.attivita ?? ""}
                   placeholder="Es. Produzione alimentare"
                 />
               </div>
@@ -200,6 +258,7 @@ export default function NewAziendaPage() {
                   <Input
                     id="sede_legale_via"
                     name="sede_legale_via"
+                    defaultValue={azienda.sede_legale_via ?? ""}
                     placeholder="Es. Via dei Chiosi 4"
                   />
                 </div>
@@ -208,6 +267,7 @@ export default function NewAziendaPage() {
                   <Input
                     id="sede_legale_citta"
                     name="sede_legale_citta"
+                    defaultValue={azienda.sede_legale_citta ?? ""}
                     placeholder="Es. Milano (MI)"
                   />
                 </div>
@@ -222,6 +282,7 @@ export default function NewAziendaPage() {
                   <Input
                     id="sede_operativa_via"
                     name="sede_operativa_via"
+                    defaultValue={azienda.sede_operativa_via ?? ""}
                     placeholder="Es. Via Milano 5"
                   />
                 </div>
@@ -230,6 +291,7 @@ export default function NewAziendaPage() {
                   <Input
                     id="sede_operativa_citta"
                     name="sede_operativa_citta"
+                    defaultValue={azienda.sede_operativa_citta ?? ""}
                     placeholder="Es. Milano (MI)"
                   />
                 </div>
@@ -242,6 +304,7 @@ export default function NewAziendaPage() {
                 <Input
                   id="orario_lavoro"
                   name="orario_lavoro"
+                  defaultValue={azienda.orario_lavoro ?? ""}
                   placeholder="Es. 08:00 - 17:00"
                 />
               </div>
@@ -253,6 +316,7 @@ export default function NewAziendaPage() {
                   type="number"
                   step="0.1"
                   min="0"
+                  defaultValue={azienda.metratura_totale ?? ""}
                   placeholder="Es. 250"
                   className="tnum"
                 />
@@ -263,23 +327,29 @@ export default function NewAziendaPage() {
                   id="zona_sismica"
                   name="zona_sismica"
                   className="h-10 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-3 py-2 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
-                  defaultValue=""
+                  defaultValue={azienda.zona_sismica ?? ""}
                 >
                   <option value="">Seleziona zona</option>
                   <option value="1">Zona 1 - Alta pericolosit&agrave;</option>
                   <option value="2">Zona 2 - Media pericolosit&agrave;</option>
                   <option value="3">Zona 3 - Bassa pericolosit&agrave;</option>
-                  <option value="4">Zona 4 - Molto bassa pericolosit&agrave;</option>
+                  <option value="4">
+                    Zona 4 - Molto bassa pericolosit&agrave;
+                  </option>
                 </select>
               </div>
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
             <div className="flex gap-3 border-t border-[#e5edf5] pt-6">
-              <Button type="submit" disabled={loading}>
-                {loading ? "Salvataggio..." : "Salva Azienda"}
+              <Button type="submit" disabled={saving}>
+                {saving ? "Salvataggio..." : "Salva modifiche"}
               </Button>
-              <Button type="button" variant="outline" onClick={() => router.back()}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.push(`/aziende/${id}`)}
+              >
                 Annulla
               </Button>
             </div>

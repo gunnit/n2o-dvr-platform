@@ -16,6 +16,7 @@ from app.api.v1.haccp import router as haccp_router
 from app.api.v1.lookups import router as lookups_router
 from app.api.v1.mansioni_sorveglianza import router as mansioni_sorveglianza_router
 from app.api.v1.pee_procedures import router as pee_procedures_router
+from app.api.v1.pericoli import router as pericoli_router
 from app.api.v1.persone import router as persone_router
 from app.api.v1.pos import router as pos_router
 from app.api.v1.rischi import router as rischi_router
@@ -35,6 +36,7 @@ api_router.include_router(attrezzature_router)
 api_router.include_router(sostanze_chimiche_router)
 api_router.include_router(rischi_router)
 api_router.include_router(rischi_misure_router)
+api_router.include_router(pericoli_router)
 api_router.include_router(survey_router)
 api_router.include_router(documents_router)
 api_router.include_router(documents_download_router)

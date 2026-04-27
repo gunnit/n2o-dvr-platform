@@ -14,13 +14,17 @@ import { formatRelative } from "@/lib/ui/relative-time";
 import {
   SURVEY_STATUS_META,
   surveyStatusKey,
+  statusBucketFor,
+  matchesBucket,
   type SurveyStatusKey,
+  type SurveyStatusBucket,
 } from "@/lib/ui/status-map";
 
-const FILTERS: { id: "all" | SurveyStatusKey; label: string }[] = [
+const FILTERS: { id: SurveyStatusBucket; label: string }[] = [
   { id: "all", label: "Tutti" },
   { id: "in_progress", label: "In corso" },
   { id: "draft", label: "Da iniziare" },
+  { id: "in_revisione", label: "In revisione" },
   { id: "completed", label: "Completati" },
 ];
 
@@ -49,8 +53,8 @@ export default function SurveyPage() {
   const counts = useMemo(() => {
     const map: Record<string, number> = { all: aziende.length };
     for (const a of aziende) {
-      const k = surveyStatusKey(a.survey_status);
-      map[k] = (map[k] ?? 0) + 1;
+      const b = statusBucketFor(a.survey_status);
+      map[b] = (map[b] ?? 0) + 1;
     }
     return map;
   }, [aziende]);
@@ -58,7 +62,7 @@ export default function SurveyPage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return aziende.filter((a) => {
-      if (activeFilter !== "all" && surveyStatusKey(a.survey_status) !== activeFilter) {
+      if (!matchesBucket(a.survey_status, activeFilter)) {
         return false;
       }
       if (!q) return true;
@@ -74,7 +78,7 @@ export default function SurveyPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="type-h1">Sopralluogo</h1>
+        <h1 className="type-h1">Sopralluoghi</h1>
         <p className="type-body mt-2">
           Seleziona un&apos;azienda per avviare o continuare il sopralluogo
           digitale.

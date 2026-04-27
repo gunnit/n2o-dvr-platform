@@ -4,7 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { Database, KeyRound, Loader2, Sparkles, UserCircle } from "lucide-react";
+import {
+  Copy,
+  Database,
+  KeyRound,
+  Loader2,
+  Sparkles,
+  UserCircle,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -187,13 +194,34 @@ function ProfileCard() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="org">ID organizzazione</Label>
-                <Input
-                  id="org"
-                  value={me.organization_id}
-                  disabled
-                  readOnly
-                  className="font-mono text-xs"
-                />
+                <div className="flex items-center gap-2">
+                  <code
+                    id="org"
+                    className="flex h-10 flex-1 items-center overflow-x-auto rounded-md border border-[#e5edf5] bg-[#f6f9fc] px-3 font-mono text-xs text-[#273951]"
+                  >
+                    {me.organization_id}
+                  </code>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-10 w-10 shrink-0"
+                    aria-label="Copia ID organizzazione"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(me.organization_id);
+                        toast.success("ID copiato negli appunti");
+                      } catch {
+                        toast.error("Copia non riuscita");
+                      }
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <p className="text-xs text-[#64748d]">
+                  Identificatore tecnico — utile in caso di assistenza.
+                </p>
               </div>
             </div>
             <div className="flex justify-end">

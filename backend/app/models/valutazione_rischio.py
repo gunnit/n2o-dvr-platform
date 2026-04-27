@@ -35,3 +35,12 @@ class ValutazioneRischio(Base):
     )
 
     ambiente: Mapped["Ambiente"] = relationship(back_populates="valutazioni_rischio")
+    # Phase 3 (1:N) — child rows from the Schede Specifiche pericoli catalog.
+    # The legacy single-block pericolo/condizioni/rischio/misure fields above
+    # remain for back-compat (auto-derived from the first child by the
+    # generator) but new code should iterate `pericoli`.
+    pericoli: Mapped[list["PericoloValutazione"]] = relationship(  # noqa: F821
+        back_populates="valutazione_rischio",
+        cascade="all, delete-orphan",
+        order_by="PericoloValutazione.ordine",
+    )

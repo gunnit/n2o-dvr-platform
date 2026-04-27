@@ -15,10 +15,13 @@ import { formatRelative } from "@/lib/ui/relative-time";
 import {
   SURVEY_STATUS_META,
   surveyStatusKey,
+  statusBucketFor,
+  matchesBucket,
   type SurveyStatusKey,
+  type SurveyStatusBucket,
 } from "@/lib/ui/status-map";
 
-const FILTERS: { id: "all" | SurveyStatusKey; label: string }[] = [
+const FILTERS: { id: SurveyStatusBucket; label: string }[] = [
   { id: "all", label: "Tutte" },
   { id: "completed", label: "Completate" },
   { id: "in_progress", label: "In corso" },
@@ -48,8 +51,8 @@ export default function AziendePage() {
   const counts = useMemo(() => {
     const map: Record<string, number> = { all: aziende.length };
     for (const a of aziende) {
-      const k = surveyStatusKey(a.survey_status);
-      map[k] = (map[k] ?? 0) + 1;
+      const b = statusBucketFor(a.survey_status);
+      map[b] = (map[b] ?? 0) + 1;
     }
     return map;
   }, [aziende]);
@@ -57,7 +60,7 @@ export default function AziendePage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return aziende.filter((a) => {
-      if (activeFilter !== "all" && surveyStatusKey(a.survey_status) !== activeFilter) {
+      if (!matchesBucket(a.survey_status, activeFilter)) {
         return false;
       }
       if (!q) return true;

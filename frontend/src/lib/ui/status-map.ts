@@ -54,3 +54,23 @@ export function surveyStatusKey(raw: string | undefined | null): SurveyStatusKey
 export function surveyStatusMeta(raw: string | undefined | null): StatusMeta {
   return SURVEY_STATUS_META[surveyStatusKey(raw)];
 }
+
+// H9 — single source of truth for status filter buckets used by Aziende
+// list, Sopralluoghi list, and Dashboard KPIs. "Completed" is the only
+// fuzzy bucket: it covers both `completed` and `firmato` because both
+// represent a delivered sopralluogo.
+export type SurveyStatusBucket = "all" | "draft" | "in_progress" | "in_revisione" | "completed";
+
+export function statusBucketFor(raw: string | undefined | null): Exclude<SurveyStatusBucket, "all"> {
+  const key = surveyStatusKey(raw);
+  if (key === "firmato") return "completed";
+  return key;
+}
+
+export function matchesBucket(
+  raw: string | undefined | null,
+  bucket: SurveyStatusBucket,
+): boolean {
+  if (bucket === "all") return true;
+  return statusBucketFor(raw) === bucket;
+}
