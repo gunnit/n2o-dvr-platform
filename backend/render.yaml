@@ -34,7 +34,7 @@ services:
           type: redis
           property: connectionString
       - key: CORS_ORIGINS
-        value: '["https://n2o-dvr-frontend.onrender.com"]'
+        value: '["https://dvr-sicurezza.it","https://www.dvr-sicurezza.it","https://n2o-dvr-frontend.onrender.com"]'
       - key: FILE_STORAGE_PATH
         value: /data
       # The DVR Google Docs editing endpoints (/documenti/{id}/open-for-editing
@@ -101,7 +101,7 @@ services:
       - key: AUTH_SECRET
         generateValue: true
       - key: NEXTAUTH_URL
-        value: https://n2o-dvr-frontend.onrender.com
+        value: https://dvr-sicurezza.it
       - key: AUTH_TRUST_HOST
         value: "true"  # Auth.js v5 requires this behind Render's reverse proxy (UntrustedHost error otherwise)
 

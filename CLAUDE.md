@@ -157,7 +157,7 @@ All project docs are branded with Niuexa header/footer, version 1.0, April 2026.
 
 ## Live URLs
 
-- **Frontend**: https://n2o-dvr-frontend.onrender.com
+- **Frontend**: https://dvr-sicurezza.it (canonical custom domain) — also https://www.dvr-sicurezza.it and https://n2o-dvr-frontend.onrender.com (Render fallback)
 - **API**: https://n2o-dvr-api.onrender.com (Swagger at `/docs`)
 - **Worker**: Celery background service (no URL)
 
