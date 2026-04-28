@@ -61,8 +61,8 @@ function describeDelta(days: number): string {
 function WorkerRow({ row, tone }: { row: SurveillanceWorkerRow; tone: "amber" | "rose" }) {
   const toneClasses =
     tone === "rose"
-      ? "border-rose-200 bg-rose-50/60 dark:border-rose-900/40 dark:bg-rose-950/20"
-      : "border-amber-200 bg-amber-50/60 dark:border-amber-900/40 dark:bg-amber-950/20";
+      ? "border-rose-300 bg-rose-100 dark:border-rose-700 dark:bg-rose-950/40"
+      : "border-amber-300 bg-amber-100 dark:border-amber-700 dark:bg-amber-950/40";
   const deltaClasses =
     tone === "rose" ? "text-rose-700 dark:text-rose-400" : "text-amber-800 dark:text-amber-300";
   const display = row.nominativo ?? row.postazione;

@@ -383,7 +383,7 @@ export function MeasuresPanel({
           {availableLibrary.map((entry) => (
             <div
               key={entry.id}
-              className="rounded-md border border-emerald-200 bg-emerald-50/50 p-3"
+              className="rounded-md border border-emerald-300 bg-emerald-100 p-3 dark:border-emerald-700 dark:bg-emerald-950/40"
             >
               <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
                 <span className="text-sm font-medium">{entry.titolo}</span>

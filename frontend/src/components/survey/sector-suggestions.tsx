@@ -86,17 +86,17 @@ export function SectorSuggestions({ aziendaId }: { aziendaId: string }) {
 
   return (
     <>
-      <div className="flex flex-col gap-2 rounded-lg border border-emerald-200 bg-emerald-50/50 px-4 py-3 text-sm dark:border-emerald-800 dark:bg-emerald-950/20 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 text-emerald-900 dark:text-emerald-200">
+      <div className="flex flex-col gap-2 rounded-lg border border-emerald-300 bg-emerald-100 px-4 py-3 text-sm dark:border-emerald-700 dark:bg-emerald-950/40 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-2 text-emerald-950 dark:text-emerald-100">
           <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            <p className="font-medium">
+            <p className="font-semibold">
               Trovati {summary.sector_size} DVR simili nel tuo settore
               {summary.ateco_prefix
                 ? ` (ATECO ${summary.ateco_prefix}xx)`
                 : ""}
             </p>
-            <p className="text-xs text-emerald-800/80 dark:text-emerald-300/80">
+            <p className="text-xs text-emerald-900 dark:text-emerald-200">
               Vedi attrezzature, rischi e sostanze ricorrenti — usali come
               punto di partenza.
             </p>

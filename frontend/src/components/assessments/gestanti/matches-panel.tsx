@@ -44,14 +44,14 @@ export function MatchesPanel({ data, onDecide }: Props) {
 
   if (data.cleared) {
     return (
-      <Card className="border-emerald-500/30 bg-emerald-500/5">
+      <Card className="border-emerald-300 bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-950/40">
         <CardContent className="flex items-start gap-3 py-4">
-          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-700 dark:text-emerald-300" />
           <div>
-            <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+            <p className="text-sm font-semibold text-emerald-950 dark:text-emerald-100">
               Nessun rischio identificato
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-emerald-900 dark:text-emerald-200">
               La mansione{" "}
               <span className="font-medium text-foreground">
                 {data.worker_mansione ?? "—"}
