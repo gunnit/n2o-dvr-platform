@@ -1,8 +1,10 @@
 """OpenAI client helpers for the N2O DVR platform.
 
-Uses the Responses API (client.responses.create) for file inputs and
-the Chat Completions parse helper (client.chat.completions.parse) for
-schema-guaranteed structured outputs via Pydantic models.
+All helpers go through the Responses API (`client.responses.create` /
+`client.responses.parse`) — OpenAI's recommended surface for gpt-5.x
+reasoning models. Schema-guaranteed structured outputs use
+`text_format=<PydanticModel>` (the Responses-API equivalent of
+`response_format` from Chat Completions).
 
 Privacy contract (CLAUDE.md):
   - NEVER send codice fiscale, ID documents, or personal health data.
@@ -45,6 +47,21 @@ def get_client() -> AsyncOpenAI:
     return _client
 
 
+def _normalize_effort(model_name: str, effort: str) -> str:
+    """Map reasoning-effort values across gpt-5.x generations.
+
+    gpt-5 / gpt-5.4 accept `minimal`; gpt-5.5 renamed that level to `none`
+    and rejects `minimal`. Callers pass the gpt-5.4 vocabulary by default
+    (it's the wider one) and we translate at call time so env-driven
+    model bumps don't break.
+    """
+    if effort == "minimal" and model_name.startswith("gpt-5.5"):
+        return "none"
+    if effort == "none" and not model_name.startswith("gpt-5.5"):
+        return "minimal"
+    return effort
+
+
 async def generate_text(
     prompt: str,
     *,
@@ -56,14 +73,17 @@ async def generate_text(
     """Simple text generation via the Responses API.
 
     Use for short Italian boilerplate (company descriptions, etc.).
-    Defaults to OPENAI_MODEL_GENERATION (gpt-5-nano).
+    Defaults to OPENAI_MODEL_GENERATION (gpt-5.4-nano).
 
     `gpt-5*` models are reasoning models: `max_output_tokens` caps the sum of
     reasoning AND visible output, so we pin effort to "minimal" for plain
     boilerplate — otherwise reasoning silently eats the whole budget and
-    `output_text` comes back empty.
+    `output_text` comes back empty. The effort value is auto-translated for
+    gpt-5.5 (which uses `none` for the same level).
     """
     client = get_client()
+    resolved_model = model or settings.OPENAI_MODEL_GENERATION
+    effort = _normalize_effort(resolved_model, reasoning_effort)
     input_messages: list[dict] = []
     if system:
         input_messages.append({"role": "system", "content": system})
@@ -71,10 +91,10 @@ async def generate_text(
 
     try:
         response = await client.responses.create(
-            model=model or settings.OPENAI_MODEL_GENERATION,
+            model=resolved_model,
             input=input_messages,
             max_output_tokens=max_output_tokens,
-            reasoning={"effort": reasoning_effort},
+            reasoning={"effort": effort},
         )
     except OpenAIError as exc:
         logger.exception("OpenAI generate_text failed")
@@ -105,34 +125,42 @@ async def generate_structured(
     schema: type[T],
     system: str | None = None,
     model: str | None = None,
+    reasoning_effort: str = "low",
 ) -> T:
-    """Schema-guaranteed structured output via chat.completions.parse().
+    """Schema-guaranteed structured output via the Responses API.
 
-    The returned value is a fully-validated Pydantic instance of `schema`.
-    Raises AIError on refusal or API failure.
+    Uses `client.responses.parse(text_format=schema, ...)` — the surface
+    OpenAI recommends for gpt-5.x reasoning models. Returns a fully-validated
+    Pydantic instance of `schema`. Raises AIError on refusal or API failure.
+
+    `reasoning_effort` defaults to "low" — most domain-reasoning workloads
+    in this app (single-risk measure suggestions, equipment lists) don't
+    need deep chain-of-thought. Pass "medium" for multi-axis evaluations
+    (e.g. the 11-category rischi suggester).
     """
     client = get_client()
-    messages: list[dict] = []
+    resolved_model = model or settings.OPENAI_MODEL_MEASURES
+    effort = _normalize_effort(resolved_model, reasoning_effort)
+    input_messages: list[dict] = []
     if system:
-        messages.append({"role": "system", "content": system})
-    messages.append({"role": "user", "content": prompt})
+        input_messages.append({"role": "system", "content": system})
+    input_messages.append({"role": "user", "content": prompt})
 
     try:
-        completion = await client.chat.completions.parse(
-            model=model or settings.OPENAI_MODEL_MEASURES,
-            messages=messages,
-            response_format=schema,
+        response = await client.responses.parse(
+            model=resolved_model,
+            input=input_messages,
+            text_format=schema,
+            reasoning={"effort": effort},
         )
     except OpenAIError as exc:
         logger.exception("OpenAI generate_structured failed")
         raise AIError(f"AI structured generation failed: {exc}") from exc
 
-    message = completion.choices[0].message
-    if message.refusal:
-        raise AIError(f"Model refused: {message.refusal}")
-    if message.parsed is None:
-        raise AIError("Model returned no parsed content")
-    return message.parsed
+    parsed = response.output_parsed
+    if parsed is None:
+        raise AIError("AI returned no parsed content (refusal or empty)")
+    return parsed
 
 
 async def extract_from_pdf(
@@ -141,13 +169,18 @@ async def extract_from_pdf(
     schema: type[T],
     instructions: str,
     model: str | None = None,
+    reasoning_effort: str = "medium",
 ) -> T:
     """Extract structured data from a PDF via the Responses API.
 
     The PDF is sent as a base64 input_file alongside the instructions.
-    The response is constrained to `schema` via json_schema response_format.
+    The response is constrained to `schema` via Pydantic `text_format`.
 
-    Defaults to OPENAI_MODEL_EXTRACTION (gpt-5.4-mini) — vision-capable.
+    Defaults to OPENAI_MODEL_EXTRACTION (gpt-5.5) — flagship vision model
+    with 1M context, used for SDS extraction where chemical accuracy matters.
+    `reasoning_effort` defaults to "medium" because SDS layouts vary widely
+    and pictogram/H-phrase recall benefits from a real reasoning pass; bump
+    to "high" for known-hard documents, drop to "low" for batch reruns.
     """
     client = get_client()
     path = Path(pdf_path)
@@ -159,10 +192,12 @@ async def extract_from_pdf(
         raise AIError("PDF exceeds 10 MB limit")
 
     b64 = base64.b64encode(pdf_bytes).decode("ascii")
+    resolved_model = model or settings.OPENAI_MODEL_EXTRACTION
+    effort = _normalize_effort(resolved_model, reasoning_effort)
 
     try:
         response = await client.responses.parse(
-            model=model or settings.OPENAI_MODEL_EXTRACTION,
+            model=resolved_model,
             input=[
                 {
                     "role": "user",
@@ -177,10 +212,95 @@ async def extract_from_pdf(
                 }
             ],
             text_format=schema,
+            reasoning={"effort": effort},
         )
     except OpenAIError as exc:
         logger.exception("OpenAI extract_from_pdf failed for %s", path.name)
         raise AIError(f"PDF extraction failed: {exc}") from exc
+
+    parsed = response.output_parsed
+    if parsed is None:
+        raise AIError("AI returned no parsed content (refusal or empty)")
+    return parsed
+
+
+# Image extension → MIME type for the input_image data URL. HEIC isn't
+# supported as input_image by OpenAI; callers should resolve it server-side
+# (or skip those photos) before calling this helper.
+_IMAGE_EXT_TO_MIME = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+}
+
+
+async def extract_from_images(
+    image_paths: list[str | Path],
+    *,
+    schema: type[T],
+    instructions: str,
+    system: str | None = None,
+    model: str | None = None,
+    reasoning_effort: str = "low",
+) -> T:
+    """Extract structured data from one or more images via the Responses API.
+
+    Sends each image as a base64 `input_image` data URL alongside the
+    instructions. The response is constrained to `schema` via Pydantic.
+
+    Defaults to OPENAI_MODEL_EXTRACTION (gpt-5.5) at `low` reasoning effort —
+    object identification in clear photos doesn't need deep chain-of-thought,
+    and `low` keeps latency under ~10s for typical 3-photo batches.
+
+    Raises AIError on missing files, unsupported extensions, refusals, or
+    empty parses.
+    """
+    client = get_client()
+    if not image_paths:
+        raise AIError("At least one image is required")
+
+    content: list[dict] = []
+    for raw in image_paths:
+        path = Path(raw)
+        if not path.is_file():
+            raise AIError(f"Image not found: {path}")
+        ext = path.suffix.lower()
+        mime = _IMAGE_EXT_TO_MIME.get(ext)
+        if not mime:
+            raise AIError(f"Unsupported image format: {ext}")
+        img_bytes = path.read_bytes()
+        if len(img_bytes) > 20 * 1024 * 1024:
+            raise AIError(f"Image exceeds 20 MB limit: {path.name}")
+        b64 = base64.b64encode(img_bytes).decode("ascii")
+        content.append(
+            {
+                "type": "input_image",
+                "image_url": f"data:{mime};base64,{b64}",
+            }
+        )
+    content.append({"type": "input_text", "text": instructions})
+
+    input_messages: list[dict] = []
+    if system:
+        input_messages.append({"role": "system", "content": system})
+    input_messages.append({"role": "user", "content": content})
+
+    resolved_model = model or settings.OPENAI_MODEL_EXTRACTION
+    effort = _normalize_effort(resolved_model, reasoning_effort)
+    try:
+        response = await client.responses.parse(
+            model=resolved_model,
+            input=input_messages,
+            text_format=schema,
+            reasoning={"effort": effort},
+        )
+    except OpenAIError as exc:
+        logger.exception(
+            "OpenAI extract_from_images failed (%d images)", len(image_paths)
+        )
+        raise AIError(f"Image extraction failed: {exc}") from exc
 
     parsed = response.output_parsed
     if parsed is None:

@@ -174,12 +174,70 @@ All project docs are branded with Niuexa header/footer, version 1.0, April 2026.
 - **Frontend**: Next.js 16 (App Router) + shadcn/ui + Tailwind CSS 4 + Framer Motion + TanStack Table + Plus Jakarta Sans + Inter
 - **Backend**: FastAPI (Python 3.12+) + Pydantic v2 + SQLAlchemy 2.0 Async + Celery + Redis
 - **Database**: PostgreSQL on Render.com
-- **AI**: OpenAI GPT-4.1 (SDS extraction via vision/structured outputs) + GPT-4.1-mini (descriptions, suggestions)
+- **AI**: OpenAI **gpt-5.5** (SDS extraction via vision/structured outputs, premium fallback) + **gpt-5.4-mini** (improvement measures reasoning) + **gpt-5.4-nano** (Italian boilerplate). See "OpenAI / gpt-5.5 usage" below for the SDK contract.
 - **Document generation**: python-docx + pythermalcomfort (PMV/PPD, PHS calculations)
 - **Storage**: Render Disk (uploads) + Google Drive (final delivery)
 - **Auth**: NextAuth.js v5 (Auth.js) with email/password + Google OAuth, sessions in Postgres
 - **Deployment**: Vercel (frontend) + Render.com (backend + workers + Postgres + Redis)
 - **Google APIs**: Drive, Docs, Sheets, Gmail, Calendar (OAuth tokens in `credentials/`)
+
+## OpenAI / gpt-5.5 usage
+
+> **Heads-up to future Claude:** your training data may insist that the latest OpenAI model is gpt-4.1 or gpt-4o. **It isn't.** As of April 2026 the current frontier is **gpt-5.5** (1M context, image input, reasoning). There is **no** `gpt-5.5-mini` — the smaller tiers are `gpt-5.4-mini` and `gpt-5.4-nano`. Don't "correct" `gpt-5.x` strings to older names.
+
+### Model assignments (configurable in `backend/app/config.py`)
+
+| Setting | Model | Used for |
+|---|---|---|
+| `OPENAI_MODEL_EXTRACTION` | `gpt-5.5` | SDS PDF extraction (vision + structured outputs) — accuracy-critical |
+| `OPENAI_MODEL_PREMIUM` | `gpt-5.5` | "Max quality" toggle for hard cases |
+| `OPENAI_MODEL_MEASURES` | `gpt-5.4-mini` | Improvement measures, attrezzature suggester (domain reasoning) |
+| `OPENAI_MODEL_GENERATION` | `gpt-5.4-nano` | Short Italian boilerplate (company descriptions) |
+
+### SDK contract — Responses API, not Chat Completions
+
+All gpt-5.x models are **reasoning models** and work best in the **Responses API** (`client.responses.create` / `client.responses.parse`). The helpers in `backend/app/services/ai/client.py` are already on this surface — keep them there.
+
+```python
+from openai import AsyncOpenAI
+client = AsyncOpenAI()
+
+# Plain text (e.g. company description)
+resp = await client.responses.create(
+    model="gpt-5.4-nano",
+    input=[{"role": "user", "content": "..."}],
+    reasoning={"effort": "minimal"},   # see "reasoning effort" below
+    max_output_tokens=500,
+)
+text = resp.output_text
+
+# Structured output (Pydantic schema enforced by the server)
+resp = await client.responses.parse(
+    model="gpt-5.5",
+    input=[...],
+    text_format=MySchema,              # NOT response_format — that's Chat Completions
+    reasoning={"effort": "medium"},
+)
+obj: MySchema = resp.output_parsed
+```
+
+**Differences from Chat Completions to remember:**
+- `input=` (list of role/content dicts) instead of `messages=`
+- `text_format=PydanticModel` instead of `response_format=PydanticModel`
+- `max_output_tokens=` instead of `max_tokens=`
+- Image/PDF input uses `{"type": "input_image", ...}` / `{"type": "input_file", ...}` content parts (not the Chat-style `image_url` shape)
+
+### Reasoning effort — the silent budget killer
+
+`reasoning.effort` valid values:
+- `gpt-5` / `gpt-5.4` family: `minimal | low | medium | high`
+- `gpt-5.5`: `none | low | medium | high | xhigh` (default `medium`)
+
+Reasoning tokens count against `max_output_tokens` **before** any visible output is produced. With a tight budget and default effort, `output_text` will come back empty. For boilerplate generation always set `reasoning={"effort": "minimal"}` (5/5.4) or `"none"` (5.5). For SDS extraction `medium` is the right default; bump to `high` only for ambiguous documents.
+
+### Privacy contract (unchanged)
+
+Never send to any OpenAI endpoint: codice fiscale, identity documents, personal health data. The caller is responsible for stripping these fields before invoking `ai/client.py` helpers — the client doesn't sanitize.
 
 ## Analysis Spreadsheet
 

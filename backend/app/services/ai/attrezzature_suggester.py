@@ -118,9 +118,10 @@ async def suggest_attrezzature(
 ) -> list[AttrezzaturaSuggerita]:
     """Generate 3-8 typical pieces of equipment for an ambiente.
 
-    Uses OPENAI_MODEL_MEASURES (gpt-5-mini) — needs domain reasoning. The
-    operator reviews each suggestion and ticks which to add as actual
-    Attrezzatura rows (tied to ambiente_id, see Phase 2.3).
+    Uses OPENAI_MODEL_MEASURES (gpt-5.4-mini) at `low` reasoning effort —
+    listing typical equipment for an ambiente type doesn't need deep
+    chain-of-thought. The operator reviews each suggestion and ticks which
+    to add as actual Attrezzatura rows (tied to ambiente_id, see Phase 2.3).
     """
     context = _build_context(ambiente, azienda, existing_descriptions)
     logger.info(

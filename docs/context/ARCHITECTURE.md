@@ -463,14 +463,21 @@ query = select(Azienda).where(Azienda.organization_id == org_id)
 
 ### Model Selection
 
-| Use Case | Model | Why | Est. Cost |
+OpenAI catalog (April 2026): **gpt-5.5** is the current frontier model (1M context, image input, reasoning). Smaller tiers are **gpt-5.4-mini** and **gpt-5.4-nano** — there is **no gpt-5.5-mini**. All gpt-5.x models are reasoning models.
+
+| Use Case | Model | Why | Approx. Cost (per 1M tokens) |
 |----------|-------|-----|-----------|
-| **SDS PDF extraction** | `gpt-4.1` | Vision + structured outputs — reads PDF pages as images + text, extracts into Pydantic schema | ~$0.02/page |
-| **Company description** | `gpt-4.1-mini` | Text generation from structured data, cheaper for creative writing | ~$0.005/request |
-| **Improvement measures** | `gpt-4.1-mini` | Suggests measures based on risk profile, cost-effective | ~$0.005/request |
-| **Batch SDS (600 sheets)** | `gpt-4.1` + Batch API | 50% cost discount on batch, async processing | ~$6-12 per client |
+| **SDS PDF extraction** | `gpt-5.5` | Vision + structured outputs — reads PDF pages as images, extracts into Pydantic schema. Chemical accuracy is critical, so we pay for the flagship. | $5 in / $30 out |
+| **Improvement measures** | `gpt-5.4-mini` | Domain reasoning over hazard tables, cost-balanced | $0.75 in / $4.50 out |
+| **Company description** | `gpt-5.4-nano` | Short Italian boilerplate, latency- and cost-sensitive | $0.20 in / ~$1.60 out |
+| **Premium fallback** | `gpt-5.5` | "Max quality" toggle for hard cases (ambiguous SDS, unusual environments) | $5 in / $30 out |
+| **Batch SDS (600 sheets)** | `gpt-5.5` + Batch API | 50% discount on Batch input, async processing | ~50% off list |
+
+Defaults are env-overridable via `OPENAI_MODEL_EXTRACTION`, `OPENAI_MODEL_GENERATION`, `OPENAI_MODEL_MEASURES`, `OPENAI_MODEL_PREMIUM` (see `backend/app/config.py`).
 
 ### SDS Extraction Architecture
+
+Use the **Responses API** (`client.responses.parse`) with `text_format=<PydanticModel>`. The Responses API is the recommended surface for gpt-5.x; reasoning models work better there than via Chat Completions. The PDF is sent as `input_file` (either base64-encoded or referencing a `client.files.create` upload).
 
 ```python
 from pydantic import BaseModel, Field
@@ -489,15 +496,15 @@ class SDSExtraction(BaseModel):
 
 client = OpenAI()
 
-# Upload SDS PDF via Files API
+# Upload SDS PDF via Files API (or send base64 inline — see ai/client.py)
 file = client.files.create(
     file=open("sds_document.pdf", "rb"),
     purpose="user_data"
 )
 
-# Extract with structured output + vision
+# Extract with structured output + vision via Responses API
 response = client.responses.parse(
-    model="gpt-4.1",
+    model="gpt-5.5",
     input=[
         {
             "role": "system",
@@ -516,11 +523,14 @@ response = client.responses.parse(
             ]
         }
     ],
-    text_format=SDSExtraction,
+    text_format=SDSExtraction,           # Responses API uses text_format (NOT response_format)
+    reasoning={"effort": "medium"},      # gpt-5.5 default; bump to "high" for ambiguous SDSs
 )
 
-extraction = response.output_parsed  # Typed SDSExtraction object
+extraction = response.output_parsed      # Typed SDSExtraction object
 ```
+
+> **Reasoning effort budget.** gpt-5.x models charge for *reasoning tokens* in addition to visible output, and `max_output_tokens` caps the **sum** of both. For boilerplate text generation pin `reasoning={"effort": "minimal"}` (gpt-5/5.4) or `"none"` (gpt-5.5) — otherwise a small budget is silently consumed by reasoning and `output_text` comes back empty. See `backend/app/services/ai/client.py:generate_text`.
 
 ### Privacy Guardrails
 
@@ -679,8 +689,10 @@ DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/dbname
 AUTH_SECRET=your-shared-jwt-secret        # Shared with NextAuth for JWT verification
 
 OPENAI_API_KEY=sk-...
-OPENAI_MODEL_EXTRACTION=gpt-4.1
-OPENAI_MODEL_GENERATION=gpt-4.1-mini
+OPENAI_MODEL_EXTRACTION=gpt-5.5
+OPENAI_MODEL_GENERATION=gpt-5.4-nano
+OPENAI_MODEL_MEASURES=gpt-5.4-mini
+OPENAI_MODEL_PREMIUM=gpt-5.5
 
 GOOGLE_CLIENT_ID=501670694075-...
 GOOGLE_CLIENT_SECRET=...

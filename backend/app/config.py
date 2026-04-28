@@ -20,14 +20,14 @@ class Settings(BaseSettings):
 
     # OpenAI
     OPENAI_API_KEY: str = ""
-    # SDS PDF extraction — vision + structured outputs
-    OPENAI_MODEL_EXTRACTION: str = "gpt-5.4-mini"
+    # SDS PDF extraction — vision + structured outputs (accuracy-critical)
+    OPENAI_MODEL_EXTRACTION: str = "gpt-5.5"
     # Short Italian boilerplate (company descriptions)
-    OPENAI_MODEL_GENERATION: str = "gpt-5-nano"
+    OPENAI_MODEL_GENERATION: str = "gpt-5.4-nano"
     # Domain reasoning for improvement measures
-    OPENAI_MODEL_MEASURES: str = "gpt-5-mini"
-    # Optional "max quality" toggle for hard cases
-    OPENAI_MODEL_PREMIUM: str = "gpt-5.4"
+    OPENAI_MODEL_MEASURES: str = "gpt-5.4-mini"
+    # "Max quality" toggle for hard cases
+    OPENAI_MODEL_PREMIUM: str = "gpt-5.5"
     # Request timeout in seconds (OpenAI default is 10 min, we tighten for UX)
     OPENAI_TIMEOUT_SECONDS: float = 60.0
 

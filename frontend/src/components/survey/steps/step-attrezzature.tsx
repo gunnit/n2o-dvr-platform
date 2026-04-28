@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, useMemo } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { toast } from "sonner";
 import {
   Card,
@@ -13,10 +13,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Trash2, Check, Sparkles, Loader2, X } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Check,
+  Sparkles,
+  Loader2,
+  X,
+  Camera,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/hooks/use-api";
-import type { Ambiente, Attrezzatura } from "@/types";
+import type { Ambiente, AmbienteFoto, Attrezzatura } from "@/types";
 
 interface StepAttrezzatureProps {
   aziendaId: string;
@@ -145,6 +153,14 @@ export function StepAttrezzature({
   >({});
   const [aiLoadingByAmbiente, setAiLoadingByAmbiente] = useState<
     Record<string, boolean>
+  >({});
+  // Photo-vision extraction has its own loading flag so the user can see
+  // which AI source is running. Counts are lazy-fetched on ambiente focus
+  // so we know when to disable the "Estrai dalle foto" button.
+  const [photoExtractLoadingByAmbiente, setPhotoExtractLoadingByAmbiente] =
+    useState<Record<string, boolean>>({});
+  const [fotoCountByAmbiente, setFotoCountByAmbiente] = useState<
+    Record<string, number>
   >({});
 
   // H5 fix: persist attrezzature to the backend so the DVR generator sees them.
@@ -343,6 +359,89 @@ export function StepAttrezzature({
       );
     } finally {
       setAiLoadingByAmbiente((prev) => ({ ...prev, [ambienteId]: false }));
+    }
+  }, [apiFetch, attrezzature, basePath, selectedAmbiente]);
+
+  // Lazy-fetch the photo count for the visible ambiente so we can enable or
+  // disable the "Estrai dalle foto" button. Only fetched once per ambiente
+  // per page-life — re-uploads in step-ambienti during the same session are
+  // rare and a stale 0 just means the button stays disabled until refresh.
+  useEffect(() => {
+    if (!selectedAmbiente) return;
+    const ambienteId = selectedAmbiente.id;
+    if (fotoCountByAmbiente[ambienteId] !== undefined) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const photos = await apiFetch<AmbienteFoto[]>(
+          `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/foto`,
+        );
+        if (cancelled) return;
+        setFotoCountByAmbiente((prev) => ({
+          ...prev,
+          [ambienteId]: photos.length,
+        }));
+      } catch {
+        // Silent fail — button stays disabled, no toast spam on every step
+        // switch. Operator can refresh if needed.
+        if (!cancelled) {
+          setFotoCountByAmbiente((prev) => ({ ...prev, [ambienteId]: 0 }));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAmbiente, aziendaId, fotoCountByAmbiente, apiFetch]);
+
+  // Vision extraction: send the ambiente's photos to the AI to identify
+  // visible equipment. Replaces the existing AI suggestion chip list for
+  // this ambiente — both buttons share the same UI so only one set of
+  // chips is visible at a time.
+  const extractFromPhotos = useCallback(async () => {
+    if (!selectedAmbiente) return;
+    const ambienteId = selectedAmbiente.id;
+    setPhotoExtractLoadingByAmbiente((prev) => ({
+      ...prev,
+      [ambienteId]: true,
+    }));
+    try {
+      const response = await apiFetch<{
+        items: AISuggestion[];
+        photos_used: number;
+      }>(`${basePath}/estrai-foto/${ambienteId}`, { method: "POST" });
+      const existing = new Set(
+        attrezzature
+          .filter((a) => a.ambiente_id === ambienteId)
+          .map((a) => a.descrizione.toLowerCase().trim()),
+      );
+      const filtered = response.items.filter(
+        (i) => !existing.has(i.descrizione.toLowerCase().trim()),
+      );
+      setAiSuggestionsByAmbiente((prev) => ({
+        ...prev,
+        [ambienteId]: filtered,
+      }));
+      if (filtered.length === 0) {
+        toast.info(
+          response.photos_used === 0
+            ? "Nessuna foto utilizzabile per l'estrazione."
+            : "L'AI non ha identificato attrezzature nelle foto.",
+        );
+      } else {
+        toast.success(
+          `Identificate ${filtered.length} attrezzature da ${response.photos_used} foto.`,
+        );
+      }
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Errore nell'estrazione dalle foto",
+      );
+    } finally {
+      setPhotoExtractLoadingByAmbiente((prev) => ({
+        ...prev,
+        [ambienteId]: false,
+      }));
     }
   }, [apiFetch, attrezzature, basePath, selectedAmbiente]);
 
@@ -602,8 +701,19 @@ export function StepAttrezzature({
       {selectedAmbiente && (() => {
         const ambienteId = selectedAmbiente.id;
         const aiLoading = aiLoadingByAmbiente[ambienteId] === true;
+        const photoLoading =
+          photoExtractLoadingByAmbiente[ambienteId] === true;
+        const anyLoading = aiLoading || photoLoading;
         const aiSuggestions = aiSuggestionsByAmbiente[ambienteId] ?? [];
         const hasSuggestions = aiSuggestions.length > 0;
+        const fotoCount = fotoCountByAmbiente[ambienteId];
+        const fotoCountKnown = fotoCount !== undefined;
+        const hasPhotos = (fotoCount ?? 0) > 0;
+        const photoButtonTitle = !fotoCountKnown
+          ? "Caricamento foto in corso..."
+          : !hasPhotos
+            ? "Carica almeno una foto nell'ambiente (passo 3) prima di estrarre con AI."
+            : `Estrai attrezzature dalle ${fotoCount} foto caricate per questo ambiente.`;
 
         return (
           <Card className="border-violet-200 bg-violet-50/30 dark:border-violet-900/40 dark:bg-violet-950/10">
@@ -623,7 +733,7 @@ export function StepAttrezzature({
                     . Clicca su una proposta per aggiungerla.
                   </CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {hasSuggestions && (
                     <Button
                       type="button"
@@ -640,7 +750,7 @@ export function StepAttrezzature({
                     variant="outline"
                     size="sm"
                     onClick={fetchAISuggestions}
-                    disabled={aiLoading}
+                    disabled={anyLoading}
                     className="border-violet-300 text-violet-700 hover:bg-violet-100 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-900/30"
                   >
                     {aiLoading ? (
@@ -652,6 +762,28 @@ export function StepAttrezzature({
                       <>
                         <Sparkles className="mr-1.5 h-3.5 w-3.5" />
                         {hasSuggestions ? "Rigenera" : "Genera con AI"}
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={extractFromPhotos}
+                    disabled={anyLoading || !hasPhotos}
+                    title={photoButtonTitle}
+                    className="border-violet-300 text-violet-700 hover:bg-violet-100 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-900/30"
+                  >
+                    {photoLoading ? (
+                      <>
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        Analisi foto...
+                      </>
+                    ) : (
+                      <>
+                        <Camera className="mr-1.5 h-3.5 w-3.5" />
+                        Estrai dalle foto
+                        {hasPhotos ? ` (${fotoCount})` : ""}
                       </>
                     )}
                   </Button>

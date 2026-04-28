@@ -2,7 +2,7 @@
 
 Given a chemical Safety Data Sheet PDF, extracts the structured fields
 required for the SostanzaChimica record using OpenAI vision + structured
-outputs (gpt-5.4-mini by default).
+outputs (gpt-5.5 by default — chemical accuracy is critical).
 
 Privacy: SDS files contain only chemical/product information — no personal
 data — so they are explicitly authorized for AI processing per CLAUDE.md.

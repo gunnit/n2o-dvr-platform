@@ -81,6 +81,12 @@ tmp/
 /feedback-*.png
 /guida-*.png
 /logo-*.png
+/apri-*.png
+/company-*.png
+/firma-*.png
+/retest-*.png
+/riepilogo-*.png
+/sopralluogo-*.png
 /QA-REPORT-*.md
 
 # Session continuation notes (working doc, regenerated each session)

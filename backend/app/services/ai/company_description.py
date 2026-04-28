@@ -79,7 +79,7 @@ def _build_context(azienda: Azienda) -> str:
 async def generate_company_description(azienda: Azienda) -> str:
     """Generate the Italian DVR Part I company description.
 
-    Uses OPENAI_MODEL_GENERATION (default gpt-5-nano) — cheap boilerplate.
+    Uses OPENAI_MODEL_GENERATION (default gpt-5.4-nano) — cheap boilerplate.
     Caller is responsible for persisting the result (typically to
     Azienda.descrizione_attivita) and for handling AIError.
     """

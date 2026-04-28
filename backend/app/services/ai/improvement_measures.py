@@ -122,7 +122,8 @@ def _build_risk_context(rischio: ValutazioneRischio) -> str:
 async def suggest_measures(rischio: ValutazioneRischio) -> list[MisuraSuggerita]:
     """Generate 2-5 improvement measures for a single risk.
 
-    Uses OPENAI_MODEL_MEASURES (default gpt-5-mini) -- needs domain reasoning.
+    Uses OPENAI_MODEL_MEASURES (default gpt-5.4-mini) — needs domain reasoning.
+    Default `low` effort suffices for single-risk measure suggestions.
     Raises AIError on API failure.
     """
     context = _build_risk_context(rischio)

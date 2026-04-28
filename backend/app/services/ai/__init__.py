@@ -3,7 +3,13 @@ from app.services.ai.attrezzature_suggester import (
     AttrezzatureSuggerite,
     suggest_attrezzature,
 )
+from app.services.ai.attrezzature_vision_extractor import (
+    AttrezzaturaIdentificata,
+    AttrezzatureIdentificate,
+    extract_attrezzature_from_photos,
+)
 from app.services.ai.client import (
+    extract_from_images,
     extract_from_pdf,
     generate_structured,
     generate_text,
@@ -37,6 +43,7 @@ __all__ = [
     "generate_text",
     "generate_structured",
     "extract_from_pdf",
+    "extract_from_images",
     # SDS extraction
     "extract_sds",
     "to_db_dict",
@@ -52,6 +59,10 @@ __all__ = [
     "suggest_attrezzature",
     "AttrezzaturaSuggerita",
     "AttrezzatureSuggerite",
+    # Attrezzature vision extraction (from ambiente photos)
+    "extract_attrezzature_from_photos",
+    "AttrezzaturaIdentificata",
+    "AttrezzatureIdentificate",
     # Mansione protocol suggestions (Phase 5.1 + 5.2)
     "suggest_mansione_protocol",
     "MansioneProtocolSuggerito",

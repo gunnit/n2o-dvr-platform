@@ -211,9 +211,12 @@ async def suggest_rischi(
     canonical RISK_CATEGORY_NAMES list and clamps P/D to defaults if
     missing.
 
-    Uses OPENAI_MODEL_MEASURES (gpt-5-mini) — needs domain reasoning over
+    Uses OPENAI_MODEL_MEASURES (gpt-5.4-mini) — needs domain reasoning over
     11 categories at once; costlier than the simpler suggesters but still
-    a single round-trip.
+    a single round-trip. Runs at `medium` reasoning effort because the
+    model has to weigh applicability AND default P/D for each of the 11
+    categories simultaneously — `low` produced visibly weaker P/D scoring
+    in spot checks.
     """
     context = _build_context(ambiente, azienda, attrezzature)
     catalog = _format_categories_for_prompt()
@@ -233,6 +236,7 @@ async def suggest_rischi(
         prompt=prompt,
         schema=RischiSuggeriti,
         system=SYSTEM_PROMPT,
+        reasoning_effort="medium",
     )
 
     # Server-side filter: accept only the 11 canonical short names.

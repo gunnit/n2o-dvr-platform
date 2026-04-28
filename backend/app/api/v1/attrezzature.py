@@ -1,22 +1,38 @@
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.db.session import get_db
 from app.dependencies import get_current_org
 from app.models.ambiente import Ambiente
+from app.models.ambiente_foto import AmbienteFoto
 from app.models.attrezzatura import Attrezzatura
 from app.models.azienda import Azienda
 from app.schemas.attrezzatura import AttrezzaturaCreate, AttrezzaturaResponse, AttrezzaturaUpdate
-from app.services.ai import AttrezzaturaSuggerita, suggest_attrezzature
+from app.services.ai import (
+    AttrezzaturaIdentificata,
+    AttrezzaturaSuggerita,
+    extract_attrezzature_from_photos,
+    suggest_attrezzature,
+)
+
+# Photos sent to OpenAI input_image must be in one of these formats; HEIC
+# is rejected (would need server-side conversion).
+_OPENAI_VISION_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 
 
 class SuggestAttrezzatureResponse(BaseModel):
     items: list[AttrezzaturaSuggerita]
+
+
+class ExtractAttrezzatureFromPhotosResponse(BaseModel):
+    items: list[AttrezzaturaIdentificata]
+    photos_used: int
 
 
 router = APIRouter(prefix="/aziende/{azienda_id}/attrezzature", tags=["attrezzature"])
@@ -167,6 +183,84 @@ async def suggerisci_attrezzature(
 
     items = await suggest_attrezzature(amb, azienda, list(existing))
     return SuggestAttrezzatureResponse(items=items)
+
+
+@router.post(
+    "/estrai-foto/{ambiente_id}",
+    response_model=ExtractAttrezzatureFromPhotosResponse,
+)
+async def estrai_attrezzature_da_foto(
+    azienda_id: uuid.UUID,
+    ambiente_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Vision-extract attrezzature visible in the ambiente's photos.
+
+    The model identifies equipment in the photos uploaded to step-ambienti.
+    Returns suggestions the operator can review and tick into actual
+    Attrezzatura rows. Never persists; only the explicit POST on
+    /aziende/{id}/attrezzature does.
+
+    Returns 400 if no usable photos are attached (HEIC photos are skipped
+    because OpenAI input_image rejects them).
+    """
+    azienda = await _get_azienda(azienda_id, org_id, db)
+    amb = (
+        await db.execute(
+            select(Ambiente).where(
+                Ambiente.id == ambiente_id, Ambiente.azienda_id == azienda_id
+            )
+        )
+    ).scalar_one_or_none()
+    if amb is None:
+        raise NotFoundError("Ambiente not found")
+
+    foto_rows = (
+        await db.execute(
+            select(AmbienteFoto).where(AmbienteFoto.ambiente_id == ambiente_id)
+        )
+    ).scalars().all()
+    if not foto_rows:
+        raise BadRequestError(
+            "Nessuna foto caricata per questo ambiente. Carica almeno una "
+            "foto prima di estrarre con AI."
+        )
+
+    # Keep only formats OpenAI can ingest; HEIC silently skipped to avoid
+    # blowing up when an iPhone upload sneaks through. Verify the file is
+    # actually on disk too — Render Disk attaches across deploys but a
+    # missing file shouldn't crash the whole call.
+    usable_paths: list[Path] = []
+    for foto in foto_rows:
+        if foto.content_type not in _OPENAI_VISION_MIME_TYPES:
+            continue
+        path = Path(foto.file_path)
+        if not path.is_file():
+            continue
+        usable_paths.append(path)
+
+    if not usable_paths:
+        raise BadRequestError(
+            "Nessuna foto utilizzabile per l'estrazione (formati supportati: "
+            "JPEG, PNG, WebP, GIF). Le foto HEIC non sono supportate."
+        )
+
+    existing = (
+        await db.execute(
+            select(Attrezzatura.descrizione).where(
+                Attrezzatura.ambiente_id == ambiente_id
+            )
+        )
+    ).scalars().all()
+
+    items = await extract_attrezzature_from_photos(
+        amb, azienda, list(usable_paths), list(existing)
+    )
+    return ExtractAttrezzatureFromPhotosResponse(
+        items=items,
+        photos_used=len(usable_paths),
+    )
 
 
 @router.delete("/{attrezzatura_id}", status_code=204)
