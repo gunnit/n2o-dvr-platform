@@ -647,7 +647,7 @@ export default function PeeProceduresPage() {
                     className={cn(
                       "rounded-md border p-3",
                       proc.personalizzata
-                        ? "border-sky-300 bg-sky-100 dark:border-sky-700 dark:bg-sky-950/40"
+                        ? "border-sky-300 bg-sky-100"
                         : "border-border bg-background"
                     )}
                   >

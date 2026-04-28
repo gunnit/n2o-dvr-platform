@@ -18,9 +18,9 @@ const TOOLTIP: Record<Allegato, string> = {
 // Base band colors (reuse the project palette: emerald/amber/rose).
 // A = rose (maximum severity), B = amber, C = emerald (soft warning).
 const CLASSNAME: Record<Allegato, string> = {
-  A: "bg-rose-500/15 text-rose-700 ring-rose-500/30 dark:text-rose-400",
-  B: "bg-amber-500/15 text-amber-800 ring-amber-500/30 dark:text-amber-300",
-  C: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-400",
+  A: "bg-rose-500/15 text-rose-700 ring-rose-500/30",
+  B: "bg-amber-500/15 text-amber-800 ring-amber-500/30",
+  C: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30",
 };
 
 export function AllegatoBadge({ allegato }: { allegato: Allegato }) {

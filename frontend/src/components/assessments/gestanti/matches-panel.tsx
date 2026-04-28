@@ -44,14 +44,14 @@ export function MatchesPanel({ data, onDecide }: Props) {
 
   if (data.cleared) {
     return (
-      <Card className="border-emerald-300 bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-950/40">
+      <Card className="border-emerald-300 bg-emerald-100">
         <CardContent className="flex items-start gap-3 py-4">
-          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-700 dark:text-emerald-300" />
+          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-700" />
           <div>
-            <p className="text-sm font-semibold text-emerald-950 dark:text-emerald-100">
+            <p className="text-sm font-semibold text-emerald-950">
               Nessun rischio identificato
             </p>
-            <p className="text-xs text-emerald-900 dark:text-emerald-200">
+            <p className="text-xs text-emerald-900">
               La mansione{" "}
               <span className="font-medium text-foreground">
                 {data.worker_mansione ?? "—"}
@@ -112,7 +112,7 @@ function MatchRow({
           {match.is_new && (
             <Badge
               variant="secondary"
-              className="bg-amber-500/20 text-amber-800 dark:text-amber-300"
+              className="bg-amber-500/20 text-amber-800"
               title="Questo rischio e' stato introdotto dopo l'ultima valutazione salvata per questa lavoratrice."
             >
               Nuovo
@@ -123,8 +123,8 @@ function MatchRow({
               variant="outline"
               className={cn(
                 match.decision === "accept"
-                  ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-400"
-                  : "border-rose-500/40 text-rose-700 dark:text-rose-400",
+                  ? "border-emerald-500/40 text-emerald-700"
+                  : "border-rose-500/40 text-rose-700",
               )}
             >
               {match.decision === "accept" ? "Accettata" : "Rifiutata"}

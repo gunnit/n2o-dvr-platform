@@ -295,9 +295,9 @@ const AREA_LABELS: Record<AreaCode, string> = {
 };
 
 const BAND_CLASS: Record<Livello, string> = {
-  BASSO: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-400",
-  MEDIO: "bg-amber-500/15 text-amber-800 ring-amber-500/30 dark:text-amber-300",
-  ALTO: "bg-rose-500/15 text-rose-700 ring-rose-500/30 dark:text-rose-400",
+  BASSO: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30",
+  MEDIO: "bg-amber-500/15 text-amber-800 ring-amber-500/30",
+  ALTO: "bg-rose-500/15 text-rose-700 ring-rose-500/30",
 };
 
 function LivelloBadge({
@@ -339,7 +339,7 @@ function AnswerButton({
         "rounded-md px-2.5 py-1 text-xs font-medium ring-1 transition-colors",
         active
           ? tone === "danger"
-            ? "bg-rose-500/15 text-rose-700 ring-rose-500/40 dark:text-rose-400"
+            ? "bg-rose-500/15 text-rose-700 ring-rose-500/40"
             : "bg-primary/10 text-primary ring-primary/40"
           : "bg-background text-muted-foreground ring-border hover:bg-muted",
       )}
@@ -532,7 +532,7 @@ export function StressChecklist({ aziendaId, onResultChange }: StressChecklistPr
       {showUnanswered && result.unanswered.length > 0 && (
         <div
           role="alert"
-          className="rounded-md border border-amber-300 bg-amber-100 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+          className="rounded-md border border-amber-300 bg-amber-100 px-4 py-3 text-sm text-amber-900"
         >
           <strong className="font-medium">Valutazione incompleta</strong> — rispondi a tutti gli{" "}
           {result.unanswered.length} indicatori evidenziati prima di confermare.
@@ -585,7 +585,7 @@ export function StressChecklist({ aziendaId, onResultChange }: StressChecklistPr
                         data-id={ind.id}
                         className={cn(
                           "flex flex-wrap items-center justify-between gap-3 py-2.5",
-                          flagged && "bg-amber-100 -mx-3 rounded-md px-3 dark:bg-amber-950/40",
+                          flagged && "bg-amber-100 -mx-3 rounded-md px-3",
                         )}
                       >
                         <div className="min-w-0 flex-1">

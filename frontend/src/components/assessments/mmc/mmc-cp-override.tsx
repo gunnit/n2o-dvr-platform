@@ -169,13 +169,13 @@ export function MmcCpOverride({
         </div>
 
         {lookupError && (
-          <p className="text-[11px] text-amber-700 dark:text-amber-400">
+          <p className="text-[11px] text-amber-700">
             {lookupError}
           </p>
         )}
 
         {editing && (
-          <div className="grid gap-3 rounded-md border border-amber-300 bg-amber-100 p-3 dark:border-amber-700 dark:bg-amber-950/40">
+          <div className="grid gap-3 rounded-md border border-amber-300 bg-amber-100 p-3">
             <div className="grid gap-1.5">
               <Label htmlFor="cp-override" className="text-xs">
                 Nuovo valore CP (kg)

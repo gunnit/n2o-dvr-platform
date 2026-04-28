@@ -206,13 +206,13 @@ export function VdtForm({ aziendaId, onSummaryChange }: VdtFormProps) {
           </div>
           <div className="flex items-center justify-between rounded-md bg-rose-500/10 px-3 py-2">
             <span className="text-muted-foreground">Esposti</span>
-            <span className="font-medium tabular-nums text-rose-700 dark:text-rose-400">
+            <span className="font-medium tabular-nums text-rose-700">
               {summary.esposti}
             </span>
           </div>
           <div className="flex items-center justify-between rounded-md bg-emerald-500/10 px-3 py-2">
             <span className="text-muted-foreground">Non esposti</span>
-            <span className="font-medium tabular-nums text-emerald-700 dark:text-emerald-400">
+            <span className="font-medium tabular-nums text-emerald-700">
               {summary.non_esposti}
             </span>
           </div>
@@ -307,12 +307,12 @@ export function VdtForm({ aziendaId, onSummaryChange }: VdtFormProps) {
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     {w.esposizione === "ESPOSTO" && (
-                      <span className="inline-flex items-center rounded-md bg-rose-500/15 px-2.5 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-500/30 dark:text-rose-400">
+                      <span className="inline-flex items-center rounded-md bg-rose-500/15 px-2.5 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-500/30">
                         ESPOSTO
                       </span>
                     )}
                     {w.esposizione === "NON_ESPOSTO" && (
-                      <span className="inline-flex items-center rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-500/30 dark:text-emerald-400">
+                      <span className="inline-flex items-center rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-500/30">
                         NON ESPOSTO
                       </span>
                     )}
@@ -350,7 +350,7 @@ export function VdtForm({ aziendaId, onSummaryChange }: VdtFormProps) {
       {hasEsposti && (
         <div
           className={cn(
-            "rounded-md border border-amber-300 bg-amber-100 p-4 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200",
+            "rounded-md border border-amber-300 bg-amber-100 p-4 text-xs text-amber-900",
           )}
         >
           <div className="font-medium">Sorveglianza sanitaria obbligatoria</div>

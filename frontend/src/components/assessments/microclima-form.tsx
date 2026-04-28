@@ -119,18 +119,18 @@ function CategoryBadge({
 }) {
   if (category === "FUORI_SOGLIA") {
     return (
-      <span className="inline-flex items-center rounded-md bg-rose-500/15 px-2.5 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-500/30 dark:text-rose-400">
+      <span className="inline-flex items-center rounded-md bg-rose-500/15 px-2.5 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-500/30">
         Fuori soglia
       </span>
     );
   }
   const tone = compliant
     ? category === "A"
-      ? "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-400"
+      ? "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30"
       : category === "B"
-      ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/25 dark:text-emerald-400"
-      : "bg-amber-500/15 text-amber-800 ring-amber-500/30 dark:text-amber-300"
-    : "bg-rose-500/15 text-rose-700 ring-rose-500/30 dark:text-rose-400";
+      ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/25"
+      : "bg-amber-500/15 text-amber-800 ring-amber-500/30"
+    : "bg-rose-500/15 text-rose-700 ring-rose-500/30";
   return (
     <span
       className={cn(
@@ -386,8 +386,8 @@ export function MicroclimaPmvForm({
               className={cn(
                 "tabular-nums",
                 result?.compliant
-                  ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-400"
-                  : "border-rose-500/40 text-rose-700 dark:text-rose-400",
+                  ? "border-emerald-500/40 text-emerald-700"
+                  : "border-rose-500/40 text-rose-700",
               )}
             >
               {result
@@ -559,10 +559,10 @@ export const DEFAULT_PHS_INPUTS: PhsInputs = {
 function LivelloBadge({ livello }: { livello: string }) {
   const tone =
     livello === "ACCETTABILE"
-      ? "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-400"
+      ? "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30"
       : livello === "LIMITE"
-      ? "bg-amber-500/15 text-amber-800 ring-amber-500/30 dark:text-amber-300"
-      : "bg-rose-500/15 text-rose-700 ring-rose-500/30 dark:text-rose-400";
+      ? "bg-amber-500/15 text-amber-800 ring-amber-500/30"
+      : "bg-rose-500/15 text-rose-700 ring-rose-500/30";
   return (
     <span
       className={cn(
@@ -709,7 +709,7 @@ export function MicroclimaPhsForm({
   return (
     <div className="space-y-6">
       {/* Scope note */}
-      <div className="rounded-md border border-amber-300 bg-amber-100 p-3 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+      <div className="rounded-md border border-amber-300 bg-amber-100 p-3 text-xs text-amber-900">
         <div className="font-medium">Ambito di applicazione</div>
         <p className="mt-0.5 leading-relaxed">
           Applicabile solo per esposizioni a caldo severo (es. fonderie,
@@ -722,7 +722,7 @@ export function MicroclimaPhsForm({
       {result && result.d_lim < PHS_CRITICAL_DLIM_MIN && (
         <div
           role="alert"
-          className="flex items-start gap-3 rounded-md border border-rose-400/60 bg-rose-50 p-3 text-rose-900 shadow-sm dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100"
+          className="flex items-start gap-3 rounded-md border border-rose-400/60 bg-rose-50 p-3 text-rose-900 shadow-sm"
         >
           <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" aria-hidden="true" />
           <div>

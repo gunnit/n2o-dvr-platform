@@ -716,7 +716,7 @@ export function StepAttrezzature({
             : `Estrai attrezzature dalle ${fotoCount} foto caricate per questo ambiente.`;
 
         return (
-          <Card className="border-violet-300 bg-violet-100 dark:border-violet-700 dark:bg-violet-950/40">
+          <Card className="border-violet-300 bg-violet-100">
             <CardHeader className="pb-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">
@@ -751,7 +751,7 @@ export function StepAttrezzature({
                     size="sm"
                     onClick={fetchAISuggestions}
                     disabled={anyLoading}
-                    className="border-violet-300 text-violet-700 hover:bg-violet-100 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-900/30"
+                    className="border-violet-300 text-violet-700 hover:bg-violet-100"
                   >
                     {aiLoading ? (
                       <>
@@ -772,7 +772,7 @@ export function StepAttrezzature({
                     onClick={extractFromPhotos}
                     disabled={anyLoading || !hasPhotos}
                     title={photoButtonTitle}
-                    className="border-violet-300 text-violet-700 hover:bg-violet-100 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-900/30"
+                    className="border-violet-300 text-violet-700 hover:bg-violet-100"
                   >
                     {photoLoading ? (
                       <>
@@ -799,7 +799,7 @@ export function StepAttrezzature({
                       type="button"
                       onClick={() => acceptAISuggestion(s)}
                       title={s.motivazione}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-3 py-2 text-sm font-medium text-violet-800 transition-colors hover:bg-violet-50 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-200 dark:hover:bg-violet-900/40"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-3 py-2 text-sm font-medium text-violet-800 transition-colors hover:bg-violet-50"
                     >
                       <Plus className="h-3.5 w-3.5" />
                       {s.descrizione}

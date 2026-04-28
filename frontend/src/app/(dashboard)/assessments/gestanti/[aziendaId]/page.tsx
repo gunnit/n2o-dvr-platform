@@ -297,7 +297,7 @@ export default function GestantiAssessmentPage() {
             <Badge variant="secondary">Allegato Gestanti</Badge>
             <span>D.Lgs. 151/2001 · Allegati A / B / C</span>
             {dirty && (
-              <Badge variant="outline" className="border-amber-500/50 text-amber-700 dark:text-amber-400">
+              <Badge variant="outline" className="border-amber-500/50 text-amber-700">
                 Modifiche non salvate
               </Badge>
             )}
@@ -458,7 +458,7 @@ export default function GestantiAssessmentPage() {
                 className={
                   saveMessage.startsWith("Errore")
                     ? "mt-1 text-xs text-destructive"
-                    : "mt-1 text-xs text-emerald-700 dark:text-emerald-400"
+                    : "mt-1 text-xs text-emerald-700"
                 }
               >
                 {saveMessage}

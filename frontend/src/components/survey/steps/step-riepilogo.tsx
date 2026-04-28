@@ -65,13 +65,13 @@ interface StepRiepilogoProps {
 function getLivelloStyle(livello: string) {
   switch (livello) {
     case "ACCETTABILE":
-      return "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800";
+      return "bg-green-100 text-green-800 border-green-200";
     case "MODESTO":
-      return "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800";
+      return "bg-yellow-100 text-yellow-800 border-yellow-200";
     case "GRAVE":
-      return "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800";
+      return "bg-orange-100 text-orange-800 border-orange-200";
     case "GRAVISSIMO":
-      return "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800";
+      return "bg-red-100 text-red-800 border-red-200";
     default:
       return "";
   }
@@ -688,7 +688,7 @@ export function StepRiepilogo({
       {/* Firma del Cliente */}
       <Card
         className={cn(
-          isSigned && "border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20",
+          isSigned && "border-green-200 bg-green-50",
         )}
       >
         <CardHeader>
@@ -706,8 +706,8 @@ export function StepRiepilogo({
         <CardContent>
           {!isComplete ? (
             /* Warning banner — survey incomplete */
-            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-900/20">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-yellow-800 dark:text-yellow-400">
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-yellow-800">
                 <AlertTriangle className="h-4 w-4" />
                 Completa il sopralluogo prima di firmare
               </div>
@@ -716,7 +716,7 @@ export function StepRiepilogo({
                   <li key={item.label}>
                     <button
                       type="button"
-                      className="text-sm text-yellow-800 underline underline-offset-2 hover:text-yellow-900 dark:text-yellow-400 dark:hover:text-yellow-300"
+                      className="text-sm text-yellow-800 underline underline-offset-2 hover:text-yellow-900"
                       onClick={() => onGoToStep(item.step)}
                     >
                       {item.label}
@@ -740,7 +740,7 @@ export function StepRiepilogo({
                 <DetailRow label="Firmato da" value={signedByNameProp} />
               )}
               {signatureDataUrl && (
-                <div className="rounded-lg border border-input bg-white p-2 dark:bg-muted/30">
+                <div className="rounded-lg border border-input bg-white p-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={signatureDataUrl}
@@ -772,7 +772,7 @@ export function StepRiepilogo({
                 </p>
                 <canvas
                   ref={canvasRef}
-                  className="w-full cursor-crosshair touch-none rounded-lg border border-input bg-white dark:bg-muted/30"
+                  className="w-full cursor-crosshair touch-none rounded-lg border border-input bg-white"
                   style={{ height: 200 }}
                   onMouseDown={startDraw}
                   onMouseMove={draw}

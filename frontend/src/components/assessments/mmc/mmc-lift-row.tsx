@@ -22,7 +22,7 @@ interface Props {
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
-  return <p className="text-[11px] text-rose-600 dark:text-rose-400">{message}</p>;
+  return <p className="text-[11px] text-rose-600">{message}</p>;
 }
 
 export function MmcLiftRow({
@@ -39,11 +39,11 @@ export function MmcLiftRow({
 
   const bandClass =
     result?.zona === "VERDE"
-      ? "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-400"
+      ? "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30"
       : result?.zona === "GIALLA"
-      ? "bg-amber-500/15 text-amber-800 ring-amber-500/30 dark:text-amber-300"
+      ? "bg-amber-500/15 text-amber-800 ring-amber-500/30"
       : result?.zona === "ROSSA"
-      ? "bg-rose-500/15 text-rose-700 ring-rose-500/30 dark:text-rose-400"
+      ? "bg-rose-500/15 text-rose-700 ring-rose-500/30"
       : "bg-muted text-muted-foreground";
 
   return (

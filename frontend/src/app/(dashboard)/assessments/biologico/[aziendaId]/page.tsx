@@ -166,7 +166,7 @@ export default function BiologicoAssessmentPage({
             {dirty && (
               <Badge
                 variant="outline"
-                className="border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300"
+                className="border-amber-500/40 bg-amber-500/10 text-amber-800"
               >
                 Modifiche non salvate
               </Badge>
@@ -205,8 +205,8 @@ export default function BiologicoAssessmentPage({
                   "mt-1 text-xs",
                   saveMessage.startsWith("Errore") ||
                     saveMessage.startsWith("Valutazione salvata in locale")
-                    ? "text-amber-700 dark:text-amber-400"
-                    : "text-emerald-700 dark:text-emerald-400",
+                    ? "text-amber-700"
+                    : "text-emerald-700",
                 )}
               >
                 {saveMessage}

@@ -20,7 +20,7 @@ export function IncendioVvfBanner({ visible }: IncendioVvfBannerProps) {
   return (
     <div
       role="alert"
-      className="sticky top-0 z-20 mb-4 flex items-start gap-3 rounded-md border border-rose-400/60 bg-rose-50 p-3 text-rose-900 shadow-sm dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100"
+      className="sticky top-0 z-20 mb-4 flex items-start gap-3 rounded-md border border-rose-400/60 bg-rose-50 p-3 text-rose-900 shadow-sm"
     >
       <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" aria-hidden="true" />
       <div>

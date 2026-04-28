@@ -441,7 +441,7 @@ export function StepDpiRischi({
                   type="button"
                   onClick={() => flagWithAi(selectedMansione)}
                   disabled={aiLoadingByMansione[selectedMansione] === true}
-                  className="inline-flex h-8 items-center gap-2 rounded-md border border-violet-300 bg-violet-50 px-3 text-xs font-medium text-violet-800 transition-colors hover:bg-violet-100 disabled:opacity-60 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-200 dark:hover:bg-violet-900/40"
+                  className="inline-flex h-8 items-center gap-2 rounded-md border border-violet-300 bg-violet-50 px-3 text-xs font-medium text-violet-800 transition-colors hover:bg-violet-100 disabled:opacity-60"
                 >
                   {aiLoadingByMansione[selectedMansione] ? (
                     <>

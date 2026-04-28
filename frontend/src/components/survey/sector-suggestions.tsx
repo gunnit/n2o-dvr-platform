@@ -86,8 +86,8 @@ export function SectorSuggestions({ aziendaId }: { aziendaId: string }) {
 
   return (
     <>
-      <div className="flex flex-col gap-2 rounded-lg border border-emerald-300 bg-emerald-100 px-4 py-3 text-sm dark:border-emerald-700 dark:bg-emerald-950/40 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 text-emerald-950 dark:text-emerald-100">
+      <div className="flex flex-col gap-2 rounded-lg border border-emerald-300 bg-emerald-100 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-2 text-emerald-950">
           <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
             <p className="font-semibold">
@@ -96,7 +96,7 @@ export function SectorSuggestions({ aziendaId }: { aziendaId: string }) {
                 ? ` (ATECO ${summary.ateco_prefix}xx)`
                 : ""}
             </p>
-            <p className="text-xs text-emerald-900 dark:text-emerald-200">
+            <p className="text-xs text-emerald-900">
               Vedi attrezzature, rischi e sostanze ricorrenti — usali come
               punto di partenza.
             </p>
@@ -107,7 +107,7 @@ export function SectorSuggestions({ aziendaId }: { aziendaId: string }) {
           variant="outline"
           size="sm"
           onClick={() => setOpen(true)}
-          className="border-emerald-300 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-200 dark:hover:bg-emerald-900/30"
+          className="border-emerald-300 text-emerald-800 hover:bg-emerald-100"
         >
           <History className="mr-1.5 h-3.5 w-3.5" />
           Vedi consigli del settore

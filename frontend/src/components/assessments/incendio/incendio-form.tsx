@@ -123,10 +123,10 @@ export const DEFAULT_AREA: IncendioFormValues["areas"][number] = {
 
 export const BAND_CLASS: Record<FireLivello, string> = {
   Basso:
-    "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-400",
+    "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30",
   Medio:
-    "bg-amber-500/15 text-amber-800 ring-amber-500/30 dark:text-amber-300",
-  Alto: "bg-rose-500/15 text-rose-700 ring-rose-500/30 dark:text-rose-400",
+    "bg-amber-500/15 text-amber-800 ring-amber-500/30",
+  Alto: "bg-rose-500/15 text-rose-700 ring-rose-500/30",
 };
 
 // ---------------------------------------------------------------------------

@@ -426,7 +426,7 @@ export function VersionHistory({
                         )}
 
                         {version.status === "bozza" && version.error_message && (
-                          <p className="text-xs text-amber-700 dark:text-amber-400">
+                          <p className="text-xs text-amber-700">
                             {version.error_message}
                           </p>
                         )}

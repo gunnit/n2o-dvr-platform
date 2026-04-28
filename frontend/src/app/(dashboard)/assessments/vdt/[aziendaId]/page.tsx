@@ -174,7 +174,7 @@ export default function VdtAssessmentPage() {
                   finalizeMessage.startsWith("Errore") ||
                     finalizeMessage.startsWith("Discrepanza")
                     ? "text-destructive"
-                    : "text-emerald-700 dark:text-emerald-400",
+                    : "text-emerald-700",
                 )}
               >
                 {finalizeMessage}

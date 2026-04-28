@@ -363,7 +363,7 @@ export default function HaccpAssessmentPage() {
         </div>
       )}
       {toast && (
-        <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
+        <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800">
           {toast}
         </div>
       )}
@@ -448,7 +448,7 @@ export default function HaccpAssessmentPage() {
               className={cn(
                 "text-xs",
                 dirty
-                  ? "text-amber-700 dark:text-amber-400"
+                  ? "text-amber-700"
                   : "text-muted-foreground",
               )}
             >
@@ -679,20 +679,20 @@ export default function HaccpAssessmentPage() {
           </DialogHeader>
 
           <div className="space-y-3 py-2 text-sm">
-            <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-900/20">
-              <p className="font-medium text-emerald-900 dark:text-emerald-300">
+            <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3">
+              <p className="font-medium text-emerald-900">
                 Unisci (consigliato)
               </p>
-              <p className="mt-1 text-xs text-emerald-900/80 dark:text-emerald-300/80">
+              <p className="mt-1 text-xs text-emerald-900/80">
                 Mantiene le righe che hai modificato + i CCP personalizzati, e
                 aggiunge i nuovi CCP dal catalogo.
               </p>
             </div>
-            <div className="rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
-              <p className="font-medium text-amber-900 dark:text-amber-300">
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
+              <p className="font-medium text-amber-900">
                 Sostituisci
               </p>
-              <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-300/80">
+              <p className="mt-1 text-xs text-amber-900/80">
                 Cancella tutti i CCP esistenti e carica solo i default della
                 nuova tipologia. Le personalizzazioni vanno perse.
               </p>

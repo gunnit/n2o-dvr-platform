@@ -196,7 +196,7 @@ export default function IncendioAssessmentPage() {
         {dirty && (
           <Badge
             variant="outline"
-            className="border-amber-400/60 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+            className="border-amber-400/60 bg-amber-50 text-amber-800"
           >
             Modifiche non salvate
           </Badge>
@@ -257,7 +257,7 @@ export default function IncendioAssessmentPage() {
                   saveMessage.startsWith("Errore") ||
                     saveMessage.startsWith("Discrepanza")
                     ? "text-destructive"
-                    : "text-emerald-700 dark:text-emerald-400",
+                    : "text-emerald-700",
                 )}
               >
                 {saveMessage}

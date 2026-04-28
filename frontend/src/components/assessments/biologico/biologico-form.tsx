@@ -77,9 +77,9 @@ const SETTORE_META: Record<Settore, { label: string; normativa: string }> = {
 };
 
 const CRITICITA_BADGE: Record<Criticita, string> = {
-  alta: "bg-rose-500/15 text-rose-700 ring-rose-500/30 dark:text-rose-400",
-  media: "bg-amber-500/15 text-amber-800 ring-amber-500/30 dark:text-amber-300",
-  bassa: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-400",
+  alta: "bg-rose-500/15 text-rose-700 ring-rose-500/30",
+  media: "bg-amber-500/15 text-amber-800 ring-amber-500/30",
+  bassa: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30",
 };
 
 const CRITICITA_LABEL: Record<Criticita, string> = {
@@ -89,9 +89,9 @@ const CRITICITA_LABEL: Record<Criticita, string> = {
 };
 
 const BAND_CLASS: Record<LivelloRischio, string> = {
-  BASSO: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-400",
-  MEDIO: "bg-amber-500/15 text-amber-800 ring-amber-500/30 dark:text-amber-300",
-  ALTO: "bg-rose-500/15 text-rose-700 ring-rose-500/30 dark:text-rose-400",
+  BASSO: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30",
+  MEDIO: "bg-amber-500/15 text-amber-800 ring-amber-500/30",
+  ALTO: "bg-rose-500/15 text-rose-700 ring-rose-500/30",
 };
 
 // ---------------------------------------------------------------------------
@@ -221,10 +221,10 @@ function AnswerButton({
         "rounded-md px-2.5 py-1 text-xs font-medium ring-1 transition-colors",
         active
           ? tone === "danger"
-            ? "bg-rose-500/15 text-rose-700 ring-rose-500/40 dark:text-rose-400"
+            ? "bg-rose-500/15 text-rose-700 ring-rose-500/40"
             : tone === "muted"
             ? "bg-muted text-muted-foreground ring-border"
-            : "bg-emerald-500/15 text-emerald-700 ring-emerald-500/40 dark:text-emerald-400"
+            : "bg-emerald-500/15 text-emerald-700 ring-emerald-500/40"
           : "bg-background text-muted-foreground ring-border hover:bg-muted",
       )}
     >
@@ -538,7 +538,7 @@ export function BiologicoForm({
           {loadError && (
             <div
               role="alert"
-              className="rounded-md border border-rose-300 bg-rose-100 px-4 py-3 text-sm text-rose-900 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-200"
+              className="rounded-md border border-rose-300 bg-rose-100 px-4 py-3 text-sm text-rose-900"
             >
               <strong className="font-medium">Errore:</strong> {loadError}
             </div>

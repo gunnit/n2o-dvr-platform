@@ -535,13 +535,13 @@ function getLivello(
 function getLivelloStyle(livello: string) {
   switch (livello) {
     case "ACCETTABILE":
-      return "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800";
+      return "bg-green-100 text-green-800 border-green-200";
     case "MODESTO":
-      return "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800";
+      return "bg-yellow-100 text-yellow-800 border-yellow-200";
     case "GRAVE":
-      return "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800";
+      return "bg-orange-100 text-orange-800 border-orange-200";
     case "GRAVISSIMO":
-      return "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800";
+      return "bg-red-100 text-red-800 border-red-200";
     default:
       return "";
   }
@@ -962,7 +962,7 @@ export function StepRischi({
           mutation) — the row data is already up-to-date thanks to the
           allValutazioni reseed, so no destructive action is offered. */}
       {ambientiChanged && (
-        <div className="flex flex-col gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <div>
@@ -978,7 +978,7 @@ export function StepRischi({
             type="button"
             variant="outline"
             size="sm"
-            className="border-amber-400 text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900/30"
+            className="border-amber-400 text-amber-900 hover:bg-amber-100"
             onClick={() => onAcknowledgeAmbienti(currentAmbientiSig)}
           >
             Ho rivisto
@@ -1053,7 +1053,7 @@ export function StepRischi({
                 !selectedAmbiente ||
                 aiLoadingByAmbiente[selectedAmbiente.id] === true
               }
-              className="border-violet-300 text-violet-700 hover:bg-violet-100 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-900/30"
+              className="border-violet-300 text-violet-700 hover:bg-violet-100"
             >
               {selectedAmbiente &&
               aiLoadingByAmbiente[selectedAmbiente.id] ? (
@@ -1081,7 +1081,7 @@ export function StepRischi({
         <CardContent>
           {/* Phase 8.3 — AI sintesi banner for the current ambiente */}
           {selectedAmbiente && aiSintesiByAmbiente[selectedAmbiente.id] && (
-            <div className="mb-4 flex items-start gap-2 rounded-lg border border-violet-300 bg-violet-100 px-3 py-2 text-xs text-violet-900 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-200">
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-violet-300 bg-violet-100 px-3 py-2 text-xs text-violet-900">
               <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-600" />
               <p>{aiSintesiByAmbiente[selectedAmbiente.id]}</p>
             </div>
@@ -1187,7 +1187,7 @@ export function StepRischi({
                             return (
                               <span
                                 title={tooltip}
-                                className="inline-flex w-fit items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200"
+                                className="inline-flex w-fit items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800"
                               >
                                 <Wrench className="h-3 w-3" />
                                 Suggerito da attrezzature

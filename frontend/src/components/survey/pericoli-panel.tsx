@@ -76,13 +76,13 @@ function getLivello(indice: number): LivelloRischio {
 
 const LIVELLO_STYLE: Record<LivelloRischio, string> = {
   ACCETTABILE:
-    "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800",
+    "bg-green-100 text-green-800 border-green-200",
   MODESTO:
-    "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800",
+    "bg-yellow-100 text-yellow-800 border-yellow-200",
   GRAVE:
-    "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800",
+    "bg-orange-100 text-orange-800 border-orange-200",
   GRAVISSIMO:
-    "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800",
+    "bg-red-100 text-red-800 border-red-200",
 };
 
 export function PericoliPanel({
@@ -420,7 +420,7 @@ export function PericoliPanel({
                                 {p.source === "custom" && (
                                   <Badge
                                     variant="outline"
-                                    className="border-blue-200 bg-blue-50 text-[9px] text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300"
+                                    className="border-blue-200 bg-blue-50 text-[9px] text-blue-700"
                                   >
                                     Personalizzato
                                   </Badge>
@@ -428,7 +428,7 @@ export function PericoliPanel({
                                 {isDelegated && (
                                   <Badge
                                     variant="outline"
-                                    className="border-purple-200 bg-purple-50 text-[9px] text-purple-700 dark:border-purple-800 dark:bg-purple-950/30 dark:text-purple-300"
+                                    className="border-purple-200 bg-purple-50 text-[9px] text-purple-700"
                                   >
                                     {p.valutazione_riferimento}
                                   </Badge>
@@ -551,7 +551,7 @@ export function PericoliPanel({
                           {s.matches_ambiente && (
                             <Badge
                               variant="outline"
-                              className="border-emerald-200 bg-emerald-50 text-[9px] text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+                              className="border-emerald-200 bg-emerald-50 text-[9px] text-emerald-700"
                             >
                               <Sparkles className="mr-0.5 h-2.5 w-2.5" />
                               Adatto all'ambiente
@@ -560,7 +560,7 @@ export function PericoliPanel({
                           {s.triggered_by_attrezzature.length > 0 && (
                             <Badge
                               variant="outline"
-                              className="border-amber-200 bg-amber-50 text-[9px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+                              className="border-amber-200 bg-amber-50 text-[9px] text-amber-800"
                             >
                               <Wrench className="mr-0.5 h-2.5 w-2.5" />
                               {s.triggered_by_attrezzature.join(", ")}

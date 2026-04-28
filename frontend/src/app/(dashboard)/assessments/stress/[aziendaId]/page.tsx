@@ -419,11 +419,11 @@ export default function StressAssessmentPage() {
                 className={cn(
                   "inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium ring-1",
                   result.livello === "BASSO" &&
-                    "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-400",
+                    "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30",
                   result.livello === "MEDIO" &&
-                    "bg-amber-500/15 text-amber-800 ring-amber-500/30 dark:text-amber-300",
+                    "bg-amber-500/15 text-amber-800 ring-amber-500/30",
                   result.livello === "ALTO" &&
-                    "bg-rose-500/15 text-rose-700 ring-rose-500/30 dark:text-rose-400",
+                    "bg-rose-500/15 text-rose-700 ring-rose-500/30",
                 )}
               >
                 {result.livello}
@@ -508,7 +508,7 @@ export default function StressAssessmentPage() {
                   "mt-1 text-xs",
                   finalizeMessage.startsWith("Errore")
                     ? "text-destructive"
-                    : "text-emerald-700 dark:text-emerald-400",
+                    : "text-emerald-700",
                 )}
               >
                 {finalizeMessage}
