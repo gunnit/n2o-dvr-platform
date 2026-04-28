@@ -39,6 +39,10 @@ out/
 # Tool artifacts
 .playwright-mcp/
 
+# Local audit / scratch dirs (working notes, never deploy)
+.audit/
+.scratch/
+
 # Python
 *.egg
 *.whl
@@ -87,6 +91,10 @@ tmp/
 /retest-*.png
 /riepilogo-*.png
 /sopralluogo-*.png
+/login-*.png
+/register-*.png
+/pericoli-*.png
+/valutazione-*.png
 /QA-REPORT-*.md
 
 # Session continuation notes (working doc, regenerated each session)
