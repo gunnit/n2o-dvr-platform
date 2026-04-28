@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 from app.services.ai.client import generate_structured
 from app.services.azienda_autofill.firecrawl import FirecrawlScrape
 from app.services.azienda_autofill.serper import SerperResult
+from app.services.azienda_autofill.snippet_extractor import ExtractedFacts
 from app.services.azienda_autofill.vies import VIESResult
 
 logger = logging.getLogger(__name__)
@@ -81,20 +82,28 @@ class ConsolidatedAzienda(BaseModel):
 
 
 SYSTEM_PROMPT = """Sei un assistente esperto di registri imprese italiani.
-Devi estrarre i dati dell'azienda dalle fonti web fornite (VIES + risultati Google + sito aziendale).
+Devi estrarre i dati dell'azienda dalle fonti web fornite (VIES + fatti deterministici dal Registro Imprese + risultati Google + sito aziendale).
 
-Regole:
-- Restituisci SOLO dati supportati dalle fonti. Se un dato non è chiaramente presente, lascia il campo a null.
-- I dati VIES sono autoritativi: NON sovrascrivere ragione_sociale, sede_legale_via, sede_legale_citta, cap_legale, provincia_legale se VIES li ha forniti.
-- Non inventare valori. Mai dedurre il codice fiscale dal nome. Mai dedurre il numero dipendenti.
-- forma_giuridica deve essere una delle sigle ufficiali: SRL, SRLS, SPA, SAPA, SNC, SAS, SCARL, SCRL, "Ditta Individuale", "Società Semplice", "Cooperativa", "Consorzio".
-- codice_ateco deve avere formato XX.XX o XX.XX.XX. Solo cifre e punti.
-- provincia_legale / provincia_operativa sono sigle di 2 lettere maiuscole (RM, MI, NA, ...).
-- cap_legale / cap_operativa sono codici postali italiani di 5 cifre.
-- numero_dipendenti_dichiarati è un intero positivo. Se la fonte dice 'circa 50' usa 50.
-- capitale_sociale è il valore numerico in euro (50000.0 non '50.000 €').
-- attivita è una descrizione concisa in italiano del settore / oggetto sociale, NON una pubblicità.
-- NON includere dati personali (nomi, codici fiscali di persone fisiche, indirizzi privati).
+Regole di priorità:
+1. I dati VIES e i FATTI DETERMINISTICI sono autoritativi. NON sovrascriverli, NON contraddirli.
+2. Quando uno snippet di Google contiene una formulazione esplicita "Campo: valore" (esempi: "Codice Ateco: 62.01", "REA: BR-180454", "Capitale Sociale: € 10.000", "PEC: x@pec.it"), DEVI restituire quel valore. Non lasciarlo a null per cautela.
+3. Per i campi descrittivi (attivita) puoi sintetizzare tu, basandoti sui dati di settore/oggetto sociale presenti negli snippet o nel sito aziendale.
+4. Se un dato NON è presente in nessuna fonte, lascia il campo a null. Mai inventare.
+
+Regole di formato:
+- forma_giuridica: una delle sigle ufficiali: SRL, SRLS, SPA, SAPA, SNC, SAS, SCARL, SCRL, "Ditta Individuale", "Società Semplice", "Cooperativa", "Consorzio".
+- codice_ateco: formato XX.XX o XX.XX.XX. Solo cifre e punti.
+- provincia_legale / provincia_operativa: sigle di 2 lettere maiuscole (RM, MI, NA, ...).
+- cap_legale / cap_operativa: codici postali italiani di 5 cifre.
+- numero_dipendenti_dichiarati: intero positivo (>= 1). Se la fonte dice 'circa 50' usa 50. Mai dedurre, mai stimare.
+- capitale_sociale: valore numerico in euro (50000.0 non '50.000 €'). Mai inferire da fatturato o stipendi.
+- data_costituzione: formato YYYY-MM-DD. L'anno DEVE essere >= 1900, altrimenti lascia null.
+- attivita: 1-2 frasi in italiano del settore / oggetto sociale, NON una pubblicità.
+- pec / email: minuscolo.
+- sito_web: URL completo con https://.
+
+Privacy:
+- NON includere dati personali (nomi, codici fiscali di persone fisiche, indirizzi privati di soci o amministratori).
 """
 
 
@@ -114,6 +123,37 @@ def _format_vies(vies: VIESResult | None) -> str:
         parts.append(f"- provincia_legale: {vies.provincia_legale}")
     if vies.raw_address and not (vies.sede_legale_via and vies.cap_legale):
         parts.append(f"- indirizzo grezzo: {vies.raw_address}")
+    return "\n".join(parts)
+
+
+def _format_facts(facts: ExtractedFacts) -> str:
+    """Render the deterministic snippet-extracted facts as a fixed block.
+
+    These come from registry-formatted "Field: value" matches (regex,
+    not AI), so they're treated as ground truth on equal footing with
+    VIES. Listing them explicitly here prevents the consolidator from
+    "playing it safe" and dropping values that are right there in the
+    snippets.
+    """
+    parts: list[str] = ["Fatti deterministici dal Registro Imprese (autoritativo, NON sovrascrivere):"]
+    if facts.codice_ateco:
+        parts.append(f"- codice_ateco: {facts.codice_ateco}")
+    if facts.rea:
+        parts.append(f"- rea: {facts.rea}")
+    if facts.pec:
+        parts.append(f"- pec: {facts.pec}")
+    if facts.codice_fiscale:
+        parts.append(f"- codice_fiscale: {facts.codice_fiscale}")
+    if facts.capitale_sociale is not None:
+        parts.append(f"- capitale_sociale: {facts.capitale_sociale}")
+    if facts.forma_giuridica:
+        parts.append(f"- forma_giuridica: {facts.forma_giuridica}")
+    if facts.sito_web:
+        parts.append(f"- sito_web: {facts.sito_web}")
+    if facts.telefono:
+        parts.append(f"- telefono: {facts.telefono}")
+    if len(parts) == 1:
+        parts.append("(nessun fatto deterministico estratto)")
     return "\n".join(parts)
 
 
@@ -143,10 +183,11 @@ async def consolidate(
     *,
     partita_iva: str,
     vies: VIESResult | None,
+    facts: ExtractedFacts,
     serper_results: list[SerperResult],
     firecrawl_scrape: FirecrawlScrape | None,
 ) -> ConsolidatedAzienda:
-    """Run the AI consolidator over the three raw sources.
+    """Run the AI consolidator over the four raw sources.
 
     Uses ``OPENAI_MODEL_MEASURES`` (gpt-5.4-mini) with low reasoning effort
     — this is structured-extraction, not deep reasoning. Total prompt is
@@ -156,15 +197,17 @@ async def consolidate(
         [
             f"Partita IVA: {partita_iva}",
             _format_vies(vies),
+            _format_facts(facts),
             _format_serper(serper_results),
             _format_firecrawl(firecrawl_scrape),
-            "Estrai i dati dell'azienda secondo lo schema. Lascia null i campi non supportati.",
+            "Estrai i dati dell'azienda secondo lo schema. Per ogni 'Campo: valore' esplicito negli snippet, RIPORTA il valore. Lascia null solo i campi davvero non supportati.",
         ]
     )
     logger.info(
-        "Consolidating autofill for %s (vies=%s, serper=%d, firecrawl=%s)",
+        "Consolidating autofill for %s (vies=%s, facts_keys=%d, serper=%d, firecrawl=%s)",
         partita_iva,
         bool(vies and vies.is_valid),
+        sum(1 for f in (facts.codice_ateco, facts.rea, facts.pec, facts.codice_fiscale, facts.capitale_sociale, facts.forma_giuridica, facts.sito_web, facts.telefono) if f),
         len(serper_results),
         bool(firecrawl_scrape),
     )

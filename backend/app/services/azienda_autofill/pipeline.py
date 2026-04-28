@@ -31,6 +31,11 @@ from app.services.azienda_autofill.consolidator import (
 )
 from app.services.azienda_autofill.firecrawl import scrape_site
 from app.services.azienda_autofill.serper import SerperResult, search_piva
+from app.services.azienda_autofill.snippet_extractor import (
+    ExtractedFacts,
+    extract_from_snippets,
+    source_url_for,
+)
 from app.services.azienda_autofill.vies import VIESResult, lookup_vies
 
 logger = logging.getLogger(__name__)
@@ -39,47 +44,81 @@ logger = logging.getLogger(__name__)
 # Domains that look like company homepages — used to filter Serper results
 # down to a likely "sito_web" target. We exclude registries, directories,
 # and aggregators because their pages are about the company, not the
-# company's own site.
+# company's own site. The list grows over time as we hit new registries
+# in the wild (PUGLIAI test 2026-04-28 surfaced fatturatoitalia +
+# registroaziende that weren't in the first cut).
 _NON_HOMEPAGE_DOMAINS = (
+    # Italian camera-di-commercio registries / aggregators
     "registroimprese.it",
     "ufficiocamerale.it",
+    "fatturatoitalia.it",
+    "registroaziende.it",
+    "infoaziende.it",
+    "imprese.io",
+    "infoimprese.it",
+    "telematicocb.it",
+    "guidamonaci.it",
+    "tuttitalia.it",
+    "partitaiva.online",
+    "partitaiva.it",
+    "aziende.virgilio.it",
+    "italiainformazioni.com",
+    "kompass.com",
+    "europages.it",
+    "europages.com",
+    "dnb.com",
+    # Maps / directories
     "paginebianche.it",
     "paginegialle.it",
-    "telematicocb.it",
-    "infoimprese.it",
+    # Social
     "linkedin.com",
     "facebook.com",
     "instagram.com",
+    "twitter.com",
+    "x.com",
+    # Search / encyclopaedia / video
     "google.com",
+    "bing.com",
     "wikipedia.org",
     "youtube.com",
+    # Govt
     "europa.eu",
-    "guidamonaci.it",
     "aifa.gov.it",
+    "agenziaentrate.gov.it",
+    "gazzettaufficiale.it",
 )
 
 
-def _pick_homepage(serper: list[SerperResult]) -> str | None:
+def _pick_homepage(serper: list[SerperResult], partita_iva: str | None = None) -> str | None:
     """Pick the most likely company homepage from Serper results.
 
-    Heuristic: first organic link whose domain isn't a known directory
-    /registry. We don't try anything smarter — the consolidator gets all
-    the snippets anyway, so even a wrong pick here only costs one
-    Firecrawl call's worth of irrelevant markdown.
+    Two filters:
+      1. Exclude known registry / directory / social domains.
+      2. Exclude URLs whose path contains the P.IVA — those are profile
+         pages on aggregators we haven't seen before (the path-PIVA
+         pattern is the universal tell of an aggregator).
+
+    We don't try anything smarter than that — the consolidator gets all
+    the snippets anyway, so a wrong pick only costs one Firecrawl call's
+    worth of irrelevant markdown.
     """
     for r in serper:
         if not r.link:
             continue
         try:
-            host = urlparse(r.link).hostname or ""
+            parsed = urlparse(r.link)
         except ValueError:
             continue
-        host = host.lower().lstrip("www.")
+        host = (parsed.hostname or "").lower()
+        if host.startswith("www."):
+            host = host[4:]
         if not host:
             continue
         if any(host == d or host.endswith("." + d) for d in _NON_HOMEPAGE_DOMAINS):
             continue
-        return f"{urlparse(r.link).scheme}://{urlparse(r.link).hostname}/"
+        if partita_iva and partita_iva in (parsed.path or ""):
+            continue
+        return f"{parsed.scheme}://{parsed.hostname}/"
     return None
 
 
@@ -127,11 +166,26 @@ def _normalize_cap(value: str | None) -> str | None:
     return digits if len(digits) == 5 else None
 
 
+def _plausible_data_costituzione(value: Any) -> Any:
+    """Drop hallucinated dates with year < 1900 (LLM sometimes fabricates
+    '0101-01-01' from a REA / postcode it parsed as a year)."""
+    if value is None:
+        return None
+    try:
+        year = int(str(value)[:4])
+    except (TypeError, ValueError):
+        return None
+    if year < 1900:
+        return None
+    return value
+
+
 def _build_response(
     *,
     partita_iva: str,
     vies: VIESResult | None,
     serper: list[SerperResult],
+    facts: ExtractedFacts,
     homepage_url: str | None,
     consolidated: ConsolidatedAzienda | None,
     warnings: list[str],
@@ -140,8 +194,10 @@ def _build_response(
 
     Priority (highest first):
       1. VIES — anything it returned for ragione sociale + sede legale
-      2. AI consolidator — everything else
-      3. Heuristics — sito_web inferred from homepage_url even if AI missed
+      2. ExtractedFacts — deterministic regex over Serper snippets
+         (ATECO, REA, PEC, CF, capitale, forma giuridica, telefono, sito)
+      3. AI consolidator — everything else (descriptive fields, gaps)
+      4. Heuristics — sito_web inferred from homepage_url even if AI missed
 
     Each populated field gets a meta entry with confidence + source.
     """
@@ -165,6 +221,25 @@ def _build_response(
         _set("sede_legale_citta", vies.sede_legale_citta, "high", "VIES")
         _set("cap_legale", vies.cap_legale, "high", "VIES")
         _set("provincia_legale", vies.provincia_legale, "high", "VIES")
+
+    # 2. Deterministic snippet extractors — medium confidence, but the
+    # fields are explicit "Field: value" matches in registry-formatted
+    # text, so they're far more reliable than AI inference. Each has the
+    # source URL of the snippet it came from for the verify-tooltip.
+    _ext_specs: tuple[tuple[str, Any, str], ...] = (
+        ("codice_ateco", facts.codice_ateco, "Registro Imprese (snippet)"),
+        ("rea", facts.rea, "Registro Imprese (snippet)"),
+        ("pec", facts.pec, "Registro Imprese (snippet)"),
+        ("codice_fiscale", facts.codice_fiscale, "Registro Imprese (snippet)"),
+        ("capitale_sociale", facts.capitale_sociale, "Registro Imprese (snippet)"),
+        ("forma_giuridica", facts.forma_giuridica, "Registro Imprese (snippet)"),
+        ("sito_web", facts.sito_web, "Registro Imprese (snippet)"),
+        ("telefono", facts.telefono, "Registro Imprese (snippet)"),
+    )
+    for field, value, source in _ext_specs:
+        if field in values:
+            continue
+        _set(field, value, "medium", source, source_url_for(facts, field, serper))
 
     # 2. AI consolidator — medium confidence (snippet-derived) or low (markdown-derived)
     if consolidated:
@@ -199,6 +274,9 @@ def _build_response(
         consolidated_dict["provincia_operativa"] = _normalize_provincia(consolidated_dict.get("provincia_operativa"))
         consolidated_dict["cap_legale"] = _normalize_cap(consolidated_dict.get("cap_legale"))
         consolidated_dict["cap_operativa"] = _normalize_cap(consolidated_dict.get("cap_operativa"))
+        consolidated_dict["data_costituzione"] = _plausible_data_costituzione(
+            consolidated_dict.get("data_costituzione")
+        )
         for field, (source, conf) in ai_fields.items():
             if field in values:
                 continue  # VIES already supplied this
@@ -252,8 +330,16 @@ async def autofill_from_piva(partita_iva: str) -> AziendaAutofillResponse:
     if not serper:
         warnings.append("Ricerca Google non disponibile (Serper key mancante o errore).")
 
-    # Pick a homepage and scrape it — Firecrawl waits on Serper.
-    homepage_url = _pick_homepage(serper)
+    # Deterministic snippet extraction (no network, no AI). These are
+    # the "Field: value" hits from registry snippets — ATECO, REA, PEC,
+    # capitale, forma giuridica, etc. Treated as ground truth alongside
+    # VIES.
+    facts = extract_from_snippets(serper)
+
+    # Prefer the snippet-extracted sito_web if we got one — it points
+    # straight at the company's own site (registry pages list it
+    # explicitly), bypassing the homepage-pick heuristic.
+    homepage_url = facts.sito_web or _pick_homepage(serper, partita_iva)
     firecrawl_scrape = await scrape_site(homepage_url) if homepage_url else None
     if homepage_url and firecrawl_scrape is None:
         warnings.append(f"Scrape del sito {homepage_url} non riuscito.")
@@ -264,6 +350,7 @@ async def autofill_from_piva(partita_iva: str) -> AziendaAutofillResponse:
         consolidated = await consolidate(
             partita_iva=partita_iva,
             vies=vies,
+            facts=facts,
             serper_results=serper,
             firecrawl_scrape=firecrawl_scrape,
         )
@@ -275,6 +362,7 @@ async def autofill_from_piva(partita_iva: str) -> AziendaAutofillResponse:
         partita_iva=partita_iva,
         vies=vies,
         serper=serper,
+        facts=facts,
         homepage_url=homepage_url,
         consolidated=consolidated,
         warnings=warnings,
