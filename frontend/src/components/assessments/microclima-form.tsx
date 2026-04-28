@@ -709,7 +709,7 @@ export function MicroclimaPhsForm({
   return (
     <div className="space-y-6">
       {/* Scope note */}
-      <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-900 dark:text-amber-200">
+      <div className="rounded-md border border-amber-300 bg-amber-100 p-3 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
         <div className="font-medium">Ambito di applicazione</div>
         <p className="mt-0.5 leading-relaxed">
           Applicabile solo per esposizioni a caldo severo (es. fonderie,

@@ -61,10 +61,10 @@ function describeDelta(days: number): string {
 function WorkerRow({ row, tone }: { row: SurveillanceWorkerRow; tone: "amber" | "rose" }) {
   const toneClasses =
     tone === "rose"
-      ? "border-rose-300 bg-rose-100 dark:border-rose-700 dark:bg-rose-950/40"
-      : "border-amber-300 bg-amber-100 dark:border-amber-700 dark:bg-amber-950/40";
+      ? "border-[rgba(186,26,26,0.3)] bg-[rgba(186,26,26,0.06)]"
+      : "border-[rgba(155,104,41,0.3)] bg-[rgba(245,158,11,0.08)]";
   const deltaClasses =
-    tone === "rose" ? "text-rose-700 dark:text-rose-400" : "text-amber-800 dark:text-amber-300";
+    tone === "rose" ? "text-[#ba1a1a]" : "text-[#9b6829]";
   const display = row.nominativo ?? row.postazione;
   return (
     <li
@@ -72,23 +72,23 @@ function WorkerRow({ row, tone }: { row: SurveillanceWorkerRow; tone: "amber" | 
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-medium">{display}</p>
+          <p className="truncate font-medium text-[#061b31]">{display}</p>
           <Link
             href={`/aziende/${row.azienda_id}`}
-            className="truncate text-xs text-muted-foreground hover:underline"
+            className="truncate text-xs text-[#64748d] hover:underline"
           >
             {row.azienda_ragione_sociale}
           </Link>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
+          <p className="mt-0.5 text-[11px] text-[#64748d]">
             Postazione: {row.postazione}
             {row.eta_50_plus ? " · over 50 (biennale)" : ""}
           </p>
         </div>
         <div className="text-right">
-          <p className="text-xs font-medium tabular-nums">
+          <p className="text-xs font-medium tabular-nums text-[#061b31]">
             {formatItalianDate(row.data_prossima_visita)}
           </p>
-          <p className={`text-[11px] ${deltaClasses}`}>{describeDelta(row.days_until_due)}</p>
+          <p className={`text-[11px] font-medium ${deltaClasses}`}>{describeDelta(row.days_until_due)}</p>
         </div>
       </div>
     </li>
@@ -136,14 +136,14 @@ export function SurveillanceAlerts() {
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {/* Scadute — red, most urgent, always first */}
-      <Card className="border-rose-200 dark:border-rose-900/40">
+      <Card className="border-[rgba(186,26,26,0.25)]">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-rose-600" aria-hidden />
+            <AlertTriangle className="h-4 w-4 text-[#ba1a1a]" aria-hidden />
             <CardTitle className="text-sm font-medium">
               Visite sorveglianza scadute
             </CardTitle>
-            <Badge className="ml-auto bg-rose-100 text-rose-800">
+            <Badge variant="destructive" className="ml-auto">
               {scadute.length}
             </Badge>
           </div>
@@ -154,7 +154,7 @@ export function SurveillanceAlerts() {
         </CardHeader>
         <CardContent>
           {scadute.length === 0 ? (
-            <p className="py-2 text-xs text-muted-foreground">
+            <p className="py-2 text-xs text-[#64748d]">
               Nessuna visita scaduta.
             </p>
           ) : (
@@ -163,7 +163,7 @@ export function SurveillanceAlerts() {
                 <WorkerRow key={row.valutazione_id} row={row} tone="rose" />
               ))}
               {scadute.length > 5 && (
-                <li className="pt-1 text-xs text-muted-foreground">
+                <li className="pt-1 text-xs text-[#64748d]">
                   + altri {scadute.length - 5} lavoratori
                 </li>
               )}
@@ -173,14 +173,14 @@ export function SurveillanceAlerts() {
       </Card>
 
       {/* In scadenza — amber, upcoming */}
-      <Card className="border-amber-200 dark:border-amber-900/40">
+      <Card className="border-[rgba(155,104,41,0.3)]">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
-            <CalendarClock className="h-4 w-4 text-amber-600" aria-hidden />
+            <CalendarClock className="h-4 w-4 text-[#9b6829]" aria-hidden />
             <CardTitle className="text-sm font-medium">
               Visite in scadenza
             </CardTitle>
-            <Badge className="ml-auto bg-amber-100 text-amber-800">
+            <Badge className="ml-auto bg-[rgba(245,158,11,0.14)] text-[#9b6829] border-[rgba(155,104,41,0.3)]">
               {inScadenza.length}
             </Badge>
           </div>
@@ -191,7 +191,7 @@ export function SurveillanceAlerts() {
         </CardHeader>
         <CardContent>
           {inScadenza.length === 0 ? (
-            <p className="py-2 text-xs text-muted-foreground">
+            <p className="py-2 text-xs text-[#64748d]">
               Nessuna visita in scadenza nel periodo.
             </p>
           ) : (
@@ -200,7 +200,7 @@ export function SurveillanceAlerts() {
                 <WorkerRow key={row.valutazione_id} row={row} tone="amber" />
               ))}
               {inScadenza.length > 5 && (
-                <li className="pt-1 text-xs text-muted-foreground">
+                <li className="pt-1 text-xs text-[#64748d]">
                   + altri {inScadenza.length - 5} lavoratori
                 </li>
               )}

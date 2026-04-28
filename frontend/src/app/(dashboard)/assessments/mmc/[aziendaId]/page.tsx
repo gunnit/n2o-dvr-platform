@@ -143,8 +143,8 @@ export default function MmcAssessmentPage() {
           className={cn(
             "rounded-md border px-4 py-3 text-sm",
             finalizeMessage.startsWith("Errore")
-              ? "border-rose-500/40 bg-rose-50/40 text-rose-700 dark:bg-rose-950/20 dark:text-rose-300"
-              : "border-emerald-500/40 bg-emerald-50/40 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300",
+              ? "border-rose-300 bg-rose-100 text-rose-900 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-200"
+              : "border-emerald-300 bg-emerald-100 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200",
           )}
         >
           {finalizeMessage}

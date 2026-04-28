@@ -61,7 +61,7 @@ export function MmcMeasures({
   const add = () => setItems((prev) => [...prev, ""]);
 
   return (
-    <Card className="border-rose-400/40 bg-rose-50/40 dark:bg-rose-950/20">
+    <Card className="border-rose-300 bg-rose-100 dark:border-rose-700 dark:bg-rose-950/40">
       <CardHeader className="flex flex-row items-center gap-2 border-b">
         <AlertTriangle className="h-5 w-5 text-rose-600" />
         <CardTitle className="text-sm">

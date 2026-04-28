@@ -918,9 +918,9 @@ export default function DuvriListPage() {
                     className={cn(
                       "rounded-md border p-3",
                       s.decision === "accept" &&
-                        "border-emerald-300 bg-emerald-50/30",
+                        "border-emerald-300 bg-emerald-100",
                       s.decision === "reject" &&
-                        "border-slate-300 bg-slate-50/50 opacity-70"
+                        "border-slate-300 bg-slate-100 opacity-70"
                     )}
                   >
                     <div className="mb-2 flex flex-wrap items-center gap-1.5">

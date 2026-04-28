@@ -538,7 +538,7 @@ export function BiologicoForm({
           {loadError && (
             <div
               role="alert"
-              className="rounded-md border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-900 dark:text-rose-200"
+              className="rounded-md border border-rose-300 bg-rose-100 px-4 py-3 text-sm text-rose-900 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-200"
             >
               <strong className="font-medium">Errore:</strong> {loadError}
             </div>

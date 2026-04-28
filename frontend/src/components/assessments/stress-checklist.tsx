@@ -532,7 +532,7 @@ export function StressChecklist({ aziendaId, onResultChange }: StressChecklistPr
       {showUnanswered && result.unanswered.length > 0 && (
         <div
           role="alert"
-          className="rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200"
+          className="rounded-md border border-amber-300 bg-amber-100 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
         >
           <strong className="font-medium">Valutazione incompleta</strong> — rispondi a tutti gli{" "}
           {result.unanswered.length} indicatori evidenziati prima di confermare.
@@ -585,7 +585,7 @@ export function StressChecklist({ aziendaId, onResultChange }: StressChecklistPr
                         data-id={ind.id}
                         className={cn(
                           "flex flex-wrap items-center justify-between gap-3 py-2.5",
-                          flagged && "bg-amber-500/5 -mx-3 rounded-md px-3",
+                          flagged && "bg-amber-100 -mx-3 rounded-md px-3 dark:bg-amber-950/40",
                         )}
                       >
                         <div className="min-w-0 flex-1">

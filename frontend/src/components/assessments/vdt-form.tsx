@@ -350,7 +350,7 @@ export function VdtForm({ aziendaId, onSummaryChange }: VdtFormProps) {
       {hasEsposti && (
         <div
           className={cn(
-            "rounded-md border border-amber-500/30 bg-amber-500/5 p-4 text-xs text-amber-900 dark:text-amber-200",
+            "rounded-md border border-amber-300 bg-amber-100 p-4 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200",
           )}
         >
           <div className="font-medium">Sorveglianza sanitaria obbligatoria</div>

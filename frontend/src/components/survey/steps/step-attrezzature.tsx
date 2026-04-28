@@ -716,7 +716,7 @@ export function StepAttrezzature({
             : `Estrai attrezzature dalle ${fotoCount} foto caricate per questo ambiente.`;
 
         return (
-          <Card className="border-violet-200 bg-violet-50/30 dark:border-violet-900/40 dark:bg-violet-950/10">
+          <Card className="border-violet-300 bg-violet-100 dark:border-violet-700 dark:bg-violet-950/40">
             <CardHeader className="pb-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">

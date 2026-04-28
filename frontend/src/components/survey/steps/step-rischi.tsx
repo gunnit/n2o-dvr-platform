@@ -1081,7 +1081,7 @@ export function StepRischi({
         <CardContent>
           {/* Phase 8.3 — AI sintesi banner for the current ambiente */}
           {selectedAmbiente && aiSintesiByAmbiente[selectedAmbiente.id] && (
-            <div className="mb-4 flex items-start gap-2 rounded-lg border border-violet-200 bg-violet-50/50 px-3 py-2 text-xs text-violet-900 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-200">
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-violet-300 bg-violet-100 px-3 py-2 text-xs text-violet-900 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-200">
               <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-600" />
               <p>{aiSintesiByAmbiente[selectedAmbiente.id]}</p>
             </div>

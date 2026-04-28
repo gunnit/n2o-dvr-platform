@@ -559,7 +559,7 @@ export function VersionHistory({
                         <td
                           className={
                             "whitespace-pre-wrap break-words border-b px-2 py-1 " +
-                            (isAI ? "bg-violet-50/60 " : "") +
+                            (isAI ? "bg-violet-100 " : "") +
                             (row.kind === "removed"
                               ? "bg-red-50 text-red-900"
                               : "")
@@ -577,7 +577,7 @@ export function VersionHistory({
                         <td
                           className={
                             "whitespace-pre-wrap break-words border-b px-2 py-1 " +
-                            (isAI ? "bg-violet-50/60 " : "") +
+                            (isAI ? "bg-violet-100 " : "") +
                             (row.kind === "added"
                               ? "bg-green-50 text-green-900"
                               : "")
