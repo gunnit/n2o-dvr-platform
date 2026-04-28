@@ -2,12 +2,26 @@ export interface Azienda {
   id: string;
   ragione_sociale: string;
   partita_iva: string | null;
+  codice_fiscale: string | null;
+  forma_giuridica: string | null;
   sede_legale_via: string | null;
   sede_legale_citta: string | null;
+  cap_legale: string | null;
+  provincia_legale: string | null;
   sede_operativa_via: string | null;
   sede_operativa_citta: string | null;
+  cap_operativa: string | null;
+  provincia_operativa: string | null;
   attivita: string | null;
   codice_ateco: string | null;
+  pec: string | null;
+  email: string | null;
+  telefono: string | null;
+  sito_web: string | null;
+  numero_dipendenti_dichiarati: number | null;
+  data_costituzione: string | null;
+  capitale_sociale: number | null;
+  rea: string | null;
   orario_lavoro: string | null;
   metratura_totale: number | null;
   zona_sismica: number | null;
@@ -55,10 +69,21 @@ export interface Persona {
   ruolo_antincendio: boolean;
   ruolo_preposto: boolean;
   ruolo_datore_lavoro: boolean;
-  // US-1.4: free-text qualifiche + multi-select ambienti assegnati.
+  // Free-text note alongside the structured `attrezzature_speciali` flags.
+  // Originally "qualifiche" (US-1.4), kept as a note field after 2026-04-28.
   qualifiche: string | null;
+  attrezzature_speciali: AttrezzaturaSpecialeCode[];
   ambiente_ids: string[];
 }
+
+export type AttrezzaturaSpecialeCode =
+  | "lavori_in_quota"
+  | "carrello_elevatore"
+  | "ple"
+  | "gru"
+  | "ruspa_escavatore"
+  | "patente_cde"
+  | "adr";
 
 export interface Ambiente {
   id: string;
@@ -345,3 +370,22 @@ export interface StressMisuraLibreria {
   created_at: string;
 }
 
+
+// Azienda autofill — response from POST /aziende/autofill. The values map
+// is a partial AziendaCreate; meta carries provenance per field so the UI
+// can render "✨ AI" badges with source/confidence tooltips. Fields not
+// derivable from the P.IVA are simply absent.
+export type AziendaAutofillConfidence = "high" | "medium" | "low";
+
+export interface AziendaAutofillFieldMeta {
+  confidence: AziendaAutofillConfidence;
+  source: string;
+  source_url?: string | null;
+}
+
+export interface AziendaAutofillResponse {
+  partita_iva: string;
+  values: Partial<Record<keyof Azienda, string | number | null>>;
+  meta: Partial<Record<keyof Azienda, AziendaAutofillFieldMeta>>;
+  warnings: string[];
+}

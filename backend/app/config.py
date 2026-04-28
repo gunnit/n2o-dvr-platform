@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     # Request timeout in seconds (OpenAI default is 10 min, we tighten for UX)
     OPENAI_TIMEOUT_SECONDS: float = 60.0
 
+    # Azienda autofill (POST /aziende/autofill) — VIES is keyless, the other
+    # two sources need API keys. Missing keys degrade gracefully: the
+    # pipeline records a warning and falls back to whatever sources are
+    # configured. VIES alone already gives ragione sociale + indirizzo.
+    SERPER_API_KEY: str = ""
+    FIRECRAWL_API_KEY: str = ""
+    AZIENDA_AUTOFILL_TIMEOUT_SECONDS: float = 12.0
+
     # Google Drive
     GOOGLE_DRIVE_FOLDER_ID: str = "13aHCy8D78JwJzgffxYbqe7Nmyed84may"
 

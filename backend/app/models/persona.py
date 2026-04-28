@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, ForeignKey, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -26,8 +26,15 @@ class Persona(Base):
     ruolo_antincendio: Mapped[bool] = mapped_column(Boolean, default=False)
     ruolo_preposto: Mapped[bool] = mapped_column(Boolean, default=False)
     ruolo_datore_lavoro: Mapped[bool] = mapped_column(Boolean, default=False)
-    # US-1.4: free-text qualifications (attestati, patenti, corsi di formazione).
+    # Free-text note (originally "qualifiche", now repurposed as free-form note
+    # alongside the structured `attrezzature_speciali` flags introduced 2026-04-28).
     qualifiche: Mapped[str | None] = mapped_column(String)
+    # Structured equipment / driving authorisations the worker is qualified for.
+    # Codes from the canonical set: lavori_in_quota, carrello_elevatore, ple, gru,
+    # ruspa_escavatore, patente_cde, adr.
+    attrezzature_speciali: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default="[]"
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     azienda: Mapped["Azienda"] = relationship(back_populates="persone")

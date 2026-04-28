@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Pencil, Plus, Trash2, Users } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
-import type { Ambiente, Persona } from "@/types";
+import type { Ambiente, AttrezzaturaSpecialeCode, Persona } from "@/types";
 
 interface StepPersoneProps {
   aziendaId: string;
@@ -49,6 +49,19 @@ const TIPOLOGIE_CONTRATTUALI = [
   "OPERAIO EDILE",
   "CO CO CO",
   "DATORE DI LAVORO",
+];
+
+// User feedback 2026-04-28 (#7 + #8): replace the free-text "qualifiche" field
+// with a fixed flag list. Codes mirror the backend enum and stay stable across
+// label tweaks.
+const ATTREZZATURE_SPECIALI: { code: AttrezzaturaSpecialeCode; label: string }[] = [
+  { code: "lavori_in_quota", label: "Lavori in quota" },
+  { code: "carrello_elevatore", label: "Carrello elevatore" },
+  { code: "ple", label: "Piattaforma di lavoro elevabile (PLE)" },
+  { code: "gru", label: "Gru" },
+  { code: "ruspa_escavatore", label: "Ruspa / escavatore" },
+  { code: "patente_cde", label: "Guida automezzi (patente C-D-E)" },
+  { code: "adr", label: "Trasporto ADR (merci pericolose)" },
 ];
 
 const RUOLI = [
@@ -79,6 +92,7 @@ function createEmptyPersona(aziendaId: string): Persona {
     ruolo_preposto: false,
     ruolo_datore_lavoro: false,
     qualifiche: null,
+    attrezzature_speciali: [],
     ambiente_ids: [],
   };
 }
@@ -180,6 +194,7 @@ export function StepPersone({
         ruolo_preposto: editing.ruolo_preposto,
         ruolo_datore_lavoro: editing.ruolo_datore_lavoro,
         qualifiche: editing.qualifiche,
+        attrezzature_speciali: editing.attrezzature_speciali,
         ambiente_ids: editing.ambiente_ids,
       };
       if (editingIndex === null) {
@@ -261,6 +276,22 @@ export function StepPersone({
           ambiente_ids: has
             ? prev.ambiente_ids.filter((id) => id !== ambienteId)
             : [...prev.ambiente_ids, ambienteId],
+        };
+      });
+    },
+    [],
+  );
+
+  const toggleAttrezzaturaSpeciale = useCallback(
+    (code: AttrezzaturaSpecialeCode) => {
+      setEditing((prev) => {
+        if (!prev) return prev;
+        const has = prev.attrezzature_speciali.includes(code);
+        return {
+          ...prev,
+          attrezzature_speciali: has
+            ? prev.attrezzature_speciali.filter((c) => c !== code)
+            : [...prev.attrezzature_speciali, code],
         };
       });
     },
@@ -379,7 +410,7 @@ export function StepPersone({
               {editingIndex === null ? "Aggiungi persona" : "Modifica persona"}
             </DialogTitle>
             <DialogDescription>
-              Compila i dati anagrafici e assegna ruoli, ambienti e qualifiche.
+              Compila i dati anagrafici e assegna ruoli, ambienti e attrezzature speciali.
             </DialogDescription>
           </DialogHeader>
 
@@ -538,16 +569,41 @@ export function StepPersone({
                 )}
               </div>
 
-              {/* Qualifiche free-text (US-1.4 AC1) */}
+              {/* Attrezzature speciali — fixed flag list + free-text note.
+                  Replaces the previous free-text "qualifiche" field per
+                  user feedback 2026-04-28 (#7 + #8). */}
               <div className="space-y-2">
-                <Label htmlFor="persona-qualifiche">Qualifiche</Label>
+                <Label>Attrezzature speciali</Label>
+                <div className="flex flex-wrap gap-2">
+                  {ATTREZZATURE_SPECIALI.map((a) => {
+                    const checked = editing.attrezzature_speciali.includes(a.code);
+                    return (
+                      <label
+                        key={a.code}
+                        className="flex items-center gap-2 rounded-lg border border-input px-3 py-1.5 text-sm transition-colors hover:bg-muted has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleAttrezzaturaSpeciale(a.code)}
+                          className="accent-primary"
+                        />
+                        {a.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="persona-qualifiche">Note / altre qualifiche</Label>
                 <Textarea
                   id="persona-qualifiche"
                   value={editing.qualifiche ?? ""}
                   onChange={(e) =>
                     updateEditing({ qualifiche: e.target.value || null })
                   }
-                  placeholder="Attestati, patenti, corsi di formazione (es. patentino muletto, antincendio medio rischio, HACCP)"
+                  placeholder="Attestati, patenti, corsi di formazione non elencati sopra (es. antincendio medio rischio, HACCP)"
                   rows={3}
                 />
               </div>

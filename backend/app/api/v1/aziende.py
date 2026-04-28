@@ -20,13 +20,19 @@ from app.models.description_revision import (
 )
 from app.models.documento_generato import DocumentoGenerato
 from app.models.user import User
-from app.schemas.azienda import AziendaCreate, AziendaResponse, AziendaUpdate
+from app.schemas.azienda import (
+    AziendaAutofillResponse,
+    AziendaCreate,
+    AziendaResponse,
+    AziendaUpdate,
+)
 from app.schemas.description_revision import (
     DescriptionRevisionResponse,
     DescriptionRevisionRestoreResponse,
     VisuraUploadResponse,
 )
 from app.services.ai import generate_company_description
+from app.services.azienda_autofill import autofill_from_piva
 from app.services.sector_prepopulator import gather_sector_summary
 from app.services.visura_extractor import extract_visura_text
 
@@ -188,6 +194,37 @@ async def dashboard_kpis(
         scadenze_imminenti=scadenze_imminenti,
         firmati_senza_documenti=firmati_senza_documenti,
     )
+
+
+class AutofillRequest(BaseModel):
+    """Body for POST /aziende/autofill — only takes the P.IVA.
+
+    Validation deliberately NOT shared with AziendaCreate.partita_iva so the
+    button can call this with whatever the user typed; we return a 400 with
+    a friendly message if it's malformed instead of leaking pydantic chatter.
+    """
+
+    partita_iva: str
+
+
+@router.post("/autofill", response_model=AziendaAutofillResponse)
+async def autofill_azienda(
+    body: AutofillRequest,
+    user: User = Depends(get_current_user),
+):
+    """Suggest Azienda field values from a P.IVA via VIES + Google + AI.
+
+    Does NOT persist. Frontend takes the response, shows ✨ AI badges per
+    field, and posts to ``POST /aziende`` once the operator confirms.
+
+    Privacy: VIES + Serper + Firecrawl + AI consolidator only see public
+    web data — same posture as the visura snippet flow. No PII is sent.
+    """
+    _require_admin(user)
+    piva = (body.partita_iva or "").strip()
+    if not piva.isdigit() or len(piva) != 11:
+        raise BadRequestError("Partita IVA deve essere di 11 cifre")
+    return await autofill_from_piva(piva)
 
 
 @router.post("", response_model=AziendaResponse, status_code=201)

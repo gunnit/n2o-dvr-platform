@@ -1,0 +1,290 @@
+"""Orchestrates the autofill pipeline.
+
+Flow:
+    VIES        ─┐
+    Serper      ─┼── parallel ──> consolidator ──> AziendaAutofillResponse
+                 │
+    [Firecrawl is sequential because it needs the URL discovered by Serper]
+
+We run VIES + Serper concurrently for latency. Firecrawl waits on Serper
+because we need the homepage URL it surfaces. End-to-end target: <8s on
+warm caches, <12s worst case.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import re
+from typing import Any
+from urllib.parse import urlparse
+
+from app.core.exceptions import AIError
+from app.schemas.azienda import (
+    AziendaAutofillFieldMeta,
+    AziendaAutofillResponse,
+    Confidence,
+)
+from app.services.azienda_autofill.consolidator import (
+    ConsolidatedAzienda,
+    consolidate,
+)
+from app.services.azienda_autofill.firecrawl import scrape_site
+from app.services.azienda_autofill.serper import SerperResult, search_piva
+from app.services.azienda_autofill.vies import VIESResult, lookup_vies
+
+logger = logging.getLogger(__name__)
+
+
+# Domains that look like company homepages — used to filter Serper results
+# down to a likely "sito_web" target. We exclude registries, directories,
+# and aggregators because their pages are about the company, not the
+# company's own site.
+_NON_HOMEPAGE_DOMAINS = (
+    "registroimprese.it",
+    "ufficiocamerale.it",
+    "paginebianche.it",
+    "paginegialle.it",
+    "telematicocb.it",
+    "infoimprese.it",
+    "linkedin.com",
+    "facebook.com",
+    "instagram.com",
+    "google.com",
+    "wikipedia.org",
+    "youtube.com",
+    "europa.eu",
+    "guidamonaci.it",
+    "aifa.gov.it",
+)
+
+
+def _pick_homepage(serper: list[SerperResult]) -> str | None:
+    """Pick the most likely company homepage from Serper results.
+
+    Heuristic: first organic link whose domain isn't a known directory
+    /registry. We don't try anything smarter — the consolidator gets all
+    the snippets anyway, so even a wrong pick here only costs one
+    Firecrawl call's worth of irrelevant markdown.
+    """
+    for r in serper:
+        if not r.link:
+            continue
+        try:
+            host = urlparse(r.link).hostname or ""
+        except ValueError:
+            continue
+        host = host.lower().lstrip("www.")
+        if not host:
+            continue
+        if any(host == d or host.endswith("." + d) for d in _NON_HOMEPAGE_DOMAINS):
+            continue
+        return f"{urlparse(r.link).scheme}://{urlparse(r.link).hostname}/"
+    return None
+
+
+def _domain_from_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    try:
+        host = urlparse(url).hostname or ""
+    except ValueError:
+        return None
+    host = host.lower()
+    if host.startswith("www."):
+        host = host[4:]
+    return host or None
+
+
+# Codice ATECO normaliser: registries sometimes return "62.01" or "62.01.00"
+# or "62.0100" — squash to canonical "XX.XX" / "XX.XX.XX".
+_ATECO_RAW_RE = re.compile(r"\b(\d{2})\.?(\d{2})(?:\.?(\d{1,2}))?\b")
+
+
+def _normalize_ateco(value: str | None) -> str | None:
+    if not value:
+        return None
+    match = _ATECO_RAW_RE.search(value)
+    if not match:
+        return None
+    a, b, c = match.groups()
+    return f"{a}.{b}.{c}" if c else f"{a}.{b}"
+
+
+def _normalize_provincia(value: str | None) -> str | None:
+    if not value:
+        return None
+    cleaned = value.strip().upper()
+    if len(cleaned) == 2 and cleaned.isalpha():
+        return cleaned
+    return None
+
+
+def _normalize_cap(value: str | None) -> str | None:
+    if not value:
+        return None
+    digits = re.sub(r"\D", "", value)
+    return digits if len(digits) == 5 else None
+
+
+def _build_response(
+    *,
+    partita_iva: str,
+    vies: VIESResult | None,
+    serper: list[SerperResult],
+    homepage_url: str | None,
+    consolidated: ConsolidatedAzienda | None,
+    warnings: list[str],
+) -> AziendaAutofillResponse:
+    """Compose the AziendaAutofillResponse, layering sources by priority.
+
+    Priority (highest first):
+      1. VIES — anything it returned for ragione sociale + sede legale
+      2. AI consolidator — everything else
+      3. Heuristics — sito_web inferred from homepage_url even if AI missed
+
+    Each populated field gets a meta entry with confidence + source.
+    """
+    values: dict[str, Any] = {}
+    meta: dict[str, AziendaAutofillFieldMeta] = {}
+
+    def _set(field: str, value: Any, confidence: Confidence, source: str, source_url: str | None = None) -> None:
+        if value is None or value == "":
+            return
+        values[field] = value
+        meta[field] = AziendaAutofillFieldMeta(
+            confidence=confidence,
+            source=source,
+            source_url=source_url,
+        )
+
+    # 1. VIES — high confidence, deterministic
+    if vies and vies.is_valid:
+        _set("ragione_sociale", vies.ragione_sociale, "high", "VIES", "https://ec.europa.eu/taxation_customs/vies/")
+        _set("sede_legale_via", vies.sede_legale_via, "high", "VIES")
+        _set("sede_legale_citta", vies.sede_legale_citta, "high", "VIES")
+        _set("cap_legale", vies.cap_legale, "high", "VIES")
+        _set("provincia_legale", vies.provincia_legale, "high", "VIES")
+
+    # 2. AI consolidator — medium confidence (snippet-derived) or low (markdown-derived)
+    if consolidated:
+        # Field name -> (source label, default confidence)
+        ai_fields: dict[str, tuple[str, Confidence]] = {
+            "ragione_sociale": ("Google + AI", "medium"),
+            "codice_fiscale": ("Google + AI", "medium"),
+            "forma_giuridica": ("Google + AI", "medium"),
+            "sede_legale_via": ("Google + AI", "medium"),
+            "sede_legale_citta": ("Google + AI", "medium"),
+            "cap_legale": ("Google + AI", "medium"),
+            "provincia_legale": ("Google + AI", "medium"),
+            "sede_operativa_via": ("Google + AI", "medium"),
+            "sede_operativa_citta": ("Google + AI", "medium"),
+            "cap_operativa": ("Google + AI", "medium"),
+            "provincia_operativa": ("Google + AI", "medium"),
+            "codice_ateco": ("Google + AI", "medium"),
+            "attivita": ("AI da sito aziendale", "low"),
+            "pec": ("Google + AI", "medium"),
+            "email": ("Sito aziendale", "low"),
+            "telefono": ("Sito aziendale", "low"),
+            "sito_web": ("Google", "high"),
+            "numero_dipendenti_dichiarati": ("AI da sito aziendale", "low"),
+            "capitale_sociale": ("Google + AI", "medium"),
+            "rea": ("Google + AI", "medium"),
+            "data_costituzione": ("Google + AI", "medium"),
+        }
+        consolidated_dict = consolidated.model_dump()
+        # Light normalisation on a few formatting-sensitive fields
+        consolidated_dict["codice_ateco"] = _normalize_ateco(consolidated_dict.get("codice_ateco"))
+        consolidated_dict["provincia_legale"] = _normalize_provincia(consolidated_dict.get("provincia_legale"))
+        consolidated_dict["provincia_operativa"] = _normalize_provincia(consolidated_dict.get("provincia_operativa"))
+        consolidated_dict["cap_legale"] = _normalize_cap(consolidated_dict.get("cap_legale"))
+        consolidated_dict["cap_operativa"] = _normalize_cap(consolidated_dict.get("cap_operativa"))
+        for field, (source, conf) in ai_fields.items():
+            if field in values:
+                continue  # VIES already supplied this
+            value = consolidated_dict.get(field)
+            if value is None or value == "":
+                continue
+            # Date fields need ISO string for the JSON response
+            if field == "data_costituzione" and hasattr(value, "isoformat"):
+                value = value.isoformat()
+            _set(field, value, conf, source)
+
+    # 3. Heuristic: if we found a homepage but the AI didn't surface
+    # sito_web, fall back to it. The AI sometimes drops obvious URLs.
+    if "sito_web" not in values and homepage_url:
+        _set(
+            "sito_web",
+            homepage_url.rstrip("/"),
+            "medium",
+            "Google (primo risultato)",
+            homepage_url,
+        )
+
+    return AziendaAutofillResponse(
+        partita_iva=partita_iva,
+        values=values,
+        meta=meta,
+        warnings=warnings,
+    )
+
+
+async def autofill_from_piva(partita_iva: str) -> AziendaAutofillResponse:
+    """Run the full autofill pipeline for a P.IVA.
+
+    Soft-fails per source: if VIES is down or Serper has no key, the
+    response still comes back with whatever the working sources produced.
+    Only catastrophic failures (e.g. AI consolidator returns nothing
+    *and* no source produced data) raise.
+    """
+    warnings: list[str] = []
+
+    # Run VIES + Serper concurrently — they don't depend on each other.
+    vies_task = asyncio.create_task(lookup_vies(partita_iva))
+    serper_task = asyncio.create_task(search_piva(partita_iva))
+    vies, serper = await asyncio.gather(vies_task, serper_task)
+
+    if vies is None:
+        warnings.append("VIES non disponibile.")
+    elif not vies.is_valid:
+        warnings.append("VIES: P.IVA non valida o non registrata.")
+
+    if not serper:
+        warnings.append("Ricerca Google non disponibile (Serper key mancante o errore).")
+
+    # Pick a homepage and scrape it — Firecrawl waits on Serper.
+    homepage_url = _pick_homepage(serper)
+    firecrawl_scrape = await scrape_site(homepage_url) if homepage_url else None
+    if homepage_url and firecrawl_scrape is None:
+        warnings.append(f"Scrape del sito {homepage_url} non riuscito.")
+
+    # Run the AI consolidator over whatever we have.
+    consolidated: ConsolidatedAzienda | None = None
+    try:
+        consolidated = await consolidate(
+            partita_iva=partita_iva,
+            vies=vies,
+            serper_results=serper,
+            firecrawl_scrape=firecrawl_scrape,
+        )
+    except AIError as exc:
+        logger.warning("Autofill AI consolidator failed for %s: %s", partita_iva, exc)
+        warnings.append(f"AI non disponibile: {exc}")
+
+    response = _build_response(
+        partita_iva=partita_iva,
+        vies=vies,
+        serper=serper,
+        homepage_url=homepage_url,
+        consolidated=consolidated,
+        warnings=warnings,
+    )
+
+    # Catastrophic case: nothing came back from any source.
+    if not response.values:
+        raise AIError(
+            "Nessun dato trovato per questa P.IVA. Verifica il numero o "
+            "compila il modulo manualmente."
+        )
+
+    return response
