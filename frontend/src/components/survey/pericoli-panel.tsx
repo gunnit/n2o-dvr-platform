@@ -23,7 +23,14 @@
  *      delete, and add custom rows. Every change debounce-saves via
  *      POST /rischi/{id}/pericoli/batch.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import {
   ChevronDown,
@@ -378,9 +385,8 @@ export function PericoliPanel({
                         : null;
                     const livello = indice != null ? getLivello(indice) : null;
                     return (
-                      <>
+                      <Fragment key={p.id}>
                         <tr
-                          key={p.id}
                           className={cn(
                             "border-t",
                             !p.applicabile && "opacity-50",
@@ -506,7 +512,7 @@ export function PericoliPanel({
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     );
                   })}
                 </tbody>

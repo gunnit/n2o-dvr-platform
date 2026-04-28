@@ -21,6 +21,7 @@ import {
   Circle,
   CloudUpload,
   Lock,
+  AlertCircle,
 } from "lucide-react";
 import type {
   Azienda,
@@ -397,7 +398,15 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
   );
 
   // H1: a step is "complete" when (required ⇒ content-validated) or
-  // (optional ⇒ visited). Used by both stepper circles and sidebar list.
+  // (optional ⇒ seen). "Seen" was originally just `visited.has(step)`,
+  // but `visited` is in-memory and reseeds to {0} on every mount, so a
+  // page reload (or arriving at a survey that's already been worked on)
+  // would leave every optional step grey forever. We now also treat an
+  // optional step as complete when:
+  //   - currentStep > step → Avanti always visits, so being past it
+  //     proves the operator walked through it in some session
+  //   - isSigned → the survey is firmato, every upstream step is by
+  //     definition reviewed-and-confirmed
   const isStepComplete = useCallback(
     (step: number): boolean => {
       const meta = STEPS[step];
@@ -405,9 +414,9 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
       if (meta.required) {
         return validationForStep(step).length === 0;
       }
-      return visited.has(step);
+      return visited.has(step) || currentStep > step || isSigned;
     },
-    [validationForStep, visited],
+    [validationForStep, visited, currentStep, isSigned],
   );
 
   // Progress % counts only required steps so optional ones (which a fast
@@ -771,7 +780,12 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             }}
           />
           {STEPS.map((step, index) => {
-            const isActive = index === currentStep;
+            // When the survey is firmato the wizard is locked on
+            // Riepilogo for life — treating it as "active" would suppress
+            // the green check (the Check renders only when !isActive).
+            // Demote isActive to false in that state so the completed
+            // styling wins and all 8 circles read as done.
+            const isActive = index === currentStep && !isSigned;
             const isCompleted = isStepComplete(index);
             const isVisited = visited.has(index);
             // M4: top-circle nav is allowed only for already-visited steps
@@ -899,7 +913,11 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             </div>
             <ul className="space-y-2">
               {STEPS.map((step, index) => {
-                const isActive = index === currentStep;
+                // Same isSigned demotion as the top stepper: once the
+                // survey is firmato the wizard is pinned to Riepilogo,
+                // and the user expects to see all 8 rows green rather
+                // than "In corso" stuck on the last row forever.
+                const isActive = index === currentStep && !isSigned;
                 // H1: green check is content-driven, not "did the operator
                 // click past it". Active step never collapses to the
                 // completed badge so the "In corso" pill always wins.
@@ -971,6 +989,20 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
           </span>
         </div>
         <div className="flex items-center gap-3">
+          {!isSigned && currentStepErrors.length > 0 && (
+            <div
+              role="alert"
+              className="flex max-w-md items-center gap-1.5 text-xs font-medium text-red-600"
+            >
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} />
+              <span className="truncate">{currentStepErrors[0].message}</span>
+              {currentStepErrors.length > 1 && (
+                <span className="shrink-0 text-red-500/70">
+                  (+{currentStepErrors.length - 1})
+                </span>
+              )}
+            </div>
+          )}
           <button
             type="button"
             onClick={goPrev}

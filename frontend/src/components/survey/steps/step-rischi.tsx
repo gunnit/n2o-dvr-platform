@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useApi } from "@/hooks/use-api";
 import {
@@ -1160,183 +1160,174 @@ export function StepRischi({
                 const d = val.danno_d ?? 1;
                 const indice = calcIndice(p, d);
                 const livello = getLivello(indice);
+                // Phase 3 (1:N): for every applicable categoria we render
+                // the expandable per-pericolo editor as a sibling row
+                // immediately under the categoria row, so the sub-rows
+                // visually belong to their parent group instead of piling
+                // up at the bottom of the table.
+                const long = CATEGORIA_LONG[val.categoria_rischio];
+                const showPericoli = val.applicabile && Boolean(val.id) && Boolean(long);
 
                 return (
-                  <TableRow
-                    key={val.id}
-                    className={cn(
-                      !val.applicabile && "opacity-40"
-                    )}
-                  >
-                    <TableCell className="font-medium">
-                      <div className="flex flex-col gap-1">
-                        <span>{val.categoria_rischio}</span>
-                        {(() => {
-                          const reasons = impliedByAttrezzature.get(
-                            val.categoria_rischio as CategoriaRischio
-                          );
-                          if (!reasons || reasons.length === 0) return null;
-                          // Tooltip lists the matching attrezzatura
-                          // descrizioni so the operator knows why this
-                          // row is here even though the ambiente subset
-                          // would otherwise hide it.
-                          const tooltip = `Aggiunto perche hai dichiarato: ${reasons.join(", ")}`;
-                          return (
-                            <span
-                              title={tooltip}
-                              className="inline-flex w-fit items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200"
-                            >
-                              <Wrench className="h-3 w-3" />
-                              Suggerito da attrezzature
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    </TableCell>
+                  <Fragment key={val.id}>
+                    <TableRow
+                      className={cn(
+                        !val.applicabile && "opacity-40"
+                      )}
+                    >
+                      <TableCell className="font-medium">
+                        <div className="flex flex-col gap-1">
+                          <span>{val.categoria_rischio}</span>
+                          {(() => {
+                            const reasons = impliedByAttrezzature.get(
+                              val.categoria_rischio as CategoriaRischio
+                            );
+                            if (!reasons || reasons.length === 0) return null;
+                            const tooltip = `Aggiunto perche hai dichiarato: ${reasons.join(", ")}`;
+                            return (
+                              <span
+                                title={tooltip}
+                                className="inline-flex w-fit items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200"
+                              >
+                                <Wrench className="h-3 w-3" />
+                                Suggerito da attrezzature
+                              </span>
+                            );
+                          })()}
+                        </div>
+                      </TableCell>
 
-                    {/* Applicabile toggle */}
-                    <TableCell className="text-center">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateValutazione(val.id, {
-                            applicabile: !val.applicabile,
-                          })
-                        }
-                        className={cn(
-                          "inline-flex h-6 w-10 items-center rounded-full transition-colors",
-                          val.applicabile
-                            ? "bg-primary"
-                            : "bg-muted-foreground/30"
-                        )}
-                      >
-                        <span
+                      {/* Applicabile toggle */}
+                      <TableCell className="text-center">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateValutazione(val.id, {
+                              applicabile: !val.applicabile,
+                            })
+                          }
                           className={cn(
-                            "inline-block h-4 w-4 rounded-full bg-white transition-transform",
+                            "inline-flex h-6 w-10 items-center rounded-full transition-colors",
                             val.applicabile
-                              ? "translate-x-5"
-                              : "translate-x-1"
-                          )}
-                        />
-                      </button>
-                    </TableCell>
-
-                    {/* P slider */}
-                    <TableCell>
-                      {val.applicabile && (
-                        <div className="flex flex-col items-center gap-1">
-                          <input
-                            type="range"
-                            min={1}
-                            max={4}
-                            step={1}
-                            value={p}
-                            onChange={(e) =>
-                              updateValutazione(val.id, {
-                                probabilita_p: Number(
-                                  e.target.value
-                                ),
-                              })
-                            }
-                            className="w-full accent-primary"
-                          />
-                          <span className="text-xs font-medium text-muted-foreground">
-                            {p}
-                          </span>
-                        </div>
-                      )}
-                    </TableCell>
-
-                    {/* D slider */}
-                    <TableCell>
-                      {val.applicabile && (
-                        <div className="flex flex-col items-center gap-1">
-                          <input
-                            type="range"
-                            min={1}
-                            max={4}
-                            step={1}
-                            value={d}
-                            onChange={(e) =>
-                              updateValutazione(val.id, {
-                                danno_d: Number(
-                                  e.target.value
-                                ),
-                              })
-                            }
-                            className="w-full accent-primary"
-                          />
-                          <span className="text-xs font-medium text-muted-foreground">
-                            {d}
-                          </span>
-                        </div>
-                      )}
-                    </TableCell>
-
-                    {/* Indice */}
-                    <TableCell className="text-center">
-                      {val.applicabile && (
-                        <div className="flex flex-col items-center gap-1">
-                          <span className="text-lg font-bold">
-                            {indice}
-                          </span>
-                          <div className="h-1.5 w-full max-w-[60px] overflow-hidden rounded-full bg-muted">
-                            <div
-                              className={cn(
-                                "h-full rounded-full transition-all",
-                                getIndiceBarColor(livello)
-                              )}
-                              style={{
-                                width: `${((indice - 3) / 9) * 100}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </TableCell>
-
-                    {/* Livello */}
-                    <TableCell className="text-center">
-                      {val.applicabile && (
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-xs font-semibold",
-                            getLivelloStyle(livello)
+                              ? "bg-primary"
+                              : "bg-muted-foreground/30"
                           )}
                         >
-                          {livello}
-                        </Badge>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-              {/* Phase 3 (1:N): for every applicable categoria, expose an
-                  expandable detail row hosting the per-pericolo editor. The
-                  editor lazy-loads the pericoli_libreria filtered to this
-                  ambiente.tipo + attrezzature combination on first open. */}
-              {visibleValutazioni
-                .filter((val) => val.applicabile && val.id)
-                .map((val) => {
-                  const long = CATEGORIA_LONG[val.categoria_rischio];
-                  if (!long) return null;
-                  return (
-                    <TableRow
-                      key={`pericoli-${val.id}`}
-                      className="hover:bg-transparent"
-                    >
-                      <TableCell colSpan={6} className="p-0">
-                        <PericoliPanel
-                          aziendaId={aziendaId}
-                          ambienteId={val.ambiente_id}
-                          valutazione={val}
-                          categoriaLong={long}
-                        />
+                          <span
+                            className={cn(
+                              "inline-block h-4 w-4 rounded-full bg-white transition-transform",
+                              val.applicabile
+                                ? "translate-x-5"
+                                : "translate-x-1"
+                            )}
+                          />
+                        </button>
+                      </TableCell>
+
+                      {/* P slider */}
+                      <TableCell>
+                        {val.applicabile && (
+                          <div className="flex flex-col items-center gap-1">
+                            <input
+                              type="range"
+                              min={1}
+                              max={4}
+                              step={1}
+                              value={p}
+                              onChange={(e) =>
+                                updateValutazione(val.id, {
+                                  probabilita_p: Number(
+                                    e.target.value
+                                  ),
+                                })
+                              }
+                              className="w-full accent-primary"
+                            />
+                            <span className="text-xs font-medium text-muted-foreground">
+                              {p}
+                            </span>
+                          </div>
+                        )}
+                      </TableCell>
+
+                      {/* D slider */}
+                      <TableCell>
+                        {val.applicabile && (
+                          <div className="flex flex-col items-center gap-1">
+                            <input
+                              type="range"
+                              min={1}
+                              max={4}
+                              step={1}
+                              value={d}
+                              onChange={(e) =>
+                                updateValutazione(val.id, {
+                                  danno_d: Number(
+                                    e.target.value
+                                  ),
+                                })
+                              }
+                              className="w-full accent-primary"
+                            />
+                            <span className="text-xs font-medium text-muted-foreground">
+                              {d}
+                            </span>
+                          </div>
+                        )}
+                      </TableCell>
+
+                      {/* Indice */}
+                      <TableCell className="text-center">
+                        {val.applicabile && (
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-lg font-bold">
+                              {indice}
+                            </span>
+                            <div className="h-1.5 w-full max-w-[60px] overflow-hidden rounded-full bg-muted">
+                              <div
+                                className={cn(
+                                  "h-full rounded-full transition-all",
+                                  getIndiceBarColor(livello)
+                                )}
+                                style={{
+                                  width: `${((indice - 3) / 9) * 100}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </TableCell>
+
+                      {/* Livello */}
+                      <TableCell className="text-center">
+                        {val.applicabile && (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-xs font-semibold",
+                              getLivelloStyle(livello)
+                            )}
+                          >
+                            {livello}
+                          </Badge>
+                        )}
                       </TableCell>
                     </TableRow>
-                  );
-                })}
+                    {showPericoli && (
+                      <TableRow className="hover:bg-transparent">
+                        <TableCell colSpan={6} className="p-0">
+                          <PericoliPanel
+                            aziendaId={aziendaId}
+                            ambienteId={val.ambiente_id}
+                            valutazione={val}
+                            categoriaLong={long as string}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                );
+              })}
             </TableBody>
           </Table>
 
