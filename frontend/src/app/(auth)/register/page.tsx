@@ -64,9 +64,8 @@ export default function RegisterPage() {
   const labelClass = "text-[13px] font-medium text-[#273951]";
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f6f9fc] p-4">
-      <div className="w-full max-w-[440px] rounded-lg border border-[#e5edf5] bg-white p-8 shadow-stripe-elevated">
-        <div className="mb-7 flex flex-col items-center text-center">
+    <div className="w-full max-w-[440px] rounded-[10px] border border-white/60 bg-white/97 p-8 shadow-stripe-elevated backdrop-blur-md sm:p-9">
+      <div className="mb-7 flex flex-col items-center text-center">
           <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-md bg-primary/10 ring-1 ring-primary/20">
             <Shield className="h-5 w-5 text-primary" strokeWidth={1.75} />
           </div>
@@ -154,7 +153,6 @@ export default function RegisterPage() {
             Accedi
           </Link>
         </p>
-      </div>
     </div>
   );
 }

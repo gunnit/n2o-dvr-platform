@@ -51,8 +51,11 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const STEPS = [
   { key: "azienda", label: "Dati Azienda", icon: Building2, required: true },
   { key: "ambienti", label: "Ambienti", icon: MapPin, required: true },
-  { key: "persone", label: "Persone", icon: Users, required: true },
+  // Order swapped 2026-04-28 (feedback #9): Attrezzature now precedes Persone
+  // so the operator can already assign equipment to environments before
+  // scoping people, mirroring the order Luca walks through on-site.
   { key: "attrezzature", label: "Attrezzature", icon: Wrench, required: false },
+  { key: "persone", label: "Persone", icon: Users, required: true },
   {
     key: "dpi_rischi",
     label: "DPI & Rischi Specifici",
@@ -142,7 +145,39 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
   //  - mark optional steps "complete" only after a deliberate visit
   //  - allow stepper-circle navigation only to already-seen steps
   // Step 0 is always considered visited (it's the wizard's landing step).
-  const [visited, setVisited] = useState<Set<number>>(() => new Set([0]));
+  // BUG-4: the in-memory Set reseeded to {0} on every page reload, so
+  // returning to a partially-completed survey left every step locked
+  // behind a "Step non ancora visitato" tooltip while the side panel
+  // showed them as ✅. We now hydrate from localStorage (per aziendaId)
+  // so a refresh preserves nav, and persist on every change.
+  const visitedStorageKey = `dvr-survey-visited:${aziendaId}`;
+  const [visited, setVisited] = useState<Set<number>>(() => {
+    if (typeof window === "undefined") return new Set([0]);
+    try {
+      const raw = window.localStorage.getItem(visitedStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as number[];
+        if (Array.isArray(parsed)) {
+          return new Set([0, ...parsed.filter((n) => Number.isInteger(n))]);
+        }
+      }
+    } catch {
+      // Corrupt entry — fall through to the default seed.
+    }
+    return new Set([0]);
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        visitedStorageKey,
+        JSON.stringify(Array.from(visited)),
+      );
+    } catch {
+      // Quota exceeded or storage disabled — silent. This is a UX
+      // optimization, not a data path.
+    }
+  }, [visited, visitedStorageKey]);
 
   const [data, setData] = useState<SurveyData>({
     azienda: initialData?.azienda ?? {},
@@ -287,14 +322,14 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
 
   // Per-step validation (H1/H2/H7). Returns the list of operator-facing
   // error messages for the step; empty list means the step is ready to
-  // advance. Required-step content rules:
+  // advance. Required-step content rules (post-2026-04-28 order swap):
   //  - 0 azienda: ragione sociale + valid P.IVA (11 digits) + valid ATECO
   //    (NN.NN or NN.NN.NN)
   //  - 1 ambienti: at least one record
-  //  - 2 persone: at least one record AND at least one with ruolo_rspp
+  //  - 3 persone: at least one record AND at least one with ruolo_rspp
   //  - 5 valutazioni rischio: at least one applicable risk assessment
   //  - 7 riepilogo: all upstream required steps complete + signature
-  // Optional steps (3, 4, 6) always pass.
+  // Optional steps (2 attrezzature, 4 dpi_rischi, 6 sostanze) always pass.
   const validationForStep = useCallback(
     (step: number): { field?: string; message: string }[] => {
       const errors: { field?: string; message: string }[] = [];
@@ -336,7 +371,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             message: "Aggiungi almeno un ambiente per continuare",
           });
         }
-      } else if (step === 2) {
+      } else if (step === 3) {
         if (data.persone.length === 0) {
           errors.push({
             message: "Aggiungi almeno una persona per continuare",
@@ -675,20 +710,20 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
         );
       case 2:
         return (
-          <StepPersone
-            aziendaId={aziendaId}
-            persone={data.persone}
-            ambienti={data.ambienti}
-            onChange={updatePersone}
-          />
-        );
-      case 3:
-        return (
           <StepAttrezzature
             aziendaId={aziendaId}
             ambienti={data.ambienti}
             attrezzature={data.attrezzature}
             onChange={updateAttrezzature}
+          />
+        );
+      case 3:
+        return (
+          <StepPersone
+            aziendaId={aziendaId}
+            persone={data.persone}
+            ambienti={data.ambienti}
+            onChange={updatePersone}
           />
         );
       case 4:
@@ -788,13 +823,17 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             const isActive = index === currentStep && !isSigned;
             const isCompleted = isStepComplete(index);
             const isVisited = visited.has(index);
-            // M4: top-circle nav is allowed only for already-visited steps
-            // (so the operator can jump back), never to future steps. We
-            // also keep the existing "firmato" lock that pins everything
-            // outside Riepilogo.
+            // BUG-4: top-circle nav is allowed for visited steps OR
+            // content-complete steps OR the active step. Without the
+            // "isCompleted" branch, a fresh page load (which reseeds
+            // visited to {0,…cached}) left clearly-done steps disabled
+            // while the side panel showed them as ✅ — a contradictory
+            // UI that forced operators to walk Avanti/Indietro. The
+            // existing "firmato" lock still pins everything outside
+            // Riepilogo when the survey is signed.
             const navDisabled =
               (isSigned && index !== riepilogoIndex) ||
-              (!isVisited && !isActive);
+              (!isVisited && !isCompleted && !isActive);
 
             return (
               <button
@@ -803,9 +842,11 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
                 onClick={() => goToStep(index)}
                 disabled={navDisabled}
                 title={
-                  navDisabled && !isSigned
-                    ? "Step non ancora visitato"
-                    : step.label
+                  isSigned && navDisabled
+                    ? "Sopralluogo firmato — apri una revisione per modificare"
+                    : navDisabled
+                      ? "Completa i passi precedenti per sbloccare questo step"
+                      : step.label
                 }
                 className={cn(
                   "group flex flex-col items-center gap-2",

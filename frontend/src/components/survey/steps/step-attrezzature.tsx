@@ -212,6 +212,17 @@ export function StepAttrezzature({
   // creating duplicate rows on the server. One promise chain per id.
   const inFlightRef = useRef<Map<string, Promise<unknown>>>(new Map());
 
+  // Mirror current attrezzature in a ref so commit reads always see the latest
+  // state. Fixes the "marcatura CE flag scompare" bug (feedback 2026-04-28 #6):
+  // event handlers called updateLocal then commitAttrezzatura on the same tick,
+  // and the captured `attrezzature` prop was the pre-update array — the commit
+  // PUT'd the old value back, server echoed it, and the optimistic toggle
+  // visually reverted.
+  const attrezzatureRef = useRef(attrezzature);
+  useEffect(() => {
+    attrezzatureRef.current = attrezzature;
+  }, [attrezzature]);
+
   // Get suggested equipment list for the currently selected environment type
   const suggestedEquipment = useMemo(() => {
     if (!selectedAmbiente) return [];
@@ -544,7 +555,7 @@ export function StepAttrezzature({
   // don't double-create.
   const commitAttrezzatura = useCallback(
     async (id: string) => {
-      const row = attrezzature.find((a) => a.id === id);
+      const row = attrezzatureRef.current.find((a) => a.id === id);
       if (!row || !row.descrizione?.trim()) {
         // Empty descrizione → nothing to persist (and never-persisted rows
         // stay client-only, ready to be removed cleanly).
@@ -556,7 +567,7 @@ export function StepAttrezzature({
         .catch(() => undefined)
         .then(async () => {
           // Re-read the row after awaiting — it may have changed.
-          const fresh = attrezzature.find((a) => a.id === id);
+          const fresh = attrezzatureRef.current.find((a) => a.id === id);
           if (!fresh || !fresh.descrizione?.trim()) return;
           try {
             if (persistedIds.has(id)) {
@@ -566,7 +577,7 @@ export function StepAttrezzature({
                 verifiche_periodiche: fresh.verifiche_periodiche,
               });
               onChange(
-                attrezzature.map((a) =>
+                attrezzatureRef.current.map((a) =>
                   a.id === id ? { ...a, ...saved } : a
                 )
               );
@@ -578,7 +589,9 @@ export function StepAttrezzature({
                 verifiche_periodiche: fresh.verifiche_periodiche,
               });
               onChange(
-                attrezzature.map((a) => (a.id === id ? { ...created } : a))
+                attrezzatureRef.current.map((a) =>
+                  a.id === id ? { ...created } : a
+                )
               );
               setPersistedIds((prev) => {
                 const updated = new Set(prev);

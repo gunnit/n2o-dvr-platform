@@ -54,6 +54,24 @@ import type {
   ValutazioneRischio,
 } from "@/types";
 
+/**
+ * Aggregate snapshot of this panel's children, published upward so the
+ * parent ValutazioneRischio row can show the children-derived I/Livello
+ * instead of its own (now stale) P/D. See BUG-3 in the audit:
+ * without this, a parent could read "ACCETTABILE" while 12 GRAVE
+ * pericoli sat underneath.
+ */
+export interface PericoliSummary {
+  /** Number of pericoli in the panel (any source / any applicable state). */
+  totalCount: number;
+  /** Number of pericoli with applicabile = true. */
+  applicableCount: number;
+  /** Max indice across applicable children, null when none are applicable. */
+  maxIndice: number | null;
+  /** Livello matching maxIndice, null when none are applicable. */
+  maxLivello: LivelloRischio | null;
+}
+
 interface PericoliPanelProps {
   aziendaId: string;
   ambienteId: string;
@@ -61,6 +79,12 @@ interface PericoliPanelProps {
   valutazione: ValutazioneRischio;
   /** Canonical long-form categoria name (e.g. "Impianti Elettrici"). */
   categoriaLong: string;
+  /**
+   * Optional — fires whenever the children list changes (load, edit,
+   * delete, add). Lets the parent re-derive its row badge so the table
+   * agrees with what's actually inside.
+   */
+  onSummaryChange?: (rischioId: string, summary: PericoliSummary) => void;
 }
 
 function calcIndice(p: number, d: number): number {
@@ -90,6 +114,7 @@ export function PericoliPanel({
   ambienteId,
   valutazione,
   categoriaLong,
+  onSummaryChange,
 }: PericoliPanelProps) {
   const { apiFetch } = useApi();
   const [expanded, setExpanded] = useState(false);
@@ -316,6 +341,34 @@ export function PericoliPanel({
       total: pericoli.length,
     };
   }, [pericoli]);
+
+  // BUG-3 — publish a child-aggregated summary upward whenever pericoli
+  // change. The parent table row uses this to render its I/Livello so it
+  // can't disagree with its children. We compute max indice over the
+  // *applicable* rows only — disabled pericoli shouldn't drive the
+  // parent badge any more than they drive the DVR.
+  const externalSummary = useMemo<PericoliSummary>(() => {
+    let maxIndice: number | null = null;
+    let applicableCount = 0;
+    for (const p of pericoli) {
+      if (!p.applicabile) continue;
+      applicableCount += 1;
+      const pVal = p.probabilita_p ?? 1;
+      const dVal = p.danno_d ?? 1;
+      const indice = calcIndice(pVal, dVal);
+      if (maxIndice == null || indice > maxIndice) maxIndice = indice;
+    }
+    return {
+      totalCount: pericoli.length,
+      applicableCount,
+      maxIndice,
+      maxLivello: maxIndice != null ? getLivello(maxIndice) : null,
+    };
+  }, [pericoli]);
+
+  useEffect(() => {
+    onSummaryChange?.(rischioId, externalSummary);
+  }, [externalSummary, onSummaryChange, rischioId]);
 
   const availableSuggestions = useMemo(
     () =>

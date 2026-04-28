@@ -29,10 +29,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AlertTriangle, Loader2, Sparkles, Wrench } from "lucide-react";
+import { AlertTriangle, Check, CloudOff, Loader2, Sparkles, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Ambiente, Attrezzatura, ValutazioneRischio } from "@/types";
-import { PericoliPanel } from "@/components/survey/pericoli-panel";
+import {
+  canonicalTipoLabel,
+  normalizeAmbienteTipo,
+  type CanonicalTipo,
+} from "@/lib/ambiente-tipo";
+import type {
+  Ambiente,
+  Attrezzatura,
+  LivelloRischio,
+  ValutazioneRischio,
+} from "@/types";
+import {
+  PericoliPanel,
+  type PericoliSummary,
+} from "@/components/survey/pericoli-panel";
 
 // Map short category name (DB) → canonical long form used by the catalog
 // API (PericoloLibreria.categoria). Mirrors backend
@@ -147,9 +160,12 @@ const RISCHI_PER_AMBIENTE: Record<string, CategoriaRischio[]> = {
 };
 
 function getCategorieForTipo(tipo: string | undefined | null): CategoriaRischio[] {
-  if (!tipo) return [...CATEGORIE_RISCHIO];
-  const filtered = RISCHI_PER_AMBIENTE[tipo.toLowerCase()];
-  return filtered ?? [...CATEGORIE_RISCHIO];
+  // Normalize free-text tipo (e.g. "Open space", "Officina meccanica") to
+  // one of the 9 canonical buckets the lookup tables key off — without
+  // this, every tipo not exactly in the dict fell back to "all 11
+  // categories visible" and useless 1/1 defaults.
+  const bucket = normalizeAmbienteTipo(tipo);
+  return RISCHI_PER_AMBIENTE[bucket] ?? [...CATEGORIE_RISCHIO];
 }
 
 // ---------------------------------------------------------------------------
@@ -245,10 +261,9 @@ const DEFAULT_APPLICABLE_FALLBACK: ReadonlyArray<CategoriaRischio> = [
 function getDefaultApplicable(
   tipo: string | undefined | null
 ): Set<CategoriaRischio> {
-  if (!tipo) return new Set(DEFAULT_APPLICABLE_FALLBACK);
+  const bucket = normalizeAmbienteTipo(tipo);
   return new Set(
-    DEFAULT_APPLICABLE_PER_AMBIENTE[tipo.toLowerCase()] ??
-      DEFAULT_APPLICABLE_FALLBACK
+    DEFAULT_APPLICABLE_PER_AMBIENTE[bucket] ?? DEFAULT_APPLICABLE_FALLBACK,
   );
 }
 
@@ -513,8 +528,8 @@ function getDefaultScores(
   tipo: string | undefined | null,
   categoria: CategoriaRischio
 ): [number, number] {
-  const key = (tipo ?? "").toLowerCase();
-  const matrix = DEFAULT_RISK_SCORES[key];
+  const bucket = normalizeAmbienteTipo(tipo);
+  const matrix = DEFAULT_RISK_SCORES[bucket];
   if (!matrix) return [1, 1];
   return matrix[categoria] ?? [1, 1];
 }
@@ -636,6 +651,50 @@ export function StepRischi({
     Map<string, { items: Array<Record<string, unknown>> }>
   >(new Map());
 
+  // BUG-3 — per-rischio summary published by each PericoliPanel (max
+  // child indice + applicable count). When a rischio has children, its
+  // displayed I/Livello and the top summary banner derive from the
+  // children, not the parent's own P/D. Without this the parent could
+  // read "ACCETTABILE 3" while 12 GRAVE pericoli sat underneath.
+  const [pericoliSummaries, setPericoliSummaries] = useState<
+    Record<string, PericoliSummary>
+  >({});
+  const handlePericoliSummary = useCallback(
+    (rischioId: string, summary: PericoliSummary) => {
+      setPericoliSummaries((prev) => {
+        const existing = prev[rischioId];
+        if (
+          existing &&
+          existing.applicableCount === summary.applicableCount &&
+          existing.maxIndice === summary.maxIndice &&
+          existing.maxLivello === summary.maxLivello &&
+          existing.totalCount === summary.totalCount
+        ) {
+          return prev;
+        }
+        return { ...prev, [rischioId]: summary };
+      });
+    },
+    [],
+  );
+
+  // UX-4 — real save status. The wizard footer's "bozza salvata" string
+  // was static; here we track per-step pending/saving/saved/error and
+  // render a small badge in the card header. State machine:
+  //   idle    → no edits this session
+  //   pending → debounce window open (operator just edited)
+  //   saving  → POST in flight
+  //   saved   → last POST returned 2xx (carries the timestamp)
+  //   error   → last POST threw (toast already raised; badge stays red
+  //             until next successful save)
+  type SaveStatus =
+    | { kind: "idle" }
+    | { kind: "pending" }
+    | { kind: "saving" }
+    | { kind: "saved"; at: number }
+    | { kind: "error"; message: string };
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
+
   // US-1.5 AC3: ack-sig is owned by the wizard so it survives this
   // component's unmount/remount across step navigation. A fresh
   // page-load initialises the wizard's ack-sig from the initial
@@ -698,7 +757,35 @@ export function StepRischi({
     );
   }, [currentValutazioni, categorieVisibili]);
 
-  // Summary counts over the currently visible rows.
+  // BUG-3 — derive a row's *effective* indice/livello: when a row has
+  // catalog/custom pericoli children, the parent's own P/D becomes a
+  // summary-of-summaries — we render the max-of-children instead so the
+  // parent badge can't lie about its own contents.
+  const getEffective = useCallback(
+    (val: ValutazioneRischio): { indice: number; livello: LivelloRischio } => {
+      const childSummary = pericoliSummaries[val.id];
+      if (
+        childSummary &&
+        childSummary.applicableCount > 0 &&
+        childSummary.maxIndice != null &&
+        childSummary.maxLivello != null
+      ) {
+        return {
+          indice: childSummary.maxIndice,
+          livello: childSummary.maxLivello,
+        };
+      }
+      const p = val.probabilita_p ?? 1;
+      const d = val.danno_d ?? 1;
+      const indice = calcIndice(p, d);
+      return { indice, livello: getLivello(indice) };
+    },
+    [pericoliSummaries],
+  );
+
+  // Summary counts over the currently visible rows. Counts use the
+  // *effective* livello so the chips agree with what the operator sees
+  // in each row (and what will end up in the DVR).
   const summary = useMemo(() => {
     const applicabiliRows = visibleValutazioni.filter((v) => v.applicabile);
     const total = visibleValutazioni.length;
@@ -710,9 +797,7 @@ export function StepRischi({
     let accettabile = 0;
 
     for (const v of applicabiliRows) {
-      const p = v.probabilita_p ?? 1;
-      const d = v.danno_d ?? 1;
-      const livello = getLivello(calcIndice(p, d));
+      const { livello } = getEffective(v);
       if (livello === "GRAVISSIMO") gravissimo += 1;
       else if (livello === "GRAVE") grave += 1;
       else if (livello === "MODESTO") modesto += 1;
@@ -720,7 +805,27 @@ export function StepRischi({
     }
 
     return { total, selected, gravissimo, grave, modesto, accettabile };
-  }, [visibleValutazioni]);
+  }, [visibleValutazioni, getEffective]);
+
+  // BUG-1 — refs let the debounced save's reconciliation read the
+  // *latest* state instead of a stale closure. Previously the timeout
+  // body did `onChange(allValutazioni.map(...))` with `allValutazioni`
+  // captured when the save was scheduled. After fetchAIRischi flipped
+  // every row to AI values and then scheduled the save, the timeout
+  // would fire 800ms later with the pre-AI snapshot and overwrite the
+  // parent state — so the AI's P/D vanished from the UI even though
+  // the server had persisted them. Reads via refs always see the
+  // post-AI state.
+  const apiFetchRef = useRef(apiFetch);
+  const aziendaIdRef = useRef(aziendaId);
+  const allValutazioniRef = useRef(allValutazioni);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    apiFetchRef.current = apiFetch;
+    aziendaIdRef.current = aziendaId;
+    allValutazioniRef.current = allValutazioni;
+    onChangeRef.current = onChange;
+  });
 
   const scheduleAmbienteSave = useCallback(
     (ambienteId: string, rows: ValutazioneRischio[]) => {
@@ -743,36 +848,45 @@ export function StepRischi({
         })),
       };
       pending.set(ambienteId, payload);
+      setSaveStatus({ kind: "pending" });
 
       const handle = setTimeout(async () => {
         timers.delete(ambienteId);
         pending.delete(ambienteId);
+        setSaveStatus({ kind: "saving" });
         try {
-          const saved = await apiFetch<ValutazioneRischio[]>(
-            `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/rischi/batch`,
-            { method: "POST", body: JSON.stringify(payload) }
+          const saved = await apiFetchRef.current<ValutazioneRischio[]>(
+            `/api/v1/aziende/${aziendaIdRef.current}/ambienti/${ambienteId}/rischi/batch`,
+            { method: "POST", body: JSON.stringify(payload) },
           );
           // Merge server-returned ids back into local state so subsequent
           // PUTs use the persisted id, not the client-side placeholder.
+          // Read latest state from the ref — `allValutazioni` captured at
+          // schedule time is stale by the time this resolves.
           const byCat = new Map(saved.map((s) => [s.categoria_rischio, s]));
-          onChange(
-            allValutazioni.map((v) => {
+          onChangeRef.current(
+            allValutazioniRef.current.map((v) => {
               if (v.ambiente_id !== ambienteId) return v;
               const s = byCat.get(v.categoria_rischio);
               return s ? { ...v, id: s.id } : v;
-            })
+            }),
           );
+          setSaveStatus({ kind: "saved", at: Date.now() });
         } catch (err) {
-          toast.error(
+          const message =
             err instanceof Error
               ? err.message
-              : "Errore nel salvataggio delle valutazioni rischio"
-          );
+              : "Errore nel salvataggio delle valutazioni rischio";
+          toast.error(message);
+          setSaveStatus({ kind: "error", message });
         }
       }, 800);
       timers.set(ambienteId, handle);
     },
-    [apiFetch, aziendaId, allValutazioni, onChange]
+    // No `allValutazioni` / `onChange` / `apiFetch` deps — the timeout
+    // body always reads the latest values via refs, and capturing them
+    // here would cancel + reschedule debounces on every parent render.
+    [],
   );
 
   // Phase 2.2 / bug B2 — flush (not cancel) any pending saves when the
@@ -781,14 +895,6 @@ export function StepRischi({
   // rischio would still appear in the generated DVR. We keep latest
   // payloads in pendingPayloadsRef and dispatch them fire-and-forget;
   // the request stays in the network stack across the unmount.
-  // apiFetch / aziendaId are read from refs so the cleanup doesn't
-  // re-run on every render and pre-fire the saves.
-  const apiFetchRef = useRef(apiFetch);
-  const aziendaIdRef = useRef(aziendaId);
-  useEffect(() => {
-    apiFetchRef.current = apiFetch;
-    aziendaIdRef.current = aziendaId;
-  });
   useEffect(() => {
     const timers = saveTimersRef.current;
     const pending = pendingPayloadsRef.current;
@@ -1028,10 +1134,15 @@ export function StepRischi({
                 ? ` (${selectedAmbiente.tipo})`
                 : ""}
             </CardTitle>
-            <CardDescription>
-              {mostraTutti
-                ? "Stai vedendo tutte le 11 categorie di rischio."
-                : `Categorie filtrate per tipo "${selectedAmbiente?.tipo ?? "altro"}".`}
+            <CardDescription className="flex flex-wrap items-center gap-2">
+              <span>
+                {mostraTutti
+                  ? "Stai vedendo tutte le 11 categorie di rischio."
+                  : `Categorie filtrate per ${canonicalTipoLabel(
+                      normalizeAmbienteTipo(selectedAmbiente?.tipo),
+                    )}.`}
+              </span>
+              <SaveStatusBadge status={saveStatus} />
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1064,7 +1175,7 @@ export function StepRischi({
               ) : (
                 <>
                   <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                  Flegga rischi con AI
+                  Suggerisci con AI
                 </>
               )}
             </Button>
@@ -1086,48 +1197,20 @@ export function StepRischi({
               <p>{aiSintesiByAmbiente[selectedAmbiente.id]}</p>
             </div>
           )}
-          {/* Summary bar */}
+          {/* UX-1 — summary bar. Chips with count = 0 render muted so a
+              red "0 Gravissimo" badge can't mislead the eye into thinking
+              there's an alert; the highest non-zero livello carries the
+              colored treatment so the operator sees at-a-glance whether
+              this ambiente is dominated by GRAVISSIMO/GRAVE/MODESTO. */}
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 px-3 py-2 text-xs">
             <div className="font-medium">
               {summary.selected} di {summary.total} rischi selezionati
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge
-                variant="outline"
-                className={cn(
-                  "font-semibold",
-                  getLivelloStyle("GRAVISSIMO")
-                )}
-              >
-                {summary.gravissimo} Gravissimo
-              </Badge>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "font-semibold",
-                  getLivelloStyle("GRAVE")
-                )}
-              >
-                {summary.grave} Grave
-              </Badge>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "font-semibold",
-                  getLivelloStyle("MODESTO")
-                )}
-              >
-                {summary.modesto} Modesto
-              </Badge>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "font-semibold",
-                  getLivelloStyle("ACCETTABILE")
-                )}
-              >
-                {summary.accettabile} Accettabile
-              </Badge>
+              <SummaryChip count={summary.gravissimo} livello="GRAVISSIMO" />
+              <SummaryChip count={summary.grave} livello="GRAVE" />
+              <SummaryChip count={summary.modesto} livello="MODESTO" />
+              <SummaryChip count={summary.accettabile} livello="ACCETTABILE" />
             </div>
           </div>
 
@@ -1158,8 +1241,15 @@ export function StepRischi({
               {visibleValutazioni.map((val) => {
                 const p = val.probabilita_p ?? 1;
                 const d = val.danno_d ?? 1;
-                const indice = calcIndice(p, d);
-                const livello = getLivello(indice);
+                // BUG-3 — when this rischio has children pericoli, the
+                // displayed I/Livello come from max-of-children. The own
+                // P/D sliders still drive the *parent* row (used as the
+                // fallback when there are no children), but the badge
+                // column shows the truth.
+                const childSummary = pericoliSummaries[val.id];
+                const hasChildren =
+                  !!childSummary && childSummary.applicableCount > 0;
+                const { indice, livello } = getEffective(val);
                 // Phase 3 (1:N): for every applicable categoria we render
                 // the expandable per-pericolo editor as a sibling row
                 // immediately under the categoria row, so the sub-rows
@@ -1224,92 +1314,89 @@ export function StepRischi({
                         </button>
                       </TableCell>
 
-                      {/* P slider */}
+                      {/* P — UX-2 segmented 1/2/3/4 (replaces unstyled
+                          range slider). BUG-5: when row is not
+                          applicable, render an em-dash placeholder
+                          instead of an empty cell. */}
                       <TableCell>
-                        {val.applicabile && (
-                          <div className="flex flex-col items-center gap-1">
-                            <input
-                              type="range"
-                              min={1}
-                              max={4}
-                              step={1}
-                              value={p}
-                              onChange={(e) =>
-                                updateValutazione(val.id, {
-                                  probabilita_p: Number(
-                                    e.target.value
-                                  ),
-                                })
-                              }
-                              className="w-full accent-primary"
-                            />
-                            <span className="text-xs font-medium text-muted-foreground">
-                              {p}
-                            </span>
-                          </div>
+                        {val.applicabile ? (
+                          <PDSegmented
+                            value={p}
+                            onChange={(next) =>
+                              updateValutazione(val.id, {
+                                probabilita_p: next,
+                              })
+                            }
+                            ariaLabel={`Probabilita ${val.categoria_rischio}`}
+                            disabledByChildren={hasChildren}
+                          />
+                        ) : (
+                          <DashCell />
                         )}
                       </TableCell>
 
-                      {/* D slider */}
+                      {/* D — same treatment as P */}
                       <TableCell>
-                        {val.applicabile && (
-                          <div className="flex flex-col items-center gap-1">
-                            <input
-                              type="range"
-                              min={1}
-                              max={4}
-                              step={1}
-                              value={d}
-                              onChange={(e) =>
-                                updateValutazione(val.id, {
-                                  danno_d: Number(
-                                    e.target.value
-                                  ),
-                                })
-                              }
-                              className="w-full accent-primary"
-                            />
-                            <span className="text-xs font-medium text-muted-foreground">
-                              {d}
-                            </span>
-                          </div>
+                        {val.applicabile ? (
+                          <PDSegmented
+                            value={d}
+                            onChange={(next) =>
+                              updateValutazione(val.id, {
+                                danno_d: next,
+                              })
+                            }
+                            ariaLabel={`Danno ${val.categoria_rischio}`}
+                            disabledByChildren={hasChildren}
+                          />
+                        ) : (
+                          <DashCell />
                         )}
                       </TableCell>
 
-                      {/* Indice */}
+                      {/* Indice — derived (children-aware) */}
                       <TableCell className="text-center">
-                        {val.applicabile && (
+                        {val.applicabile ? (
                           <div className="flex flex-col items-center gap-1">
-                            <span className="text-lg font-bold">
-                              {indice}
-                            </span>
+                            <span className="text-lg font-bold">{indice}</span>
                             <div className="h-1.5 w-full max-w-[60px] overflow-hidden rounded-full bg-muted">
                               <div
                                 className={cn(
                                   "h-full rounded-full transition-all",
-                                  getIndiceBarColor(livello)
+                                  getIndiceBarColor(livello),
                                 )}
                                 style={{
                                   width: `${((indice - 3) / 9) * 100}%`,
                                 }}
                               />
                             </div>
+                            {hasChildren && (
+                              <span
+                                title="Calcolato come massimo dei pericoli di dettaglio"
+                                className="text-[9px] uppercase tracking-wide text-muted-foreground"
+                              >
+                                da pericoli
+                              </span>
+                            )}
                           </div>
+                        ) : (
+                          <DashCell />
                         )}
                       </TableCell>
 
                       {/* Livello */}
                       <TableCell className="text-center">
-                        {val.applicabile && (
+                        {val.applicabile ? (
                           <Badge
                             variant="outline"
                             className={cn(
                               "text-xs font-semibold",
-                              getLivelloStyle(livello)
+                              getLivelloStyle(livello),
                             )}
                           >
                             {livello}
                           </Badge>
+                        ) : (
+                          <DashCell />
                         )}
                       </TableCell>
                     </TableRow>
@@ -1321,6 +1408,7 @@ export function StepRischi({
                             ambienteId={val.ambiente_id}
                             valutazione={val}
                             categoriaLong={long as string}
+                            onSummaryChange={handlePericoliSummary}
                           />
                         </TableCell>
                       </TableRow>
@@ -1389,5 +1477,147 @@ export function StepRischi({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// UX-2 — segmented 1/2/3/4 control replacing the unstyled <input type=range>
+// for P (probabilita) and D (danno). Each value is a discrete pip the
+// operator can hit directly on tablets in the field; the active pip uses
+// the brand primary so the choice is unmistakable. When the rischio has
+// children pericoli, the parent slider is greyed out — the value still
+// renders but editing it would mislead since the displayed I/Livello come
+// from the children, not from this control.
+// ---------------------------------------------------------------------------
+interface PDSegmentedProps {
+  value: number;
+  onChange: (next: number) => void;
+  ariaLabel: string;
+  disabledByChildren?: boolean;
+}
+
+function PDSegmented({
+  value,
+  onChange,
+  ariaLabel,
+  disabledByChildren,
+}: PDSegmentedProps) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ariaLabel}
+      className={cn(
+        "mx-auto flex w-fit items-center gap-0.5 rounded-md border bg-background p-0.5",
+        disabledByChildren && "opacity-50",
+      )}
+    >
+      {[1, 2, 3, 4].map((n) => (
+        <button
+          key={n}
+          type="button"
+          role="radio"
+          aria-checked={value === n}
+          onClick={() => onChange(n)}
+          className={cn(
+            "h-6 w-6 rounded text-xs font-semibold transition-colors",
+            value === n
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:bg-muted",
+          )}
+        >
+          {n}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// BUG-5 — placeholder for cells whose row is not applicable. Renders an
+// em-dash centered in the cell so the table doesn't appear broken. We
+// keep the full muted opacity treatment on the parent <TableRow> so the
+// whole row reads as "off".
+function DashCell() {
+  return (
+    <div className="text-center text-xs text-muted-foreground">—</div>
+  );
+}
+
+// UX-1 — summary chip. count = 0 falls back to a muted style so a red
+// "0 Gravissimo" badge can't be misread as an alert; non-zero counts
+// keep the per-livello color treatment.
+interface SummaryChipProps {
+  count: number;
+  livello: LivelloRischio;
+}
+
+function SummaryChip({ count, livello }: SummaryChipProps) {
+  const label = (() => {
+    switch (livello) {
+      case "GRAVISSIMO":
+        return "Gravissimo";
+      case "GRAVE":
+        return "Grave";
+      case "MODESTO":
+        return "Modesto";
+      case "ACCETTABILE":
+        return "Accettabile";
+    }
+  })();
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "font-semibold",
+        count === 0
+          ? "border-muted bg-muted/30 text-muted-foreground"
+          : getLivelloStyle(livello),
+      )}
+    >
+      {count} {label}
+    </Badge>
+  );
+}
+
+// UX-4 — small status pill rendered next to the card description.
+// Mirrors the saveStatus state machine in StepRischi. Hidden in the
+// idle state to avoid noise on the first paint.
+type SaveStatus =
+  | { kind: "idle" }
+  | { kind: "pending" }
+  | { kind: "saving" }
+  | { kind: "saved"; at: number }
+  | { kind: "error"; message: string };
+
+function SaveStatusBadge({ status }: { status: SaveStatus }) {
+  if (status.kind === "idle") return null;
+  if (status.kind === "pending" || status.kind === "saving") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+        <Loader2 className="h-2.5 w-2.5 animate-spin" />
+        Salvataggio…
+      </span>
+    );
+  }
+  if (status.kind === "error") {
+    return (
+      <span
+        title={status.message}
+        className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700"
+      >
+        <CloudOff className="h-2.5 w-2.5" />
+        Salvataggio fallito
+      </span>
+    );
+  }
+  // saved
+  const time = new Date(status.at).toLocaleTimeString("it-IT", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+      <Check className="h-2.5 w-2.5" />
+      Salvato {time}
+    </span>
   );
 }
