@@ -206,7 +206,7 @@ client = AsyncOpenAI()
 resp = await client.responses.create(
     model="gpt-5.4-nano",
     input=[{"role": "user", "content": "..."}],
-    reasoning={"effort": "minimal"},   # see "reasoning effort" below
+    reasoning={"effort": "none"},      # nano + 5.5 use "none"; 5/5.4-mini use "minimal"
     max_output_tokens=500,
 )
 text = resp.output_text
@@ -229,11 +229,13 @@ obj: MySchema = resp.output_parsed
 
 ### Reasoning effort — the silent budget killer
 
-`reasoning.effort` valid values:
-- `gpt-5` / `gpt-5.4` family: `minimal | low | medium | high`
-- `gpt-5.5`: `none | low | medium | high | xhigh` (default `medium`)
+`reasoning.effort` valid values vary by model — confirmed against the live API on 2026-04-28:
+- `gpt-5`, `gpt-5.4-mini`: `minimal | low | medium | high`
+- `gpt-5.4-nano`, `gpt-5.5`: `none | low | medium | high | xhigh` (no `minimal`; passing it returns 400 invalid_request_error)
 
-Reasoning tokens count against `max_output_tokens` **before** any visible output is produced. With a tight budget and default effort, `output_text` will come back empty. For boilerplate generation always set `reasoning={"effort": "minimal"}` (5/5.4) or `"none"` (5.5). For SDS extraction `medium` is the right default; bump to `high` only for ambiguous documents.
+The "lightest tier" is `minimal` on the older/full-size models and `none` on nano + 5.5. The helpers in `backend/app/services/ai/client.py` accept the `minimal` vocabulary at the call site and translate to `none` automatically for nano + 5.5 via `_normalize_effort` — keep that translation in sync if you add new models.
+
+Reasoning tokens count against `max_output_tokens` **before** any visible output is produced. With a tight budget and default effort, `output_text` will come back empty. For boilerplate generation always pass the lightest tier. For SDS extraction `medium` is the right default; bump to `high` only for ambiguous documents.
 
 ### Privacy contract (unchanged)
 
