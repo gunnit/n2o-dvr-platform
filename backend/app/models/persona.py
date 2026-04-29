@@ -26,6 +26,7 @@ class Persona(Base):
     ruolo_antincendio: Mapped[bool] = mapped_column(Boolean, default=False)
     ruolo_preposto: Mapped[bool] = mapped_column(Boolean, default=False)
     ruolo_datore_lavoro: Mapped[bool] = mapped_column(Boolean, default=False)
+    ruolo_medico_competente: Mapped[bool] = mapped_column(Boolean, default=False)
     # Free-text note (originally "qualifiche", now repurposed as free-form note
     # alongside the structured `attrezzature_speciali` flags introduced 2026-04-28).
     qualifiche: Mapped[str | None] = mapped_column(String)

@@ -16,6 +16,7 @@ class PersonaBase(BaseModel):
     ruolo_antincendio: bool = False
     ruolo_preposto: bool = False
     ruolo_datore_lavoro: bool = False
+    ruolo_medico_competente: bool = False
     # Free-text note alongside the structured attrezzature_speciali flags.
     # Originally "qualifiche" (US-1.4), repurposed as a note 2026-04-28.
     qualifiche: str | None = None
@@ -40,6 +41,7 @@ class PersonaUpdate(BaseModel):
     ruolo_antincendio: bool | None = None
     ruolo_preposto: bool | None = None
     ruolo_datore_lavoro: bool | None = None
+    ruolo_medico_competente: bool | None = None
     qualifiche: str | None = None
     attrezzature_speciali: list[str] | None = None
     # When present the M2M is rewritten; when absent it is left untouched.

@@ -34,6 +34,7 @@ type RoleKey =
   | "datore_lavoro"
   | "rspp"
   | "rls"
+  | "medico_competente"
   | "preposto"
   | "primo_soccorso"
   | "antincendio";
@@ -42,6 +43,7 @@ const ROLE_DEFS: { key: RoleKey; label: string; field: keyof Persona }[] = [
   { key: "datore_lavoro", label: "DdL", field: "ruolo_datore_lavoro" },
   { key: "rspp", label: "RSPP", field: "ruolo_rspp" },
   { key: "rls", label: "RLS", field: "ruolo_rls" },
+  { key: "medico_competente", label: "MC", field: "ruolo_medico_competente" },
   { key: "preposto", label: "Preposto", field: "ruolo_preposto" },
   { key: "primo_soccorso", label: "Primo Soccorso", field: "ruolo_primo_soccorso" },
   { key: "antincendio", label: "Antincendio", field: "ruolo_antincendio" },

@@ -69,6 +69,7 @@ export interface Persona {
   ruolo_antincendio: boolean;
   ruolo_preposto: boolean;
   ruolo_datore_lavoro: boolean;
+  ruolo_medico_competente: boolean;
   // Free-text note alongside the structured `attrezzature_speciali` flags.
   // Originally "qualifiche" (US-1.4), kept as a note field after 2026-04-28.
   qualifiche: string | null;

@@ -150,7 +150,7 @@ async def seed_acme(session: AsyncSession) -> Azienda:
         {"nome": "Mario Rossi",        "mans": "Datore di Lavoro", "role_dl": True},
         {"nome": "Luca Bianchi",       "mans": "RSPP",             "role_rspp": True},
         {"nome": "Giulia Verdi",       "mans": "RLS",              "role_rls": True},
-        {"nome": "Dott. Paolo Neri",   "mans": "Medico Competente"},
+        {"nome": "Dott. Paolo Neri",   "mans": "Medico Competente", "role_mc": True},
         {"nome": "Franco Gialli",      "mans": "Preposto Officina",       "role_prep": True, "role_anti": True},
         {"nome": "Antonio Marrone",    "mans": "Operaio Tornitore",       "role_ps": True},
         {"nome": "Giuseppe Russo",     "mans": "Operaio Fresatore"},
@@ -181,6 +181,7 @@ async def seed_acme(session: AsyncSession) -> Azienda:
             ruolo_antincendio=bool(p.get("role_anti")),
             ruolo_preposto=bool(p.get("role_prep")),
             ruolo_datore_lavoro=bool(p.get("role_dl")),
+            ruolo_medico_competente=bool(p.get("role_mc")),
         )
         session.add(pers)
         persone[p["nome"]] = pers
