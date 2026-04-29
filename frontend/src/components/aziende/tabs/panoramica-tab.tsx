@@ -570,28 +570,30 @@ export default function PanoramicaTab({
       </Panel>
 
       {/* Descrizione */}
-      <Panel accent="violet" className="md:col-span-2">
-        <PanelHeader icon={FileText} title="Descrizione" accent="violet" />
-        <div className="space-y-6 p-6">
-          <DescriptionEditor
-            aziendaId={azienda.id}
-            value={azienda.descrizione_attivita ?? ""}
-            initialProvenance={
-              azienda.descrizione_attivita ? "edited" : "none"
-            }
-            visuraUploadedAt={azienda.visura_uploaded_at ?? null}
-            onChange={onDescriptionChange}
-          />
-          {azienda.contesto_territoriale && (
-            <div>
-              <Eyebrow>Contesto territoriale</Eyebrow>
-              <p className="mt-2 text-[14px] leading-relaxed text-[#273951]">
-                {azienda.contesto_territoriale}
-              </p>
-            </div>
-          )}
-        </div>
-      </Panel>
+      <div id="descrizione-attivita" className="scroll-mt-24 md:col-span-2">
+        <Panel accent="violet">
+          <PanelHeader icon={FileText} title="Descrizione" accent="violet" />
+          <div className="space-y-6 p-6">
+            <DescriptionEditor
+              aziendaId={azienda.id}
+              value={azienda.descrizione_attivita ?? ""}
+              initialProvenance={
+                azienda.descrizione_attivita ? "edited" : "none"
+              }
+              visuraUploadedAt={azienda.visura_uploaded_at ?? null}
+              onChange={onDescriptionChange}
+            />
+            {azienda.contesto_territoriale && (
+              <div>
+                <Eyebrow>Contesto territoriale</Eyebrow>
+                <p className="mt-2 text-[14px] leading-relaxed text-[#273951]">
+                  {azienda.contesto_territoriale}
+                </p>
+              </div>
+            )}
+          </div>
+        </Panel>
+      </div>
     </div>
   );
 }

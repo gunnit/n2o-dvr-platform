@@ -377,7 +377,17 @@ export default function AziendaDetailPage() {
         documenti={documenti}
         callbacks={{
           onResumeSurvey: () => router.push(`/survey/${id}`),
-          onOpenDescrizione: () => handleTabChange("panoramica"),
+          onOpenDescrizione: () => {
+            handleTabChange("panoramica");
+            // Wait two frames so the tab content is mounted before scrolling.
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                document
+                  .getElementById("descrizione-attivita")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
+              });
+            });
+          },
           onOpenRischi: () => handleTabChange("rischi"),
           onOpenAssessments: () => router.push("/assessments"),
           onOpenDocumenti: () => handleTabChange("documenti"),

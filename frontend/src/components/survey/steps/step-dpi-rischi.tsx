@@ -160,6 +160,15 @@ export function StepDpiRischi({
     [mansioni, mansioniSorveglianza, aziendaId]
   );
 
+  // Latest parent prop, mirrored in a ref so the debounced save's success
+  // branch always merges into the freshest row list — without it, a PUT
+  // for mansione A in flight while the operator toggles mansione B would
+  // overwrite B's pending tick with A's stale snapshot.
+  const latestRowsRef = useRef(mansioniSorveglianza);
+  useEffect(() => {
+    latestRowsRef.current = mansioniSorveglianza;
+  }, [mansioniSorveglianza]);
+
   // Debounced per-mansione upsert. Multiple checkbox toggles coalesce into
   // one PUT 800ms after the last edit.
   const saveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
@@ -194,9 +203,10 @@ export function StepDpiRischi({
               }),
             }
           );
-          // Replace placeholder id with server id.
+          // Merge the saved row into the freshest array (ref, not closure)
+          // so concurrent edits on other mansioni aren't clobbered.
           onChange(
-            Array.from(rowsByMansione.values()).map((r) =>
+            latestRowsRef.current.map((r) =>
               r.mansione_nome === saved.mansione_nome ? saved : r
             )
           );
@@ -208,7 +218,7 @@ export function StepDpiRischi({
       }, 800);
       timers.set(key, handle);
     },
-    [apiFetch, aziendaId, onChange, rowsByMansione]
+    [apiFetch, aziendaId, onChange]
   );
 
   const updateRow = useCallback(
@@ -451,7 +461,7 @@ export function StepDpiRischi({
                   ) : (
                     <>
                       <Sparkles className="h-3.5 w-3.5" />
-                      Flegga con AI
+                      Flagga con AI
                     </>
                   )}
                 </button>

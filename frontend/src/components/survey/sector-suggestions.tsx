@@ -23,7 +23,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Lightbulb, History } from "lucide-react";
+import { Lightbulb, History, X } from "lucide-react";
 
 interface SectorAttrezzatura {
   descrizione: string;
@@ -51,10 +51,18 @@ interface SectorSummary {
   top_sostanze: SectorSostanza[];
 }
 
+const dismissKey = (aziendaId: string) => `n2o:sector-banner-dismissed:${aziendaId}`;
+
 export function SectorSuggestions({ aziendaId }: { aziendaId: string }) {
   const { apiFetch } = useApi();
   const [summary, setSummary] = useState<SectorSummary | null>(null);
   const [open, setOpen] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setDismissed(window.localStorage.getItem(dismissKey(aziendaId)) === "1");
+  }, [aziendaId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,6 +81,13 @@ export function SectorSuggestions({ aziendaId }: { aziendaId: string }) {
     };
   }, [apiFetch, aziendaId]);
 
+  const handleDismiss = () => {
+    setDismissed(true);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(dismissKey(aziendaId), "1");
+    }
+  };
+
   const tipos = useMemo(() => {
     if (!summary) return [];
     const set = new Set<string>([
@@ -82,7 +97,7 @@ export function SectorSuggestions({ aziendaId }: { aziendaId: string }) {
     return Array.from(set).sort();
   }, [summary]);
 
-  if (!summary || summary.sector_size === 0) return null;
+  if (!summary || summary.sector_size === 0 || dismissed) return null;
 
   return (
     <>
@@ -102,16 +117,26 @@ export function SectorSuggestions({ aziendaId }: { aziendaId: string }) {
             </p>
           </div>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setOpen(true)}
-          className="border-emerald-300 text-emerald-800 hover:bg-emerald-100"
-        >
-          <History className="mr-1.5 h-3.5 w-3.5" />
-          Vedi consigli del settore
-        </Button>
+        <div className="flex items-center gap-2 self-end sm:self-auto">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setOpen(true)}
+            className="border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+          >
+            <History className="mr-1.5 h-3.5 w-3.5" />
+            Vedi consigli del settore
+          </Button>
+          <button
+            type="button"
+            onClick={handleDismiss}
+            aria-label="Nascondi suggerimenti del settore"
+            className="rounded-md p-1 text-emerald-800 hover:bg-emerald-200/60"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>

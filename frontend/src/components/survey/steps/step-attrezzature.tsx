@@ -331,10 +331,18 @@ export function StepAttrezzature({
     if (!selectedAmbiente) return;
     // Add optimistically; defer server create until the descrizione is
     // populated and the field blurs (commitAttrezzatura handles that).
-    onChange([
-      ...attrezzature,
-      createEmptyAttrezzatura(aziendaId, selectedAmbiente.id),
-    ]);
+    const newRow = createEmptyAttrezzatura(aziendaId, selectedAmbiente.id);
+    onChange([...attrezzature, newRow]);
+    // Autofocus the new descrizione input once React has rendered it.
+    // Without this, the empty row also briefly surfaces in "Attrezzature
+    // selezionate" as "Senza nome" and operators don't realize the editable
+    // input is in the section below.
+    requestAnimationFrame(() => {
+      const el = document.getElementById(
+        `att-desc-${newRow.id}`,
+      ) as HTMLInputElement | null;
+      el?.focus();
+    });
   }, [attrezzature, onChange, aziendaId, selectedAmbiente]);
 
   // Phase 5.3 — fetch AI suggestions for the current ambiente.
@@ -825,25 +833,34 @@ export function StepAttrezzature({
         );
       })()}
 
-      {/* Selected equipment details — scoped to current ambiente */}
-      {ambienteAttrezzature.length > 0 && (
+      {/* Selected equipment details — scoped to current ambiente. Rows with
+          an empty descrizione are still being edited in the "Attrezzature
+          personalizzate" section below, so we hide them here to avoid the
+          duplicate "Senza nome" placeholder that confused operators into
+          thinking the name wasn't editable. */}
+      {(() => {
+        const namedAttrezzature = ambienteAttrezzature.filter((a) =>
+          a.descrizione?.trim(),
+        );
+        if (namedAttrezzature.length === 0) return null;
+        return (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Attrezzature selezionate ({ambienteAttrezzature.length})
+              Attrezzature selezionate ({namedAttrezzature.length})
             </CardTitle>
             <CardDescription>
               Imposta marcatura CE per ogni attrezzatura
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {ambienteAttrezzature.map((att) => (
+            {namedAttrezzature.map((att) => (
               <div
                 key={att.id}
                 className="flex flex-wrap items-center gap-3 rounded-lg border border-input p-3"
               >
                 <span className="min-w-[160px] flex-1 text-sm font-medium">
-                  {att.descrizione || "Senza nome"}
+                  {att.descrizione}
                 </span>
 
                 <label className="flex items-center gap-2 rounded-lg border border-input px-3 py-1.5 text-sm transition-colors hover:bg-muted has-[:checked]:border-primary has-[:checked]:bg-primary/5">
@@ -870,7 +887,8 @@ export function StepAttrezzature({
             ))}
           </CardContent>
         </Card>
-      )}
+        );
+      })()}
 
       {/* Custom equipment */}
       <Card>
