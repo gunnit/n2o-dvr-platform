@@ -23,6 +23,7 @@ from app.models.biologico_valutazione import BiologicoValutazione
 from app.models.stress_misura_libreria import StressMisuraLibreria
 from app.models.rischio_misura_libreria import RischioMisuraLibreria
 from app.models.mansione_sorveglianza import MansioneSorveglianza
+from app.models.misura_miglioramento import MisuraMiglioramento
 
 # Complementary document models
 from app.models.haccp_form import HaccpConfig, HaccpFormState
@@ -60,6 +61,7 @@ __all__ = [
     "StressMisuraLibreria",
     "RischioMisuraLibreria",
     "MansioneSorveglianza",
+    "MisuraMiglioramento",
     "HaccpConfig",
     "HaccpFormState",
     "PeePlan",
