@@ -1562,8 +1562,18 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     def _add_single_role_title_table(
         self, doc: Document, title: str, role_persone: list
     ) -> None:
-        """Template Tables 6–9 — single-column title table with the role-holder's name."""
-        names = [(p.nominativo or "").upper() for p in role_persone] or ["—"]
+        """Template Tables 6–9 — single-column title table with the role-holder's name.
+
+        Feedback #10 (2026-04-29): MC and RSPP are frequently external
+        consultants. We append "(ESTERNO)" to the name when `is_esterno` is
+        set. The flag is only writable on MC/RSPP in the survey UI, so DdL
+        and RLS rows naturally carry it false and render unchanged.
+        """
+        def _format(p) -> str:
+            base = (p.nominativo or "").upper()
+            return f"{base} (ESTERNO)" if getattr(p, "is_esterno", False) else base
+
+        names = [_format(p) for p in role_persone] or ["—"]
         table = doc.add_table(rows=1 + len(names), cols=1)
         table.style = "Table Grid"
 

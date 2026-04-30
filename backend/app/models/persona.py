@@ -27,6 +27,10 @@ class Persona(Base):
     ruolo_preposto: Mapped[bool] = mapped_column(Boolean, default=False)
     ruolo_datore_lavoro: Mapped[bool] = mapped_column(Boolean, default=False)
     ruolo_medico_competente: Mapped[bool] = mapped_column(Boolean, default=False)
+    # External consultant flag (feedback #10, 2026-04-29). Many small clients
+    # outsource the RSPP and the Medico Competente roles to external
+    # professionals — the DVR organigramma must label them as such.
+    is_esterno: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Free-text note (originally "qualifiche", now repurposed as free-form note
     # alongside the structured `attrezzature_speciali` flags introduced 2026-04-28).
     qualifiche: Mapped[str | None] = mapped_column(String)

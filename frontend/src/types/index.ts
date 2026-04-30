@@ -70,6 +70,10 @@ export interface Persona {
   ruolo_preposto: boolean;
   ruolo_datore_lavoro: boolean;
   ruolo_medico_competente: boolean;
+  // External consultant flag (feedback #10, 2026-04-29). Only meaningful
+  // when ruolo_rspp or ruolo_medico_competente is true; the DVR
+  // organigramma renders an "(esterno)" suffix when set.
+  is_esterno?: boolean;
   // Free-text note alongside the structured `attrezzature_speciali` flags.
   // Originally "qualifiche" (US-1.4), kept as a note field after 2026-04-28.
   qualifiche: string | null;

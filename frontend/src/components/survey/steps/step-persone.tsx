@@ -95,6 +95,7 @@ function createEmptyPersona(aziendaId: string): Persona {
     ruolo_preposto: false,
     ruolo_datore_lavoro: false,
     ruolo_medico_competente: false,
+    is_esterno: false,
     qualifiche: null,
     attrezzature_speciali: [],
     ambiente_ids: [],
@@ -198,6 +199,13 @@ export function StepPersone({
         ruolo_preposto: editing.ruolo_preposto,
         ruolo_datore_lavoro: editing.ruolo_datore_lavoro,
         ruolo_medico_competente: editing.ruolo_medico_competente,
+        // Only persist is_esterno when MC or RSPP is set — feedback #10
+        // explicitly scopes it to those roles. For everyone else we send
+        // false so toggling roles off correctly clears the flag server-side.
+        is_esterno:
+          editing.ruolo_medico_competente || editing.ruolo_rspp
+            ? !!editing.is_esterno
+            : false,
         qualifiche: editing.qualifiche,
         attrezzature_speciali: editing.attrezzature_speciali,
         ambiente_ids: editing.ambiente_ids,
@@ -345,11 +353,20 @@ export function StepPersone({
                 {persone.map((p, index) => (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">
-                      {p.nominativo || (
-                        <span className="text-muted-foreground italic">
-                          (senza nome)
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>
+                          {p.nominativo || (
+                            <span className="text-muted-foreground italic">
+                              (senza nome)
+                            </span>
+                          )}
                         </span>
-                      )}
+                        {p.is_esterno && (
+                          <span className="rounded-sm border border-amber-300 bg-amber-50 px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide text-amber-800">
+                            Esterno
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {p.mansione ?? "—"}
@@ -635,6 +652,28 @@ export function StepPersone({
                   ))}
                 </div>
               </div>
+
+              {/* Consulente esterno — feedback #10 (2026-04-29).
+                  Only relevant for MC and RSPP, which are commonly
+                  outsourced to external professionals. We hide the toggle
+                  for every other role so the UI doesn't suggest it's a
+                  generic property. */}
+              {(editing.ruolo_medico_competente || editing.ruolo_rspp) && (
+                <div className="space-y-2">
+                  <Label>Tipologia incarico</Label>
+                  <label className="flex items-center gap-2 rounded-lg border border-input px-3 py-1.5 text-sm transition-colors hover:bg-muted has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+                    <input
+                      type="checkbox"
+                      checked={!!editing.is_esterno}
+                      onChange={(e) =>
+                        updateEditing({ is_esterno: e.target.checked })
+                      }
+                      className="accent-primary"
+                    />
+                    Consulente esterno (non dipendente dell&apos;azienda)
+                  </label>
+                </div>
+              )}
             </div>
           )}
 

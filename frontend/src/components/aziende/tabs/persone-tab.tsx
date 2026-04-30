@@ -293,9 +293,16 @@ export default function PersoneTab({ persone, ambienti }: PersoneTabProps) {
                     <TableRow key={p.id}>
                       <TableCell>
                         <div className="flex flex-col gap-0.5">
-                          <span className="font-medium text-[#061b31]">
-                            {p.nominativo}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium text-[#061b31]">
+                              {p.nominativo}
+                            </span>
+                            {p.is_esterno && (
+                              <span className="rounded-sm border border-amber-300 bg-amber-50 px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide text-amber-800">
+                                Esterno
+                              </span>
+                            )}
+                          </div>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[#64748d] tnum">
                             {cfMasked && <span>{cfMasked}</span>}
                             {sexAge && (

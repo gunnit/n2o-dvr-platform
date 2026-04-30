@@ -17,6 +17,10 @@ class PersonaBase(BaseModel):
     ruolo_preposto: bool = False
     ruolo_datore_lavoro: bool = False
     ruolo_medico_competente: bool = False
+    # External consultant flag (feedback #10, 2026-04-29). Surfaced in the
+    # DVR §1.3 organigramma as an "(esterno)" suffix; only meaningful when
+    # `ruolo_rspp` or `ruolo_medico_competente` is set.
+    is_esterno: bool = False
     # Free-text note alongside the structured attrezzature_speciali flags.
     # Originally "qualifiche" (US-1.4), repurposed as a note 2026-04-28.
     qualifiche: str | None = None
@@ -42,6 +46,7 @@ class PersonaUpdate(BaseModel):
     ruolo_preposto: bool | None = None
     ruolo_datore_lavoro: bool | None = None
     ruolo_medico_competente: bool | None = None
+    is_esterno: bool | None = None
     qualifiche: str | None = None
     attrezzature_speciali: list[str] | None = None
     # When present the M2M is rewritten; when absent it is left untouched.
