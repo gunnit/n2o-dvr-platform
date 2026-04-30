@@ -21,9 +21,9 @@ from app.services.ai.improvement_measures import (
     MisureSuggerite,
     suggest_measures,
 )
-from app.services.ai.mansione_protocol_suggester import (
-    MansioneProtocolSuggerito,
-    suggest_mansione_protocol,
+from app.services.ai.dpi_rischi_suggester import (
+    DpiRischiSuggerito,
+    suggest_dpi_rischi,
 )
 from app.services.ai.rischi_suggester import (
     RischiSuggeriti,
@@ -63,9 +63,9 @@ __all__ = [
     "extract_attrezzature_from_photos",
     "AttrezzaturaIdentificata",
     "AttrezzatureIdentificate",
-    # Mansione protocol suggestions (Phase 5.1 + 5.2)
-    "suggest_mansione_protocol",
-    "MansioneProtocolSuggerito",
+    # Per-persona DPI + rischi specifici suggestions
+    "suggest_dpi_rischi",
+    "DpiRischiSuggerito",
     # Rischi suggestions per ambiente (Phase 8.3)
     "suggest_rischi",
     "RischioSuggerito",

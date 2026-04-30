@@ -23,12 +23,13 @@ import {
   ShieldAlert,
   Sparkles,
   Stethoscope,
+  Users2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/hooks/use-api";
 import type {
   DpiCatalogResponse,
-  MansioneSorveglianza,
+  DpiRischiSuggerito,
   Persona,
   RischiSpecificiCatalogResponse,
 } from "@/types";
@@ -36,62 +37,24 @@ import type {
 interface StepDpiRischiProps {
   aziendaId: string;
   persone: Persona[];
-  mansioniSorveglianza: MansioneSorveglianza[];
-  onChange: (rows: MansioneSorveglianza[]) => void;
+  onChange: (persone: Persona[]) => void;
 }
 
-// Distinct mansioni from persone, trimmed, deduped, sorted.
-// Empty / whitespace mansioni are skipped — the step renders an empty state
-// in that case so the operator knows to fill mansioni first.
-function distinctMansioni(persone: Persona[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const p of persone) {
-    const m = (p.mansione ?? "").trim();
-    if (!m || seen.has(m)) continue;
-    seen.add(m);
-    out.push(m);
-  }
-  return out.sort((a, b) => a.localeCompare(b, "it"));
-}
-
-// Build a map mansione_nome -> row, returning a synthetic (unsaved) row
-// when missing so the UI always has something to render per mansione.
-function buildRowsByMansione(
-  mansioni: string[],
-  rows: MansioneSorveglianza[],
-  aziendaId: string
-): Map<string, MansioneSorveglianza> {
-  const byNome = new Map<string, MansioneSorveglianza>();
-  for (const r of rows) byNome.set(r.mansione_nome, r);
-
-  const out = new Map<string, MansioneSorveglianza>();
-  const nowIso = new Date().toISOString();
-  for (const nome of mansioni) {
-    const existing = byNome.get(nome);
-    if (existing) {
-      out.set(nome, existing);
-    } else {
-      out.set(nome, {
-        // Placeholder id — replaced with server-returned id after first PUT.
-        id: `pending-${nome}`,
-        azienda_id: aziendaId,
-        mansione_nome: nome,
-        dpi_codes: [],
-        rischi_specifici_codes: [],
-        note: null,
-        created_at: nowIso,
-        updated_at: nowIso,
-      });
-    }
-  }
-  return out;
+// Sort persone by mansione, then by nominativo, so colleagues with the
+// same role are visually grouped in the selector and the operator can
+// scan the list for the right person quickly.
+function sortPersone(persone: Persona[]): Persona[] {
+  return [...persone].sort((a, b) => {
+    const ma = (a.mansione ?? "").trim().toLowerCase();
+    const mb = (b.mansione ?? "").trim().toLowerCase();
+    if (ma !== mb) return ma.localeCompare(mb, "it");
+    return (a.nominativo ?? "").localeCompare(b.nominativo ?? "", "it");
+  });
 }
 
 export function StepDpiRischi({
   aziendaId,
   persone,
-  mansioniSorveglianza,
   onChange,
 }: StepDpiRischiProps) {
   const { apiFetch } = useApi();
@@ -100,30 +63,31 @@ export function StepDpiRischi({
   const [rischiCatalog, setRischiCatalog] =
     useState<RischiSpecificiCatalogResponse | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(true);
-  // Phase 5.1 + 5.2 — track AI generation per mansione so two mansioni
-  // can be in flight at once without their loading state colliding.
-  const [aiLoadingByMansione, setAiLoadingByMansione] = useState<
+  // Track AI generation per persona so two persone can be in flight at
+  // once without their loading state colliding.
+  const [aiLoadingByPersona, setAiLoadingByPersona] = useState<
     Record<string, boolean>
   >({});
 
-  const mansioni = useMemo(() => distinctMansioni(persone), [persone]);
-  const [selectedMansione, setSelectedMansione] = useState<string | null>(null);
+  const sortedPersone = useMemo(() => sortPersone(persone), [persone]);
+  const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(
+    null,
+  );
 
-  // Default-select the first mansione as the operator reaches this step.
+  // Default-select the first persona when the operator reaches this step.
   useEffect(() => {
-    if (mansioni.length > 0 && !selectedMansione) {
-      setSelectedMansione(mansioni[0]);
+    if (sortedPersone.length > 0 && !selectedPersonaId) {
+      setSelectedPersonaId(sortedPersone[0].id);
     } else if (
-      selectedMansione &&
-      !mansioni.includes(selectedMansione) &&
-      mansioni.length > 0
+      selectedPersonaId &&
+      !sortedPersone.some((p) => p.id === selectedPersonaId) &&
+      sortedPersone.length > 0
     ) {
-      // Previously-selected mansione disappeared from persone — fall back.
-      setSelectedMansione(mansioni[0]);
+      setSelectedPersonaId(sortedPersone[0].id);
     }
-  }, [mansioni, selectedMansione]);
+  }, [sortedPersone, selectedPersonaId]);
 
-  // Fetch both catalogs once. 5 KB combined so no incremental loading.
+  // Fetch both catalogs once. ~5 KB combined.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -132,7 +96,7 @@ export function StepDpiRischi({
         const [dpi, rischi] = await Promise.all([
           apiFetch<DpiCatalogResponse>("/api/v1/lookup/dpi-catalog"),
           apiFetch<RischiSpecificiCatalogResponse>(
-            "/api/v1/lookup/rischi-specifici-catalog"
+            "/api/v1/lookup/rischi-specifici-catalog",
           ),
         ]);
         if (cancelled) return;
@@ -143,7 +107,7 @@ export function StepDpiRischi({
           toast.error(
             err instanceof Error
               ? err.message
-              : "Errore caricamento catalogo DPI/rischi"
+              : "Errore caricamento catalogo DPI/rischi",
           );
         }
       } finally {
@@ -155,24 +119,19 @@ export function StepDpiRischi({
     };
   }, [apiFetch]);
 
-  const rowsByMansione = useMemo(
-    () => buildRowsByMansione(mansioni, mansioniSorveglianza, aziendaId),
-    [mansioni, mansioniSorveglianza, aziendaId]
-  );
-
-  // Latest parent prop, mirrored in a ref so the debounced save's success
-  // branch always merges into the freshest row list — without it, a PUT
-  // for mansione A in flight while the operator toggles mansione B would
+  // Latest persone prop, mirrored in a ref so the debounced save's success
+  // branch always merges into the freshest list — without it, a PUT for
+  // persona A in flight while the operator toggles persona B would
   // overwrite B's pending tick with A's stale snapshot.
-  const latestRowsRef = useRef(mansioniSorveglianza);
+  const latestPersoneRef = useRef(persone);
   useEffect(() => {
-    latestRowsRef.current = mansioniSorveglianza;
-  }, [mansioniSorveglianza]);
+    latestPersoneRef.current = persone;
+  }, [persone]);
 
-  // Debounced per-mansione upsert. Multiple checkbox toggles coalesce into
-  // one PUT 800ms after the last edit.
+  // Debounced per-persona PUT. Multiple checkbox toggles coalesce into
+  // one request 800ms after the last edit.
   const saveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
-    new Map()
+    new Map(),
   );
 
   useEffect(() => {
@@ -183,110 +142,103 @@ export function StepDpiRischi({
   }, []);
 
   const scheduleSave = useCallback(
-    (row: MansioneSorveglianza) => {
+    (persona: Persona) => {
       const timers = saveTimersRef.current;
-      const key = row.mansione_nome;
+      const key = persona.id;
       const existing = timers.get(key);
       if (existing) clearTimeout(existing);
       const handle = setTimeout(async () => {
         timers.delete(key);
         try {
-          const saved = await apiFetch<MansioneSorveglianza>(
-            `/api/v1/aziende/${aziendaId}/mansioni-sorveglianza`,
+          const saved = await apiFetch<Persona>(
+            `/api/v1/aziende/${aziendaId}/persone/${persona.id}`,
             {
               method: "PUT",
               body: JSON.stringify({
-                mansione_nome: row.mansione_nome,
-                dpi_codes: row.dpi_codes,
-                rischi_specifici_codes: row.rischi_specifici_codes,
-                note: row.note,
+                dpi_codes: persona.dpi_codes,
+                rischi_specifici_codes: persona.rischi_specifici_codes,
+                dpi_rischi_note: persona.dpi_rischi_note,
               }),
-            }
+            },
           );
-          // Merge the saved row into the freshest array (ref, not closure)
-          // so concurrent edits on other mansioni aren't clobbered.
+          // Merge the saved persona into the freshest array (ref, not
+          // closure) so concurrent edits on other persone aren't clobbered.
           onChange(
-            latestRowsRef.current.map((r) =>
-              r.mansione_nome === saved.mansione_nome ? saved : r
-            )
+            latestPersoneRef.current.map((p) =>
+              p.id === saved.id ? saved : p,
+            ),
           );
         } catch (err) {
           toast.error(
-            err instanceof Error ? err.message : "Salvataggio fallito"
+            err instanceof Error ? err.message : "Salvataggio fallito",
           );
         }
       }, 800);
       timers.set(key, handle);
     },
-    [apiFetch, aziendaId, onChange]
+    [apiFetch, aziendaId, onChange],
   );
 
-  const updateRow = useCallback(
-    (mansioneNome: string, patch: Partial<MansioneSorveglianza>) => {
-      const current = rowsByMansione.get(mansioneNome);
+  const updatePersona = useCallback(
+    (personaId: string, patch: Partial<Persona>) => {
+      const current = latestPersoneRef.current.find((p) => p.id === personaId);
       if (!current) return;
-      const merged = { ...current, ...patch };
-      const next = Array.from(rowsByMansione.values()).map((r) =>
-        r.mansione_nome === mansioneNome ? merged : r
+      const merged: Persona = { ...current, ...patch };
+      onChange(
+        latestPersoneRef.current.map((p) =>
+          p.id === personaId ? merged : p,
+        ),
       );
-      onChange(next);
       scheduleSave(merged);
     },
-    [rowsByMansione, onChange, scheduleSave]
+    [onChange, scheduleSave],
   );
 
   const toggleDpi = useCallback(
-    (mansioneNome: string, code: string) => {
-      const row = rowsByMansione.get(mansioneNome);
-      if (!row) return;
-      const has = row.dpi_codes.includes(code);
-      updateRow(mansioneNome, {
+    (personaId: string, code: string) => {
+      const current = latestPersoneRef.current.find((p) => p.id === personaId);
+      if (!current) return;
+      const has = current.dpi_codes.includes(code);
+      updatePersona(personaId, {
         dpi_codes: has
-          ? row.dpi_codes.filter((c) => c !== code)
-          : [...row.dpi_codes, code],
+          ? current.dpi_codes.filter((c) => c !== code)
+          : [...current.dpi_codes, code],
       });
     },
-    [rowsByMansione, updateRow]
+    [updatePersona],
   );
 
   const toggleRischio = useCallback(
-    (mansioneNome: string, code: string) => {
-      const row = rowsByMansione.get(mansioneNome);
-      if (!row) return;
-      const has = row.rischi_specifici_codes.includes(code);
-      updateRow(mansioneNome, {
+    (personaId: string, code: string) => {
+      const current = latestPersoneRef.current.find((p) => p.id === personaId);
+      if (!current) return;
+      const has = current.rischi_specifici_codes.includes(code);
+      updatePersona(personaId, {
         rischi_specifici_codes: has
-          ? row.rischi_specifici_codes.filter((c) => c !== code)
-          : [...row.rischi_specifici_codes, code],
+          ? current.rischi_specifici_codes.filter((c) => c !== code)
+          : [...current.rischi_specifici_codes, code],
       });
     },
-    [rowsByMansione, updateRow]
+    [updatePersona],
   );
 
-  // Phase 5.1 + 5.2 — ask the AI to propose DPI + rischi codes for the
-  // current mansione, then merge them into the row. Merge (not replace)
-  // so the operator's prior ticks survive and the AI never silently
-  // removes a deliberate selection.
+  // Ask the AI to propose DPI + rischi codes for the selected persona,
+  // then merge them into the persona's flags. Merge (not replace) so
+  // operator-chosen ticks survive and the AI never silently removes a
+  // deliberate selection.
   const flagWithAi = useCallback(
-    async (mansioneNome: string) => {
-      const row = rowsByMansione.get(mansioneNome);
-      if (!row) return;
-      setAiLoadingByMansione((prev) => ({ ...prev, [mansioneNome]: true }));
+    async (personaId: string) => {
+      const current = latestPersoneRef.current.find((p) => p.id === personaId);
+      if (!current) return;
+      setAiLoadingByPersona((prev) => ({ ...prev, [personaId]: true }));
       try {
-        const result = await apiFetch<{
-          dpi_codes: string[];
-          rischi_specifici_codes: string[];
-          motivazione: string;
-        }>(
-          `/api/v1/aziende/${aziendaId}/mansioni-sorveglianza/suggerisci`,
-          {
-            method: "POST",
-            body: JSON.stringify({ mansione_nome: mansioneNome }),
-          },
+        const result = await apiFetch<DpiRischiSuggerito>(
+          `/api/v1/aziende/${aziendaId}/persone/${personaId}/dpi-rischi/suggerisci`,
+          { method: "POST" },
         );
 
-        const existingDpi = new Set(row.dpi_codes);
-        const existingRischi = new Set(row.rischi_specifici_codes);
+        const existingDpi = new Set(current.dpi_codes);
+        const existingRischi = new Set(current.rischi_specifici_codes);
         const addedDpi = result.dpi_codes.filter((c) => !existingDpi.has(c));
         const addedRischi = result.rischi_specifici_codes.filter(
           (c) => !existingRischi.has(c),
@@ -294,15 +246,15 @@ export function StepDpiRischi({
 
         if (addedDpi.length === 0 && addedRischi.length === 0) {
           toast.info(
-            `L'AI non ha trovato suggerimenti aggiuntivi per "${mansioneNome}".`,
+            `L'AI non ha trovato suggerimenti aggiuntivi per "${current.nominativo}".`,
           );
           return;
         }
 
-        updateRow(mansioneNome, {
-          dpi_codes: [...row.dpi_codes, ...addedDpi],
+        updatePersona(personaId, {
+          dpi_codes: [...current.dpi_codes, ...addedDpi],
           rischi_specifici_codes: [
-            ...row.rischi_specifici_codes,
+            ...current.rischi_specifici_codes,
             ...addedRischi,
           ],
         });
@@ -312,44 +264,79 @@ export function StepDpiRischi({
         );
       } catch (err) {
         toast.error(
-          err instanceof Error
-            ? err.message
-            : "Errore nella generazione AI",
+          err instanceof Error ? err.message : "Errore nella generazione AI",
         );
       } finally {
-        setAiLoadingByMansione((prev) => ({
-          ...prev,
-          [mansioneNome]: false,
-        }));
+        setAiLoadingByPersona((prev) => ({ ...prev, [personaId]: false }));
       }
     },
-    [apiFetch, aziendaId, rowsByMansione, updateRow],
+    [apiFetch, aziendaId, updatePersona],
   );
 
   const copyFromOther = useCallback(
-    (toMansione: string, fromMansione: string) => {
-      const source = rowsByMansione.get(fromMansione);
+    (toPersonaId: string, fromPersonaId: string) => {
+      const source = latestPersoneRef.current.find(
+        (p) => p.id === fromPersonaId,
+      );
       if (!source) return;
-      updateRow(toMansione, {
+      updatePersona(toPersonaId, {
         dpi_codes: [...source.dpi_codes],
         rischi_specifici_codes: [...source.rischi_specifici_codes],
       });
-      toast.success(`Flag copiati da "${fromMansione}"`);
+      toast.success(`Flag copiati da "${source.nominativo}"`);
     },
-    [rowsByMansione, updateRow]
+    [updatePersona],
+  );
+
+  // Bulk-apply: copy the source persona's flags to all other persone
+  // sharing the same mansione. Useful for aziende with many workers in
+  // the same role — the operator flags one and replicates.
+  const applyToSameMansione = useCallback(
+    (sourcePersonaId: string) => {
+      const source = latestPersoneRef.current.find(
+        (p) => p.id === sourcePersonaId,
+      );
+      if (!source) return;
+      const mansione = (source.mansione ?? "").trim().toLowerCase();
+      if (!mansione) {
+        toast.error(
+          "La persona non ha una mansione definita — imposta la mansione nel passo Persone per usare questa azione.",
+        );
+        return;
+      }
+      const targets = latestPersoneRef.current.filter(
+        (p) =>
+          p.id !== sourcePersonaId &&
+          (p.mansione ?? "").trim().toLowerCase() === mansione,
+      );
+      if (targets.length === 0) {
+        toast.info(
+          `Nessun'altra persona con mansione "${source.mansione}" da aggiornare.`,
+        );
+        return;
+      }
+      for (const target of targets) {
+        updatePersona(target.id, {
+          dpi_codes: [...source.dpi_codes],
+          rischi_specifici_codes: [...source.rischi_specifici_codes],
+        });
+      }
+      toast.success(
+        `Flag applicati a ${targets.length} ${targets.length === 1 ? "persona" : "persone"} con mansione "${source.mansione}".`,
+      );
+    },
+    [updatePersona],
   );
 
   // ---------- empty states ----------
-  if (mansioni.length === 0) {
+  if (sortedPersone.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
         <Stethoscope className="h-8 w-8 text-[#64748d]" strokeWidth={1.5} />
-        <p className="text-[14px] text-[#273951]">
-          Nessuna mansione definita.
-        </p>
+        <p className="text-[14px] text-[#273951]">Nessuna persona definita.</p>
         <p className="max-w-md text-[13px] text-[#64748d]">
-          Aggiungi persone con mansione nel passo 2 per abilitare la flaggatura
-          dei DPI e dei rischi specifici per mansione.
+          Aggiungi persone nel passo Persone per abilitare la flaggatura dei DPI
+          e dei rischi specifici per ciascun lavoratore.
         </p>
       </div>
     );
@@ -363,18 +350,11 @@ export function StepDpiRischi({
     );
   }
 
-  const currentRow = selectedMansione
-    ? rowsByMansione.get(selectedMansione)
+  const currentPersona = selectedPersonaId
+    ? sortedPersone.find((p) => p.id === selectedPersonaId)
     : null;
-  const otherMansioni = mansioni.filter((m) => m !== selectedMansione);
-
-  // Count persone sharing each mansione to show the context chip.
-  const personeCountByMansione = mansioni.reduce<Record<string, number>>(
-    (acc, m) => {
-      acc[m] = persone.filter((p) => (p.mansione ?? "").trim() === m).length;
-      return acc;
-    },
-    {}
+  const otherPersone = sortedPersone.filter(
+    (p) => p.id !== selectedPersonaId,
   );
 
   return (
@@ -385,45 +365,47 @@ export function StepDpiRischi({
           DPI & Rischi Specifici
         </h3>
         <p className="mt-1 text-sm text-[#64748d]">
-          Flagga, per ogni mansione, i DPI in uso e i rischi specifici (D.Lgs.
-          81/08) a cui i lavoratori sono esposti. Il Medico del Lavoro usa
-          questi dati per definire il protocollo delle visite mediche.
+          Per ogni lavoratore, flagga i DPI in uso e i rischi specifici
+          (D.Lgs. 81/08) a cui è esposto. Il Medico del Lavoro usa questi dati
+          per definire il protocollo delle visite mediche. Due persone con la
+          stessa mansione possono avere flag diversi se le loro attrezzature
+          speciali o gli ambienti differiscono.
         </p>
       </div>
 
-      {/* Mansione selector */}
+      {/* Persona selector */}
       <div className="space-y-2">
-        <span className="type-eyebrow">Seleziona Mansione</span>
+        <span className="type-eyebrow">Seleziona Lavoratore</span>
         <div className="flex flex-wrap gap-2">
-          {mansioni.map((nome) => {
-            const row = rowsByMansione.get(nome);
+          {sortedPersone.map((p) => {
             const total =
-              (row?.dpi_codes.length ?? 0) +
-              (row?.rischi_specifici_codes.length ?? 0);
-            const isActive = nome === selectedMansione;
+              (p.dpi_codes?.length ?? 0) +
+              (p.rischi_specifici_codes?.length ?? 0);
+            const isActive = p.id === selectedPersonaId;
+            const mansione = (p.mansione ?? "").trim() || "—";
             return (
               <button
-                key={nome}
+                key={p.id}
                 type="button"
-                onClick={() => setSelectedMansione(nome)}
+                onClick={() => setSelectedPersonaId(p.id)}
                 className={cn(
                   "inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors",
                   isActive
                     ? "border-primary bg-primary text-white"
-                    : "border-[#e5edf5] bg-white text-[#273951] hover:bg-[#f6f9fc]"
+                    : "border-[#e5edf5] bg-white text-[#273951] hover:bg-[#f6f9fc]",
                 )}
               >
-                <span>{nome}</span>
+                <span>{p.nominativo}</span>
                 <Badge
                   variant="outline"
                   className={cn(
-                    "h-4 rounded-sm px-1 text-[10px] tnum",
+                    "h-4 rounded-sm px-1 text-[10px]",
                     isActive
                       ? "border-white/30 bg-white/10 text-white"
-                      : "border-[#e5edf5] bg-[#f6f9fc] text-[#64748d]"
+                      : "border-[#e5edf5] bg-[#f6f9fc] text-[#64748d]",
                   )}
                 >
-                  {personeCountByMansione[nome]}p · {total} flag
+                  {mansione} · {total} flag
                 </Badge>
               </button>
             );
@@ -431,29 +413,29 @@ export function StepDpiRischi({
         </div>
       </div>
 
-      {currentRow && selectedMansione && (
+      {currentPersona && (
         <>
-          {/* Header card with counts + copy action */}
+          {/* Header card with counts + actions */}
           <Card>
             <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="space-y-1">
-                <CardTitle className="text-base">{selectedMansione}</CardTitle>
+                <CardTitle className="text-base">
+                  {currentPersona.nominativo}
+                </CardTitle>
                 <CardDescription>
-                  {personeCountByMansione[selectedMansione]} person
-                  {personeCountByMansione[selectedMansione] === 1 ? "a" : "e"}{" "}
-                  con questa mansione · {currentRow.dpi_codes.length} DPI ·{" "}
-                  {currentRow.rischi_specifici_codes.length} rischi
+                  {currentPersona.mansione || "Mansione non definita"} ·{" "}
+                  {currentPersona.dpi_codes?.length ?? 0} DPI ·{" "}
+                  {currentPersona.rischi_specifici_codes?.length ?? 0} rischi
                 </CardDescription>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {/* Phase 5.1 + 5.2 — Flegga con AI */}
                 <button
                   type="button"
-                  onClick={() => flagWithAi(selectedMansione)}
-                  disabled={aiLoadingByMansione[selectedMansione] === true}
+                  onClick={() => flagWithAi(currentPersona.id)}
+                  disabled={aiLoadingByPersona[currentPersona.id] === true}
                   className="inline-flex h-8 items-center gap-2 rounded-md border border-violet-300 bg-violet-50 px-3 text-xs font-medium text-violet-800 transition-colors hover:bg-violet-100 disabled:opacity-60"
                 >
-                  {aiLoadingByMansione[selectedMansione] ? (
+                  {aiLoadingByPersona[currentPersona.id] ? (
                     <>
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       Generazione...
@@ -465,32 +447,44 @@ export function StepDpiRischi({
                     </>
                   )}
                 </button>
-                {otherMansioni.length > 0 && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
+                {currentPersona.mansione &&
+                  otherPersone.some(
+                    (p) =>
+                      (p.mansione ?? "").trim().toLowerCase() ===
+                      currentPersona.mansione!.trim().toLowerCase(),
+                  ) && (
+                    <button
+                      type="button"
+                      onClick={() => applyToSameMansione(currentPersona.id)}
                       className="inline-flex h-8 items-center gap-2 rounded-md border border-[#e5edf5] bg-white px-3 text-xs font-medium text-[#273951] transition-colors hover:bg-[#f6f9fc]"
                     >
+                      <Users2 className="h-3.5 w-3.5" />
+                      Applica a tutti con stessa mansione
+                    </button>
+                  )}
+                {otherPersone.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className="inline-flex h-8 items-center gap-2 rounded-md border border-[#e5edf5] bg-white px-3 text-xs font-medium text-[#273951] transition-colors hover:bg-[#f6f9fc]">
                       <Copy className="h-3.5 w-3.5" />
-                      Copia da altra mansione
+                      Copia da altra persona
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      {otherMansioni.map((other) => {
-                        const src = rowsByMansione.get(other);
+                      {otherPersone.map((src) => {
                         const count =
-                          (src?.dpi_codes.length ?? 0) +
-                          (src?.rischi_specifici_codes.length ?? 0);
+                          (src.dpi_codes?.length ?? 0) +
+                          (src.rischi_specifici_codes?.length ?? 0);
                         return (
                           <DropdownMenuItem
-                            key={other}
+                            key={src.id}
                             onClick={() =>
-                              copyFromOther(selectedMansione, other)
+                              copyFromOther(currentPersona.id, src.id)
                             }
                             disabled={count === 0}
                           >
-                            <span className="mr-2">{other}</span>
+                            <span className="mr-2">{src.nominativo}</span>
                             <Badge
                               variant="outline"
-                              className="h-4 rounded-sm px-1 text-[10px] tnum"
+                              className="h-4 rounded-sm px-1 text-[10px]"
                             >
                               {count}
                             </Badge>
@@ -512,7 +506,7 @@ export function StepDpiRischi({
                 DPI in uso
               </CardTitle>
               <CardDescription>
-                {currentRow.dpi_codes.length} su {" "}
+                {currentPersona.dpi_codes?.length ?? 0} su{" "}
                 {dpiCatalog.groups.reduce((n, g) => n + g.items.length, 0)}{" "}
                 selezionati
               </CardDescription>
@@ -523,19 +517,20 @@ export function StepDpiRischi({
                   <h4 className="mb-2 type-eyebrow">{group.area}</h4>
                   <div className="flex flex-wrap gap-2">
                     {group.items.map((item) => {
-                      const checked = currentRow.dpi_codes.includes(item.code);
+                      const checked =
+                        currentPersona.dpi_codes?.includes(item.code) ?? false;
                       return (
                         <button
                           key={item.code}
                           type="button"
                           onClick={() =>
-                            toggleDpi(selectedMansione, item.code)
+                            toggleDpi(currentPersona.id, item.code)
                           }
                           className={cn(
                             "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[12.5px] transition-colors",
                             checked
                               ? "border-primary bg-[rgba(0,61,116,0.08)] text-primary"
-                              : "border-[#e5edf5] bg-white text-[#273951] hover:bg-[#f6f9fc]"
+                              : "border-[#e5edf5] bg-white text-[#273951] hover:bg-[#f6f9fc]",
                           )}
                         >
                           <span
@@ -544,7 +539,7 @@ export function StepDpiRischi({
                               "flex h-3.5 w-3.5 items-center justify-center rounded-sm border",
                               checked
                                 ? "border-primary bg-primary text-white"
-                                : "border-[#c2c6d2] bg-white"
+                                : "border-[#c2c6d2] bg-white",
                             )}
                           >
                             {checked && (
@@ -579,7 +574,7 @@ export function StepDpiRischi({
                 Rischi Specifici D.Lgs. 81/08
               </CardTitle>
               <CardDescription>
-                {currentRow.rischi_specifici_codes.length} su {" "}
+                {currentPersona.rischi_specifici_codes?.length ?? 0} su{" "}
                 {rischiCatalog.groups.reduce((n, g) => n + g.items.length, 0)}{" "}
                 selezionati
               </CardDescription>
@@ -591,19 +586,21 @@ export function StepDpiRischi({
                   <div className="flex flex-wrap gap-2">
                     {group.items.map((item) => {
                       const checked =
-                        currentRow.rischi_specifici_codes.includes(item.code);
+                        currentPersona.rischi_specifici_codes?.includes(
+                          item.code,
+                        ) ?? false;
                       return (
                         <button
                           key={item.code}
                           type="button"
                           onClick={() =>
-                            toggleRischio(selectedMansione, item.code)
+                            toggleRischio(currentPersona.id, item.code)
                           }
                           className={cn(
                             "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[12.5px] transition-colors",
                             checked
                               ? "border-primary bg-[rgba(0,61,116,0.08)] text-primary"
-                              : "border-[#e5edf5] bg-white text-[#273951] hover:bg-[#f6f9fc]"
+                              : "border-[#e5edf5] bg-white text-[#273951] hover:bg-[#f6f9fc]",
                           )}
                         >
                           <span
@@ -612,7 +609,7 @@ export function StepDpiRischi({
                               "flex h-3.5 w-3.5 items-center justify-center rounded-sm border",
                               checked
                                 ? "border-primary bg-primary text-white"
-                                : "border-[#c2c6d2] bg-white"
+                                : "border-[#c2c6d2] bg-white",
                             )}
                           >
                             {checked && (

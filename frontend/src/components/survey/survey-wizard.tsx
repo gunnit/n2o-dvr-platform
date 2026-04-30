@@ -28,7 +28,6 @@ import type {
   Persona,
   Ambiente,
   Attrezzatura,
-  MansioneSorveglianza,
   ValutazioneRischio,
   SostanzaChimica,
 } from "@/types";
@@ -99,7 +98,6 @@ export interface SurveyData {
   persone: Persona[];
   ambienti: Ambiente[];
   attrezzature: Attrezzatura[];
-  mansioniSorveglianza: MansioneSorveglianza[];
   valutazioni: ValutazioneRischio[];
   sostanze: SostanzaChimica[];
 }
@@ -196,7 +194,6 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
     persone: initialData?.persone ?? [],
     ambienti: initialData?.ambienti ?? [],
     attrezzature: initialData?.attrezzature ?? [],
-    mansioniSorveglianza: initialData?.mansioniSorveglianza ?? [],
     valutazioni: initialData?.valutazioni ?? [],
     sostanze: initialData?.sostanze ?? [],
   });
@@ -320,13 +317,6 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
   const updateValutazioni = useCallback((valutazioni: ValutazioneRischio[]) => {
     setData((prev) => ({ ...prev, valutazioni }));
   }, []);
-
-  const updateMansioniSorveglianza = useCallback(
-    (mansioniSorveglianza: MansioneSorveglianza[]) => {
-      setData((prev) => ({ ...prev, mansioniSorveglianza }));
-    },
-    []
-  );
 
   const updateSostanze = useCallback((sostanze: SostanzaChimica[]) => {
     setData((prev) => ({ ...prev, sostanze }));
@@ -743,8 +733,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
           <StepDpiRischi
             aziendaId={aziendaId}
             persone={data.persone}
-            mansioniSorveglianza={data.mansioniSorveglianza}
-            onChange={updateMansioniSorveglianza}
+            onChange={updatePersone}
           />
         );
       case 5:

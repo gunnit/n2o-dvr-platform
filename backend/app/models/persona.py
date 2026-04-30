@@ -40,6 +40,18 @@ class Persona(Base):
     attrezzature_speciali: Mapped[list[str]] = mapped_column(
         JSONB, nullable=False, default=list, server_default="[]"
     )
+    # Per-persona DPI + rischi specifici flags (feedback 2026-04-29). The
+    # Medico del Lavoro defines visite-mediche per individual, not per
+    # mansione, because two saldatori can have different ambienti or
+    # attrezzature speciali. Codes validated against DPI_CATALOG /
+    # RISCHI_SPECIFICI_CATALOG in app.services.reference_data.
+    dpi_codes: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default="[]"
+    )
+    rischi_specifici_codes: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default="[]"
+    )
+    dpi_rischi_note: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     azienda: Mapped["Azienda"] = relationship(back_populates="persone")

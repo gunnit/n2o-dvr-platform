@@ -22,7 +22,6 @@ from app.models.gestanti_valutazione import GestantiValutazione
 from app.models.biologico_valutazione import BiologicoValutazione
 from app.models.stress_misura_libreria import StressMisuraLibreria
 from app.models.rischio_misura_libreria import RischioMisuraLibreria
-from app.models.mansione_sorveglianza import MansioneSorveglianza
 from app.models.misura_miglioramento import MisuraMiglioramento
 
 # Complementary document models
@@ -60,7 +59,6 @@ __all__ = [
     "BiologicoValutazione",
     "StressMisuraLibreria",
     "RischioMisuraLibreria",
-    "MansioneSorveglianza",
     "MisuraMiglioramento",
     "HaccpConfig",
     "HaccpFormState",

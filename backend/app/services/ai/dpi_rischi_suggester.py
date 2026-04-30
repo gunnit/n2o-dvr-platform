@@ -1,15 +1,22 @@
-"""AI-suggested DPI + rischi specifici per mansione (Phase 5.1 + 5.2).
+"""AI-suggested DPI + rischi specifici per persona.
 
-Given a mansione (job role), the ambienti those workers operate in, and
-the equipment they use, the model proposes:
+Given a single worker (mansione + attrezzature speciali + ambienti they
+operate in + attrezzature in those ambienti), the model proposes:
   - which DPI codes are appropriate (from DPI_CATALOG)
   - which rischi specifici codes apply (from RISCHI_SPECIFICI_CATALOG)
 
-Both are returned in one round-trip because the reasoning shares context
-(a saldatore needs casco + visiera AND triggers cancerogeni_mutageni).
+The unit was changed from mansione to persona on 2026-04-30 (feedback
+Luca Marchetti, 2026-04-29). Two saldatori in the same azienda may have
+genuinely different exposures depending on which ambienti they cover and
+which attrezzature speciali they're certified for.
 
-The operator reviews each suggestion and ticks which ones to keep.
-Persistence is the existing PUT /aziende/{id}/mansioni-sorveglianza.
+Both lists are returned in one round-trip because the reasoning shares
+context (a saldatore needs casco + visiera AND triggers cancerogeni). The
+operator reviews each suggestion and ticks which to keep.
+
+PII contract: name, codice fiscale, data di nascita are NOT sent. Only
+the work-related signals (mansione, attrezzature speciali, ambienti,
+attrezzature) reach the model.
 """
 
 import logging
@@ -27,8 +34,24 @@ from app.services.reference_data import (
 logger = logging.getLogger(__name__)
 
 
-class MansioneProtocolSuggerito(BaseModel):
-    """AI suggestions for a single mansione's protocol."""
+# Human-readable labels for the structured attrezzature_speciali codes
+# the operator ticks on the persona. Mirrors the labels in the wizard
+# step + DVR generator's attrezzatura_to_rischio map.
+ATTREZZATURE_SPECIALI_LABELS: dict[str, str] = {
+    "lavori_in_quota": "Lavori in quota",
+    "trabattelli": "Utilizzo di trabattelli",
+    "ponteggi": "Utilizzo di ponteggi",
+    "carrello_elevatore": "Utilizzo di carrelli elevatori",
+    "ple": "Utilizzo di piattaforme di lavoro elevabili (PLE)",
+    "gru": "Utilizzo di gru",
+    "ruspa_escavatore": "Utilizzo di ruspe / escavatori",
+    "patente_cde": "Guida professionale (patente C/D/E)",
+    "adr": "Trasporto merci pericolose (ADR)",
+}
+
+
+class DpiRischiSuggerito(BaseModel):
+    """AI suggestions for a single persona's DPI + rischi specifici."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -37,7 +60,7 @@ class MansioneProtocolSuggerito(BaseModel):
             "Codici DPI dal catalogo (es. 'caschi_industria', "
             "'guanti_meccanici'). Solo codici esistenti nel catalogo, "
             "ordinati dal piu' rilevante. Includere DPI obbligatori e "
-            "fortemente raccomandati per la mansione."
+            "fortemente raccomandati per la persona."
         )
     )
     rischi_specifici_codes: list[str] = Field(
@@ -49,9 +72,9 @@ class MansioneProtocolSuggerito(BaseModel):
     motivazione: str = Field(
         description=(
             "Sintesi in 1-2 frasi italiano del perche' di queste scelte, "
-            "specificando se ci sono attrezzature/ambienti che le hanno "
-            "guidate (es. 'Saldatura ad arco implica visiera + "
-            "cancerogeni')."
+            "specificando se attrezzature speciali / ambienti / "
+            "attrezzature le hanno guidate (es. 'PLE + trabattelli "
+            "implica imbragatura + lavori in quota')."
         )
     )
 
@@ -77,35 +100,54 @@ SYSTEM_PROMPT = """Sei un consulente esperto di sicurezza sul lavoro
 italiano (D.Lgs. 81/2008) specializzato in protocollo di sorveglianza
 sanitaria del Medico del Lavoro.
 
-Dato il profilo di una mansione (ambienti dove opera, attrezzature
-utilizzate), suggerisci:
-  1. I DPI codici dal catalogo che dovrebbero essere obbligatori o
-     fortemente raccomandati;
-  2. I rischi specifici codici dal catalogo a cui questa mansione e'
+Dato il profilo di un singolo lavoratore (mansione, attrezzature speciali
+per cui e' qualificato, ambienti in cui opera, attrezzature presenti in
+quegli ambienti), suggerisci:
+  1. I codici DPI dal catalogo che dovrebbero essere obbligatori o
+     fortemente raccomandati per QUESTA persona;
+  2. I codici rischi specifici dal catalogo a cui QUESTA persona e'
      esposta.
+
+Il profilo e' per UN lavoratore specifico, non per una mansione astratta:
+due saldatori possono avere protocolli diversi se uno guida anche un PLE
+e l'altro no.
 
 Regole vincolanti:
 - Restituisci SOLO codici presenti nei cataloghi forniti — non inventare
   codici nuovi. Se un DPI/rischio non e' in catalogo, omettilo.
 - Sii completo ma non esagerato: 3-12 DPI tipicamente, 2-8 rischi.
-- Privilegia codici specifici rispetto a quelli generici (es. preferire
+- Privilegia codici specifici rispetto a generici (es. preferire
   'maschera_saldatura_arco' a 'schermo_facciale' per un saldatore).
-- Se la mansione e' impiegatizia/ufficio, sii minimal (es.
-  'occhiali_stanghette' per VDT, 'ergonomici' come rischio).
+- Le attrezzature speciali ticcate sulla persona sono segnali FORTI:
+  PLE / trabattelli / ponteggi / lavori_in_quota -> imbragatura +
+  caduta_dall_alto; carrello_elevatore / gru -> casco + segnaletica +
+  carico_sospeso; patente_cde / adr -> rischio stradale + ergonomia +
+  stress.
+- Se la mansione e' impiegatizia / ufficio e non ci sono attrezzature
+  speciali, sii minimal (es. 'occhiali_stanghette' per VDT, 'ergonomici'
+  come rischio).
 
 Formato output: SOLO JSON che rispetta lo schema dato."""
 
 
 def _build_persona_context(
-    mansione_nome: str,
+    mansione_nome: str | None,
+    attrezzature_speciali_codes: list[str],
     ambienti: list[Ambiente],
     attrezzature: list[Attrezzatura],
 ) -> str:
     """Compose the persona context. No PII (names, codice fiscale)."""
     lines: list[str] = []
-    lines.append(f"Mansione: {mansione_nome}")
+    lines.append(f"Mansione: {mansione_nome or 'non specificata'}")
+
+    if attrezzature_speciali_codes:
+        lines.append("Attrezzature speciali / qualifiche per cui e' abilitato:")
+        for code in attrezzature_speciali_codes:
+            label = ATTREZZATURE_SPECIALI_LABELS.get(code, code)
+            lines.append(f"  - {label}")
+
     if ambienti:
-        lines.append("Ambienti dove la mansione opera:")
+        lines.append("Ambienti dove la persona opera:")
         for amb in ambienti:
             descr = (
                 f"  - {amb.nome or '—'} (tipo: {amb.tipo or '—'}"
@@ -115,24 +157,29 @@ def _build_persona_context(
             descr += ")"
             lines.append(descr)
     if attrezzature:
-        lines.append("Attrezzature utilizzate (su questi ambienti):")
+        lines.append("Attrezzature presenti negli ambienti:")
         for att in attrezzature:
             lines.append(f"  - {att.descrizione}")
     return "\n".join(lines)
 
 
-async def suggest_mansione_protocol(
-    mansione_nome: str,
+async def suggest_dpi_rischi(
+    *,
+    mansione_nome: str | None,
+    attrezzature_speciali_codes: list[str],
     ambienti: list[Ambiente],
     attrezzature: list[Attrezzatura],
-) -> MansioneProtocolSuggerito:
-    """AI: propose DPI + rischi specifici codes for a mansione.
+) -> DpiRischiSuggerito:
+    """AI: propose DPI + rischi specifici codes for a single persona.
 
     Invalid codes (not in the catalog) are filtered out before returning,
     so the frontend never sees a non-existent code.
     """
     persona_context = _build_persona_context(
-        mansione_nome, ambienti, attrezzature
+        mansione_nome,
+        attrezzature_speciali_codes,
+        ambienti,
+        attrezzature,
     )
     dpi_catalog_text = _format_catalog_for_prompt(DPI_CATALOG, "area")
     rischi_catalog_text = _format_catalog_for_prompt(
@@ -140,29 +187,28 @@ async def suggest_mansione_protocol(
     )
 
     prompt = (
-        f"Profilo mansione:\n{persona_context}\n\n"
+        f"Profilo lavoratore:\n{persona_context}\n\n"
         f"Catalogo DPI disponibili (codice — etichetta):\n"
         f"{dpi_catalog_text}\n\n"
         f"Catalogo Rischi Specifici disponibili (codice — etichetta):\n"
         f"{rischi_catalog_text}\n\n"
-        f"Suggerisci il protocollo per questa mansione."
+        f"Suggerisci DPI e rischi specifici per questa persona."
     )
 
     logger.info(
-        "Suggesting protocol for mansione %r (%d ambienti, %d attrezzature)",
+        "Suggesting DPI/rischi for persona (mansione=%r, %d attrezzature speciali, %d ambienti, %d attrezzature)",
         mansione_nome,
+        len(attrezzature_speciali_codes),
         len(ambienti),
         len(attrezzature),
     )
     response = await generate_structured(
         prompt=prompt,
-        schema=MansioneProtocolSuggerito,
+        schema=DpiRischiSuggerito,
         system=SYSTEM_PROMPT,
     )
 
-    # Phase 5.4 — schema-level validation: filter to known codes only.
-    # The model is instructed to stay within catalog but enforce server-side
-    # so the frontend only sees codes it can render.
+    # Schema-level validation: filter to known codes only.
     valid_dpi = {c for c in response.dpi_codes if c in DPI_CATALOG}
     valid_rischi = {
         c for c in response.rischi_specifici_codes if c in RISCHI_SPECIFICI_CATALOG
@@ -179,7 +225,7 @@ async def suggest_mansione_protocol(
             sorted(dropped_rischi),
         )
 
-    return MansioneProtocolSuggerito(
+    return DpiRischiSuggerito(
         dpi_codes=[c for c in response.dpi_codes if c in valid_dpi],
         rischi_specifici_codes=[
             c for c in response.rischi_specifici_codes if c in valid_rischi

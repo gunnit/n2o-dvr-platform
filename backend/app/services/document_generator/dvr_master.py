@@ -97,7 +97,7 @@ _DEFINIZIONI_ROWS: list[tuple[str, str]] = [
      "Entita del danno atteso per il lavoratore esposto, valutata su "
      "scala 1-4 (Trascurabile, Modesto, Notevole, Ingente)."),
     ("INDICE DI RISCHIO (I)",
-     "Calcolato come I = 2 x D + P; range 3-12; livelli ACCETTABILE, "
+     "Calcolato come I = 2*D + P; range 3-12; livelli ACCETTABILE, "
      "MODESTO, GRAVE, GRAVISSIMO."),
     ("UNITA PRODUTTIVA",
      "Stabilimento o struttura finalizzati alla produzione di beni "
@@ -674,7 +674,7 @@ _METODOLOGIA_INTRO_1 = (
 
 _METODOLOGIA_INTRO_2 = (
     "Il metodo adottato si fonda sulla stima dell'Indice di Rischio (I) "
-    "calcolato attraverso la formula I = 2 x D + P, dove P rappresenta la "
+    "calcolato attraverso la formula I = 2*D + P, dove P rappresenta la "
     "Probabilita di accadimento dell'evento dannoso (scala 1-4) e D il Danno "
     "atteso per il lavoratore esposto (scala 1-4). L'indice risultante, "
     "compreso nell'intervallo 3-12, e associato a un livello di rischio e a "
@@ -788,7 +788,6 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         Returns a dict with:
           - ``foto_by_ambiente``: ambiente_id -> list[AmbienteFoto]
-          - ``mansioni_sorveglianza_by_nome``: mansione_nome -> MansioneSorveglianza
           - ``vdt_esposti_persona_ids``: set of persona_ids with VDT esposto=True
           - ``allegati_presenti``: ordered list of (slug, label) for applicable
             allegati, derived from MMC/VDT/Stress/Incendio/Gestanti/
@@ -796,6 +795,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
           - ``misure_miglioramento``: list[MisuraMiglioramento] ordered for
             T109 emission (auto-seeded from pericoli I>=7 when empty so the
             document is signable on day 1)
+
+        DPI + rischi specifici flags now live on Persona itself
+        (persona.dpi_codes / persona.rischi_specifici_codes), so the
+        renderer reads them directly from data["persone"] — no extras
+        lookup needed.
 
         Failure to load any single sub-source is non-fatal — the renderer
         falls back to the empty case rather than crashing the doc job.
@@ -805,7 +809,6 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         from app.models.biologico_valutazione import BiologicoValutazione
         from app.models.gestanti_valutazione import GestantiValutazione
         from app.models.incendio_valutazione import IncendioValutazione
-        from app.models.mansione_sorveglianza import MansioneSorveglianza
         from app.models.microclima_valutazione import MicroclimaValutazione
         from app.models.misura_miglioramento import MisuraMiglioramento
         from app.models.mmc_valutazione import MmcValutazione
@@ -825,16 +828,6 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             )
             for foto in r.scalars().all():
                 foto_by_ambiente.setdefault(foto.ambiente_id, []).append(foto)
-
-        # Mansioni sorveglianza by mansione_nome (case-insensitive lookup)
-        mansioni_sorveglianza_by_nome: dict = {}
-        r = await self.db.execute(
-            select(MansioneSorveglianza).where(
-                MansioneSorveglianza.azienda_id == self.azienda_id
-            )
-        )
-        for ms in r.scalars().all():
-            mansioni_sorveglianza_by_nome[ms.mansione_nome.lower()] = ms
 
         # VDT esposti persona ids
         vdt_esposti_persona_ids: set = set()
@@ -894,7 +887,6 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         return {
             "foto_by_ambiente": foto_by_ambiente,
-            "mansioni_sorveglianza_by_nome": mansioni_sorveglianza_by_nome,
             "vdt_esposti_persona_ids": vdt_esposti_persona_ids,
             "allegati_presenti": allegati_presenti,
             "misure_miglioramento": misure,
@@ -918,8 +910,54 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         ambienti = data.get("ambienti") or []
         persone = data.get("persone") or []
+        ddl = next((p for p in persone if p.ruolo_datore_lavoro), None)
         rspp = next((p for p in persone if p.ruolo_rspp), None)
-        responsabile = (rspp.nominativo if rspp else "RSPP").upper()
+        ddl_name = (ddl.nominativo if ddl else "DATORE DI LAVORO").upper()
+        rspp_name = (rspp.nominativo if rspp else "RSPP").upper()
+
+        # Per-ambiente preposto lookup (ambiente.preposto_id -> persona),
+        # falling back to any ambiente persona with ruolo_preposto, else
+        # any azienda-level preposto. Mirrors the resolution order used
+        # in _add_env_identity_table so the same name flows through the
+        # measures table.
+        persone_by_id = {p.id: p for p in persone}
+        global_preposto = next((p for p in persone if p.ruolo_preposto), None)
+
+        def _resolve_preposto(amb) -> str:
+            pid = getattr(amb, "preposto_id", None)
+            if pid and pid in persone_by_id:
+                return persone_by_id[pid].nominativo.upper()
+            for pers in getattr(amb, "persone", None) or []:
+                if getattr(pers, "ruolo_preposto", False):
+                    return pers.nominativo.upper()
+            if global_preposto:
+                return global_preposto.nominativo.upper()
+            return "PREPOSTO DA NOMINARE"
+
+        # Categories whose interventions are typically structural -> DdL.
+        # Categories that are operational/behavioural -> Preposto.
+        # Everything else (procedure, formazione, chemical, biological,
+        # psychosocial) -> RSPP.
+        ddl_categories = {
+            "Strutture",
+            "Impianti Elettrici",
+            "Incendio-Esplosioni",
+        }
+        preposto_categories = {
+            "Macchine",
+            "Agenti Fisici",
+            "Fattori Ergonomici",
+        }
+
+        def _classify_responsabile(amb, categoria: str, indice: int) -> str:
+            # Severity escalation: GRAVISSIMO always escalates to DdL.
+            if indice >= 9:
+                return ddl_name
+            if categoria in ddl_categories:
+                return ddl_name
+            if categoria in preposto_categories:
+                return _resolve_preposto(amb)
+            return rspp_name
 
         seeded: list[MisuraMiglioramento] = []
         ordine = 0
@@ -950,13 +988,21 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                         f"Riduzione del rischio in {(amb.nome or '').upper()}: "
                         f"{pericolo_text or cat_long}"
                     )
+                    # Procedura/risorse from the categoria template are a
+                    # starting point, not a finished plan. Mark them with a
+                    # DA COMPILARE prefix so an inspector immediately sees
+                    # which rows still need the RSPP to write the specific
+                    # procedure for the actual pericolo (audit F-002,
+                    # 2026-04-29 rerun). The marker disappears the moment
+                    # the operator edits the row via the API.
+                    da_compilare = "[DA COMPILARE — RSPP] "
                     misura = MisuraMiglioramento(
                         azienda_id=self.azienda_id,
                         pericolo_valutazione_id=per.id,
                         misura=misura_text,
-                        procedura=template["procedura"],
-                        risorse=template["risorse"],
-                        responsabile=responsabile,
+                        procedura=da_compilare + template["procedura"],
+                        risorse=da_compilare + template["risorse"],
+                        responsabile=_classify_responsabile(amb, cat_long, indice),
                         scadenza=tempi,
                         priorita=livello,
                         ordine=ordine,
@@ -1527,7 +1573,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         an em-dash so reviewers don't read it as missing data
         (audit F-011).
         """
-        headers = ["Nominativo", "Mansione", "Ambiente di Lavoro", "Note", "Tipologia contrattuale"]
+        # Column 4 is the persona's codice fiscale, not a free-form Note —
+        # rename the header to match the actual content so an em-dash reads
+        # as "CF not entered" rather than "broken Note column" (audit F-007,
+        # 2026-04-29 rerun).
+        headers = ["Nominativo", "Mansione", "Ambiente di Lavoro", "Codice Fiscale", "Tipologia contrattuale"]
         if not persone:
             self._add_data_table(doc, headers, [["—", "—", "—", "—", "—"]])
             return
@@ -1549,12 +1599,12 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                     ambienti_names = "Tutta l'azienda (ruolo trasversale)"
                 else:
                     ambienti_names = "—"
-            note = getattr(p, "codice_fiscale", None) or "—"
+            cf = getattr(p, "codice_fiscale", None) or "—"
             rows.append([
                 (p.nominativo or "—").upper(),
                 (p.mansione or "—").upper(),
                 ambienti_names.upper(),
-                note,
+                cf,
                 (p.tipologia_contrattuale or "—").upper(),
             ])
         self._add_data_table(doc, headers, rows)
@@ -1712,7 +1762,14 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         doc.add_paragraph("")
 
     def _add_ambienti_summary_table(self, doc: Document, ambienti: list) -> None:
-        """Template Table 12 — Ambiente | Tipo | Metratura | N. Lavoratori."""
+        """Template Table 12 — Ambiente | Tipo | Metratura | N. Lavoratori.
+
+        Note on N. Lavoratori: a worker assigned to multiple ambienti is
+        counted once per ambiente, so the column sum can exceed the total
+        dipendenti reported in T004 (e.g. preposti + addetti emergenza
+        operate across several aree). A footnote below the table makes the
+        convention explicit so an inspector does not flag the discrepancy.
+        """
         headers = ["Ambiente", "Tipo", "Metratura", "N. Lavoratori"]
         if not ambienti:
             rows = [["—", "—", "—", "0"]]
@@ -1727,6 +1784,18 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                     str(len(getattr(a, "persone", None) or [])),
                 ])
         self._add_data_table(doc, headers, rows)
+
+        note = doc.add_paragraph()
+        run = note.add_run(
+            "Nota: la colonna \"N. Lavoratori\" conteggia ciascun addetto "
+            "una volta per ogni ambiente in cui opera; preposti, addetti "
+            "alle emergenze e personale con mansioni trasversali "
+            "compaiono pertanto in piu righe. Il totale dei dipendenti "
+            "in forza all'azienda e riportato in §1.1."
+        )
+        run.font.italic = True
+        run.font.size = Pt(8)
+        run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
 
     def _add_attrezzature_table(self, doc: Document, attrezzature: list) -> None:
         """Template Table 13 — Descrizione | Marcata CE | Verifiche periodiche."""
@@ -1759,11 +1828,12 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         headers = [
             "Sostanza / Prodotto",
             "Produttore / Distributore",
+            "Attivita / Uso",
             "Stato",
             "Pittogrammi GHS",
         ]
         if not sostanze:
-            rows = [["Nessuna sostanza chimica registrata.", "—", "—", "—"]]
+            rows = [["Nessuna sostanza chimica registrata.", "—", "—", "—", "—"]]
             self._add_data_table(doc, headers, rows)
             return
 
@@ -1774,6 +1844,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             rows.append([
                 (s.nome_prodotto or "—").upper(),
                 (s.produttore or "—").upper(),
+                (getattr(s, "attivita_uso", None) or "—"),
                 (getattr(s, "stato_miscela", None) or "—").upper(),
                 pittogrammi_text,
             ])
@@ -2221,7 +2292,13 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 run.add_picture(path, width=Cm(12))
                 caption = doc.add_paragraph()
                 caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                cap_run = caption.add_run(f.filename or "")
+                # "Fig. N — filename" prefix prevents downstream text-only
+                # readers (audit tools, accessibility readers) from
+                # misreading the styled italic caption as a stray bare
+                # filename (audit F-003, 2026-04-29 rerun).
+                cap_run = caption.add_run(
+                    f"Fig. {embedded + 1} — {f.filename or ''}"
+                )
                 cap_run.font.italic = True
                 cap_run.font.size = Pt(9)
                 cap_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
@@ -2249,11 +2326,14 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         """Emit the "Mansioni che espongono i lavoratori a rischi specifici"
         table required by the template tail (DOCUMENT_STRUCTURE.md §3.N+1).
 
-        Driven by:
-          - VDT esposti (>= 20h/week → "Videoterminali" risk specifico)
-          - Persona attrezzature_speciali codes (each maps to a rischio)
-          - MansioneSorveglianza.rischi_specifici_codes when the operator has
-            ticked them via the sorveglianza wizard.
+        Driven by per-persona signals, then aggregated up to mansione for
+        the legal table layout. When two persone with the same mansione
+        diverge, the row shows the union of risks.
+
+        Sources, per persona:
+          - VDT esposti (>= 20h/week → "Videoterminali" rischio specifico)
+          - persona.attrezzature_speciali codes (each maps to a rischio)
+          - persona.rischi_specifici_codes ticked in the wizard
         """
         from app.services.reference_data import RISCHI_SPECIFICI_CATALOG
 
@@ -2262,8 +2342,10 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         )
 
         # Build mansione → set[rischio_label] index.
+        # Track the per-persona contribution count so we can flag mansioni
+        # where the flags vary across persone (audit hint for the operator).
         mansioni_idx: dict[str, set[str]] = {}
-        ms_by_nome = extras.get("mansioni_sorveglianza_by_nome", {})
+        mansione_persona_codes: dict[str, list[frozenset[str]]] = {}
         vdt_ids = extras.get("vdt_esposti_persona_ids", set())
 
         attrezzatura_to_rischio = {
@@ -2283,19 +2365,25 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             if not mansione:
                 continue
             bucket = mansioni_idx.setdefault(mansione, set())
+            persona_codes: set[str] = set()
             if p.id in vdt_ids:
-                bucket.add("Videoterminali (VDT) — esposizione >= 20h/sett.")
+                label = "Videoterminali (VDT) — esposizione >= 20h/sett."
+                bucket.add(label)
+                persona_codes.add(label)
             for code in (p.attrezzature_speciali or []):
                 label = attrezzatura_to_rischio.get(code)
                 if label:
                     bucket.add(label)
-            ms = ms_by_nome.get(mansione.lower())
-            if ms:
-                for rs_code in (ms.rischi_specifici_codes or []):
-                    meta = RISCHI_SPECIFICI_CATALOG.get(rs_code) or {}
-                    label = meta.get("etichetta")
-                    if label:
-                        bucket.add(label)
+                    persona_codes.add(label)
+            for rs_code in (getattr(p, "rischi_specifici_codes", None) or []):
+                meta = RISCHI_SPECIFICI_CATALOG.get(rs_code) or {}
+                label = meta.get("etichetta")
+                if label:
+                    bucket.add(label)
+                    persona_codes.add(label)
+            mansione_persona_codes.setdefault(mansione, []).append(
+                frozenset(persona_codes)
+            )
 
         # Filter out mansioni without specific risks — they belong to the
         # generic risk assessment, not to this table.
@@ -2309,10 +2397,19 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 for p in persone
                 if (p.mansione or "").strip() == mansione
             )
+            # If the persone with this mansione don't all share the same
+            # set of rischi, flag the row so the Medico del Lavoro knows
+            # to consult the per-persona detail (kept in the CRM).
+            persona_sets = mansione_persona_codes.get(mansione, [])
+            distinct = {s for s in persona_sets if s}
+            varia = len(distinct) > 1
+            rischi_cell = "; ".join(rischi)
+            if varia:
+                rischi_cell += " (varia per lavoratore — vedere scheda persona)"
             rows.append([
                 mansione.upper(),
                 str(count),
-                "; ".join(rischi),
+                rischi_cell,
             ])
 
         if not rows:
@@ -2342,26 +2439,37 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         self, doc: Document, persone: list, extras: dict
     ) -> None:
         """Emit one DPI grid per mansione, listing the codes the operator
-        has ticked in the sorveglianza wizard.
+        has ticked on each persona in the wizard.
 
-        Mansioni without a sorveglianza row are omitted — they will roll
-        up into the generic Gestione DPI procedure (§4.8).
+        Aggregates per-persona ``dpi_codes`` up to mansione (union). When
+        the persone with the same mansione have divergent DPI selections,
+        a "varia per lavoratore" note is appended so the operator and
+        the Medico del Lavoro know to consult the per-persona detail.
+
+        Mansioni without any persona-level DPI flags are omitted — they
+        roll up into the generic Gestione DPI procedure (§4.8).
         """
         from app.services.reference_data import DPI_CATALOG
 
         doc.add_heading("DPI in dotazione per Mansione", level=2)
-        ms_by_nome = extras.get("mansioni_sorveglianza_by_nome", {})
 
-        # Collect distinct mansioni with at least one DPI code
-        mansioni: dict[str, list[str]] = {}
+        # Aggregate per-persona DPI codes up to mansione (union).
+        mansione_codes: dict[str, set[str]] = {}
+        mansione_persona_codes: dict[str, list[frozenset[str]]] = {}
         for p in persone:
             nome = (p.mansione or "").strip()
             if not nome:
                 continue
-            ms = ms_by_nome.get(nome.lower())
-            if not ms or not ms.dpi_codes:
-                continue
-            mansioni.setdefault(nome, ms.dpi_codes)
+            codes = list(getattr(p, "dpi_codes", None) or [])
+            mansione_codes.setdefault(nome, set()).update(codes)
+            mansione_persona_codes.setdefault(nome, []).append(frozenset(codes))
+
+        # Drop mansioni whose persone all have empty selections.
+        mansioni: dict[str, list[str]] = {
+            nome: sorted(codes)
+            for nome, codes in mansione_codes.items()
+            if codes
+        }
 
         if not mansioni:
             p = doc.add_paragraph()
@@ -2379,8 +2487,26 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         for mansione, codes in sorted(mansioni.items()):
             doc.add_heading(mansione.upper(), level=3)
+
+            persona_sets = mansione_persona_codes.get(mansione, [])
+            distinct_nonempty = {s for s in persona_sets if s}
+            varia = len(distinct_nonempty) > 1
+            if varia:
+                p = doc.add_paragraph()
+                run = p.add_run(
+                    "Nota: la dotazione DPI varia tra i lavoratori con "
+                    "questa mansione — la tabella riporta l'unione delle "
+                    "selezioni. Per l'assegnazione individuale fare "
+                    "riferimento alla scheda persona."
+                )
+                run.font.size = Pt(9)
+                run.font.italic = True
+
             rows = []
             # Group by area so the table mirrors the DPI catalog layout.
+            # Spec §3.N+2 requires Descrizione | Marca/Modello | Note;
+            # Marca/Modello and Note are operator-completed at first audit
+            # so we emit a defensible placeholder rather than blanks.
             by_area: dict[str, list[str]] = {}
             for code in codes:
                 meta = DPI_CATALOG.get(code) or {}
@@ -2388,9 +2514,15 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 etichetta = meta.get("etichetta", code)
                 by_area.setdefault(area, []).append(etichetta)
             for area in sorted(by_area.keys()):
-                rows.append([area, "; ".join(sorted(by_area[area]))])
+                rows.append([
+                    f"{area}: {'; '.join(sorted(by_area[area]))}",
+                    "Da definire al primo audit DPI",
+                    "Conforme a Reg. UE 2016/425; verifica annuale",
+                ])
             self._add_data_table(
-                doc, headers=["Area di Protezione", "DPI"], rows=rows
+                doc,
+                headers=["Descrizione DPI", "Marca / Modello", "Note"],
+                rows=rows,
             )
             doc.add_paragraph("")
 
@@ -2411,17 +2543,39 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         )
         run.font.size = Pt(10)
 
-        rows = [
-            ["Divieto", "Tonda — pittogramma nero su fondo bianco, bordo e banda diagonale rossi", "Vietato fumare; vietato l'accesso ai non addetti"],
-            ["Avvertimento", "Triangolare — pittogramma nero su fondo giallo, bordo nero", "Pericolo elettrico; pericolo materiale infiammabile"],
-            ["Prescrizione", "Tonda — pittogramma bianco su fondo azzurro", "Obbligo casco; obbligo guanti; obbligo occhiali"],
-            ["Salvataggio / Emergenza", "Rettangolare o quadrata — pittogramma bianco su fondo verde", "Uscita di emergenza; cassetta primo soccorso; defibrillatore"],
-            ["Antincendio", "Rettangolare o quadrata — pittogramma bianco su fondo rosso", "Estintore; idrante; punto di raccolta"],
+        # Tabella 105 — Codifica cromatica (Allegato XXV D.Lgs. 81/2008).
+        # Mappa colore -> significato e indicazioni d'uso.
+        doc.add_heading("Codifica cromatica della segnaletica", level=3)
+        color_rows = [
+            ["Rosso", "Divieto", "Atteggiamenti pericolosi", "Stop, dispositivi di interruzione, sgombero"],
+            ["Rosso", "Pericolo / allarme", "Identificazione attrezzature antincendio", "Estintori, idranti, punto di raccolta"],
+            ["Giallo o giallo-arancio", "Avvertimento", "Attenzione, cautela, verifica", "Pericolo elettrico, infiammabile, biologico"],
+            ["Azzurro", "Prescrizione", "Comportamento o azione specifica, obbligo DPI", "Obbligo casco, guanti, occhiali, otoprotettori"],
+            ["Verde", "Salvataggio / soccorso", "Porte, uscite, percorsi, materiali, postazioni, locali", "Uscita di emergenza, cassetta primo soccorso, defibrillatore"],
+            ["Verde", "Situazione di sicurezza", "Ritorno alla normalita", "Punto di raccolta evacuazione"],
         ]
         self._add_data_table(
             doc,
-            headers=["Categoria", "Forma e colori", "Esempi"],
-            rows=rows,
+            headers=["Colore", "Significato", "Indicazioni e precisazioni", "Esempi"],
+            rows=color_rows,
+        )
+        doc.add_paragraph("")
+
+        # Tabella 106 — Forma dei cartelli (Allegato XXIV D.Lgs. 81/2008).
+        # Mappa forma + colore -> categoria di cartello.
+        doc.add_heading("Forma e categorie dei cartelli", level=3)
+        shape_rows = [
+            ["Cartelli di divieto", "Tonda", "Pittogramma nero su fondo bianco; bordo e banda diagonale rossi", "Vietato fumare; vietato l'accesso ai non addetti; vietato spegnere con acqua"],
+            ["Cartelli di avvertimento", "Triangolare", "Pittogramma nero su fondo giallo; bordo nero", "Pericolo elettrico; materiale infiammabile; carichi sospesi; rischio biologico"],
+            ["Cartelli di prescrizione", "Tonda", "Pittogramma bianco su fondo azzurro", "Obbligo casco; obbligo guanti; obbligo occhiali; obbligo otoprotettori"],
+            ["Cartelli di salvataggio", "Rettangolare o quadrata", "Pittogramma bianco su fondo verde", "Uscita di emergenza; direzione vie di fuga; punto di raccolta; defibrillatore"],
+            ["Cartelli antincendio", "Rettangolare o quadrata", "Pittogramma bianco su fondo rosso", "Estintore; idrante; pulsante di allarme; scala antincendio"],
+            ["Cartelli supplementari", "Rettangolare", "Testo nero su fondo bianco o coordinato al cartello principale", "Distanza, altezza, indicazioni testuali integrative"],
+        ]
+        self._add_data_table(
+            doc,
+            headers=["Categoria", "Forma", "Colori e caratteristiche", "Esempi"],
+            rows=shape_rows,
         )
         doc.add_paragraph("")
 
@@ -2549,11 +2703,29 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     def _add_env_identity_table(
         self, doc: Document, ambiente, persone_by_id: dict
     ) -> None:
-        """Template Table 24 — DYNAMIC key-value block for the environment."""
-        preposto_name = "—"
+        """Template Table 24 — DYNAMIC key-value block for the environment.
+
+        Preposto resolution order:
+          1. ``ambiente.preposto_id`` (explicit assignment)
+          2. Any persona assigned to this ambiente with ``ruolo_preposto=True``
+          3. Any azienda-level persona with ``ruolo_preposto=True``
+          4. "Da nominare" — legally defensible placeholder per art. 19.
+        """
+        preposto_name: str | None = None
         preposto_id = getattr(ambiente, "preposto_id", None)
         if preposto_id and preposto_id in persone_by_id:
-            preposto_name = (persone_by_id[preposto_id].nominativo or "—").upper()
+            preposto_name = persone_by_id[preposto_id].nominativo
+        if not preposto_name:
+            for pers in getattr(ambiente, "persone", None) or []:
+                if getattr(pers, "ruolo_preposto", False):
+                    preposto_name = pers.nominativo
+                    break
+        if not preposto_name:
+            for pers in persone_by_id.values():
+                if getattr(pers, "ruolo_preposto", False):
+                    preposto_name = pers.nominativo
+                    break
+        preposto_name = (preposto_name or "Da nominare").upper()
 
         descrizione = (
             (ambiente.descrizione_attivita or "").strip()
@@ -2726,7 +2898,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             "CONDIZIONI DI IMPIEGO O DI ESPOSIZIONE",
             "RISCHIO",
             "MISURE DI PREVENZIONE E PROTEZIONE ATTUATE E DPI",
-            "I = P + 2*D",
+            "I = 2*D + P",
         ]
         table = doc.add_table(rows=1, cols=len(headers))
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -2888,9 +3060,14 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         )
         doc.add_paragraph("")
 
-        # §4.2–4.12 — static procedural sections
+        # §4.2–4.12 — static procedural sections. After §4.3 we inject a
+        # mansione-level Sorveglianza Sanitaria protocol table aggregated
+        # from per-persona DPI + rischi flags (audit recommendation,
+        # post-fix 2026-04-29; persona-level data 2026-04-30).
         for spec in _PART_IV_PROCEDURAL_SECTIONS:
             self._add_procedural_section(doc, spec)
+            if spec.heading.startswith("4.3"):
+                self._add_sorveglianza_protocol_table(doc, persone)
 
         # Cross-reference applicable allegati by name (audit F-016).
         self._add_allegati_cross_references(
@@ -2902,6 +3079,99 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         # Template Table 110 — Signature block (2×3)
         self._add_signature_table(doc, persone)
+
+    def _add_sorveglianza_protocol_table(
+        self, doc: Document, persone: list
+    ) -> None:
+        """Render the per-mansione Sorveglianza Sanitaria protocol table,
+        aggregating per-persona DPI + rischi flags up to mansione (union).
+
+        4 columns: Mansione | Rischi specifici | DPI assegnati | Periodicita'
+        (compilata dal Medico Competente). Periodicita' is left as a
+        placeholder because the actual cadence is a medical decision the
+        MC must make per mansione (art. 41 D.Lgs. 81/2008) — we render the
+        scaffold so the MC has a structured form to fill, not invented
+        values that look authoritative.
+
+        Falls back to a transparent "no data" paragraph when no persona
+        carries any DPI/rischi flags for the azienda.
+        """
+        from app.services.reference_data import (
+            DPI_CATALOG,
+            RISCHI_SPECIFICI_CATALOG,
+        )
+
+        doc.add_heading(
+            "Protocollo di Sorveglianza Sanitaria per Mansione",
+            level=3,
+        )
+
+        # Aggregate per-persona codes up to mansione (union).
+        mansione_dpi: dict[str, set[str]] = {}
+        mansione_rischi: dict[str, set[str]] = {}
+        for p in persone:
+            nome = (p.mansione or "").strip()
+            if not nome:
+                continue
+            dpi_codes = list(getattr(p, "dpi_codes", None) or [])
+            rs_codes = list(getattr(p, "rischi_specifici_codes", None) or [])
+            if dpi_codes:
+                mansione_dpi.setdefault(nome, set()).update(dpi_codes)
+            if rs_codes:
+                mansione_rischi.setdefault(nome, set()).update(rs_codes)
+
+        all_mansioni = sorted(set(mansione_dpi.keys()) | set(mansione_rischi.keys()))
+
+        if not all_mansioni:
+            p = doc.add_paragraph()
+            run = p.add_run(
+                "Nessuna mansione con sorveglianza sanitaria configurata. "
+                "Il Medico Competente, in fase di nomina, definira il "
+                "protocollo specifico per le mansioni esposte ai rischi "
+                "previsti dalla normativa."
+            )
+            run.font.size = Pt(10)
+            run.font.italic = True
+            doc.add_paragraph("")
+            return
+
+        headers = [
+            "Mansione",
+            "Rischi specifici",
+            "DPI assegnati",
+            "Periodicita' (compilata dal MC)",
+        ]
+
+        rows: list[list[str]] = []
+        for nome in all_mansioni:
+            rischi_labels = sorted(
+                RISCHI_SPECIFICI_CATALOG.get(c, {}).get("etichetta", c)
+                for c in mansione_rischi.get(nome, set())
+            )
+            dpi_labels = sorted(
+                DPI_CATALOG.get(c, {}).get("etichetta", c)
+                for c in mansione_dpi.get(nome, set())
+            )
+            rows.append([
+                nome.upper(),
+                "; ".join(rischi_labels) if rischi_labels else "—",
+                "; ".join(dpi_labels) if dpi_labels else "—",
+                "[DA COMPILARE — MC]",
+            ])
+
+        self._add_data_table(doc, headers, rows)
+        # Footnote clarifying authority for the periodicita' column.
+        note = doc.add_paragraph()
+        nrun = note.add_run(
+            "Nota: la periodicita' della sorveglianza sanitaria e i "
+            "protocolli specifici sono definiti dal Medico Competente in "
+            "sede di nomina e di prima visita, ai sensi dell'art. 41 "
+            "D.Lgs. 81/2008."
+        )
+        nrun.font.size = Pt(9)
+        nrun.font.italic = True
+        nrun.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+        doc.add_paragraph("")
 
     def _add_allegati_cross_references(
         self, doc: Document, allegati: list[tuple[str, str]]

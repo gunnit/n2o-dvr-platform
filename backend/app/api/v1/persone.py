@@ -9,9 +9,11 @@ from app.core.exceptions import BadRequestError, NotFoundError
 from app.db.session import get_db
 from app.dependencies import get_current_org
 from app.models.ambiente import Ambiente
+from app.models.attrezzatura import Attrezzatura
 from app.models.azienda import Azienda
 from app.models.persona import Persona
 from app.schemas.persona import PersonaCreate, PersonaResponse, PersonaUpdate
+from app.services.ai import DpiRischiSuggerito, suggest_dpi_rischi
 
 router = APIRouter(prefix="/aziende/{azienda_id}/persone", tags=["persone"])
 
@@ -145,3 +147,61 @@ async def delete_persona(
 
     await db.delete(persona)
     await db.commit()
+
+
+@router.post(
+    "/{persona_id}/dpi-rischi/suggerisci",
+    response_model=DpiRischiSuggerito,
+)
+async def suggerisci_dpi_rischi(
+    azienda_id: uuid.UUID,
+    persona_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """AI-suggest DPI + rischi specifici for a single persona.
+
+    Inputs to the model: the persona's mansione + attrezzature speciali
+    flags + the ambienti they're assigned to + the attrezzature in those
+    ambienti. PII (nominativo, codice fiscale) is never sent.
+    """
+    await _get_azienda(azienda_id, org_id, db)
+    persona = await _load_persona(azienda_id, persona_id, db)
+    if not persona:
+        raise NotFoundError("Persona not found")
+
+    # Ambienti: from the M2M loaded by _load_persona. Fall back to the
+    # whole azienda when the persona has none assigned, so the model
+    # still gets context to reason from.
+    if persona.ambienti:
+        ambienti = list(persona.ambienti)
+    else:
+        ambienti = list(
+            (
+                await db.execute(
+                    select(Ambiente).where(Ambiente.azienda_id == azienda_id)
+                )
+            ).scalars().all()
+        )
+
+    ambiente_ids = [a.id for a in ambienti]
+    attrezzature = (
+        list(
+            (
+                await db.execute(
+                    select(Attrezzatura).where(
+                        Attrezzatura.ambiente_id.in_(ambiente_ids)
+                    )
+                )
+            ).scalars().all()
+        )
+        if ambiente_ids
+        else []
+    )
+
+    return await suggest_dpi_rischi(
+        mansione_nome=(persona.mansione or "").strip() or None,
+        attrezzature_speciali_codes=list(persona.attrezzature_speciali or []),
+        ambienti=ambienti,
+        attrezzature=attrezzature,
+    )

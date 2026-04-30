@@ -25,6 +25,11 @@ class PersonaBase(BaseModel):
     # Originally "qualifiche" (US-1.4), repurposed as a note 2026-04-28.
     qualifiche: str | None = None
     attrezzature_speciali: list[str] = Field(default_factory=list)
+    # Per-persona DPI + rischi specifici (feedback 2026-04-29). Replaces
+    # the previous mansioni_sorveglianza per-mansione grouping.
+    dpi_codes: list[str] = Field(default_factory=list)
+    rischi_specifici_codes: list[str] = Field(default_factory=list)
+    dpi_rischi_note: str | None = None
 
 
 class PersonaCreate(PersonaBase):
@@ -49,6 +54,9 @@ class PersonaUpdate(BaseModel):
     is_esterno: bool | None = None
     qualifiche: str | None = None
     attrezzature_speciali: list[str] | None = None
+    dpi_codes: list[str] | None = None
+    rischi_specifici_codes: list[str] | None = None
+    dpi_rischi_note: str | None = None
     # When present the M2M is rewritten; when absent it is left untouched.
     ambiente_ids: list[uuid.UUID] | None = None
 

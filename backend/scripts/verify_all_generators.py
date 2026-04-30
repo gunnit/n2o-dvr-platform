@@ -100,9 +100,29 @@ def build_fixture() -> dict:
 
     # Assessment rows
     mmc_rows = [
-        mk(compito="Carico/scarico pezzi dal magazzino al tornio", peso_kg=15.0, sesso="M", fascia_eta=">18",
-           cp=25.0, fattore_a=0.93, fattore_b=0.93, fattore_c=0.83, fattore_d=0.85, fattore_e=1.0, fattore_f=0.88,
-           plr=15.0, indice_ir=1.0, livello_rischio="GIALLO", note="Sollevamento con flessione del tronco"),
+        mk(persona_id=persone[3].id, ambiente_id=officina.id,
+           compito="Carico/scarico pezzi dal magazzino al tornio",
+           peso_kg=15.0, sesso="M", fascia_eta=">18",
+           altezza_cm=50, dislocazione_cm=50, distanza_cm=30,
+           angolo_gradi=30, giudizio_presa="Buono",
+           frequenza_atti_min=2.0, durata_min=120,
+           cp=25.0, fattore_a=0.93, fattore_b=0.93, fattore_c=0.83,
+           fattore_d=0.85, fattore_e=1.0, fattore_f=0.88,
+           plr=15.0, indice_ir=1.0,
+           livello_rischio="GIALLO", area_classificazione="Gialla",
+           note="Sollevamento con flessione del tronco",
+           misure_proposte="Carrello a sponde + sorveglianza sanitaria mirata."),
+        mk(persona_id=persone[4].id, ambiente_id=ufficio.id,
+           compito="Movimentazione scatole materie prime",
+           peso_kg=10.0, sesso="F", fascia_eta=">18",
+           altezza_cm=75, dislocazione_cm=25, distanza_cm=25,
+           angolo_gradi=0, giudizio_presa="Buono",
+           frequenza_atti_min=0.5, durata_min=30,
+           cp=20.0, fattore_a=1.0, fattore_b=1.0, fattore_c=1.0,
+           fattore_d=1.0, fattore_e=1.0, fattore_f=0.97,
+           plr=20 * 0.97, indice_ir=10 / (20 * 0.97),
+           livello_rischio="VERDE", area_classificazione="Verde",
+           note="", misure_proposte=""),
     ]
     vdt_rows = [
         mk(postazione="Ufficio 1", ore_settimanali=32.0, esposto=True,
@@ -288,6 +308,24 @@ def patch_generators(fixture: dict, output_dir: str):
             "generated_at": fixture["generated_at"],
         }
     base.BaseDocumentGenerator.load_data = fake_load_data
+
+    # DVR Master also pulls extras (foto, allegati, misure miglioramento)
+    # directly from the DB. Bypass with empty collections in the off-DB
+    # harness — tests cover the static structure of the doc, not the
+    # dynamic-data flow. Per-persona DPI + rischi flags now live on the
+    # Persona rows themselves, so no extras key is needed for them.
+    async def fake_load_dvr_extras(self, data):
+        return {
+            "foto_by_ambiente": {},
+            "vdt_esposti_persona_ids": set(),
+            "allegati_presenti": [
+                ("mmc", "Allegato Movimentazione Manuale dei Carichi (MMC)"),
+                ("vdt", "Allegato Videoterminali (VDT)"),
+                ("stress", "Allegato Stress Lavoro-Correlato"),
+            ],
+            "misure_miglioramento": [],
+        }
+    DVRMasterGenerator._load_dvr_extras = fake_load_dvr_extras
 
     # Override output dir
     def fake_output_dir(self):

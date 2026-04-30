@@ -78,6 +78,13 @@ export interface Persona {
   // Originally "qualifiche" (US-1.4), kept as a note field after 2026-04-28.
   qualifiche: string | null;
   attrezzature_speciali: AttrezzaturaSpecialeCode[];
+  // Per-persona DPI + rischi specifici (feedback 2026-04-29). Replaces
+  // the previous mansione-level grouping — two persone with the same
+  // mansione can carry different flags depending on their attrezzature
+  // speciali and ambienti.
+  dpi_codes: string[];
+  rischi_specifici_codes: string[];
+  dpi_rischi_note: string | null;
   ambiente_ids: string[];
 }
 
@@ -331,17 +338,12 @@ export type {
   ZonaNiosh,
 } from "@/components/assessments/pos/phase-schema";
 
-// Per-mansione DPI + rischi specifici (sorveglianza sanitaria).
-// Backend model: MansioneSorveglianza. Keyed by (azienda_id, mansione_nome).
-export interface MansioneSorveglianza {
-  id: string;
-  azienda_id: string;
-  mansione_nome: string;
+// Per-persona AI suggestion response. Returned by
+// POST /api/v1/aziende/{azienda_id}/persone/{persona_id}/dpi-rischi/suggerisci.
+export interface DpiRischiSuggerito {
   dpi_codes: string[];
   rischi_specifici_codes: string[];
-  note: string | null;
-  created_at: string;
-  updated_at: string;
+  motivazione: string;
 }
 
 export interface CatalogItem {
