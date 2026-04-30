@@ -79,6 +79,33 @@ download_router = APIRouter(prefix="/documenti", tags=["documents"])
 _DVR_DEPENDENT_TYPES: set[str] = {"pee_azienda", "pee_comune"}
 
 
+async def _ensure_anagrafica_complete_for_dvr(
+    azienda: Azienda, tipo_documento: str
+) -> None:
+    """Block DVR generation when ALL legally-required contact fields are NULL.
+
+    Audit F-004 (2026-04-29 rerun): the DVR Anagrafica section requires
+    Codice Fiscale, Telefono, Email and PEC. When all four are NULL the
+    document renders four "Non comunicato" rows that an inspector will
+    reject. Allowing generation with at least one field populated keeps
+    the door open for small artigiani without (e.g.) a PEC yet.
+    """
+    if tipo_documento != "dvr_master":
+        return
+    fields = (
+        azienda.codice_fiscale,
+        azienda.telefono,
+        azienda.email,
+        azienda.pec,
+    )
+    if not any((f or "").strip() for f in fields):
+        raise BadRequestError(
+            "Anagrafica incompleta: inserisci almeno uno tra "
+            "Codice Fiscale, Telefono, Email o PEC sull'Azienda "
+            "prima di generare il DVR."
+        )
+
+
 async def _ensure_dvr_exists_for_dependent(
     azienda_id: uuid.UUID, tipo_documento: str, db: AsyncSession
 ) -> None:
@@ -175,7 +202,9 @@ async def generate_document(
     Creates a DocumentoGenerato record with status='pending' and returns
     immediately. The actual generation will be handled by a Celery worker.
     """
-    await _get_azienda(azienda_id, org_id, db)
+    azienda = await _get_azienda(azienda_id, org_id, db)
+    # Audit F-004: refuse DVR Master with all anagrafica contact fields NULL.
+    await _ensure_anagrafica_complete_for_dvr(azienda, body.tipo_documento)
     # US-4.1 AC2: block dependent documents (PEE) until the DVR Master exists.
     await _ensure_dvr_exists_for_dependent(azienda_id, body.tipo_documento, db)
 

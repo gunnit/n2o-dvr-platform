@@ -96,6 +96,10 @@ async def seed_acme(session: AsyncSession) -> Azienda:
         organization_id=org.id,
         ragione_sociale=ACME_AZIENDA_NAME,
         partita_iva="04567890123",
+        codice_fiscale="04567890123",
+        telefono="+39 0521 555 0042",
+        email="info@acme-meccanica.it",
+        pec="acme.meccanica@pec.it",
         sede_legale_via="Via dell'Industria 42",
         sede_legale_citta="Parma (PR)",
         sede_operativa_via="Via dell'Industria 42",
@@ -209,6 +213,14 @@ async def seed_acme(session: AsyncSession) -> Azienda:
             [{"persona_id": pid, "ambiente_id": aid} for pid, aid in pairs],
         )
 
+    # Assign Franco Gialli as preposto on the ambienti he supervises.
+    # Without this, the DVR Master ambiente identity table renders
+    # "Preposto per la sicurezza: —" everywhere.
+    franco_id = persone["Franco Gialli"].id
+    for amb in (officina, deposito, esterno):
+        amb.preposto_id = franco_id
+    await session.flush()
+
     # 6. Attrezzature (12)
     attrezzature_data = [
         ("Tornio parallelo CNC", True, True),
@@ -275,23 +287,41 @@ async def seed_acme(session: AsyncSession) -> Azienda:
     log.info("Created %d valutazioni rischio", len(ambienti) * len(RISK_CATEGORY_NAMES))
 
     # 9. MMC (NIOSH) - 2 tasks
+    plr1 = 25 * 0.93 * 0.93 * 0.83 * 0.85 * 1.0 * 0.88
+    ir1 = 15 / plr1
     session.add(MmcValutazione(
         azienda_id=az.id, persona_id=persone["Antonio Marrone"].id, ambiente_id=officina.id,
         compito="Carico/scarico pezzi grezzi dal magazzino al tornio",
         peso_kg=15.0, sesso="M", fascia_eta=">18",
+        altezza_cm=50, dislocazione_cm=50, distanza_cm=30,
+        angolo_gradi=30, giudizio_presa="Buono",
+        frequenza_atti_min=2.0, durata_min=120,
         cp=25.0, fattore_a=0.93, fattore_b=0.93, fattore_c=0.83, fattore_d=0.85, fattore_e=1.0, fattore_f=0.88,
-        plr=25 * 0.93 * 0.93 * 0.83 * 0.85 * 1.0 * 0.88,
-        indice_ir=15 / (25 * 0.93 * 0.93 * 0.83 * 0.85 * 1.0 * 0.88),
-        livello_rischio="GIALLO",
+        plr=plr1, indice_ir=ir1,
+        livello_rischio="GIALLO" if ir1 > 0.75 else "VERDE",
+        area_classificazione="Gialla" if ir1 > 0.75 else "Verde",
+        misure_proposte=(
+            "Introdurre carrello a sponde ribaltabili per ridurre la flessione del "
+            "tronco; sorveglianza sanitaria mirata; formazione art. 169 D.Lgs. 81/08."
+        ),
     ))
+    plr2 = 25 * 1.0 * 1.0 * 1.0 * 1.0 * 1.0 * 0.95
+    ir2 = 12 / plr2
     session.add(MmcValutazione(
         azienda_id=az.id, persona_id=persone["Roberto Moretti"].id, ambiente_id=magazzino.id,
         compito="Movimentazione scatole materie prime dal pallet allo scaffale",
         peso_kg=12.0, sesso="M", fascia_eta=">18",
+        altezza_cm=75, dislocazione_cm=25, distanza_cm=25,
+        angolo_gradi=0, giudizio_presa="Buono",
+        frequenza_atti_min=0.5, durata_min=60,
         cp=25.0, fattore_a=1.0, fattore_b=1.0, fattore_c=1.0, fattore_d=1.0, fattore_e=1.0, fattore_f=0.95,
-        plr=25 * 0.95,
-        indice_ir=12 / (25 * 0.95),
+        plr=plr2, indice_ir=ir2,
         livello_rischio="VERDE",
+        area_classificazione="Verde",
+        misure_proposte=(
+            "Mantenere le condizioni operative attuali; rivalutazione in occasione "
+            "di modifiche del ciclo produttivo."
+        ),
     ))
 
     # 10. VDT (4 postazioni) — each worker seeded with a different

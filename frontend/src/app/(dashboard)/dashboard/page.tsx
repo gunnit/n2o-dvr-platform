@@ -46,14 +46,6 @@ type AccentKey = "primary" | "emerald" | "amber" | "violet" | "rose";
 // Tokens / helpers
 // ---------------------------------------------------------------------------
 
-const STROKE: Record<AccentKey, string> = {
-  primary: "#003d74",
-  emerald: "#108c3d",
-  amber: "#9b6829",
-  violet: "#7c3aed",
-  rose: "#ba1a1a",
-};
-
 const ICON_TILE: Record<AccentKey, string> = {
   primary: "bg-[#eef4fb] text-primary",
   emerald: "bg-[rgba(21,190,83,0.15)] text-[#108c3d]",
@@ -161,18 +153,64 @@ function progressFill(p: number): string {
   return "bg-[#ba1a1a]";
 }
 
-// Decorative static sparklines (no time-series backend yet).
-const SPARKS: Record<AccentKey, string> = {
-  primary: "0,18 8,16 16,14 24,15 32,10 40,12 48,7 56,8 64,4",
-  amber: "0,14 8,12 16,14 24,10 32,12 40,8 48,10 56,6 64,8",
-  emerald: "0,20 8,16 16,15 24,12 32,14 40,8 48,7 56,5 64,2",
-  violet: "0,12 8,10 16,12 24,14 32,10 40,12 48,10 56,12 64,10",
-  rose: "0,14 8,14 16,16 24,12 32,15 40,11 48,13 56,9 64,7",
-};
-
 // ---------------------------------------------------------------------------
 // Tiny sub-components (kept inline — only used here)
 // ---------------------------------------------------------------------------
+
+type PipelineHighlight = "all" | "drafts" | "inProgress" | "completed";
+type PipelineCounts = {
+  total: number;
+  drafts: number;
+  inProgress: number;
+  completed: number;
+};
+
+// A 3px bar that decomposes the portfolio across draft / in-progress /
+// completed states. Each tile highlights *its own* segment (others dim to
+// 20% opacity). The "Clienti attivi" tile passes highlight="all" — it IS
+// the total, so every segment stays lit. Segment colors match the icon-tile
+// colors of the corresponding KPI cards, so the bar is self-referential.
+function PipelineBar({
+  total,
+  drafts,
+  inProgress,
+  completed,
+  highlight,
+}: PipelineCounts & { highlight: PipelineHighlight }) {
+  if (total <= 0) return null;
+  const segs: Array<{
+    key: Exclude<PipelineHighlight, "all">;
+    val: number;
+    color: string;
+  }> = [
+    { key: "drafts", val: drafts, color: "#7c3aed" },
+    { key: "inProgress", val: inProgress, color: "#9b6829" },
+    { key: "completed", val: completed, color: "#108c3d" },
+  ];
+  return (
+    <div
+      className="mt-3 flex h-[3px] w-full overflow-hidden rounded-full bg-[#eef2f7]"
+      aria-hidden
+    >
+      {segs.map((s) => {
+        if (s.val <= 0) return null;
+        const pct = Math.min(100, (s.val / total) * 100);
+        const lit = highlight === "all" || highlight === s.key;
+        return (
+          <div
+            key={s.key}
+            className="h-full transition-opacity"
+            style={{
+              width: `${pct}%`,
+              background: s.color,
+              opacity: lit ? 1 : 0.2,
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
 
 function KpiTile({
   label,
@@ -180,12 +218,16 @@ function KpiTile({
   accent,
   icon: Icon,
   delta,
+  pipeline,
+  highlight,
 }: {
   label: string;
   value: number;
   accent: AccentKey;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   delta: React.ReactNode;
+  pipeline: PipelineCounts;
+  highlight: PipelineHighlight;
 }) {
   return (
     <div className="relative overflow-hidden rounded-md border border-[#e5edf5] bg-white p-4 shadow-stripe-ambient transition-shadow hover:shadow-stripe-standard">
@@ -206,21 +248,7 @@ function KpiTile({
       <div className="mt-1 flex min-h-[16px] items-center gap-1.5 text-[11.5px] font-medium text-[#64748d]">
         {delta}
       </div>
-      <svg
-        aria-hidden
-        className="pointer-events-none absolute bottom-2.5 right-2.5 h-[22px] w-16 opacity-80"
-        viewBox="0 0 64 22"
-        preserveAspectRatio="none"
-      >
-        <polyline
-          points={SPARKS[accent]}
-          fill="none"
-          stroke={STROKE[accent]}
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
+      <PipelineBar {...pipeline} highlight={highlight} />
     </div>
   );
 }
@@ -465,6 +493,8 @@ export default function DashboardPage() {
                   <>nessun cliente</>
                 )
               }
+              pipeline={stats}
+              highlight="all"
             />
             <KpiTile
               label="Sopralluoghi"
@@ -483,6 +513,8 @@ export default function DashboardPage() {
                   <>nessuno in corso</>
                 )
               }
+              pipeline={stats}
+              highlight="inProgress"
             />
             <KpiTile
               label="Completati"
@@ -496,6 +528,8 @@ export default function DashboardPage() {
                   <>nessuno ancora</>
                 )
               }
+              pipeline={stats}
+              highlight="completed"
             />
             <KpiTile
               label="Bozze"
@@ -514,6 +548,8 @@ export default function DashboardPage() {
                   <>tutte completate</>
                 )
               }
+              pipeline={stats}
+              highlight="drafts"
             />
           </div>
 

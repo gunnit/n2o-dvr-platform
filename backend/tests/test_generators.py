@@ -95,6 +95,65 @@ def test_biologico_all_three_variants_generate(generated_outputs):
         assert ok and path.endswith(".docx"), f"{key} failed"
 
 
+def test_vdt_emits_full_template_sections(generated_outputs):
+    """Allegato VDT must emit every template section, not just a header +
+    summary. The audit on 2026-04-29 caught the pre-rewrite generator only
+    producing a few sections; this guards against regression to that state.
+    """
+    ok, path, _ = generated_outputs["ALLEGATO_VDT"]
+    assert ok and path.endswith(".docx")
+    doc = Document(path)
+
+    headings = [
+        p.text.strip() for p in doc.paragraphs
+        if p.style.name.startswith("Heading") and p.text.strip()
+    ]
+    required = [
+        "Indice",
+        "Introduzione",
+        "Anagrafica Aziendale",
+        "Dati Occupazionali",
+        "Organizzazione Aziendale della Sicurezza",
+        "Principali fattori di rischio",
+        "La postazione di lavoro",
+        "Elenco postazioni VDT",
+        "Tavole di Valutazione del Rischio VDT",
+        "Quadro sinottico di esposizione",
+        "Misure di prevenzione",
+        "Programma di Attuazione delle Misure di Prevenzione",
+        "Dichiarazione del Datore di Lavoro",
+        "Firme",
+    ]
+    missing = [r for r in required if r not in headings]
+    assert not missing, f"Allegato VDT missing sections: {missing}"
+
+
+def test_vdt_quadro_sinottico_emits_classification(generated_outputs):
+    """The quadro sinottico must show every valutazione row with its
+    Esposto/Non Esposto classification — that's the per-worker summary
+    the medico competente reads first.
+    """
+    ok, path, _ = generated_outputs["ALLEGATO_VDT"]
+    assert ok and path
+    doc = Document(path)
+
+    sinottico_header = ("Nominativo", "Mansione", "Tempo di utilizzo (h/sett)", "Rischio VDT")
+    matched = False
+    for t in doc.tables:
+        if not t.rows:
+            continue
+        header = tuple(c.text.strip() for c in t.rows[0].cells)
+        if header == sinottico_header:
+            matched = True
+            assert len(t.rows) >= 2, "quadro sinottico has no data rows"
+            risk_col = {row.cells[3].text.strip() for row in t.rows[1:]}
+            assert risk_col & {"Esposto", "Non Esposto"}, (
+                f"quadro sinottico Rischio VDT col missing classification: {risk_col}"
+            )
+            break
+    assert matched, "VDT quadro sinottico table not found"
+
+
 def test_dvr_total_table_count_hits_template_parity(generated_outputs):
     """US-2.8 AC1: DVR .docx emits enough tables to match the master template
     (Pre-Parte I + Parte I + II + III + IV).

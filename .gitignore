@@ -43,6 +43,9 @@ out/
 .audit/
 .scratch/
 
+# GSD planning artefacts (local only)
+.planning/
+
 # Python
 *.egg
 *.whl
