@@ -257,18 +257,17 @@ export default function PersoneTab({ persone, ambienti }: PersoneTabProps) {
             Nessun risultato per i filtri selezionati.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-md border border-[#e5edf5]">
+          <div className="rounded-md border border-[#e5edf5]">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nominativo / CF</TableHead>
-                  <TableHead>Mansione</TableHead>
-                  <TableHead>Contratto</TableHead>
-                  <TableHead>Sesso/Età</TableHead>
+                  <TableHead>Nominativo</TableHead>
+                  <TableHead>Mansione & attrezzature</TableHead>
+                  <TableHead className="hidden md:table-cell">
+                    Contratto
+                  </TableHead>
                   <TableHead>Ambienti</TableHead>
                   <TableHead>Ruoli</TableHead>
-                  <TableHead>Attrezzature speciali</TableHead>
-                  <TableHead>Note</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -293,29 +292,45 @@ export default function PersoneTab({ persone, ambienti }: PersoneTabProps) {
                   return (
                     <TableRow key={p.id}>
                       <TableCell>
-                        <div className="flex flex-col">
+                        <div className="flex flex-col gap-0.5">
                           <span className="font-medium text-[#061b31]">
                             {p.nominativo}
                           </span>
-                          {cfMasked && (
-                            <span className="tnum text-[11px] text-[#64748d]">
-                              {cfMasked}
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[#64748d] tnum">
+                            {cfMasked && <span>{cfMasked}</span>}
+                            {sexAge && (
+                              <>
+                                {cfMasked && <span aria-hidden>·</span>}
+                                <span>{sexAge}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-[#273951]">
+                        <div className="flex flex-col gap-1">
+                          <span>
+                            {p.mansione || (
+                              <span className="text-[#64748d]">—</span>
+                            )}
+                          </span>
+                          {(p.attrezzature_speciali?.length ?? 0) > 0 && (
+                            <SpecialEquipmentBadges
+                              codes={p.attrezzature_speciali ?? []}
+                            />
+                          )}
+                          {p.qualifiche && (
+                            <span
+                              title={p.qualifiche}
+                              className="block max-w-[260px] truncate text-[11px] italic text-[#64748d]"
+                            >
+                              {p.qualifiche}
                             </span>
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-[#273951]">
-                        {p.mansione || (
-                          <span className="text-[#64748d]">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-[#273951]">
+                      <TableCell className="hidden text-[#273951] md:table-cell">
                         {p.tipologia_contrattuale || (
-                          <span className="text-[#64748d]">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-[#273951] tnum">
-                        {sexAge || (
                           <span className="text-[#64748d]">—</span>
                         )}
                       </TableCell>
@@ -335,23 +350,6 @@ export default function PersoneTab({ persone, ambienti }: PersoneTabProps) {
                       </TableCell>
                       <TableCell>
                         <PersonaRoleBadges persona={p} />
-                      </TableCell>
-                      <TableCell>
-                        <SpecialEquipmentBadges
-                          codes={p.attrezzature_speciali ?? []}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {p.qualifiche ? (
-                          <span
-                            title={p.qualifiche}
-                            className="block max-w-[200px] truncate text-[12.5px] text-[#64748d]"
-                          >
-                            {p.qualifiche}
-                          </span>
-                        ) : (
-                          <span className="text-[#64748d]">—</span>
-                        )}
                       </TableCell>
                     </TableRow>
                   );
