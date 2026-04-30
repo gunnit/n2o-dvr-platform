@@ -108,6 +108,59 @@ function validateFotoFile(file: File): FileRejectReason | null {
   return null;
 }
 
+// Resize + recompress JPG/PNG so we don't blow Render's request timeout on
+// 8-12 MB iPhone photos. Feedback 2026-04-29 #4/#5/#11: uploads silently
+// stalled around the 4th file because Safari surfaces "load failed" on
+// timeouts and our handler queued them for retry instead of compressing.
+// HEIC and small files (<1.5 MB) skip — Canvas can't decode HEIC and small
+// files don't justify the CPU cost.
+const COMPRESS_SKIP_BYTES = 1.5 * 1024 * 1024;
+const COMPRESS_MAX_DIMENSION = 2000;
+const COMPRESS_QUALITY = 0.85;
+
+async function compressFotoIfNeeded(file: File): Promise<File> {
+  if (file.size <= COMPRESS_SKIP_BYTES) return file;
+  const nameLower = file.name.toLowerCase();
+  if (nameLower.endsWith(".heic") || file.type === "image/heic") return file;
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    const { width, height } = bitmap;
+    const longest = Math.max(width, height);
+    const scale = longest > COMPRESS_MAX_DIMENSION
+      ? COMPRESS_MAX_DIMENSION / longest
+      : 1;
+    const targetW = Math.round(width * scale);
+    const targetH = Math.round(height * scale);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      bitmap.close?.();
+      return file;
+    }
+    ctx.drawImage(bitmap, 0, 0, targetW, targetH);
+    bitmap.close?.();
+
+    const blob: Blob | null = await new Promise((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", COMPRESS_QUALITY)
+    );
+    if (!blob || blob.size >= file.size) return file;
+
+    // Preserve original basename, force .jpg extension since output is JPEG.
+    const base = file.name.replace(/\.[^.]+$/, "");
+    return new File([blob], `${base}.jpg`, {
+      type: "image/jpeg",
+      lastModified: file.lastModified,
+    });
+  } catch {
+    // Any decode/encode failure — fall back to original file.
+    return file;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // <AmbienteFotoGrid> — isolated per-ambiente so each grid owns its own queue,
 // loading indicator, and retry-on-reconnect wiring without re-rendering its
@@ -163,8 +216,9 @@ function AmbienteFotoGrid({ aziendaId, ambienteId }: AmbienteFotoGridProps) {
 
   const uploadOne = useCallback(
     async (file: File): Promise<AmbienteFoto | null> => {
+      const compressed = await compressFotoIfNeeded(file);
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", compressed);
       try {
         const created = await apiFetch<AmbienteFoto>(basePath, {
           method: "POST",
@@ -184,6 +238,14 @@ function AmbienteFotoGrid({ aziendaId, ambienteId }: AmbienteFotoGridProps) {
           msg.toLowerCase().includes("load failed");
         if (offline || looksLikeNetwork) {
           pendingRetryRef.current.push(file);
+          // Tell the operator the file is queued — previously the failure was
+          // swallowed and only the first few uploads visibly succeeded, which
+          // surfaced as "non mi fa caricare più di 3 foto" (feedback #5).
+          toast.warning(
+            offline
+              ? `"${file.name}": offline, riprovo al ripristino della connessione`
+              : `"${file.name}": rete instabile, riprovo automaticamente`,
+          );
           return null;
         }
         // Server-side rejection (validation/limit) — surface to the user.
