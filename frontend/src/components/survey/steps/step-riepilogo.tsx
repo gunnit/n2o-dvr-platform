@@ -21,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { STEP_INDEX } from "../survey-wizard";
 import {
   AlertTriangle,
   Building2,
@@ -139,18 +140,27 @@ export function StepRiepilogo({
   const missingItems: { label: string; step: number }[] = [];
 
   if (!azienda.ragione_sociale?.trim()) {
-    missingItems.push({ label: "Ragione sociale mancante", step: 0 });
+    missingItems.push({
+      label: "Ragione sociale mancante",
+      step: STEP_INDEX.azienda,
+    });
   }
   if (persone.length === 0) {
-    missingItems.push({ label: "Nessuna persona inserita", step: 1 });
+    missingItems.push({
+      label: "Nessuna persona inserita",
+      step: STEP_INDEX.persone,
+    });
   }
   if (ambienti.length === 0) {
-    missingItems.push({ label: "Nessun ambiente inserito", step: 2 });
+    missingItems.push({
+      label: "Nessun ambiente inserito",
+      step: STEP_INDEX.ambienti,
+    });
   }
   if (!persone.some((p) => p.ruolo_rspp)) {
     missingItems.push({
       label: "Nessun RSPP designato tra le persone",
-      step: 1,
+      step: STEP_INDEX.persone,
     });
   }
 
@@ -318,7 +328,7 @@ export function StepRiepilogo({
         <SectionHeader
           title="Dati Azienda"
           icon={Building2}
-          step={0}
+          step={STEP_INDEX.azienda}
           onEdit={onGoToStep}
           disabled={isSigned}
         />
@@ -369,7 +379,7 @@ export function StepRiepilogo({
         <SectionHeader
           title="Persone"
           icon={Users}
-          step={1}
+          step={STEP_INDEX.persone}
           count={persone.length}
           onEdit={onGoToStep}
           disabled={isSigned}
@@ -397,9 +407,9 @@ export function StepRiepilogo({
                       persona/e senza ambiente assegnato
                     </div>
                     <div className="text-[12px] text-[#b51648]/80">
-                      Apri la persona dalla scheda Persone (passo 2) e spunta
-                      gli ambienti rilevanti per farla comparire nelle tabelle
-                      del DVR.
+                      Apri la persona dalla scheda Persone e spunta gli
+                      ambienti rilevanti per farla comparire nelle tabelle del
+                      DVR.
                     </div>
                   </div>
                 </div>
@@ -462,7 +472,7 @@ export function StepRiepilogo({
         <SectionHeader
           title="Ambienti di Lavoro"
           icon={MapPin}
-          step={2}
+          step={STEP_INDEX.ambienti}
           count={ambienti.length}
           onEdit={onGoToStep}
           disabled={isSigned}
@@ -503,7 +513,7 @@ export function StepRiepilogo({
         <SectionHeader
           title="Attrezzature"
           icon={Wrench}
-          step={3}
+          step={STEP_INDEX.attrezzature}
           count={attrezzature.length}
           onEdit={onGoToStep}
           disabled={isSigned}
@@ -551,7 +561,7 @@ export function StepRiepilogo({
         <SectionHeader
           title="Valutazione Rischi"
           icon={ShieldAlert}
-          step={4}
+          step={STEP_INDEX.rischi}
           count={applicableValutazioni.length}
           onEdit={onGoToStep}
           disabled={isSigned}
@@ -611,7 +621,7 @@ export function StepRiepilogo({
         <SectionHeader
           title="Sostanze Chimiche"
           icon={FlaskConical}
-          step={5}
+          step={STEP_INDEX.sostanze}
           count={sostanze.length}
           onEdit={onGoToStep}
           disabled={isSigned}

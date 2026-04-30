@@ -79,6 +79,8 @@ export interface Persona {
 
 export type AttrezzaturaSpecialeCode =
   | "lavori_in_quota"
+  | "trabattelli"
+  | "ponteggi"
   | "carrello_elevatore"
   | "ple"
   | "gru"

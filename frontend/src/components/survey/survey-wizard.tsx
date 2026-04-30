@@ -82,6 +82,18 @@ const STEPS = [
   },
 ] as const;
 
+// Indices by key — consumers (e.g. step-riepilogo "modifica" buttons) MUST go
+// through this lookup, never hardcode raw indices, so a future STEPS reorder
+// doesn't silently route the user to the wrong step (feedback 2026-04-29 #1).
+export type SurveyStepKey = (typeof STEPS)[number]["key"];
+export const STEP_INDEX: Record<SurveyStepKey, number> = STEPS.reduce(
+  (acc, step, i) => {
+    acc[step.key] = i;
+    return acc;
+  },
+  {} as Record<SurveyStepKey, number>,
+);
+
 export interface SurveyData {
   azienda: Partial<Azienda>;
   persone: Persona[];

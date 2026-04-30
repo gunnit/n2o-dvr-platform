@@ -56,6 +56,8 @@ const TIPOLOGIE_CONTRATTUALI = [
 // label tweaks.
 const ATTREZZATURE_SPECIALI: { code: AttrezzaturaSpecialeCode; label: string }[] = [
   { code: "lavori_in_quota", label: "Lavori in quota" },
+  { code: "trabattelli", label: "Trabattelli" },
+  { code: "ponteggi", label: "Ponteggi" },
   { code: "carrello_elevatore", label: "Carrello elevatore" },
   { code: "ple", label: "Piattaforma di lavoro elevabile (PLE)" },
   { code: "gru", label: "Gru" },

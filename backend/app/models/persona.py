@@ -31,8 +31,8 @@ class Persona(Base):
     # alongside the structured `attrezzature_speciali` flags introduced 2026-04-28).
     qualifiche: Mapped[str | None] = mapped_column(String)
     # Structured equipment / driving authorisations the worker is qualified for.
-    # Codes from the canonical set: lavori_in_quota, carrello_elevatore, ple, gru,
-    # ruspa_escavatore, patente_cde, adr.
+    # Codes from the canonical set: lavori_in_quota, trabattelli, ponteggi,
+    # carrello_elevatore, ple, gru, ruspa_escavatore, patente_cde, adr.
     attrezzature_speciali: Mapped[list[str]] = mapped_column(
         JSONB, nullable=False, default=list, server_default="[]"
     )

@@ -2258,6 +2258,8 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         attrezzatura_to_rischio = {
             "lavori_in_quota": "Lavori in quota",
+            "trabattelli": "Utilizzo di trabattelli",
+            "ponteggi": "Utilizzo di ponteggi",
             "carrello_elevatore": "Utilizzo di carrelli elevatori",
             "ple": "Utilizzo di piattaforme di lavoro elevabili (PLE)",
             "gru": "Utilizzo di gru",
