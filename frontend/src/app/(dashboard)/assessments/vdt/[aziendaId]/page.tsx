@@ -12,46 +12,55 @@ import { cn } from "@/lib/utils";
 import {
   VdtForm,
   summarize,
+  type PersonaOption,
   type VdtSummary,
 } from "@/components/assessments/vdt-form";
 import type { Azienda } from "@/types";
 
-// ---------------------------------------------------------------------------
-
 const EMPTY_SUMMARY: VdtSummary = summarize([]);
+
+async function authHeaders(): Promise<HeadersInit> {
+  let token: string | null = null;
+  try {
+    const s = await fetch("/api/auth/session");
+    const session = await s.json();
+    token = session?.accessToken ?? null;
+  } catch {
+    /* noop */
+  }
+  return token
+    ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
+    : { "Content-Type": "application/json" };
+}
 
 export default function VdtAssessmentPage() {
   const params = useParams<{ aziendaId: string }>();
   const aziendaId = params.aziendaId;
 
   const [azienda, setAzienda] = useState<Azienda | null>(null);
+  const [persone, setPersone] = useState<PersonaOption[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [summary, setSummary] = useState<VdtSummary>(EMPTY_SUMMARY);
   const [finalizing, setFinalizing] = useState(false);
   const [finalizeMessage, setFinalizeMessage] = useState<string | null>(null);
 
-  // Load azienda metadata (best-effort — mirrors incendio/mmc pattern).
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        let token: string | null = null;
-        try {
-          const s = await fetch("/api/auth/session");
-          const session = await s.json();
-          token = session?.accessToken ?? null;
-        } catch {
-          /* noop */
+        const headers = await authHeaders();
+        const [azRes, persRes] = await Promise.all([
+          fetch(`${apiUrl}/api/v1/aziende/${aziendaId}`, { headers }),
+          fetch(`${apiUrl}/api/v1/aziende/${aziendaId}/persone`, { headers }),
+        ]);
+        if (!azRes.ok) throw new Error(`Errore ${azRes.status}`);
+        const azData = (await azRes.json()) as Azienda;
+        if (!cancelled) setAzienda(azData);
+        if (persRes.ok) {
+          const persData = (await persRes.json()) as PersonaOption[];
+          if (!cancelled) setPersone(persData);
         }
-        const res = await fetch(`${apiUrl}/api/v1/aziende/${aziendaId}`, {
-          headers: token
-            ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
-            : { "Content-Type": "application/json" },
-        });
-        if (!res.ok) throw new Error(`Errore ${res.status}`);
-        const data = (await res.json()) as Azienda;
-        if (!cancelled) setAzienda(data);
       } catch (err) {
         if (!cancelled) {
           setLoadError(
@@ -66,60 +75,61 @@ export default function VdtAssessmentPage() {
     };
   }, [aziendaId]);
 
-  const allClassified =
-    summary.total > 0 && summary.incompleti === 0;
+  const allClassified = summary.total > 0 && summary.incompleti === 0;
 
   const finalize = useCallback(async () => {
     setFinalizing(true);
     setFinalizeMessage(null);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      let token: string | null = null;
-      try {
-        const s = await fetch("/api/auth/session");
-        const session = await s.json();
-        token = session?.accessToken ?? null;
-      } catch {
-        /* noop */
+      const headers = await authHeaders();
+
+      const validRows = summary.workers.filter(
+        (w) => w.ore_settimanali != null && w.postazione.trim() !== "",
+      );
+      if (!validRows.length) {
+        throw new Error("Nessuna riga valida da salvare.");
       }
 
-      const body = {
-        workers: summary.workers
-          .filter((w) => w.ore_settimanali != null)
-          .map((w) => ({
-            id: w.id,
-            nome: w.nome || null,
-            ore_settimanali: w.ore_settimanali ?? 0,
-          })),
-      };
+      let saved = 0;
+      const failures: string[] = [];
+      for (const w of validRows) {
+        const body: Record<string, unknown> = {
+          persona_id: w.persona_id,
+          postazione: w.postazione.trim(),
+          ore_settimanali: w.ore_settimanali ?? 0,
+          schermo_conforme: w.schermo_conforme,
+          tastiera_separata: w.tastiera_separata,
+          sedile_regolabile: w.sedile_regolabile,
+          poggiapiedi_disponibile: w.poggiapiedi_disponibile,
+          illuminazione_adeguata: w.illuminazione_adeguata,
+          riflessi_assenti: w.riflessi_assenti,
+          spazio_adeguato: w.spazio_adeguato,
+          pause_previste: w.pause_previste,
+          eta_50_plus: w.eta_50_plus,
+          idoneita_visiva: w.idoneita_visiva || null,
+          data_ultima_visita: w.data_ultima_visita || null,
+          note: w.note || null,
+        };
+        const res = await fetch(
+          `${apiUrl}/api/v1/aziende/${aziendaId}/vdt`,
+          { method: "POST", headers, body: JSON.stringify(body) },
+        );
+        if (!res.ok) {
+          const detail = await res.text().catch(() => "");
+          failures.push(`${w.postazione}: ${res.status} ${detail.slice(0, 120)}`);
+        } else {
+          saved += 1;
+        }
+      }
 
-      const res = await fetch(`${apiUrl}/api/v1/calculate/vdt`, {
-        method: "POST",
-        headers: token
-          ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
-          : { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error(`API error ${res.status}`);
-      const data = (await res.json()) as {
-        total: number;
-        esposti: number;
-        non_esposti: number;
-      };
-
-      // Confirm backend matches local computation
-      if (
-        data.total !== summary.total ||
-        data.esposti !== summary.esposti ||
-        data.non_esposti !== summary.non_esposti
-      ) {
+      if (failures.length) {
         throw new Error(
-          `Discrepanza: locale ${summary.esposti}/${summary.total}, server ${data.esposti}/${data.total}`,
+          `Salvati ${saved}/${validRows.length}. Errori:\n${failures.join("\n")}`,
         );
       }
-
       setFinalizeMessage(
-        `Valutazione archiviata: ${data.esposti} esposti / ${data.total} lavoratori.`,
+        `Valutazione archiviata: ${saved} postazioni salvate · ${summary.esposti} esposti.`,
       );
     } catch (err) {
       setFinalizeMessage(
@@ -130,7 +140,7 @@ export default function VdtAssessmentPage() {
     } finally {
       setFinalizing(false);
     }
-  }, [summary]);
+  }, [aziendaId, summary]);
 
   const pageSubtitle = useMemo(() => {
     if (loadError) return `Azienda ${aziendaId} (metadati non disponibili)`;
@@ -153,26 +163,28 @@ export default function VdtAssessmentPage() {
         </div>
       </div>
 
-      <VdtForm aziendaId={aziendaId} onSummaryChange={setSummary} />
+      <VdtForm
+        aziendaId={aziendaId}
+        persone={persone}
+        onSummaryChange={setSummary}
+      />
 
-      {/* Finalize */}
       <Card className="border-primary/30 bg-primary/5">
         <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
           <div>
             <p className="text-sm font-medium">Conferma valutazione</p>
             <p className="text-xs text-muted-foreground">
               {summary.total === 0
-                ? "Aggiungi almeno un lavoratore per confermare."
+                ? "Aggiungi almeno una postazione per confermare."
                 : allClassified
-                ? `Tutti i ${summary.total} lavoratori classificati. La valutazione sarà archiviata nel fascicolo cliente.`
-                : `Completa le ore per ${summary.incompleti} lavoratori.`}
+                ? `Pronto per archiviare ${summary.total} postazioni nel fascicolo cliente.`
+                : `Completa postazione e ore per ${summary.incompleti} righe.`}
             </p>
             {finalizeMessage && (
               <p
                 className={cn(
-                  "mt-1 text-xs",
-                  finalizeMessage.startsWith("Errore") ||
-                    finalizeMessage.startsWith("Discrepanza")
+                  "mt-1 whitespace-pre-line text-xs",
+                  finalizeMessage.startsWith("Errore")
                     ? "text-destructive"
                     : "text-emerald-700",
                 )}
@@ -182,10 +194,7 @@ export default function VdtAssessmentPage() {
             )}
           </div>
           <div className="flex gap-2">
-            <Button
-              disabled={!allClassified || finalizing}
-              onClick={finalize}
-            >
+            <Button disabled={!allClassified || finalizing} onClick={finalize}>
               {finalizing ? "Conferma in corso…" : "Conferma valutazione"}
             </Button>
           </div>
@@ -193,7 +202,8 @@ export default function VdtAssessmentPage() {
       </Card>
 
       <p className="text-[11px] text-muted-foreground">
-        Bozza salvata in locale (chiave: <code>vdt-draft-{aziendaId}</code>)
+        Bozza salvata in locale (chiave: <code>vdt-draft-{aziendaId}</code>).
+        Al salvataggio le righe vengono archiviate sul server.
       </p>
     </div>
   );

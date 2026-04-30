@@ -15,18 +15,41 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
-// Domain — mirrors backend/app/services/vdt_calculator.py.
-// D.Lgs. 81/2008 Titolo VII: worker with >= 20h/week VDT use = ESPOSTO.
+// Domain — mirrors backend/app/services/vdt_calculator.py and
+// backend/app/schemas/vdt.py.  D.Lgs. 81/2008 Titolo VII: worker with
+// >= 20h/week VDT use = ESPOSTO.
 // ---------------------------------------------------------------------------
 
 export const VDT_EXPOSURE_THRESHOLD_HOURS = 20;
 
 export type Esposizione = "ESPOSTO" | "NON_ESPOSTO";
+export type IdoneitaVisiva = "idoneo" | "con prescrizioni" | "non idoneo";
+
+export interface PersonaOption {
+  id: string;
+  nominativo: string;
+  mansione: string | null;
+}
 
 export interface VdtWorker {
-  id: string;
-  nome: string;
+  id: string; // client-side id only, never sent to server
+  persona_id: string | null;
+  postazione: string;
   ore_settimanali: number | null;
+  // checklist
+  schermo_conforme: boolean;
+  tastiera_separata: boolean;
+  sedile_regolabile: boolean;
+  poggiapiedi_disponibile: boolean;
+  illuminazione_adeguata: boolean;
+  riflessi_assenti: boolean;
+  spazio_adeguato: boolean;
+  pause_previste: boolean;
+  // surveillance
+  eta_50_plus: boolean;
+  idoneita_visiva: IdoneitaVisiva | "";
+  data_ultima_visita: string | ""; // YYYY-MM-DD
+  note: string;
 }
 
 export interface VdtWorkerResult extends VdtWorker {
@@ -39,7 +62,7 @@ export interface VdtSummary {
   total: number;
   esposti: number;
   non_esposti: number;
-  incompleti: number; // workers without ore_settimanali
+  incompleti: number; // workers without ore_settimanali or postazione
 }
 
 export function classifyWorker(worker: VdtWorker): VdtWorkerResult {
@@ -63,7 +86,9 @@ export function summarize(workers: VdtWorker[]): VdtSummary {
   let non_esposti = 0;
   let incompleti = 0;
   for (const w of classified) {
-    if (w.esposizione === null) incompleti += 1;
+    const missingOre = w.esposizione === null;
+    const missingPost = !w.postazione.trim();
+    if (missingOre || missingPost) incompleti += 1;
     else if (w.esposizione === "ESPOSTO") esposti += 1;
     else non_esposti += 1;
   }
@@ -76,13 +101,41 @@ export function summarize(workers: VdtWorker[]): VdtSummary {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Utility — stable ids for workers on the client (client-only).
-// ---------------------------------------------------------------------------
-
 function makeId(): string {
   return `w_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
+
+function makeWorker(): VdtWorker {
+  return {
+    id: makeId(),
+    persona_id: null,
+    postazione: "",
+    ore_settimanali: null,
+    schermo_conforme: true,
+    tastiera_separata: true,
+    sedile_regolabile: true,
+    poggiapiedi_disponibile: true,
+    illuminazione_adeguata: true,
+    riflessi_assenti: true,
+    spazio_adeguato: true,
+    pause_previste: true,
+    eta_50_plus: false,
+    idoneita_visiva: "",
+    data_ultima_visita: "",
+    note: "",
+  };
+}
+
+const CHECKLIST_FIELDS: Array<{ key: keyof VdtWorker; label: string }> = [
+  { key: "schermo_conforme", label: "Schermo conforme" },
+  { key: "tastiera_separata", label: "Tastiera separata e inclinabile" },
+  { key: "sedile_regolabile", label: "Sedile regolabile" },
+  { key: "poggiapiedi_disponibile", label: "Poggiapiedi disponibile" },
+  { key: "illuminazione_adeguata", label: "Illuminazione adeguata (300-500 lux)" },
+  { key: "riflessi_assenti", label: "Assenza di riflessi" },
+  { key: "spazio_adeguato", label: "Spazio di lavoro sufficiente" },
+  { key: "pause_previste", label: "Pause previste (15 min/2 h)" },
+];
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -90,14 +143,16 @@ function makeId(): string {
 
 export interface VdtFormProps {
   aziendaId: string;
+  persone: PersonaOption[];
   onSummaryChange?: (summary: VdtSummary) => void;
 }
 
-export function VdtForm({ aziendaId, onSummaryChange }: VdtFormProps) {
+export function VdtForm({ aziendaId, persone, onSummaryChange }: VdtFormProps) {
   const storageKey = `vdt-draft-${aziendaId}`;
 
   const [workers, setWorkers] = useState<VdtWorker[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   // Hydrate from localStorage
   useEffect(() => {
@@ -107,14 +162,11 @@ export function VdtForm({ aziendaId, onSummaryChange }: VdtFormProps) {
           ? window.localStorage.getItem(storageKey)
           : null;
       if (raw) {
-        const parsed = JSON.parse(raw) as VdtWorker[];
+        const parsed = JSON.parse(raw) as Partial<VdtWorker>[];
         if (Array.isArray(parsed)) {
-          setWorkers(parsed);
-        } else {
-          setWorkers([]);
+          // Merge defaults so older drafts don't crash on missing fields.
+          setWorkers(parsed.map((p) => ({ ...makeWorker(), ...p })));
         }
-      } else {
-        setWorkers([]);
       }
     } catch {
       setWorkers([]);
@@ -123,14 +175,13 @@ export function VdtForm({ aziendaId, onSummaryChange }: VdtFormProps) {
     }
   }, [storageKey]);
 
-  // Persist on change (after hydration so we don't overwrite a saved draft
-  // with the empty initial state).
+  // Persist on change
   useEffect(() => {
     if (!hydrated) return;
     try {
       window.localStorage.setItem(storageKey, JSON.stringify(workers));
     } catch {
-      // ignore quota / privacy mode errors
+      /* noop */
     }
   }, [workers, storageKey, hydrated]);
 
@@ -141,10 +192,7 @@ export function VdtForm({ aziendaId, onSummaryChange }: VdtFormProps) {
   }, [summary, onSummaryChange]);
 
   const addWorker = useCallback(() => {
-    setWorkers((prev) => [
-      ...prev,
-      { id: makeId(), nome: "", ore_settimanali: null },
-    ]);
+    setWorkers((prev) => [...prev, makeWorker()]);
   }, []);
 
   const removeWorker = useCallback((id: string) => {
@@ -165,7 +213,7 @@ export function VdtForm({ aziendaId, onSummaryChange }: VdtFormProps) {
     try {
       window.localStorage.removeItem(storageKey);
     } catch {
-      // ignore
+      /* noop */
     }
   }, [storageKey]);
 
@@ -218,9 +266,7 @@ export function VdtForm({ aziendaId, onSummaryChange }: VdtFormProps) {
           </div>
           <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
             <span className="text-muted-foreground">Incompleti</span>
-            <span className="font-medium tabular-nums">
-              {summary.incompleti}
-            </span>
+            <span className="font-medium tabular-nums">{summary.incompleti}</span>
           </div>
         </CardContent>
       </Card>
@@ -230,123 +276,295 @@ export function VdtForm({ aziendaId, onSummaryChange }: VdtFormProps) {
         <CardHeader className="border-b">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <CardTitle className="text-sm">Lavoratori al videoterminale</CardTitle>
+              <CardTitle className="text-sm">Postazioni VDT da valutare</CardTitle>
               <CardDescription className="text-xs">
-                Per ogni lavoratore indicare le ore settimanali di utilizzo del
-                VDT. La classificazione è calcolata automaticamente.
+                Una riga per postazione/lavoratore. Il rischio è classificato
+                in base alle ore settimanali; per gli esposti compaiono i
+                campi sulla sorveglianza sanitaria.
               </CardDescription>
             </div>
             <Badge variant="outline" className="text-[10px]">
-              {workers.length} lavoratori
+              {workers.length} righe
             </Badge>
           </div>
         </CardHeader>
         <CardContent className="space-y-3 pt-4">
           {workers.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              Nessun lavoratore aggiunto. Usa il pulsante qui sotto per iniziare.
+              Nessuna postazione aggiunta. Usa il pulsante qui sotto per iniziare.
             </p>
           )}
-          <ul className="space-y-2">
-            {summary.workers.map((w, idx) => (
-              <li
-                key={w.id}
-                className="rounded-md border border-border bg-background p-3"
-              >
-                <div className="flex flex-wrap items-center gap-3">
-                  <Badge variant="outline" className="shrink-0 text-[10px]">
-                    {idx + 1}
-                  </Badge>
-                  <div className="min-w-[160px] flex-1 space-y-1">
-                    <Label
-                      htmlFor={`${w.id}-nome`}
-                      className="text-[11px] text-muted-foreground"
-                    >
-                      Nome / riferimento
-                    </Label>
-                    <Input
-                      id={`${w.id}-nome`}
-                      type="text"
-                      placeholder="es. Mario R. — ufficio vendite"
-                      value={w.nome}
-                      onChange={(e) =>
-                        updateWorker(w.id, "nome", e.target.value)
-                      }
-                    />
-                  </div>
-                  <div className="w-40 space-y-1">
-                    <Label
-                      htmlFor={`${w.id}-ore`}
-                      className="text-[11px] text-muted-foreground"
-                    >
-                      Ore / settimana
-                    </Label>
-                    <Input
-                      id={`${w.id}-ore`}
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      max={168}
-                      step={0.5}
-                      placeholder="es. 25"
-                      value={w.ore_settimanali ?? ""}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        if (raw === "") {
-                          updateWorker(w.id, "ore_settimanali", null);
-                        } else {
-                          const n = Number(raw);
+          <ul className="space-y-3">
+            {summary.workers.map((w, idx) => {
+              const isExpanded = expanded[w.id] ?? false;
+              const personaLabel = w.persona_id
+                ? persone.find((p) => p.id === w.persona_id)?.nominativo ??
+                  "(lavoratore non in elenco)"
+                : "(generica / nessun lavoratore)";
+              return (
+                <li
+                  key={w.id}
+                  className="rounded-md border border-border bg-background p-3"
+                >
+                  <div className="flex flex-wrap items-start gap-3">
+                    <Badge variant="outline" className="mt-2 shrink-0 text-[10px]">
+                      {idx + 1}
+                    </Badge>
+
+                    <div className="min-w-[200px] flex-1 space-y-1">
+                      <Label
+                        htmlFor={`${w.id}-persona`}
+                        className="text-[11px] text-muted-foreground"
+                      >
+                        Lavoratore
+                      </Label>
+                      <select
+                        id={`${w.id}-persona`}
+                        value={w.persona_id ?? ""}
+                        onChange={(e) =>
                           updateWorker(
                             w.id,
-                            "ore_settimanali",
-                            isNaN(n) ? null : n,
-                          );
+                            "persona_id",
+                            e.target.value || null,
+                          )
                         }
-                      }}
-                    />
+                        className="block w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+                      >
+                        <option value="">— Generica —</option>
+                        {persone.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.nominativo}
+                            {p.mansione ? ` — ${p.mansione}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="min-w-[200px] flex-1 space-y-1">
+                      <Label
+                        htmlFor={`${w.id}-post`}
+                        className="text-[11px] text-muted-foreground"
+                      >
+                        Postazione
+                      </Label>
+                      <Input
+                        id={`${w.id}-post`}
+                        type="text"
+                        placeholder="es. PC ufficio amministrazione"
+                        value={w.postazione}
+                        onChange={(e) =>
+                          updateWorker(w.id, "postazione", e.target.value)
+                        }
+                      />
+                    </div>
+
+                    <div className="w-32 space-y-1">
+                      <Label
+                        htmlFor={`${w.id}-ore`}
+                        className="text-[11px] text-muted-foreground"
+                      >
+                        Ore / settimana
+                      </Label>
+                      <Input
+                        id={`${w.id}-ore`}
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        max={168}
+                        step={0.5}
+                        placeholder="25"
+                        value={w.ore_settimanali ?? ""}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === "") {
+                            updateWorker(w.id, "ore_settimanali", null);
+                          } else {
+                            const n = Number(raw);
+                            updateWorker(
+                              w.id,
+                              "ore_settimanali",
+                              isNaN(n) ? null : n,
+                            );
+                          }
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2 self-center">
+                      {w.esposizione === "ESPOSTO" && (
+                        <span className="inline-flex items-center rounded-md bg-rose-500/15 px-2.5 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-500/30">
+                          ESPOSTO
+                        </span>
+                      )}
+                      {w.esposizione === "NON_ESPOSTO" && (
+                        <span className="inline-flex items-center rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-500/30">
+                          NON ESPOSTO
+                        </span>
+                      )}
+                      {w.esposizione === null && (
+                        <Badge variant="secondary" className="text-xs">
+                          —
+                        </Badge>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() =>
+                          setExpanded((e) => ({ ...e, [w.id]: !isExpanded }))
+                        }
+                      >
+                        {isExpanded ? "Nascondi" : "Dettaglio"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                        onClick={() => removeWorker(w.id)}
+                      >
+                        Rimuovi
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {w.esposizione === "ESPOSTO" && (
-                      <span className="inline-flex items-center rounded-md bg-rose-500/15 px-2.5 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-500/30">
-                        ESPOSTO
-                      </span>
-                    )}
-                    {w.esposizione === "NON_ESPOSTO" && (
-                      <span className="inline-flex items-center rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-500/30">
-                        NON ESPOSTO
-                      </span>
-                    )}
-                    {w.esposizione === null && (
-                      <Badge variant="secondary" className="text-xs">
-                        —
-                      </Badge>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
-                      onClick={() => removeWorker(w.id)}
-                    >
-                      Rimuovi
-                    </Button>
-                  </div>
-                </div>
-              </li>
-            ))}
+
+                  {isExpanded && (
+                    <div className="mt-3 space-y-4 border-t pt-3">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                          Check-list ergonomica · {personaLabel}
+                        </p>
+                        <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
+                          {CHECKLIST_FIELDS.map(({ key, label }) => (
+                            <label
+                              key={key}
+                              className="flex items-center gap-2 text-xs"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={Boolean(w[key])}
+                                onChange={(e) =>
+                                  updateWorker(
+                                    w.id,
+                                    key,
+                                    e.target.checked as VdtWorker[typeof key],
+                                  )
+                                }
+                                className="h-3.5 w-3.5"
+                              />
+                              <span>{label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      {w.esposizione === "ESPOSTO" && (
+                        <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-amber-900">
+                            Sorveglianza sanitaria
+                          </p>
+                          <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                            <label className="flex items-center gap-2 text-xs">
+                              <input
+                                type="checkbox"
+                                checked={w.eta_50_plus}
+                                onChange={(e) =>
+                                  updateWorker(
+                                    w.id,
+                                    "eta_50_plus",
+                                    e.target.checked,
+                                  )
+                                }
+                                className="h-3.5 w-3.5"
+                              />
+                              <span>Età ≥ 50 anni (cadenza biennale)</span>
+                            </label>
+
+                            <div className="space-y-1">
+                              <Label
+                                htmlFor={`${w.id}-idoneita`}
+                                className="text-[11px] text-muted-foreground"
+                              >
+                                Idoneità visiva
+                              </Label>
+                              <select
+                                id={`${w.id}-idoneita`}
+                                value={w.idoneita_visiva}
+                                onChange={(e) =>
+                                  updateWorker(
+                                    w.id,
+                                    "idoneita_visiva",
+                                    e.target.value as VdtWorker["idoneita_visiva"],
+                                  )
+                                }
+                                className="block w-full rounded-md border bg-background px-2 py-1.5 text-xs"
+                              >
+                                <option value="">—</option>
+                                <option value="idoneo">Idoneo</option>
+                                <option value="con prescrizioni">
+                                  Con prescrizioni
+                                </option>
+                                <option value="non idoneo">Non idoneo</option>
+                              </select>
+                            </div>
+
+                            <div className="space-y-1">
+                              <Label
+                                htmlFor={`${w.id}-data`}
+                                className="text-[11px] text-muted-foreground"
+                              >
+                                Ultima visita
+                              </Label>
+                              <Input
+                                id={`${w.id}-data`}
+                                type="date"
+                                value={w.data_ultima_visita}
+                                onChange={(e) =>
+                                  updateWorker(
+                                    w.id,
+                                    "data_ultima_visita",
+                                    e.target.value,
+                                  )
+                                }
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-1">
+                        <Label
+                          htmlFor={`${w.id}-note`}
+                          className="text-[11px] text-muted-foreground"
+                        >
+                          Note (opzionali)
+                        </Label>
+                        <Input
+                          id={`${w.id}-note`}
+                          type="text"
+                          placeholder="es. Postazione condivisa con altro lavoratore"
+                          value={w.note}
+                          onChange={(e) =>
+                            updateWorker(w.id, "note", e.target.value)
+                          }
+                        />
+                      </div>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
           <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
             <Button variant="outline" size="sm" onClick={addWorker}>
-              + Aggiungi lavoratore
+              + Aggiungi postazione
             </Button>
             <p className="text-[11px] text-muted-foreground">
-              Privacy · non inserire il codice fiscale. Usa un riferimento
-              identificativo interno.
+              Privacy · non inserire codice fiscale o dati clinici personali.
             </p>
           </div>
         </CardContent>
       </Card>
 
-      {/* Health surveillance notice (only when there is at least 1 ESPOSTO) */}
       {hasEsposti && (
         <div
           className={cn(
@@ -355,23 +573,21 @@ export function VdtForm({ aziendaId, onSummaryChange }: VdtFormProps) {
         >
           <div className="font-medium">Sorveglianza sanitaria obbligatoria</div>
           <p className="mt-1 leading-relaxed">
-            Sorveglianza sanitaria obbligatoria — visita medica prima
-            dell&apos;adibizione al VDT e a intervalli stabiliti dal medico
-            competente (in genere 5 anni, o 2 anni per età &gt;50 o prescrizione
-            specifica).
+            Visita medica oculistica prima dell&apos;adibizione al VDT e a
+            intervalli stabiliti dal medico competente: cadenza standard 5
+            anni; 2 anni per età ≥ 50 anni o con prescrizioni.
           </p>
         </div>
       )}
 
-      {/* Reset */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-4">
         <div className="text-xs text-muted-foreground">
           Bozza salvata automaticamente ·{" "}
           {summary.incompleti === 0 && summary.total > 0
-            ? "tutti i lavoratori classificati"
+            ? "tutte le righe complete"
             : summary.total === 0
-            ? "nessun lavoratore inserito"
-            : `mancano le ore per ${summary.incompleti} lavoratori`}
+            ? "nessuna riga inserita"
+            : `${summary.incompleti} righe incomplete`}
         </div>
         <button
           type="button"
