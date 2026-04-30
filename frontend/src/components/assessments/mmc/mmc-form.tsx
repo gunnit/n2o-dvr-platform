@@ -30,6 +30,13 @@ import { MmcMeasures } from "./mmc-measures";
 // NIOSH multi-lift form — US-3.1 / US-3.2 / US-3.3
 // The backend `POST /api/v1/calculate/niosh` remains the source of truth.
 // `computeLift` below is a local echo used while the network is quiet.
+//
+// IMPORTANT — keep these tables in sync with `backend/app/data/niosh_factors.py`.
+// That module is the single source of truth on the server (calculator endpoint,
+// MMC persistence, document generator all import from there). The arrays below
+// exist solely for instant local feedback while the user types; if you change
+// any value here, mirror the change in the backend module and run
+// `pytest tests/test_niosh_factors.py`.
 // ---------------------------------------------------------------------------
 
 // Factor A -- Fattore Altezza

@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.data.fire_measures import get_measures_for_level
 from app.data.niosh_cp import get_default_cp
+from app.data.niosh_factors import classify_ir as _classify_ir
 from app.schemas.calculation import (
     BiologicoChecklistResponse,
     FireMeasuresResponse,
@@ -53,12 +54,17 @@ def _risk_level(indice: int) -> str:
 
 
 def _niosh_level(ir: float) -> str:
-    """Return NIOSH risk level based on the lifting index IR."""
-    if ir <= 0.75:
-        return "GREEN"
-    if ir <= 1.0:
-        return "YELLOW"
-    return "RED"
+    """Return NIOSH risk level based on the lifting index IR.
+
+    Uses the centralized classifier in app.data.niosh_factors so the
+    calculator endpoint, the persistence router, and the document
+    generator all agree on the green/yellow/red boundaries. The label
+    vocabulary kept here (GREEN/YELLOW/RED) is the historical contract
+    of the calculator endpoint; the persistence layer uses Italian
+    VERDE/GIALLO/ROSSO from `classify_ir`.
+    """
+    italian = _classify_ir(ir)
+    return {"VERDE": "GREEN", "GIALLO": "YELLOW", "ROSSO": "RED"}[italian]
 
 
 @router.post("/risk-index", response_model=RiskIndexResponse)
