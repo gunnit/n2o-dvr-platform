@@ -351,7 +351,11 @@ export function StepPersone({
               </TableHeader>
               <TableBody>
                 {persone.map((p, index) => (
-                  <TableRow key={p.id}>
+                  <TableRow
+                    key={p.id}
+                    onClick={() => openEdit(index)}
+                    className="cursor-pointer hover:bg-muted/40"
+                  >
                     <TableCell className="font-medium">
                       <div className="flex flex-wrap items-center gap-2">
                         <span>
@@ -395,16 +399,23 @@ export function StepPersone({
                       <div className="flex justify-end gap-1">
                         <Button
                           variant="ghost"
-                          size="icon-sm"
-                          onClick={() => openEdit(index)}
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEdit(index);
+                          }}
                           aria-label="Modifica"
                         >
-                          <Pencil className="h-3.5 w-3.5" />
+                          <Pencil className="mr-1 h-3.5 w-3.5" />
+                          Modifica
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          onClick={() => setDeleteDialogIndex(index)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteDialogIndex(index);
+                          }}
                           aria-label="Elimina"
                         >
                           <Trash2 className="h-3.5 w-3.5 text-destructive" />
