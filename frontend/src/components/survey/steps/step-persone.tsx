@@ -99,6 +99,9 @@ function createEmptyPersona(aziendaId: string): Persona {
     qualifiche: null,
     attrezzature_speciali: [],
     ambiente_ids: [],
+    dpi_codes: [],
+    rischi_specifici_codes: [],
+    dpi_rischi_note: null,
   };
 }
 
@@ -329,7 +332,7 @@ export function StepPersone({
             Aggiungi persona
           </Button>
         </div>
-        <div>
+        <div className="space-y-6">
           {persone.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 py-10 text-center text-muted-foreground">
               <Users className="h-10 w-10 opacity-40" />
@@ -339,18 +342,17 @@ export function StepPersone({
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nominativo</TableHead>
-                  <TableHead>Mansione</TableHead>
-                  <TableHead>Ambienti</TableHead>
-                  <TableHead>Ruoli</TableHead>
-                  <TableHead className="w-[100px] text-right">Azioni</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {persone.map((p, index) => (
+            <>
+              {/* Feedback 29/04: separate the MC/RSPP esterni from dipendenti
+                  in two distinct tables, since they're consulenti, not
+                  employees, and the operator wanted them out of the main
+                  workforce list. */}
+              {(() => {
+                const indexed = persone.map((p, index) => ({ p, index }));
+                const dipendenti = indexed.filter(({ p }) => !p.is_esterno);
+                const esterni = indexed.filter(({ p }) => p.is_esterno);
+
+                const renderRow = ({ p, index }: { p: Persona; index: number }) => (
                   <TableRow
                     key={p.id}
                     onClick={() => openEdit(index)}
@@ -423,9 +425,59 @@ export function StepPersone({
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                );
+
+                const headerRow = (
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nominativo</TableHead>
+                      <TableHead>Mansione</TableHead>
+                      <TableHead>Ambienti</TableHead>
+                      <TableHead>Ruoli</TableHead>
+                      <TableHead className="w-[100px] text-right">Azioni</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                );
+
+                return (
+                  <>
+                    {dipendenti.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-semibold text-on-surface">
+                          Dipendenti
+                          <span className="ml-2 text-xs font-normal text-on-surface-variant">
+                            {dipendenti.length}
+                          </span>
+                        </h4>
+                        <Table>
+                          {headerRow}
+                          <TableBody>{dipendenti.map(renderRow)}</TableBody>
+                        </Table>
+                      </div>
+                    )}
+                    {esterni.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-semibold text-on-surface">
+                          Consulenti esterni
+                          <span className="ml-2 text-xs font-normal text-on-surface-variant">
+                            {esterni.length}
+                          </span>
+                        </h4>
+                        <p className="text-xs text-on-surface-variant">
+                          Medico Competente / RSPP non dipendenti
+                          dell&apos;azienda. Compaiono nell&apos;organigramma
+                          DVR con il suffisso &quot;(esterno)&quot;.
+                        </p>
+                        <Table>
+                          {headerRow}
+                          <TableBody>{esterni.map(renderRow)}</TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </>
           )}
         </div>
       </div>

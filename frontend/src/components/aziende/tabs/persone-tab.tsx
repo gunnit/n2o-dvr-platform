@@ -51,6 +51,8 @@ const ROLE_DEFS: { key: RoleKey; label: string; field: keyof Persona }[] = [
 
 const SPECIAL_LABEL: Record<AttrezzaturaSpecialeCode, string> = {
   lavori_in_quota: "Lavori in quota",
+  trabattelli: "Trabattelli",
+  ponteggi: "Ponteggi",
   carrello_elevatore: "Carrello elevatore",
   ple: "PLE",
   gru: "Gru",
