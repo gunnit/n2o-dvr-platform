@@ -1,8 +1,12 @@
 """extend mmc_valutazioni with NIOSH inputs and persistence fields
 
 Revision ID: k2g3h4i5j6k7
-Revises: j1f2g3h4i5j6
+Revises: m4i5j6k7l8m9
 Create Date: 2026-04-29 14:50:00.000000
+
+NOTE 2026-05-06: rebased onto m4i5j6k7l8m9 to linearize a two-heads alembic
+state that was failing pre_deploy on Render. Original chain pointed to
+j1f2g3h4i5j6 same as l3h4i5j6k7l8 — both branched from j1.
 
 The MMC audit (2026-04-29) flagged that the model only stored derived NIOSH
 multipliers (fattore_a..fattore_f) but not the *inputs* that produced them
@@ -22,7 +26,7 @@ import sqlalchemy as sa
 
 
 revision: str = "k2g3h4i5j6k7"
-down_revision: Union[str, Sequence[str], None] = "j1f2g3h4i5j6"
+down_revision: Union[str, Sequence[str], None] = "m4i5j6k7l8m9"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -1413,10 +1413,13 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         doc.add_paragraph("")
 
         # Table 4 — Anagrafica Aziendale (key-value)
-        # Mandatory rows always render. Optional contact rows (Codice
-        # Fiscale, Telefono, Email, PEC) render only when populated — the
-        # template does not show "—" placeholders for fields the survey
-        # did not collect (audit F-003, 2026-04-28).
+        # Required rows (Ragione Sociale, Datore di Lavoro, Sede Legale,
+        # Sede Operativa) always render. Optional rows are SKIPPED entirely
+        # when null/empty — empty placeholder rows like "—" or
+        # "Non comunicato" are noise that an inspector flags. The audit
+        # gate in api/v1/documents._ensure_anagrafica_complete_for_dvr
+        # already blocks generation when ALL of CF/Tel/Email/PEC are
+        # missing, so at least one of those rows will always render.
         doc.add_heading("2. Anagrafica Aziendale", level=2)
 
         ddl = next((p for p in persone if p.ruolo_datore_lavoro), None)
@@ -1436,48 +1439,51 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         else:
             dipendenti_label = str(actual_count)
 
+        # Required rows — always rendered, even when the underlying field
+        # is blank, so the table structure is recognisable.
         anagrafica_rows: list[tuple[str, str]] = [
             ("Ragione Sociale", azienda.ragione_sociale or "—"),
             ("Datore di Lavoro", ddl_label),
-            ("Attivita", azienda.attivita or "—"),
-        ]
-        # Codice ATECO has a dedicated row when populated — keeps the
-        # Attivita description clean and the ATECO classification visible
-        # at a glance for ispezioni / regulatory cross-reference.
-        ateco = getattr(azienda, "codice_ateco", None)
-        if ateco:
-            anagrafica_rows.append(("Codice ATECO", ateco))
-        anagrafica_rows.extend([
             ("Sede Legale", self._format_address(
                 azienda.sede_legale_via, azienda.sede_legale_citta
             )),
             ("Sede Operativa", self._format_address(
                 azienda.sede_operativa_via, azienda.sede_operativa_citta
             )),
-            ("Partita IVA", getattr(azienda, "partita_iva", None) or "—"),
-        ])
-        # Contact rows — always emitted so an inspector can confirm a
-        # missing field is "non comunicato dal cliente" rather than a
-        # generator omission (audit F-004). The phantom-dash issue from
-        # audit-1 is avoided by using an explicit phrase, not just "—".
-        for label, attr in (
-            ("Codice Fiscale", "codice_fiscale"),
-            ("Telefono", "telefono"),
-            ("Email", "email"),
-            ("PEC", "pec"),
-        ):
-            value = getattr(azienda, attr, None)
-            anagrafica_rows.append(
-                (label, value if value else "Non comunicato")
-            )
-        anagrafica_rows.extend([
-            ("Orario di Lavoro", azienda.orario_lavoro or "—"),
-            ("Numero Totale Dipendenti", dipendenti_label),
-            ("Metratura Totale",
-             f"{azienda.metratura_totale} mq" if azienda.metratura_totale else "—"),
-            ("Zona Sismica",
-             str(azienda.zona_sismica) if azienda.zona_sismica else "—"),
-        ])
+        ]
+
+        # Optional rows — skip entirely when null/empty. Order preserved
+        # to match the prior layout (Attivita / ATECO above contacts,
+        # operativi at the bottom).
+        def _add_optional(label: str, value, formatter=lambda v: str(v)) -> None:
+            if value is None:
+                return
+            if isinstance(value, str) and not value.strip():
+                return
+            anagrafica_rows.append((label, formatter(value)))
+
+        _add_optional("Attivita", getattr(azienda, "attivita", None))
+        _add_optional("Codice ATECO", getattr(azienda, "codice_ateco", None))
+        _add_optional("Partita IVA", getattr(azienda, "partita_iva", None))
+        _add_optional("Codice Fiscale", getattr(azienda, "codice_fiscale", None))
+        _add_optional("Telefono", getattr(azienda, "telefono", None))
+        _add_optional("Email", getattr(azienda, "email", None))
+        _add_optional("PEC", getattr(azienda, "pec", None))
+        _add_optional("Orario di Lavoro", getattr(azienda, "orario_lavoro", None))
+        # Numero dipendenti always rendered — derived from the Persone roster
+        # and the declared figure, both of which the survey forces.
+        anagrafica_rows.append(("Numero Totale Dipendenti", dipendenti_label))
+        _add_optional(
+            "Metratura Totale",
+            getattr(azienda, "metratura_totale", None),
+            formatter=lambda v: f"{v} mq",
+        )
+        _add_optional(
+            "Zona Sismica",
+            getattr(azienda, "zona_sismica", None),
+            formatter=lambda v: str(v),
+        )
+
         self._add_key_value_table(doc, anagrafica_rows)
         doc.add_paragraph("")
 

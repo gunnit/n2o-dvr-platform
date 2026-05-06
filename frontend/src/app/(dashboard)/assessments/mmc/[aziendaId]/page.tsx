@@ -10,12 +10,19 @@ import {
   type MmcFormValues,
   type MmcResult,
 } from "@/components/assessments/mmc/mmc-form";
+import {
+  extractAge,
+  extractSex,
+  fasciaEtaFromAge,
+} from "@/lib/codice-fiscale";
 import type { Azienda } from "@/types";
 
 interface PersonaOption {
   id: string;
   nominativo: string;
   mansione: string | null;
+  codice_fiscale: string | null;
+  sesso: string | null;
 }
 
 const DURATION_TO_MIN: Record<"breve" | "media" | "lunga", number> = {
@@ -99,6 +106,36 @@ export default function MmcAssessmentPage() {
     return "Caricamento in corso...";
   }, [azienda, aziendaId, loadError]);
 
+  // CF-derived worker metadata for the currently selected persona. Used to
+  // pre-fill MmcForm.initialValues so the operator doesn't manually pick the
+  // age band when the CF already encodes it (admin feedback 2026-05-04 #1).
+  const selectedPersona = useMemo(
+    () => persone.find((p) => p.id === selectedPersonaId) ?? null,
+    [persone, selectedPersonaId],
+  );
+
+  const cfDerived = useMemo(() => {
+    if (!selectedPersona?.codice_fiscale) return null;
+    const age = extractAge(selectedPersona.codice_fiscale);
+    if (age === null) return null;
+    const sex = extractSex(selectedPersona.codice_fiscale);
+    return {
+      age,
+      sex: sex ?? (selectedPersona.sesso === "F" ? "F" : "M"),
+    } as const;
+  }, [selectedPersona]);
+
+  // Pass to MmcForm via initialValues. We also key the form by personaId so
+  // changing the dropdown remounts with the right defaults — this avoids
+  // mutating an in-progress form state for a different worker.
+  const formInitialValues = useMemo<Partial<MmcFormValues> | undefined>(() => {
+    if (!cfDerived) return undefined;
+    return {
+      worker_eta: Math.max(15, Math.min(70, cfDerived.age)),
+      worker_sesso: cfDerived.sex,
+    };
+  }, [cfDerived]);
+
   const handleFinalize = async (values: MmcFormValues, result: MmcResult) => {
     setFinalizing(true);
     setFinalizeMessage(null);
@@ -111,7 +148,10 @@ export default function MmcAssessmentPage() {
       }
 
       const personaId = selectedPersonaId || null;
-      const fasciaEta = values.worker_eta >= 18 ? ">18" : "15-18";
+      // Prefer CF-derived age band when available; falls back to the
+      // form's worker_eta value (manual entry).
+      const ageForBand = cfDerived?.age ?? values.worker_eta;
+      const fasciaEta = fasciaEtaFromAge(ageForBand);
       const measuresText = (values.measures ?? []).filter(Boolean).join("\n");
 
       // Persist one MmcValutazione per lift. Server runs NIOSH math from
@@ -203,6 +243,12 @@ export default function MmcAssessmentPage() {
               </option>
             ))}
           </select>
+          {cfDerived && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              (età {cfDerived.age}
+              {cfDerived.sex ? `, sesso ${cfDerived.sex}` : ""}, dedotta da CF)
+            </p>
+          )}
         </div>
       )}
 
@@ -220,8 +266,13 @@ export default function MmcAssessmentPage() {
       )}
 
       <MmcForm
+        // Remount when persona changes so CF-derived defaults take effect.
+        // The form state is per-worker anyway, so resetting on switch is the
+        // expected UX (and avoids stale lifts carrying over).
+        key={selectedPersonaId || "no-persona"}
         aziendaId={aziendaId}
         finalizing={finalizing}
+        initialValues={formInitialValues}
         onFinalize={handleFinalize}
       />
     </div>

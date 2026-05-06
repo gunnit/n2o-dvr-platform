@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, Check, Loader2, Sparkles } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -83,6 +84,23 @@ const EMPTY_FORM: AziendaFormState = {
 
 type AiMeta = Partial<Record<keyof AziendaFormState, AziendaAutofillFieldMeta>>;
 
+// Result of /api/v1/lookup/seismic-zone — kept in lockstep with the survey
+// step-azienda type so any backend shape change surfaces in both places.
+interface SeismicLookupResult {
+  comune_query: string;
+  comune_matched: string | null;
+  zona: number | null;
+  found: boolean;
+  source: string;
+  regione?: string | null;
+}
+
+type SeismicLookupState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "found"; comune: string; zona: number; regione?: string | null }
+  | { kind: "not_found"; comune: string };
+
 const FORMA_GIURIDICA_OPTIONS = [
   "SRL",
   "SRLS",
@@ -139,6 +157,17 @@ export default function NewAziendaPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<AziendaFieldErrors>({});
+  // Feedback 04/05 #2: Dati Amministrativi (capitale, REA, data costituzione,
+  // dipendenti dichiarati) is optional and OFF by default — most clients
+  // don't have these on hand at survey time. When OFF the section is
+  // collapsed and the four fields are forced to null on submit.
+  const [adminOpen, setAdminOpen] = useState(false);
+  // Feedback 04/05 #1: Zona Sismica autofill — mirrors the survey wizard's
+  // step-azienda but here behind an explicit "Compila zona sismica"
+  // button (no onBlur magic on the standalone form).
+  const [seismicLookup, setSeismicLookup] = useState<SeismicLookupState>({
+    kind: "idle",
+  });
 
   // US-5.1: non-admins cannot create clients. Bounce them with a toast.
   useEffect(() => {
@@ -175,6 +204,46 @@ export default function NewAziendaPage() {
       }
       return next;
     });
+  }
+
+  async function handleSeismicLookup() {
+    const comune = form.sede_operativa_citta.trim() || form.sede_legale_citta.trim();
+    if (!comune) return;
+    setSeismicLookup({ kind: "loading" });
+    try {
+      const sessionRes = await fetch("/api/auth/session");
+      const sess = await sessionRes.json();
+      const token = sess?.accessToken;
+      const qs = new URLSearchParams({ comune });
+      const res = await fetch(
+        `${API_URL}/api/v1/lookup/seismic-zone?${qs.toString()}`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        },
+      );
+      if (!res.ok) {
+        throw new Error(`Lookup error: ${res.status}`);
+      }
+      const data: SeismicLookupResult = await res.json();
+      if (data.found && data.zona != null && data.comune_matched) {
+        setForm((prev) => ({ ...prev, zona_sismica: String(data.zona) }));
+        setSeismicLookup({
+          kind: "found",
+          comune: data.comune_matched,
+          zona: data.zona,
+          regione: data.regione ?? null,
+        });
+        toast.success(
+          `Zona sismica compilata: Zona ${data.zona} (${data.comune_matched})`,
+        );
+      } else {
+        setSeismicLookup({ kind: "not_found", comune });
+        toast.error("Comune non trovato. Inseriscilo manualmente.");
+      }
+    } catch {
+      setSeismicLookup({ kind: "not_found", comune });
+      toast.error("Comune non trovato. Inseriscilo manualmente.");
+    }
   }
 
   async function handleAutofill() {
@@ -305,10 +374,16 @@ export default function NewAziendaPage() {
         email: str(form.email),
         telefono: str(form.telefono),
         sito_web: str(form.sito_web),
-        capitale_sociale: num(form.capitale_sociale),
-        rea: str(form.rea),
-        data_costituzione: str(form.data_costituzione),
-        numero_dipendenti_dichiarati: num(form.numero_dipendenti_dichiarati),
+        // When the operator left the Dati Amministrativi section
+        // collapsed, force these fields to null regardless of any stale
+        // values that might have been autofilled before they toggled it
+        // off — the toggle is the single source of truth.
+        capitale_sociale: adminOpen ? num(form.capitale_sociale) : null,
+        rea: adminOpen ? str(form.rea) : null,
+        data_costituzione: adminOpen ? str(form.data_costituzione) : null,
+        numero_dipendenti_dichiarati: adminOpen
+          ? num(form.numero_dipendenti_dichiarati)
+          : null,
         orario_lavoro: str(form.orario_lavoro),
         metratura_totale: num(form.metratura_totale),
         zona_sismica: num(form.zona_sismica),
@@ -654,68 +729,83 @@ export default function NewAziendaPage() {
               </div>
             </div>
 
-            {/* Dati amministrativi */}
+            {/* Dati amministrativi — optional, off by default. The toggle
+                lives in the section header so the operator can choose to
+                expand only when they actually have visura/CCIAA data on hand. */}
             <div className="space-y-3 border-t border-[#e5edf5] pt-6">
-              <h3 className="type-eyebrow">Dati Amministrativi</h3>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label htmlFor="capitale_sociale">Capitale Sociale (€)</Label>
-                    {aiMeta.capitale_sociale && <AiBadge meta={aiMeta.capitale_sociale} />}
+              <label className="flex cursor-pointer items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={adminOpen}
+                  onChange={(e) => setAdminOpen(e.target.checked)}
+                  className="h-4 w-4 cursor-pointer rounded border-[#cbd5e1] text-primary focus:ring-2 focus:ring-primary/20"
+                />
+                <span className="type-eyebrow">Compila Dati Amministrativi</span>
+                <span className="text-[12px] text-[#64748d]">
+                  (capitale sociale, REA, data costituzione, n° dipendenti — opzionale)
+                </span>
+              </label>
+              {adminOpen && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label htmlFor="capitale_sociale">Capitale Sociale (€)</Label>
+                      {aiMeta.capitale_sociale && <AiBadge meta={aiMeta.capitale_sociale} />}
+                    </div>
+                    <Input
+                      id="capitale_sociale"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={form.capitale_sociale}
+                      onChange={(e) => setField("capitale_sociale", e.target.value)}
+                      placeholder="10000"
+                    />
                   </div>
-                  <Input
-                    id="capitale_sociale"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={form.capitale_sociale}
-                    onChange={(e) => setField("capitale_sociale", e.target.value)}
-                    placeholder="10000"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label htmlFor="rea">REA</Label>
-                    {aiMeta.rea && <AiBadge meta={aiMeta.rea} />}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label htmlFor="rea">REA</Label>
+                      {aiMeta.rea && <AiBadge meta={aiMeta.rea} />}
+                    </div>
+                    <Input
+                      id="rea"
+                      value={form.rea}
+                      onChange={(e) => setField("rea", e.target.value)}
+                      placeholder="Es. MI-1234567"
+                    />
                   </div>
-                  <Input
-                    id="rea"
-                    value={form.rea}
-                    onChange={(e) => setField("rea", e.target.value)}
-                    placeholder="Es. MI-1234567"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label htmlFor="data_costituzione">Data Costituzione</Label>
-                    {aiMeta.data_costituzione && <AiBadge meta={aiMeta.data_costituzione} />}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label htmlFor="data_costituzione">Data Costituzione</Label>
+                      {aiMeta.data_costituzione && <AiBadge meta={aiMeta.data_costituzione} />}
+                    </div>
+                    <Input
+                      id="data_costituzione"
+                      type="date"
+                      value={form.data_costituzione}
+                      onChange={(e) => setField("data_costituzione", e.target.value)}
+                    />
                   </div>
-                  <Input
-                    id="data_costituzione"
-                    type="date"
-                    value={form.data_costituzione}
-                    onChange={(e) => setField("data_costituzione", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label htmlFor="numero_dipendenti_dichiarati">N° Dipendenti</Label>
-                    {aiMeta.numero_dipendenti_dichiarati && (
-                      <AiBadge meta={aiMeta.numero_dipendenti_dichiarati} />
-                    )}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label htmlFor="numero_dipendenti_dichiarati">N° Dipendenti</Label>
+                      {aiMeta.numero_dipendenti_dichiarati && (
+                        <AiBadge meta={aiMeta.numero_dipendenti_dichiarati} />
+                      )}
+                    </div>
+                    <Input
+                      id="numero_dipendenti_dichiarati"
+                      type="number"
+                      min="0"
+                      value={form.numero_dipendenti_dichiarati}
+                      onChange={(e) =>
+                        setField("numero_dipendenti_dichiarati", e.target.value)
+                      }
+                      placeholder="Es. 12"
+                    />
                   </div>
-                  <Input
-                    id="numero_dipendenti_dichiarati"
-                    type="number"
-                    min="0"
-                    value={form.numero_dipendenti_dichiarati}
-                    onChange={(e) =>
-                      setField("numero_dipendenti_dichiarati", e.target.value)
-                    }
-                    placeholder="Es. 12"
-                  />
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Operativi */}
@@ -743,19 +833,69 @@ export default function NewAziendaPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="zona_sismica">Zona Sismica</Label>
-                <select
-                  id="zona_sismica"
-                  value={form.zona_sismica}
-                  onChange={(e) => setField("zona_sismica", e.target.value)}
-                  className="h-10 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-3 py-2 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
-                >
-                  <option value="">Seleziona zona</option>
-                  <option value="1">Zona 1 - Alta pericolosit&agrave;</option>
-                  <option value="2">Zona 2 - Media pericolosit&agrave;</option>
-                  <option value="3">Zona 3 - Bassa pericolosit&agrave;</option>
-                  <option value="4">Zona 4 - Molto bassa pericolosit&agrave;</option>
-                </select>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="zona_sismica">Zona Sismica</Label>
+                  {seismicLookup.kind === "found" && (
+                    <Badge
+                      variant="secondary"
+                      className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 text-[10px]"
+                      title={`Compilata dal lookup comune "${seismicLookup.comune}" (OPCM 3519/2006).`}
+                    >
+                      <Check className="mr-1 h-2.5 w-2.5" />
+                      {seismicLookup.regione
+                        ? `${seismicLookup.comune} · ${seismicLookup.regione}`
+                        : seismicLookup.comune}
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <select
+                    id="zona_sismica"
+                    value={form.zona_sismica}
+                    onChange={(e) => {
+                      setField("zona_sismica", e.target.value);
+                      // Operator hand-edit clears the lookup badge.
+                      if (seismicLookup.kind === "found") {
+                        setSeismicLookup({ kind: "idle" });
+                      }
+                    }}
+                    className="h-10 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-3 py-2 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                  >
+                    <option value="">Seleziona zona</option>
+                    <option value="1">Zona 1 - Alta pericolosit&agrave;</option>
+                    <option value="2">Zona 2 - Media pericolosit&agrave;</option>
+                    <option value="3">Zona 3 - Bassa pericolosit&agrave;</option>
+                    <option value="4">Zona 4 - Molto bassa pericolosit&agrave;</option>
+                  </select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSeismicLookup}
+                    disabled={
+                      seismicLookup.kind === "loading" ||
+                      !(form.sede_operativa_citta.trim() || form.sede_legale_citta.trim())
+                    }
+                    title={
+                      form.sede_operativa_citta.trim() || form.sede_legale_citta.trim()
+                        ? "Compila la zona sismica dal comune della sede"
+                        : "Inserisci prima la città della sede"
+                    }
+                    className="shrink-0 whitespace-nowrap"
+                  >
+                    {seismicLookup.kind === "loading" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Compila zona sismica"
+                    )}
+                  </Button>
+                </div>
+                {seismicLookup.kind === "not_found" && (
+                  <p className="flex items-start gap-1 text-[11px] text-amber-700">
+                    <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" />
+                    Comune non trovato. Inseriscilo manualmente.
+                  </p>
+                )}
               </div>
             </div>
 

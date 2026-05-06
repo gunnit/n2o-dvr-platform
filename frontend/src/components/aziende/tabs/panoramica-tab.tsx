@@ -282,7 +282,11 @@ export default function PanoramicaTab({
       <Panel accent="violet">
         <PanelHeader icon={Building2} title="Dati Azienda" accent="violet" />
         <div className="grid gap-5 p-6 sm:grid-cols-2">
-          <InfoRow label="Ragione Sociale" value={azienda.ragione_sociale} />
+          <InfoRow
+            label="Ragione Sociale"
+            value={azienda.ragione_sociale}
+            showWhenEmpty
+          />
           <InfoRow label="Forma giuridica" value={azienda.forma_giuridica} />
           <InfoRow label="Partita IVA" value={azienda.partita_iva} tnum />
           <InfoRow

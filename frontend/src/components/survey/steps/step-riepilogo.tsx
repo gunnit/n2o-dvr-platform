@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
   Card,
@@ -11,7 +12,6 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -63,21 +63,6 @@ interface StepRiepilogoProps {
   ) => void;
 }
 
-function getLivelloStyle(livello: string) {
-  switch (livello) {
-    case "ACCETTABILE":
-      return "bg-green-100 text-green-800 border-green-200";
-    case "MODESTO":
-      return "bg-yellow-100 text-yellow-800 border-yellow-200";
-    case "GRAVE":
-      return "bg-orange-100 text-orange-800 border-orange-200";
-    case "GRAVISSIMO":
-      return "bg-red-100 text-red-800 border-red-200";
-    default:
-      return "";
-  }
-}
-
 function SectionHeader({
   title,
   icon: Icon,
@@ -120,6 +105,7 @@ function SectionHeader({
 }
 
 export function StepRiepilogo({
+  aziendaId,
   data,
   onGoToStep,
   isSigned: isSignedProp,
@@ -129,10 +115,7 @@ export function StepRiepilogo({
   onOpenRevision,
   onSignatureChange,
 }: StepRiepilogoProps) {
-  const { azienda, persone, ambienti, attrezzature, valutazioni, sostanze } =
-    data;
-
-  const applicableValutazioni = valutazioni.filter((v) => v.applicabile);
+  const { azienda, persone, ambienti, attrezzature, sostanze } = data;
 
   // ---------------------------------------------------------------------------
   // Completion validation
@@ -334,7 +317,11 @@ export function StepRiepilogo({
         />
         <CardContent>
           <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
-            <DetailRow label="Ragione Sociale" value={azienda.ragione_sociale} />
+            <DetailRow
+              label="Ragione Sociale"
+              value={azienda.ragione_sociale}
+              showWhenEmpty
+            />
             <DetailRow label="Attivita" value={azienda.attivita} />
             <DetailRow label="Codice ATECO" value={azienda.codice_ateco} />
             <DetailRow
@@ -556,63 +543,32 @@ export function StepRiepilogo({
         </CardContent>
       </Card>
 
-      {/* Valutazione Rischi */}
+      {/* Valutazione Rischi — extracted to /assessments/risk/[id] on
+          2026-04-30. The summary card here would be a stale snapshot
+          (rischi can change post-firma without the wizard knowing), so
+          we surface a CTA instead and let the operator click through. */}
       <Card>
-        <SectionHeader
-          title="Valutazione Rischi"
-          icon={ShieldAlert}
-          step={STEP_INDEX.rischi}
-          count={applicableValutazioni.length}
-          onEdit={onGoToStep}
-          disabled={isSigned}
-        />
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldAlert className="h-4 w-4 text-muted-foreground" />
+            Valutazione Rischi
+          </CardTitle>
+          <CardAction>
+            {aziendaId && !isSigned && (
+              <Link
+                href={`/assessments/risk/${aziendaId}`}
+                className="inline-flex h-8 items-center rounded-md px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                Apri valutazione
+              </Link>
+            )}
+          </CardAction>
+        </CardHeader>
         <CardContent>
-          {applicableValutazioni.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Nessuna valutazione inserita
-            </p>
-          ) : (
-            <div className="space-y-4">
-              {ambienti.map((amb) => {
-                const ambValutazioni = applicableValutazioni.filter(
-                  (v) => v.ambiente_id === amb.id
-                );
-                if (ambValutazioni.length === 0) return null;
-
-                return (
-                  <div key={amb.id}>
-                    <h4 className="mb-2 text-sm font-medium">
-                      {amb.nome || "Ambiente"}
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {ambValutazioni.map((v) => (
-                        <div
-                          key={v.id}
-                          className="flex items-center gap-2 rounded-lg border border-input px-3 py-1.5 text-xs"
-                        >
-                          <span className="font-medium">
-                            {v.categoria_rischio}
-                          </span>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-xs",
-                              getLivelloStyle(
-                                v.livello_rischio ?? ""
-                              )
-                            )}
-                          >
-                            {v.livello_rischio} ({v.indice_i})
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                    <Separator className="mt-3" />
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <p className="text-sm text-muted-foreground">
+            La valutazione rischi è gestita su una pagina dedicata. Apri la
+            pagina per rivedere le categorie di rischio per ogni ambiente.
+          </p>
         </CardContent>
       </Card>
 
@@ -836,14 +792,23 @@ function formatTimestamp(iso: string): string {
 function DetailRow({
   label,
   value,
+  showWhenEmpty = false,
 }: {
   label: string;
   value?: string | null;
+  /**
+   * Default: hide the row entirely when the value is empty/null. The
+   * survey riepilogo is a review surface — empty rows are dead pixels.
+   * Pass true for rows where absence itself is informative.
+   */
+  showWhenEmpty?: boolean;
 }) {
+  const hasValue = value != null && String(value).trim() !== "";
+  if (!hasValue && !showWhenEmpty) return null;
   return (
     <div className="flex flex-col">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-sm font-medium">{value || "-"}</span>
+      <span className="text-sm font-medium">{hasValue ? value : "-"}</span>
     </div>
   );
 }

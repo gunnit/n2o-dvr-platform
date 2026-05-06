@@ -11,7 +11,6 @@ import {
   Users,
   MapPin,
   Wrench,
-  ShieldAlert,
   FlaskConical,
   ClipboardCheck,
   Stethoscope,
@@ -28,7 +27,6 @@ import type {
   Persona,
   Ambiente,
   Attrezzatura,
-  ValutazioneRischio,
   SostanzaChimica,
 } from "@/types";
 
@@ -37,7 +35,6 @@ import { StepPersone } from "./steps/step-persone";
 import { StepAmbienti } from "./steps/step-ambienti";
 import { StepAttrezzature } from "./steps/step-attrezzature";
 import { StepDpiRischi } from "./steps/step-dpi-rischi";
-import { StepRischi, ambientiSignature } from "./steps/step-rischi";
 import { StepSostanze } from "./steps/step-sostanze";
 import { StepRiepilogo } from "./steps/step-riepilogo";
 import { SectorSuggestions } from "./sector-suggestions";
@@ -47,6 +44,11 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 // `required` drives both progress % and the Avanti gate. Optional steps
 // (attrezzature, dpi_rischi, sostanze) don't block the wizard but still
 // surface a green check once the operator has visited them.
+//
+// Rischi was extracted out of the wizard 2026-04-30 (admin feedback #2 +
+// #5): valutazione rischi is its own page at /assessments/risk/[aziendaId]
+// — the wizard column is too narrow for that table and risk evaluation is
+// also done outside the on-site sopralluogo workflow.
 const STEPS = [
   { key: "azienda", label: "Dati Azienda", icon: Building2, required: true },
   { key: "ambienti", label: "Ambienti", icon: MapPin, required: true },
@@ -60,12 +62,6 @@ const STEPS = [
     label: "DPI & Rischi Specifici",
     icon: Stethoscope,
     required: false,
-  },
-  {
-    key: "rischi",
-    label: "Valutazione Rischi",
-    icon: ShieldAlert,
-    required: true,
   },
   {
     key: "sostanze",
@@ -98,7 +94,6 @@ export interface SurveyData {
   persone: Persona[];
   ambienti: Ambiente[];
   attrezzature: Attrezzatura[];
-  valutazioni: ValutazioneRischio[];
   sostanze: SostanzaChimica[];
 }
 
@@ -194,21 +189,8 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
     persone: initialData?.persone ?? [],
     ambienti: initialData?.ambienti ?? [],
     attrezzature: initialData?.attrezzature ?? [],
-    valutazioni: initialData?.valutazioni ?? [],
     sostanze: initialData?.sostanze ?? [],
   });
-
-  // US-1.5 AC3: ambienti signature the operator has last acknowledged
-  // on Step 5. Lives at wizard scope so it survives Step 5 unmount/
-  // remount under <AnimatePresence mode="wait">. Lazy initializer seeds
-  // it from the initial ambienti list, so a fresh page load does NOT
-  // surface the banner — only an in-session edit on Step 2 does.
-  const [acknowledgedAmbientiSig, setAcknowledgedAmbientiSig] =
-    useState<string>(() => ambientiSignature(initialData?.ambienti ?? []));
-
-  const acknowledgeAmbienti = useCallback((sig: string) => {
-    setAcknowledgedAmbientiSig(sig);
-  }, []);
 
   // Keep the wizard pinned on the Riepilogo step whenever the survey is
   // signed — step-navigation handlers short-circuit below, but if the
@@ -314,24 +296,20 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
     setData((prev) => ({ ...prev, attrezzature }));
   }, []);
 
-  const updateValutazioni = useCallback((valutazioni: ValutazioneRischio[]) => {
-    setData((prev) => ({ ...prev, valutazioni }));
-  }, []);
-
   const updateSostanze = useCallback((sostanze: SostanzaChimica[]) => {
     setData((prev) => ({ ...prev, sostanze }));
   }, []);
 
   // Per-step validation (H1/H2/H7). Returns the list of operator-facing
   // error messages for the step; empty list means the step is ready to
-  // advance. Required-step content rules (post-2026-04-28 order swap):
+  // advance. Required-step content rules (post-2026-04-30 rischi extract):
   //  - 0 azienda: ragione sociale + valid P.IVA (11 digits) + valid ATECO
   //    (NN.NN or NN.NN.NN)
   //  - 1 ambienti: at least one record
   //  - 3 persone: at least one record AND at least one with ruolo_rspp
-  //  - 5 valutazioni rischio: at least one applicable risk assessment
-  //  - 7 riepilogo: all upstream required steps complete + signature
-  // Optional steps (2 attrezzature, 4 dpi_rischi, 6 sostanze) always pass.
+  //  - 6 riepilogo: all upstream required steps complete + signature
+  // Optional steps (2 attrezzature, 4 dpi_rischi, 5 sostanze) always pass.
+  // Rischi is no longer in the wizard — it lives on /assessments/risk/[id].
   const validationForStep = useCallback(
     (step: number): { field?: string; message: string }[] => {
       const errors: { field?: string; message: string }[] = [];
@@ -383,19 +361,14 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             message: "Designa almeno un RSPP tra le persone inserite",
           });
         }
-      } else if (step === 5) {
-        const applicable = data.valutazioni.filter((v) => v.applicabile);
-        if (applicable.length === 0) {
-          errors.push({
-            message:
-              "Compila almeno una valutazione del rischio applicabile per continuare",
-          });
-        }
-      } else if (step === 7) {
+      } else if (step === STEP_INDEX.riepilogo) {
         // Riepilogo is "complete" only when every upstream required step
         // is content-complete and the survey is signed. We don't recurse
         // through validationForStep here because that would cause a
         // dependency cycle; instead we re-check the invariants directly.
+        // Note: rischi was removed from the gate 2026-04-30 — it's no
+        // longer a wizard step and the DVR generator gracefully degrades
+        // when no valutazioni exist.
         const a = data.azienda;
         if (
           !a.ragione_sociale?.trim() ||
@@ -417,12 +390,6 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
           errors.push({
             message:
               "Designa almeno un RSPP tra le persone prima di firmare",
-          });
-        }
-        if (data.valutazioni.filter((v) => v.applicabile).length === 0) {
-          errors.push({
-            message:
-              "Compila almeno una valutazione del rischio prima di firmare",
           });
         }
         if (!isSigned) {
@@ -691,9 +658,13 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
     setSurveyStatus(payload.survey_status);
   }, [aziendaId]);
 
+  // Step renderer keyed by the step.key — using a numeric switch makes the
+  // next reorder painful (rischi got pulled mid-list 2026-04-30 and every
+  // numeric branch shifted). The key lookup stays in lock-step with STEPS.
   const renderStep = () => {
-    switch (currentStep) {
-      case 0:
+    const key = STEPS[currentStep]?.key;
+    switch (key) {
+      case "azienda":
         return (
           <StepAzienda
             aziendaId={aziendaId}
@@ -702,7 +673,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             showAllErrors={showValidationErrors}
           />
         );
-      case 1:
+      case "ambienti":
         return (
           <StepAmbienti
             aziendaId={aziendaId}
@@ -710,7 +681,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             onChange={updateAmbienti}
           />
         );
-      case 2:
+      case "attrezzature":
         return (
           <StepAttrezzature
             aziendaId={aziendaId}
@@ -719,7 +690,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             onChange={updateAttrezzature}
           />
         );
-      case 3:
+      case "persone":
         return (
           <StepPersone
             aziendaId={aziendaId}
@@ -728,7 +699,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             onChange={updatePersone}
           />
         );
-      case 4:
+      case "dpi_rischi":
         return (
           <StepDpiRischi
             aziendaId={aziendaId}
@@ -736,19 +707,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             onChange={updatePersone}
           />
         );
-      case 5:
-        return (
-          <StepRischi
-            aziendaId={aziendaId}
-            ambienti={data.ambienti}
-            attrezzature={data.attrezzature}
-            valutazioni={data.valutazioni}
-            onChange={updateValutazioni}
-            acknowledgedAmbientiSig={acknowledgedAmbientiSig}
-            onAcknowledgeAmbienti={acknowledgeAmbienti}
-          />
-        );
-      case 6:
+      case "sostanze":
         return (
           <StepSostanze
             aziendaId={aziendaId}
@@ -756,7 +715,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             onChange={updateSostanze}
           />
         );
-      case 7:
+      case "riepilogo":
         return (
           <StepRiepilogo
             aziendaId={aziendaId}

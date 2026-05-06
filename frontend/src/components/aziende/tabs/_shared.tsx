@@ -78,11 +78,24 @@ export function InfoRow({
   label,
   value,
   tnum = false,
+  showWhenEmpty = false,
 }: {
   label: string;
   value: string | null | undefined;
   tnum?: boolean;
+  /**
+   * When false (default) the row is skipped entirely if value is null,
+   * undefined or empty. Feedback 04/05 #4: read-only displays of azienda
+   * data should hide unfilled fields rather than show "-" placeholders,
+   * which the operator reads as "we don't have this" noise.
+   * Set to true on rows where the absence is itself information
+   * (e.g. "Stato firma: non firmato").
+   */
+  showWhenEmpty?: boolean;
 }) {
+  const hasValue =
+    value !== null && value !== undefined && String(value).trim() !== "";
+  if (!hasValue && !showWhenEmpty) return null;
   return (
     <div className="flex flex-col gap-1">
       <span className="type-eyebrow">{label}</span>
@@ -91,7 +104,7 @@ export function InfoRow({
           "text-[14px] leading-[1.4] text-[#061b31] " + (tnum ? "tnum" : "")
         }
       >
-        {value || "-"}
+        {hasValue ? value : "-"}
       </span>
     </div>
   );

@@ -56,14 +56,14 @@ export default function SurveyAziendaPage() {
 
         // Try to load existing survey data. The backend returns the shape
         // defined in `app/schemas/survey.py::SurveyResponse`, which uses
-        // `sostanze_chimiche` and `rischi` — the wizard's SurveyData shape
-        // uses `sostanze` and `valutazioni`. Normalise here (B-03 fix for
-        // the "Riepilogo shows 0 valutazioni / 0 sostanze" regression).
+        // `sostanze_chimiche` — the wizard's SurveyData shape uses
+        // `sostanze`. Normalise here. The `rischi` field is still
+        // returned by the API but is no longer consumed by the wizard
+        // (extracted to /assessments/risk/[id] 2026-04-30).
         try {
           const surveyData = await apiCall<
             Partial<SurveyData> & {
               sostanze_chimiche?: SurveyData["sostanze"];
-              rischi?: SurveyData["valutazioni"];
             }
           >(`/api/v1/aziende/${aziendaId}/survey`, token);
           setInitialData({
@@ -73,8 +73,6 @@ export default function SurveyAziendaPage() {
             attrezzature: surveyData.attrezzature ?? [],
             sostanze:
               surveyData.sostanze ?? surveyData.sostanze_chimiche ?? [],
-            valutazioni:
-              surveyData.valutazioni ?? surveyData.rischi ?? [],
           });
         } catch {
           // No existing survey data — start fresh

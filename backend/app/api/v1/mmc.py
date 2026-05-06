@@ -203,6 +203,80 @@ async def get_mmc(
     return row
 
 
+# Fields that, when changed, force NIOSH multipliers to be recomputed.
+_NIOSH_INPUT_FIELDS = (
+    "sesso",
+    "fascia_eta",
+    "peso_kg",
+    "altezza_cm",
+    "dislocazione_cm",
+    "distanza_cm",
+    "angolo_gradi",
+    "giudizio_presa",
+    "frequenza_atti_min",
+    "durata_min",
+    "cp",
+)
+
+_NIOSH_DERIVED_FIELDS = (
+    "cp",
+    "fattore_a",
+    "fattore_b",
+    "fattore_c",
+    "fattore_d",
+    "fattore_e",
+    "fattore_f",
+    "plr",
+    "indice_ir",
+    "livello_rischio",
+    "area_classificazione",
+)
+
+
+def _build_patch_assignments(
+    row: MmcValutazione, updates: dict[str, Any]
+) -> dict[str, Any]:
+    """Decide which attributes to write back on a PATCH.
+
+    Always writes the fields the client actually sent (from `updates`, which
+    is `model_dump(exclude_unset=True)`). Additionally, if any NIOSH input
+    field changed, recomputes the derived multipliers (cp, fattore_a..f,
+    plr, indice_ir, livello_rischio, area_classificazione) from the merged
+    state and writes those too.
+
+    Pure function — no DB I/O — so the merge logic is unit-testable.
+    """
+    # Start with exactly what the client sent. Non-NIOSH fields like compito,
+    # note, misure_proposte, ambiente_id, persona_id pass straight through.
+    assignments: dict[str, Any] = dict(updates)
+
+    niosh_inputs_changed = any(k in updates for k in _NIOSH_INPUT_FIELDS)
+    if not niosh_inputs_changed:
+        return assignments
+
+    # Recompute multipliers from merged (current row + updates) state.
+    current = {
+        "sesso": row.sesso,
+        "fascia_eta": row.fascia_eta,
+        "peso_kg": float(row.peso_kg) if row.peso_kg is not None else 0.0,
+        "altezza_cm": row.altezza_cm,
+        "dislocazione_cm": row.dislocazione_cm,
+        "distanza_cm": row.distanza_cm,
+        "angolo_gradi": row.angolo_gradi,
+        "giudizio_presa": row.giudizio_presa,
+        "frequenza_atti_min": (
+            float(row.frequenza_atti_min) if row.frequenza_atti_min is not None else None
+        ),
+        "durata_min": row.durata_min,
+        "cp": float(row.cp) if row.cp is not None else None,
+    }
+    current.update({k: updates[k] for k in _NIOSH_INPUT_FIELDS if k in updates})
+    enriched = _apply_niosh(current)
+    for k in _NIOSH_DERIVED_FIELDS:
+        assignments[k] = enriched[k]
+    return assignments
+
+
 @router.patch("/{mmc_id}", response_model=MmcValutazioneResponse)
 async def update_mmc(
     azienda_id: uuid.UUID,
@@ -225,30 +299,8 @@ async def update_mmc(
     if "persona_id" in updates:
         await _validate_persona(azienda_id, updates.get("persona_id"), db)
 
-    # Merge with current row state so _apply_niosh sees the full picture.
-    current = {
-        "sesso": row.sesso,
-        "fascia_eta": row.fascia_eta,
-        "peso_kg": float(row.peso_kg) if row.peso_kg is not None else 0.0,
-        "altezza_cm": row.altezza_cm,
-        "dislocazione_cm": row.dislocazione_cm,
-        "distanza_cm": row.distanza_cm,
-        "angolo_gradi": row.angolo_gradi,
-        "giudizio_presa": row.giudizio_presa,
-        "frequenza_atti_min": float(row.frequenza_atti_min) if row.frequenza_atti_min is not None else None,
-        "durata_min": row.durata_min,
-        "cp": float(row.cp) if row.cp is not None else None,
-    }
-    current.update(updates)
-    enriched = _apply_niosh(current)
-
-    for k, v in {**updates, **{
-        k: enriched[k] for k in (
-            "cp", "fattore_a", "fattore_b", "fattore_c", "fattore_d",
-            "fattore_e", "fattore_f", "plr", "indice_ir",
-            "livello_rischio", "area_classificazione",
-        )
-    }}.items():
+    assignments = _build_patch_assignments(row, updates)
+    for k, v in assignments.items():
         setattr(row, k, v)
 
     await db.commit()

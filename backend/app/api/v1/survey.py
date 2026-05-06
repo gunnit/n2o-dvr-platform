@@ -108,14 +108,20 @@ async def save_survey_step(
 ):
     """Auto-save a single survey step.
 
-    Steps:
+    Steps (post-2026-04-30 rischi extract — see frontend
+    survey-wizard.tsx STEPS for the canonical order):
       1 = azienda company data
-      2 = persone (managed via /persone CRUD)
-      3 = ambienti (managed via /ambienti CRUD)
-      4 = attrezzature (managed via /attrezzature CRUD)
-      5 = rischi (managed via /rischi CRUD)
+      2 = ambienti (managed via /ambienti CRUD)
+      3 = attrezzature (managed via /attrezzature CRUD)
+      4 = persone (managed via /persone CRUD)
+      5 = dpi & rischi specifici per persona (managed via /persone CRUD)
       6 = sostanze chimiche (managed via /sostanze-chimiche CRUD)
       7 = riepilogo (summary / review, no data save needed)
+
+    Note: la valutazione rischi (un tempo step 6) è stata estratta in una
+    pagina dedicata su /assessments/risk/[aziendaId] (admin feedback #2,
+    2026-04-30) — il backend continua ad accettare i POST /rischi/batch
+    come prima, ma il survey wizard non la gestisce più.
 
     For step 1 the body.data fields are applied directly to the Azienda record.
     For steps 2-6, data is managed through dedicated CRUD endpoints; this endpoint

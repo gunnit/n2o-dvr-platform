@@ -254,7 +254,28 @@ function computeSteps(
       : { label: "Apri", onClick: cb.onOpenDescrizione },
   });
 
-  // 3. Misure di prevenzione (skip if no risks yet — sopralluogo not done)
+  // 3a. Valuta rischi — surfaced once the sopralluogo is delivered but
+  // no rischi have been entered yet. Replaces the previous mid-wizard
+  // step with a CTA that points at the standalone /assessments/risk/[id]
+  // editor (extraction 2026-04-30). When at least one applicable risk
+  // exists we drop straight to the Misure di prevenzione step instead.
+  if (surveyDelivered && applicableRisks.length === 0) {
+    steps.push({
+      id: "valuta-rischi",
+      status: "todo",
+      title: "Valuta rischi",
+      detail:
+        "Apri la pagina dedicata per assegnare P/D, applicabilità e pericoli specifici per ogni ambiente.",
+      icon: ShieldAlert,
+      cta: {
+        label: "Apri valutazione",
+        onClick: cb.onOpenRischi,
+        primary: true,
+      },
+    });
+  }
+
+  // 3b. Misure di prevenzione (skip if no risks yet — sopralluogo not done)
   if (applicableRisks.length > 0) {
     const allCovered = missingMeasures === 0;
     steps.push({

@@ -388,7 +388,15 @@ export default function AziendaDetailPage() {
               });
             });
           },
-          onOpenRischi: () => handleTabChange("rischi"),
+          // When no applicable rischi exist yet, jump straight to the
+          // standalone editor — the rischi tab would just show an empty
+          // state with the same CTA. With rischi present the tab is the
+          // right landing (it surfaces measures coverage / level
+          // distribution).
+          onOpenRischi: () =>
+            rischi.some((r) => r.applicabile)
+              ? handleTabChange("rischi")
+              : router.push(`/assessments/risk/${id}`),
           onOpenAssessments: () => router.push("/assessments"),
           onOpenDocumenti: () => handleTabChange("documenti"),
           onGenerateDocs: handleGenerateDocs,

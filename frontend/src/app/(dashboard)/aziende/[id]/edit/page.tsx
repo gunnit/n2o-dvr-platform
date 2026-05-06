@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { ArrowLeft } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,21 @@ import {
 import type { Azienda } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+interface SeismicLookupResult {
+  comune_query: string;
+  comune_matched: string | null;
+  zona: number | null;
+  found: boolean;
+  source: string;
+  regione?: string | null;
+}
+
+type SeismicLookupState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "found"; comune: string; zona: number; regione?: string | null }
+  | { kind: "not_found"; comune: string };
 
 /**
  * Edit page for an existing azienda. Mirrors `aziende/new` field-for-field
@@ -40,6 +56,26 @@ export default function EditAziendaPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<AziendaFieldErrors>({});
+  // Feedback 04/05 #1: zona sismica autofill from comune. The form is
+  // otherwise uncontrolled (defaultValue + FormData), so we track only
+  // the seismic state explicitly and read the city via refs to avoid
+  // disturbing the rest of the form.
+  const [seismicLookup, setSeismicLookup] = useState<SeismicLookupState>({
+    kind: "idle",
+  });
+  const [zonaSismicaValue, setZonaSismicaValue] = useState<string>("");
+  const sedeOperativaCittaRef = useRef<HTMLInputElement>(null);
+  const sedeLegaleCittaRef = useRef<HTMLInputElement>(null);
+
+  // Once the azienda loads, seed the controlled zona sismica (so we can
+  // overwrite it after a lookup) from the persisted value.
+  useEffect(() => {
+    if (azienda) {
+      setZonaSismicaValue(
+        azienda.zona_sismica != null ? String(azienda.zona_sismica) : "",
+      );
+    }
+  }, [azienda]);
 
   // US-5.1 alignment: only admins can edit aziende.
   useEffect(() => {
@@ -66,6 +102,49 @@ export default function EditAziendaPage() {
       cancelled = true;
     };
   }, [id]);
+
+  async function handleSeismicLookup() {
+    const comune =
+      sedeOperativaCittaRef.current?.value.trim() ||
+      sedeLegaleCittaRef.current?.value.trim() ||
+      "";
+    if (!comune) return;
+    setSeismicLookup({ kind: "loading" });
+    try {
+      const sessionRes = await fetch("/api/auth/session");
+      const sess = await sessionRes.json();
+      const token = sess?.accessToken;
+      const qs = new URLSearchParams({ comune });
+      const res = await fetch(
+        `${API_URL}/api/v1/lookup/seismic-zone?${qs.toString()}`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        },
+      );
+      if (!res.ok) {
+        throw new Error(`Lookup error: ${res.status}`);
+      }
+      const data: SeismicLookupResult = await res.json();
+      if (data.found && data.zona != null && data.comune_matched) {
+        setZonaSismicaValue(String(data.zona));
+        setSeismicLookup({
+          kind: "found",
+          comune: data.comune_matched,
+          zona: data.zona,
+          regione: data.regione ?? null,
+        });
+        toast.success(
+          `Zona sismica compilata: Zona ${data.zona} (${data.comune_matched})`,
+        );
+      } else {
+        setSeismicLookup({ kind: "not_found", comune });
+        toast.error("Comune non trovato. Inseriscilo manualmente.");
+      }
+    } catch {
+      setSeismicLookup({ kind: "not_found", comune });
+      toast.error("Comune non trovato. Inseriscilo manualmente.");
+    }
+  }
 
   function validateField(
     name: "partita_iva" | "codice_ateco",
@@ -265,6 +344,7 @@ export default function EditAziendaPage() {
                 <div className="space-y-1.5">
                   <Label htmlFor="sede_legale_citta">Citt&agrave;</Label>
                   <Input
+                    ref={sedeLegaleCittaRef}
                     id="sede_legale_citta"
                     name="sede_legale_citta"
                     defaultValue={azienda.sede_legale_citta ?? ""}
@@ -289,6 +369,7 @@ export default function EditAziendaPage() {
                 <div className="space-y-1.5">
                   <Label htmlFor="sede_operativa_citta">Citt&agrave;</Label>
                   <Input
+                    ref={sedeOperativaCittaRef}
                     id="sede_operativa_citta"
                     name="sede_operativa_citta"
                     defaultValue={azienda.sede_operativa_citta ?? ""}
@@ -322,21 +403,64 @@ export default function EditAziendaPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="zona_sismica">Zona Sismica</Label>
-                <select
-                  id="zona_sismica"
-                  name="zona_sismica"
-                  className="h-10 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-3 py-2 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
-                  defaultValue={azienda.zona_sismica ?? ""}
-                >
-                  <option value="">Seleziona zona</option>
-                  <option value="1">Zona 1 - Alta pericolosit&agrave;</option>
-                  <option value="2">Zona 2 - Media pericolosit&agrave;</option>
-                  <option value="3">Zona 3 - Bassa pericolosit&agrave;</option>
-                  <option value="4">
-                    Zona 4 - Molto bassa pericolosit&agrave;
-                  </option>
-                </select>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="zona_sismica">Zona Sismica</Label>
+                  {seismicLookup.kind === "found" && (
+                    <Badge
+                      variant="secondary"
+                      className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 text-[10px]"
+                      title={`Compilata dal lookup comune "${seismicLookup.comune}" (OPCM 3519/2006).`}
+                    >
+                      <Check className="mr-1 h-2.5 w-2.5" />
+                      {seismicLookup.regione
+                        ? `${seismicLookup.comune} · ${seismicLookup.regione}`
+                        : seismicLookup.comune}
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <select
+                    id="zona_sismica"
+                    name="zona_sismica"
+                    className="h-10 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-3 py-2 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                    value={zonaSismicaValue}
+                    onChange={(e) => {
+                      setZonaSismicaValue(e.target.value);
+                      if (seismicLookup.kind === "found") {
+                        setSeismicLookup({ kind: "idle" });
+                      }
+                    }}
+                  >
+                    <option value="">Seleziona zona</option>
+                    <option value="1">Zona 1 - Alta pericolosit&agrave;</option>
+                    <option value="2">Zona 2 - Media pericolosit&agrave;</option>
+                    <option value="3">Zona 3 - Bassa pericolosit&agrave;</option>
+                    <option value="4">
+                      Zona 4 - Molto bassa pericolosit&agrave;
+                    </option>
+                  </select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSeismicLookup}
+                    disabled={seismicLookup.kind === "loading"}
+                    className="shrink-0 whitespace-nowrap"
+                    title="Compila la zona sismica dal comune della sede"
+                  >
+                    {seismicLookup.kind === "loading" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Compila zona sismica"
+                    )}
+                  </Button>
+                </div>
+                {seismicLookup.kind === "not_found" && (
+                  <p className="flex items-start gap-1 text-[11px] text-amber-700">
+                    <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" />
+                    Comune non trovato. Inseriscilo manualmente.
+                  </p>
+                )}
               </div>
             </div>
 
