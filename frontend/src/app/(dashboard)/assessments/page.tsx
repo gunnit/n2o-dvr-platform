@@ -15,6 +15,7 @@ import {
   Microscope,
   Monitor,
   Package,
+  ShieldAlert,
   Thermometer,
   Utensils,
   type LucideIcon,
@@ -34,6 +35,15 @@ type AssessmentType = {
 };
 
 const assessmentTypes: AssessmentType[] = [
+  {
+    slug: "risk",
+    title: "Valutazione Rischi",
+    metodo: "D.Lgs. 81/2008 · Formula I = 2D + P",
+    description:
+      "Catalogo pericoli per ambiente · scoring P/D · livello accettabile→gravissimo.",
+    icon: ShieldAlert,
+    accent: "rose",
+  },
   {
     slug: "mmc",
     title: "Movimentazione Manuale dei Carichi",
