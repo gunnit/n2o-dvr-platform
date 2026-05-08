@@ -238,7 +238,7 @@ export function MeasuresPanel({
     });
   };
 
-  const useLibraryEntry = (entry: LibraryEntry) => {
+  const addLibraryEntry = (entry: LibraryEntry) => {
     setAccepted((a) => [
       ...a,
       {
@@ -415,7 +415,7 @@ export function MeasuresPanel({
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={() => useLibraryEntry(entry)}
+                  onClick={() => addLibraryEntry(entry)}
                 >
                   <Check className="mr-1 h-3.5 w-3.5" />
                   Usa

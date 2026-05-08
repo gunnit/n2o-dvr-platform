@@ -45,6 +45,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
+import { MeasuresPanel } from "@/components/ai/measures-panel";
 import type {
   LivelloRischio,
   PericoloLibreria,
@@ -85,6 +86,13 @@ interface PericoliPanelProps {
    * agrees with what's actually inside.
    */
   onSummaryChange?: (rischioId: string, summary: PericoliSummary) => void;
+  /**
+   * Persists the rischio-level `misure_prevenzione` text. Called by the
+   * AI MeasuresPanel after the operator accepts/edits suggestions. The
+   * parent should route this through its own batch-save pipeline so we
+   * don't bypass scheduleAmbienteSave.
+   */
+  onSaveMisure?: (rischioId: string, combinedText: string) => Promise<void>;
 }
 
 function calcIndice(p: number, d: number): number {
@@ -115,6 +123,7 @@ export function PericoliPanel({
   valutazione,
   categoriaLong,
   onSummaryChange,
+  onSaveMisure,
 }: PericoliPanelProps) {
   const { apiFetch } = useApi();
   const [expanded, setExpanded] = useState(false);
@@ -404,6 +413,21 @@ export function PericoliPanel({
 
       {expanded && (
         <div className="space-y-3 px-4 pb-4">
+          {/* US-2.6 — AI improvement measures for the rischio (above the
+              pericoli list). Mounted only when we have a parent save
+              handler; otherwise the panel can't persist what it gathers. */}
+          {onSaveMisure && (
+            <MeasuresPanel
+              aziendaId={aziendaId}
+              rischioId={valutazione.id}
+              categoriaRischio={valutazione.categoria_rischio}
+              initialText={valutazione.misure_prevenzione ?? undefined}
+              onSave={(combinedText) =>
+                onSaveMisure(valutazione.id, combinedText)
+              }
+            />
+          )}
+
           {pericoli.length === 0 && !loading && (
             <p className="text-xs italic text-muted-foreground">
               Nessun pericolo applicabile dal catalogo per questa
@@ -441,11 +465,18 @@ export function PericoliPanel({
                       <Fragment key={p.id}>
                         <tr
                           className={cn(
-                            "border-t",
+                            "group cursor-pointer border-t transition-colors hover:bg-muted/30",
                             !p.applicabile && "opacity-50",
+                            isEditing && "bg-muted/40",
                           )}
+                          onClick={() =>
+                            setEditingId(isEditing ? null : p.id)
+                          }
                         >
-                          <td className="p-2 text-center">
+                          <td
+                            className="p-2 text-center"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <input
                               type="checkbox"
                               checked={p.applicabile}
@@ -461,13 +492,22 @@ export function PericoliPanel({
                             <div className="flex flex-col gap-0.5">
                               <button
                                 type="button"
-                                onClick={() =>
-                                  setEditingId(isEditing ? null : p.id)
-                                }
-                                className="text-left text-xs font-medium hover:text-primary"
+                                onClick={(e) => {
+                                  // The whole row is clickable; stop here so
+                                  // we don't toggle twice when the label is
+                                  // the actual click target.
+                                  e.stopPropagation();
+                                  setEditingId(isEditing ? null : p.id);
+                                }}
+                                className="flex items-center gap-1.5 text-left text-xs font-medium hover:text-primary"
                                 title="Clicca per espandere/modificare"
                               >
-                                {p.pericolo}
+                                {isEditing ? (
+                                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:text-foreground" />
+                                ) : (
+                                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:text-foreground" />
+                                )}
+                                <span>{p.pericolo}</span>
                               </button>
                               <div className="flex flex-wrap items-center gap-1">
                                 {p.source === "custom" && (
@@ -489,7 +529,10 @@ export function PericoliPanel({
                               </div>
                             </div>
                           </td>
-                          <td className="p-2 text-center">
+                          <td
+                            className="p-2 text-center"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             {p.applicabile && !isDelegated && (
                               <select
                                 value={pVal ?? 1}
@@ -507,7 +550,10 @@ export function PericoliPanel({
                               </select>
                             )}
                           </td>
-                          <td className="p-2 text-center">
+                          <td
+                            className="p-2 text-center"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             {p.applicabile && !isDelegated && (
                               <select
                                 value={dVal ?? 1}
@@ -541,7 +587,10 @@ export function PericoliPanel({
                               </Badge>
                             )}
                           </td>
-                          <td className="p-2 text-center">
+                          <td
+                            className="p-2 text-center"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <button
                               type="button"
                               onClick={() => deletePericolo(p.id)}
@@ -607,7 +656,7 @@ export function PericoliPanel({
                               className="border-emerald-200 bg-emerald-50 text-[9px] text-emerald-700"
                             >
                               <Sparkles className="mr-0.5 h-2.5 w-2.5" />
-                              Adatto all'ambiente
+                              Adatto all&apos;ambiente
                             </Badge>
                           )}
                           {s.triggered_by_attrezzature.length > 0 && (
