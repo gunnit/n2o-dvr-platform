@@ -17,6 +17,7 @@ import {
   ShieldAlert,
   Pencil,
   Trash2,
+  Target,
 } from "lucide-react";
 import {
   Tabs,
@@ -43,6 +44,7 @@ import PersoneTab from "@/components/aziende/tabs/persone-tab";
 import AttrezzatureTab from "@/components/aziende/tabs/attrezzature-tab";
 import RischiTab from "@/components/aziende/tabs/rischi-tab";
 import DocumentiTab from "@/components/aziende/tabs/documenti-tab";
+import MiglioramentoTab from "@/components/aziende/tabs/miglioramento-tab";
 
 // Detail-page tab keys — shared between the trigger list and the
 // deep-link helpers below. Order mirrors the wizard (M3) minus
@@ -53,6 +55,7 @@ type DetailTabKey =
   | "persone"
   | "attrezzature"
   | "rischi"
+  | "miglioramento"
   | "documenti";
 
 const DETAIL_TABS: ReadonlySet<DetailTabKey> = new Set([
@@ -61,6 +64,7 @@ const DETAIL_TABS: ReadonlySet<DetailTabKey> = new Set([
   "persone",
   "attrezzature",
   "rischi",
+  "miglioramento",
   "documenti",
 ]);
 
@@ -467,6 +471,13 @@ export default function AziendaDetailPage() {
             )}
           </TabsTrigger>
           <TabsTrigger
+            value="miglioramento"
+            className="text-[13px] font-medium text-[#64748d] data-active:text-[#061b31]"
+          >
+            <Target className="mr-1.5 h-3.5 w-3.5" />
+            Miglioramento
+          </TabsTrigger>
+          <TabsTrigger
             value="documenti"
             className="text-[13px] font-medium text-[#64748d] data-active:text-[#061b31]"
           >
@@ -520,6 +531,10 @@ export default function AziendaDetailPage() {
             ambienti={ambienti}
             onMeasuresSaved={fetchData}
           />
+        </TabsContent>
+
+        <TabsContent value="miglioramento" className="mt-6">
+          <MiglioramentoTab aziendaId={azienda.id} />
         </TabsContent>
 
         <TabsContent value="documenti" className="mt-6">

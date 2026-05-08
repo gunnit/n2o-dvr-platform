@@ -1,0 +1,787 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pencil, Plus, Save, Target, Trash2, X } from "lucide-react";
+import { toast } from "sonner";
+
+import {
+  EmptyState,
+  Panel,
+  PanelHeader,
+  StatusPill,
+} from "@/components/aziende/tabs/_shared";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import { useApi } from "@/hooks/use-api";
+import type { LivelloRischio } from "@/types";
+
+interface MiglioramentoTabProps {
+  aziendaId: string;
+}
+
+interface MisuraMiglioramento {
+  id: string;
+  azienda_id: string;
+  pericolo_valutazione_id: string | null;
+  misura: string;
+  procedura: string | null;
+  risorse: string | null;
+  responsabile: string | null;
+  scadenza: string | null;
+  priorita: string | null;
+  ordine: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Editable subset that matches MisuraMiglioramentoCreate / Update on the
+// backend. `ordine` is set server-side at creation; we only let the user
+// drive the visible business fields here.
+interface MisuraDraft {
+  misura: string;
+  procedura: string;
+  risorse: string;
+  responsabile: string;
+  scadenza: string;
+  priorita: string;
+}
+
+const EMPTY_DRAFT: MisuraDraft = {
+  misura: "",
+  procedura: "",
+  risorse: "",
+  responsabile: "",
+  scadenza: "",
+  priorita: "",
+};
+
+const LIVELLO_OPTIONS: { value: LivelloRischio; label: string }[] = [
+  { value: "ACCETTABILE", label: "Accettabile" },
+  { value: "MODESTO", label: "Modesto" },
+  { value: "GRAVE", label: "Grave" },
+  { value: "GRAVISSIMO", label: "Gravissimo" },
+];
+
+// Color rail for the priorita cell. Mirrors LIVELLO_BAR in rischi-tab.
+const LIVELLO_BAR: Record<LivelloRischio, string> = {
+  ACCETTABILE: "bg-[#15be53]",
+  MODESTO: "bg-[#9b6829]",
+  GRAVE: "bg-[#003d74]",
+  GRAVISSIMO: "bg-[#b51648]",
+};
+
+const LIVELLO_PILL: Record<LivelloRischio, string> = {
+  ACCETTABILE:
+    "bg-[rgba(21,190,83,0.2)] text-[#108c3d] border border-[rgba(21,190,83,0.4)]",
+  MODESTO:
+    "bg-[rgba(155,104,41,0.12)] text-[#9b6829] border border-[rgba(155,104,41,0.3)]",
+  GRAVE:
+    "bg-[rgba(0,61,116,0.12)] text-primary border border-[rgba(0,61,116,0.3)]",
+  GRAVISSIMO:
+    "bg-[rgba(234,34,97,0.08)] text-[#b51648] border border-[rgba(234,34,97,0.3)]",
+};
+
+const NEUTRAL_PILL =
+  "bg-[#f6f9fc] text-[#273951] border border-[#e5edf5]";
+
+function normalizeLivello(raw: string | null | undefined): LivelloRischio | null {
+  if (!raw) return null;
+  const upper = raw.trim().toUpperCase();
+  if (
+    upper === "ACCETTABILE" ||
+    upper === "MODESTO" ||
+    upper === "GRAVE" ||
+    upper === "GRAVISSIMO"
+  ) {
+    return upper as LivelloRischio;
+  }
+  return null;
+}
+
+function PriorityCell({ priorita }: { priorita: string | null }) {
+  const livello = normalizeLivello(priorita);
+  if (livello) {
+    const labelMap: Record<LivelloRischio, string> = {
+      ACCETTABILE: "Accettabile",
+      MODESTO: "Modesto",
+      GRAVE: "Grave",
+      GRAVISSIMO: "Gravissimo",
+    };
+    return (
+      <div className="flex items-center gap-2">
+        <span
+          aria-hidden
+          className={"h-3.5 w-1 rounded-full " + LIVELLO_BAR[livello]}
+        />
+        <StatusPill className={LIVELLO_PILL[livello]}>
+          {labelMap[livello]}
+        </StatusPill>
+      </div>
+    );
+  }
+  if (!priorita || priorita.trim() === "") {
+    return <span className="text-[#64748d]">—</span>;
+  }
+  return <StatusPill className={NEUTRAL_PILL}>{priorita}</StatusPill>;
+}
+
+export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
+  const { apiFetch } = useApi();
+
+  const [rows, setRows] = useState<MisuraMiglioramento[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Create dialog state
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createDraft, setCreateDraft] = useState<MisuraDraft>(EMPTY_DRAFT);
+  const [creating, setCreating] = useState(false);
+
+  // Inline edit state — id of row currently being edited, plus its draft.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<MisuraDraft>(EMPTY_DRAFT);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Delete confirm state
+  const [deleteRow, setDeleteRow] = useState<MisuraMiglioramento | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiFetch<MisuraMiglioramento[]>(
+        `/api/v1/aziende/${aziendaId}/misure-miglioramento`,
+      );
+      setRows(data);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Caricamento del piano di miglioramento non riuscito.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [apiFetch, aziendaId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Backend already orders by (ordine, created_at). We re-sort client-side
+  // for safety after optimistic inserts that don't yet know the final ordine.
+  const sortedRows = useMemo(() => {
+    const copy = [...rows];
+    copy.sort((a, b) => {
+      if (a.ordine !== b.ordine) return a.ordine - b.ordine;
+      return a.created_at.localeCompare(b.created_at);
+    });
+    return copy;
+  }, [rows]);
+
+  function startEdit(row: MisuraMiglioramento) {
+    setEditingId(row.id);
+    setEditDraft({
+      misura: row.misura,
+      procedura: row.procedura ?? "",
+      risorse: row.risorse ?? "",
+      responsabile: row.responsabile ?? "",
+      scadenza: row.scadenza ?? "",
+      priorita: row.priorita ?? "",
+    });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditDraft(EMPTY_DRAFT);
+  }
+
+  function draftToPayload(draft: MisuraDraft) {
+    // Empty optional strings become null so the backend stores absent
+    // values cleanly and the UI doesn't render hollow "—".
+    return {
+      misura: draft.misura.trim(),
+      procedura: draft.procedura.trim() || null,
+      risorse: draft.risorse.trim() || null,
+      responsabile: draft.responsabile.trim() || null,
+      scadenza: draft.scadenza.trim() || null,
+      priorita: draft.priorita.trim() || null,
+    };
+  }
+
+  async function handleCreate() {
+    if (!createDraft.misura.trim()) {
+      toast.error("La misura è obbligatoria.");
+      return;
+    }
+    setCreating(true);
+    try {
+      const payload = draftToPayload(createDraft);
+      // Place new rows at the bottom so the auto-seeded high-priority items
+      // stay visually anchored at the top until the operator reorders.
+      const nextOrdine =
+        rows.length === 0
+          ? 0
+          : Math.max(...rows.map((r) => r.ordine)) + 1;
+      const created = await apiFetch<MisuraMiglioramento>(
+        `/api/v1/aziende/${aziendaId}/misure-miglioramento`,
+        {
+          method: "POST",
+          body: JSON.stringify({ ...payload, ordine: nextOrdine }),
+        },
+      );
+      setRows((prev) => [...prev, created]);
+      setCreateDraft(EMPTY_DRAFT);
+      setCreateOpen(false);
+      toast.success("Misura salvata");
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Errore durante il salvataggio",
+      );
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleSaveEdit() {
+    if (!editingId) return;
+    if (!editDraft.misura.trim()) {
+      toast.error("La misura è obbligatoria.");
+      return;
+    }
+    setSavingEdit(true);
+    const prev = rows;
+    const payload = draftToPayload(editDraft);
+    // Optimistic update so the row stops looking "in flight" immediately.
+    setRows((curr) =>
+      curr.map((r) => (r.id === editingId ? { ...r, ...payload } : r)),
+    );
+    try {
+      const updated = await apiFetch<MisuraMiglioramento>(
+        `/api/v1/aziende/${aziendaId}/misure-miglioramento/${editingId}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        },
+      );
+      setRows((curr) =>
+        curr.map((r) => (r.id === editingId ? updated : r)),
+      );
+      toast.success("Misura salvata");
+      setEditingId(null);
+      setEditDraft(EMPTY_DRAFT);
+    } catch (err) {
+      setRows(prev);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Errore durante il salvataggio",
+      );
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleteRow) return;
+    setDeleting(true);
+    const prev = rows;
+    setRows((curr) => curr.filter((r) => r.id !== deleteRow.id));
+    try {
+      await apiFetch(
+        `/api/v1/aziende/${aziendaId}/misure-miglioramento/${deleteRow.id}`,
+        { method: "DELETE" },
+      );
+      toast.success("Misura eliminata");
+      setDeleteRow(null);
+    } catch (err) {
+      setRows(prev);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Eliminazione non riuscita.",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  const subtitle = loading
+    ? "Caricamento..."
+    : `${rows.length} ${rows.length === 1 ? "misura" : "misure"}`;
+
+  return (
+    <Panel accent="navy">
+      <PanelHeader
+        icon={Target}
+        title="Piano di Miglioramento"
+        subtitle={subtitle}
+        accent="navy"
+        action={
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              setCreateDraft(EMPTY_DRAFT);
+              setCreateOpen(true);
+            }}
+          >
+            <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+            Aggiungi misura
+          </Button>
+        }
+      />
+
+      <div className="p-6">
+        {error && (
+          <div className="mb-4 rounded-md border border-[rgba(234,34,97,0.25)] bg-[rgba(234,34,97,0.04)] px-3 py-2 text-[13px] text-[#b51648]">
+            {error}
+          </div>
+        )}
+
+        {!loading && sortedRows.length === 0 && !error ? (
+          <EmptyState
+            icon={Target}
+            title="Nessuna misura di miglioramento"
+            body="Le misure auto-seedate dai pericoli ad alto indice (I≥7) appariranno qui dopo la rigenerazione del DVR."
+            action={
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  setCreateDraft(EMPTY_DRAFT);
+                  setCreateOpen(true);
+                }}
+              >
+                <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+                Aggiungi misura
+              </Button>
+            }
+          />
+        ) : (
+          <div className="overflow-hidden rounded-md border border-[#e5edf5]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[150px]">Priorità</TableHead>
+                  <TableHead className="min-w-[260px]">Misura</TableHead>
+                  <TableHead className="min-w-[200px]">Procedura</TableHead>
+                  <TableHead className="min-w-[140px]">Risorse</TableHead>
+                  <TableHead className="min-w-[140px]">Responsabile</TableHead>
+                  <TableHead className="min-w-[140px]">Scadenza</TableHead>
+                  <TableHead className="w-[110px] text-right">Azioni</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading && sortedRows.length === 0 && (
+                  <TableRow>
+                    <TableCell
+                      colSpan={7}
+                      className="py-8 text-center text-[13px] text-[#64748d]"
+                    >
+                      Caricamento...
+                    </TableCell>
+                  </TableRow>
+                )}
+                {sortedRows.map((row) => {
+                  const isEditing = editingId === row.id;
+                  return (
+                    <TableRow key={row.id} className="align-top">
+                      {/* Priorità */}
+                      <TableCell className="py-3">
+                        {isEditing ? (
+                          <select
+                            value={editDraft.priorita}
+                            onChange={(e) =>
+                              setEditDraft((d) => ({
+                                ...d,
+                                priorita: e.target.value,
+                              }))
+                            }
+                            className="h-9 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-2 text-[13px] text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                          >
+                            <option value="">—</option>
+                            {LIVELLO_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <PriorityCell priorita={row.priorita} />
+                        )}
+                      </TableCell>
+
+                      {/* Misura */}
+                      <TableCell className="py-3">
+                        {isEditing ? (
+                          <Textarea
+                            value={editDraft.misura}
+                            onChange={(e) =>
+                              setEditDraft((d) => ({
+                                ...d,
+                                misura: e.target.value,
+                              }))
+                            }
+                            rows={3}
+                            className="min-h-16"
+                            placeholder="Descrivi la misura"
+                          />
+                        ) : (
+                          <p className="whitespace-pre-wrap text-[13px] leading-[1.5] text-[#061b31]">
+                            {row.misura}
+                          </p>
+                        )}
+                      </TableCell>
+
+                      {/* Procedura */}
+                      <TableCell className="py-3">
+                        {isEditing ? (
+                          <Textarea
+                            value={editDraft.procedura}
+                            onChange={(e) =>
+                              setEditDraft((d) => ({
+                                ...d,
+                                procedura: e.target.value,
+                              }))
+                            }
+                            rows={3}
+                            className="min-h-16"
+                            placeholder="Procedura di attuazione"
+                          />
+                        ) : row.procedura ? (
+                          <p className="whitespace-pre-wrap text-[13px] leading-[1.5] text-[#273951]">
+                            {row.procedura}
+                          </p>
+                        ) : (
+                          <span className="text-[#64748d]">—</span>
+                        )}
+                      </TableCell>
+
+                      {/* Risorse */}
+                      <TableCell className="py-3">
+                        {isEditing ? (
+                          <Input
+                            value={editDraft.risorse}
+                            onChange={(e) =>
+                              setEditDraft((d) => ({
+                                ...d,
+                                risorse: e.target.value,
+                              }))
+                            }
+                            className="h-9"
+                            placeholder="Risorse necessarie"
+                          />
+                        ) : row.risorse ? (
+                          <span className="text-[13px] text-[#273951]">
+                            {row.risorse}
+                          </span>
+                        ) : (
+                          <span className="text-[#64748d]">—</span>
+                        )}
+                      </TableCell>
+
+                      {/* Responsabile */}
+                      <TableCell className="py-3">
+                        {isEditing ? (
+                          <Input
+                            value={editDraft.responsabile}
+                            onChange={(e) =>
+                              setEditDraft((d) => ({
+                                ...d,
+                                responsabile: e.target.value,
+                              }))
+                            }
+                            className="h-9"
+                            placeholder="Es. RSPP"
+                          />
+                        ) : row.responsabile ? (
+                          <span className="text-[13px] text-[#273951]">
+                            {row.responsabile}
+                          </span>
+                        ) : (
+                          <span className="text-[#64748d]">—</span>
+                        )}
+                      </TableCell>
+
+                      {/* Scadenza */}
+                      <TableCell className="py-3">
+                        {isEditing ? (
+                          <Input
+                            value={editDraft.scadenza}
+                            onChange={(e) =>
+                              setEditDraft((d) => ({
+                                ...d,
+                                scadenza: e.target.value,
+                              }))
+                            }
+                            className="h-9"
+                            placeholder="Es. Entro 6 mesi"
+                          />
+                        ) : row.scadenza ? (
+                          <span className="text-[13px] text-[#273951]">
+                            {row.scadenza}
+                          </span>
+                        ) : (
+                          <span className="text-[#64748d]">—</span>
+                        )}
+                      </TableCell>
+
+                      {/* Actions */}
+                      <TableCell className="py-3 text-right">
+                        {isEditing ? (
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={cancelEdit}
+                              disabled={savingEdit}
+                              title="Annulla"
+                            >
+                              <X className="h-3.5 w-3.5" strokeWidth={2} />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon-sm"
+                              onClick={handleSaveEdit}
+                              disabled={savingEdit}
+                              title="Salva"
+                            >
+                              <Save className="h-3.5 w-3.5" strokeWidth={2} />
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => startEdit(row)}
+                              title="Modifica misura"
+                            >
+                              <Pencil
+                                className="h-3.5 w-3.5"
+                                strokeWidth={1.75}
+                              />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => setDeleteRow(row)}
+                              title="Elimina misura"
+                              className="text-[#b51648] hover:bg-[rgba(234,34,97,0.06)] hover:text-[#b51648]"
+                            >
+                              <Trash2
+                                className="h-3.5 w-3.5"
+                                strokeWidth={1.75}
+                              />
+                            </Button>
+                          </div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
+
+      {/* Create dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Aggiungi misura di miglioramento</DialogTitle>
+            <DialogDescription>
+              Compila i campi del Programma di Miglioramento (DVR §4.1).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="misura-misura">
+                Misura <span className="text-[#b51648]">*</span>
+              </Label>
+              <Textarea
+                id="misura-misura"
+                value={createDraft.misura}
+                onChange={(e) =>
+                  setCreateDraft((d) => ({ ...d, misura: e.target.value }))
+                }
+                rows={3}
+                placeholder="Descrivi la misura di miglioramento"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="misura-procedura">Procedura</Label>
+              <Textarea
+                id="misura-procedura"
+                value={createDraft.procedura}
+                onChange={(e) =>
+                  setCreateDraft((d) => ({
+                    ...d,
+                    procedura: e.target.value,
+                  }))
+                }
+                rows={2}
+                placeholder="Procedura di attuazione"
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="misura-risorse">Risorse</Label>
+                <Input
+                  id="misura-risorse"
+                  value={createDraft.risorse}
+                  onChange={(e) =>
+                    setCreateDraft((d) => ({
+                      ...d,
+                      risorse: e.target.value,
+                    }))
+                  }
+                  placeholder="Risorse necessarie"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="misura-responsabile">Responsabile</Label>
+                <Input
+                  id="misura-responsabile"
+                  value={createDraft.responsabile}
+                  onChange={(e) =>
+                    setCreateDraft((d) => ({
+                      ...d,
+                      responsabile: e.target.value,
+                    }))
+                  }
+                  placeholder="Es. RSPP"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="misura-scadenza">Scadenza</Label>
+                <Input
+                  id="misura-scadenza"
+                  value={createDraft.scadenza}
+                  onChange={(e) =>
+                    setCreateDraft((d) => ({
+                      ...d,
+                      scadenza: e.target.value,
+                    }))
+                  }
+                  placeholder="Es. Entro 6 mesi, 31/12/2026"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="misura-priorita">Priorità</Label>
+                <select
+                  id="misura-priorita"
+                  value={createDraft.priorita}
+                  onChange={(e) =>
+                    setCreateDraft((d) => ({
+                      ...d,
+                      priorita: e.target.value,
+                    }))
+                  }
+                  className="h-10 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-3 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                >
+                  <option value="">—</option>
+                  {LIVELLO_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCreateOpen(false)}
+              disabled={creating}
+            >
+              Annulla
+            </Button>
+            <Button
+              type="button"
+              onClick={handleCreate}
+              disabled={creating || !createDraft.misura.trim()}
+            >
+              {creating ? "Salvataggio..." : "Salva misura"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirm dialog */}
+      <Dialog
+        open={deleteRow !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteRow(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <div className="flex items-start gap-3">
+              <span className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-[rgba(234,34,97,0.08)]">
+                <Trash2 className="h-4 w-4 text-[#b51648]" strokeWidth={2} />
+              </span>
+              <div className="space-y-1.5">
+                <DialogTitle>Eliminare misura?</DialogTitle>
+                <DialogDescription>
+                  La misura verrà rimossa dal Programma di Miglioramento.
+                  L&apos;operazione non puo&apos; essere annullata.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteRow(null)}
+              disabled={deleting}
+            >
+              Annulla
+            </Button>
+            <Button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-[#b51648] text-white hover:bg-[#9b1340] focus-visible:ring-[#b51648]/30"
+            >
+              {deleting ? "Eliminazione..." : "Elimina"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Panel>
+  );
+}
