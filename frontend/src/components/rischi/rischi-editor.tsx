@@ -54,6 +54,7 @@ import {
   Sparkles,
   Wrench,
 } from "lucide-react";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { cn } from "@/lib/utils";
 import {
   canonicalTipoLabel,
@@ -1128,20 +1129,42 @@ export function RischiEditor({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[180px]">Categoria Rischio</TableHead>
-                  <TableHead className="w-[80px] text-center">
-                    Applicabile
-                  </TableHead>
-                  <TableHead className="w-[140px] text-center">
-                    P (Probabilita)
-                  </TableHead>
-                  <TableHead className="w-[140px] text-center">
-                    D (Danno)
+                  <TableHead className="w-[180px]">
+                    <span className="inline-flex items-center gap-1.5">
+                      Categoria Rischio
+                      <HelpTooltip text="Macro-categoria del pericolo (es. Macchine, Elettrici, Chimici). Selezionata dalla libreria N2O in base al tipo di ambiente e alle attrezzature presenti." />
+                    </span>
                   </TableHead>
                   <TableHead className="w-[80px] text-center">
-                    I (Indice)
+                    <span className="inline-flex items-center gap-1.5">
+                      Applicabile
+                      <HelpTooltip text="Spunta se la categoria di rischio è presente in questo ambiente. Se non spuntata, la riga viene esclusa dal DVR." />
+                    </span>
                   </TableHead>
-                  <TableHead className="w-[140px] text-center">Livello</TableHead>
+                  <TableHead className="w-[140px] text-center">
+                    <span className="inline-flex items-center justify-center gap-1.5">
+                      P (Probabilita)
+                      <HelpTooltip text="Probabilità del danno (1-4): 1 Bassa, 2 Medio-Bassa, 3 Medio-Alta, 4 Elevata. Considera frequenza di esposizione e misure già in atto." />
+                    </span>
+                  </TableHead>
+                  <TableHead className="w-[140px] text-center">
+                    <span className="inline-flex items-center justify-center gap-1.5">
+                      D (Danno)
+                      <HelpTooltip text="Magnitudo del danno (1-4): 1 Trascurabile, 2 Modesta, 3 Notevole, 4 Ingente. Valuta la gravità del peggior infortunio plausibile." />
+                    </span>
+                  </TableHead>
+                  <TableHead className="w-[80px] text-center">
+                    <span className="inline-flex items-center justify-center gap-1.5">
+                      I (Indice)
+                      <HelpTooltip text="Indice di rischio: I = 2·D + P (formula N2O, non standard P×D). Range 3-12. Il danno pesa il doppio della probabilità." />
+                    </span>
+                  </TableHead>
+                  <TableHead className="w-[140px] text-center">
+                    <span className="inline-flex items-center justify-center gap-1.5">
+                      Livello
+                      <HelpTooltip text="Bande dell'indice: 3-4 Accettabile, 5-6 Modesto, 7-8 Grave, 9-12 Gravissimo. Determina la priorità delle misure di prevenzione." />
+                    </span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
