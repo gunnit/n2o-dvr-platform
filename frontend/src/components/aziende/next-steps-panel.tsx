@@ -69,6 +69,9 @@ export type NextStepsCallbacks = {
   onResumeSurvey: () => void;
   onOpenDescrizione: () => void;
   onOpenRischi: () => void;
+  // Always navigates to the standalone /assessments/risk/[id] editor.
+  // Distinct from onOpenRischi which may switch the parent tab.
+  onEditRischi: () => void;
   onOpenAssessments: () => void;
   onOpenDocumenti: () => void;
   onGenerateDocs: () => void;
@@ -275,7 +278,9 @@ function computeSteps(
     });
   }
 
-  // 3b. Misure di prevenzione (skip if no risks yet — sopralluogo not done)
+  // 3b. Misure di prevenzione (skip if no risks yet — sopralluogo not done).
+  // CTA goes to the standalone editor where the AI suggester actually lives;
+  // tab-switching here was a no-op when the user was already on the rischi tab.
   if (applicableRisks.length > 0) {
     const allCovered = missingMeasures === 0;
     steps.push({
@@ -284,11 +289,11 @@ function computeSteps(
       title: "Misure di prevenzione",
       detail: allCovered
         ? `${applicableRisks.length} rischi su ${applicableRisks.length} con misure definite.`
-        : `${missingMeasures} ${missingMeasures === 1 ? "rischio" : "rischi"} senza misure (su ${applicableRisks.length}). Generale con AI in pochi secondi.`,
+        : `${missingMeasures} ${missingMeasures === 1 ? "rischio" : "rischi"} senza misure (su ${applicableRisks.length}). Apri l'editor per definirle o generarle con AI.`,
       icon: ShieldAlert,
       cta: {
-        label: allCovered ? "Rivedi rischi" : "Genera misure",
-        onClick: cb.onOpenRischi,
+        label: allCovered ? "Rivedi rischi" : "Apri editor rischi",
+        onClick: cb.onEditRischi,
         primary: !allCovered,
       },
     });

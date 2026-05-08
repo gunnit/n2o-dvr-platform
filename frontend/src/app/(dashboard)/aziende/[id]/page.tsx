@@ -401,6 +401,7 @@ export default function AziendaDetailPage() {
             rischi.some((r) => r.applicabile)
               ? handleTabChange("rischi")
               : router.push(`/assessments/risk/${id}`),
+          onEditRischi: () => router.push(`/assessments/risk/${id}`),
           onOpenAssessments: () => router.push("/assessments"),
           onOpenDocumenti: () => handleTabChange("documenti"),
           onGenerateDocs: handleGenerateDocs,
