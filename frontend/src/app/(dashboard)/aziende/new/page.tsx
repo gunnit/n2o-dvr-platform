@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { AlertTriangle, Check, Loader2, Sparkles } from "lucide-react";
@@ -162,6 +163,13 @@ export default function NewAziendaPage() {
   // don't have these on hand at survey time. When OFF the section is
   // collapsed and the four fields are forced to null on submit.
   const [adminOpen, setAdminOpen] = useState(false);
+  // Feedback 04/05 #1: warn the operator (don't block) if a client with the
+  // same P.IVA already exists in this org. Set onBlur of the P.IVA input
+  // and cleared whenever the field is edited.
+  const [existingAzienda, setExistingAzienda] = useState<{
+    id: string;
+    ragione_sociale: string;
+  } | null>(null);
   // Feedback 04/05 #1: Zona Sismica autofill — mirrors the survey wizard's
   // step-azienda but here behind an explicit "Compila zona sismica"
   // button (no onBlur magic on the standalone form).
@@ -188,6 +196,10 @@ export default function NewAziendaPage() {
       delete next[name];
       return next;
     });
+    // Editing the P.IVA invalidates any previously-shown duplicate warning.
+    if (name === "partita_iva" && existingAzienda) {
+      setExistingAzienda(null);
+    }
   }
 
   function validateField(name: "partita_iva" | "codice_ateco", value: string) {
@@ -204,6 +216,41 @@ export default function NewAziendaPage() {
       }
       return next;
     });
+  }
+
+  // Feedback 04/05 #1: lookup if a client with this P.IVA already exists.
+  // Search endpoint uses ilike, so we filter to an exact match client-side
+  // to avoid flagging looser substring hits.
+  async function checkExistingPiva(value: string) {
+    const piva = value.trim();
+    if (!/^\d{11}$/.test(piva)) {
+      setExistingAzienda(null);
+      return;
+    }
+    try {
+      const sessionRes = await fetch("/api/auth/session");
+      const sess = await sessionRes.json();
+      const token = sess?.accessToken;
+      if (!token) return;
+      const qs = new URLSearchParams({ search: piva });
+      const res = await fetch(`${API_URL}/api/v1/aziende?${qs.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const list = (await res.json()) as Array<{
+        id: string;
+        partita_iva: string | null;
+        ragione_sociale: string;
+      }>;
+      const match = list.find((a) => (a.partita_iva || "").trim() === piva);
+      if (match) {
+        setExistingAzienda({ id: match.id, ragione_sociale: match.ragione_sociale });
+      } else {
+        setExistingAzienda(null);
+      }
+    } catch {
+      // Silent: this is a soft warning, not a blocker.
+    }
   }
 
   async function handleSeismicLookup() {
@@ -460,7 +507,10 @@ export default function NewAziendaPage() {
                     id="partita_iva"
                     value={form.partita_iva}
                     onChange={(e) => setField("partita_iva", e.target.value)}
-                    onBlur={(e) => validateField("partita_iva", e.target.value)}
+                    onBlur={(e) => {
+                      validateField("partita_iva", e.target.value);
+                      checkExistingPiva(e.target.value);
+                    }}
                     placeholder="Es. 12345678901"
                     inputMode="numeric"
                     className={`flex-1 ${fieldErrors.partita_iva ? "border-destructive" : ""}`}
@@ -487,6 +537,26 @@ export default function NewAziendaPage() {
                 </div>
                 {fieldErrors.partita_iva && (
                   <p className="text-xs text-destructive">{fieldErrors.partita_iva}</p>
+                )}
+                {existingAzienda && (
+                  <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+                    <AlertTriangle
+                      className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700"
+                      strokeWidth={2}
+                    />
+                    <div className="flex-1 text-xs">
+                      <p>
+                        Cliente già presente in piattaforma:{" "}
+                        <span className="font-medium">{existingAzienda.ragione_sociale}</span>
+                      </p>
+                      <Link
+                        href={`/aziende/${existingAzienda.id}`}
+                        className="font-medium text-amber-900 underline underline-offset-2 hover:text-amber-950"
+                      >
+                        apri scheda
+                      </Link>
+                    </div>
+                  </div>
                 )}
               </div>
 

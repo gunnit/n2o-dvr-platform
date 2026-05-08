@@ -234,6 +234,24 @@ async def create_azienda(
     db: AsyncSession = Depends(get_db),
 ):
     _require_admin(user)
+    # Feedback 04/05: prevent duplicate clients by P.IVA within the same org.
+    # No DB UNIQUE constraint yet — production data may already contain
+    # duplicates that would block an Alembic migration. Application-level
+    # check is sufficient for now; the frontend also warns onBlur.
+    piva = (body.partita_iva or "").strip() if body.partita_iva else ""
+    if piva:
+        dup_result = await db.execute(
+            select(Azienda).where(
+                Azienda.organization_id == user.organization_id,
+                Azienda.partita_iva == piva,
+            )
+        )
+        existing = dup_result.scalar_one_or_none()
+        if existing:
+            raise BadRequestError(
+                f"Esiste già un cliente con questa Partita IVA: {existing.ragione_sociale}"
+            )
+
     azienda = Azienda(
         **body.model_dump(),
         organization_id=user.organization_id,
@@ -276,6 +294,24 @@ async def update_azienda(
         raise NotFoundError("Azienda not found")
 
     payload = body.model_dump(exclude_unset=True)
+    # Feedback 04/05: prevent duplicate P.IVA within the same org on update
+    # too. Skip the check when partita_iva is unchanged or being cleared.
+    if "partita_iva" in payload and payload["partita_iva"]:
+        new_piva = str(payload["partita_iva"]).strip()
+        if new_piva and new_piva != (azienda.partita_iva or ""):
+            dup_result = await db.execute(
+                select(Azienda).where(
+                    Azienda.organization_id == org_id,
+                    Azienda.partita_iva == new_piva,
+                    Azienda.id != azienda_id,
+                )
+            )
+            existing = dup_result.scalar_one_or_none()
+            if existing:
+                raise BadRequestError(
+                    f"Esiste già un cliente con questa Partita IVA: {existing.ragione_sociale}"
+                )
+
     # US-2.1 AC2 — snapshot a manual revision when the descrizione_attivita
     # actually changes. We only snapshot non-empty new values to avoid
     # filling the table with empty rows on incidental clears, and we skip
