@@ -102,3 +102,9 @@ tmp/
 
 # Session continuation notes (working doc, regenerated each session)
 /CONTINUE.md
+
+# Working notes & debug artifacts at repo root (Playwright snapshots,
+# Luca emails, ad-hoc step-N screenshots) — kept locally, never committed.
+/*.yml
+/email-*.md
+/step*.png
