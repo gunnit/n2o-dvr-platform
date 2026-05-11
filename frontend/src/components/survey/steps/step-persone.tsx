@@ -33,9 +33,10 @@ interface StepPersoneProps {
   onChange: (persone: Persona[]) => void;
 }
 
-// 12 voci confermate da Luca via email 2026-04-24 (Week 1 review).
+// Confermate da Luca via email 2026-04-24 (Week 1 review).
 // "IMPIEGATO" è full-time per default; "IMPIEGATO PART-TIME" è voce separata.
 // "CO CO CO" = collaborazione coordinata e continuativa.
+// "SOCIO LAVORATORE" aggiunta su feedback 2026-05-11.
 const TIPOLOGIE_CONTRATTUALI = [
   "OPERAIO",
   "OPERAIO QUALIFICATO",
@@ -49,6 +50,7 @@ const TIPOLOGIE_CONTRATTUALI = [
   "OPERAIO EDILE",
   "CO CO CO",
   "DATORE DI LAVORO",
+  "SOCIO LAVORATORE",
 ];
 
 // User feedback 2026-04-28 (#7 + #8): replace the free-text "qualifiche" field
@@ -716,12 +718,13 @@ export function StepPersone({
                 </div>
               </div>
 
-              {/* Consulente esterno — feedback #10 (2026-04-29).
-                  Only relevant for MC and RSPP, which are commonly
-                  outsourced to external professionals. We hide the toggle
-                  for every other role so the UI doesn't suggest it's a
-                  generic property. */}
-              {(editing.ruolo_medico_competente || editing.ruolo_rspp) && (
+              {/* Consulente esterno — feedback #10 (2026-04-29) + RLST 2026-05-04.
+                  Relevant for MC and RSPP (commonly outsourced) and for RLS:
+                  RLS + esterno = RLST (Rappresentante dei Lavoratori per la
+                  Sicurezza Territoriale). Hidden for other roles. */}
+              {(editing.ruolo_medico_competente ||
+                editing.ruolo_rspp ||
+                editing.ruolo_rls) && (
                 <div className="space-y-2">
                   <Label>Tipologia incarico</Label>
                   <label className="flex items-center gap-2 rounded-lg border border-input px-3 py-1.5 text-sm transition-colors hover:bg-muted has-[:checked]:border-primary has-[:checked]:bg-primary/5">
@@ -733,7 +736,11 @@ export function StepPersone({
                       }
                       className="accent-primary"
                     />
-                    Consulente esterno (non dipendente dell&apos;azienda)
+                    {editing.ruolo_rls &&
+                    !editing.ruolo_medico_competente &&
+                    !editing.ruolo_rspp
+                      ? "Rappresentante territoriale (RLST — esterno all'azienda)"
+                      : "Consulente esterno (non dipendente dell'azienda)"}
                   </label>
                 </div>
               )}

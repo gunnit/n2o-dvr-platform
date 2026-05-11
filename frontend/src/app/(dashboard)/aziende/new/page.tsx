@@ -489,7 +489,6 @@ export default function NewAziendaPage() {
                   id="ragione_sociale"
                   value={form.ragione_sociale}
                   onChange={(e) => setField("ragione_sociale", e.target.value)}
-                  placeholder="Es. N2O SRL"
                   required
                 />
                 {fieldErrors.ragione_sociale && (
@@ -511,7 +510,6 @@ export default function NewAziendaPage() {
                       validateField("partita_iva", e.target.value);
                       checkExistingPiva(e.target.value);
                     }}
-                    placeholder="Es. 12345678901"
                     inputMode="numeric"
                     className={`flex-1 ${fieldErrors.partita_iva ? "border-destructive" : ""}`}
                   />
@@ -569,7 +567,6 @@ export default function NewAziendaPage() {
                   id="codice_fiscale"
                   value={form.codice_fiscale}
                   onChange={(e) => setField("codice_fiscale", e.target.value.toUpperCase())}
-                  placeholder="Spesso coincide con la P.IVA"
                 />
               </div>
 
@@ -602,7 +599,6 @@ export default function NewAziendaPage() {
                   id="attivita"
                   value={form.attivita}
                   onChange={(e) => setField("attivita", e.target.value)}
-                  placeholder="Es. Produzione alimentare"
                 />
               </div>
 
@@ -616,7 +612,6 @@ export default function NewAziendaPage() {
                   value={form.codice_ateco}
                   onChange={(e) => setField("codice_ateco", e.target.value)}
                   onBlur={(e) => validateField("codice_ateco", e.target.value)}
-                  placeholder="Es. 46.69.94"
                   className={fieldErrors.codice_ateco ? "border-destructive" : ""}
                 />
                 {fieldErrors.codice_ateco && (
@@ -638,7 +633,6 @@ export default function NewAziendaPage() {
                     id="sede_legale_via"
                     value={form.sede_legale_via}
                     onChange={(e) => setField("sede_legale_via", e.target.value)}
-                    placeholder="Es. Via dei Chiosi 4"
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
@@ -650,7 +644,6 @@ export default function NewAziendaPage() {
                     id="sede_legale_citta"
                     value={form.sede_legale_citta}
                     onChange={(e) => setField("sede_legale_citta", e.target.value)}
-                    placeholder="Es. Milano"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -664,7 +657,6 @@ export default function NewAziendaPage() {
                     onChange={(e) =>
                       setField("provincia_legale", e.target.value.toUpperCase().slice(0, 2))
                     }
-                    placeholder="MI"
                     maxLength={2}
                   />
                 </div>
@@ -677,7 +669,6 @@ export default function NewAziendaPage() {
                     id="cap_legale"
                     value={form.cap_legale}
                     onChange={(e) => setField("cap_legale", e.target.value.replace(/\D/g, "").slice(0, 5))}
-                    placeholder="20121"
                     inputMode="numeric"
                     maxLength={5}
                   />
@@ -698,7 +689,6 @@ export default function NewAziendaPage() {
                     id="sede_operativa_via"
                     value={form.sede_operativa_via}
                     onChange={(e) => setField("sede_operativa_via", e.target.value)}
-                    placeholder="Es. Via Milano 5"
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
@@ -710,7 +700,6 @@ export default function NewAziendaPage() {
                     id="sede_operativa_citta"
                     value={form.sede_operativa_citta}
                     onChange={(e) => setField("sede_operativa_citta", e.target.value)}
-                    placeholder="Es. Milano"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -721,7 +710,6 @@ export default function NewAziendaPage() {
                     onChange={(e) =>
                       setField("provincia_operativa", e.target.value.toUpperCase().slice(0, 2))
                     }
-                    placeholder="MI"
                     maxLength={2}
                   />
                 </div>
@@ -733,7 +721,6 @@ export default function NewAziendaPage() {
                     onChange={(e) =>
                       setField("cap_operativa", e.target.value.replace(/\D/g, "").slice(0, 5))
                     }
-                    placeholder="20121"
                     inputMode="numeric"
                     maxLength={5}
                   />
@@ -755,7 +742,6 @@ export default function NewAziendaPage() {
                     type="email"
                     value={form.pec}
                     onChange={(e) => setField("pec", e.target.value)}
-                    placeholder="azienda@pec.it"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -768,7 +754,6 @@ export default function NewAziendaPage() {
                     type="email"
                     value={form.email}
                     onChange={(e) => setField("email", e.target.value)}
-                    placeholder="info@azienda.it"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -780,7 +765,6 @@ export default function NewAziendaPage() {
                     id="telefono"
                     value={form.telefono}
                     onChange={(e) => setField("telefono", e.target.value)}
-                    placeholder="+39 02 1234567"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -793,7 +777,6 @@ export default function NewAziendaPage() {
                     type="url"
                     value={form.sito_web}
                     onChange={(e) => setField("sito_web", e.target.value)}
-                    placeholder="https://www.azienda.it"
                   />
                 </div>
               </div>
@@ -829,7 +812,6 @@ export default function NewAziendaPage() {
                       min="0"
                       value={form.capitale_sociale}
                       onChange={(e) => setField("capitale_sociale", e.target.value)}
-                      placeholder="10000"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -841,7 +823,6 @@ export default function NewAziendaPage() {
                       id="rea"
                       value={form.rea}
                       onChange={(e) => setField("rea", e.target.value)}
-                      placeholder="Es. MI-1234567"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -871,7 +852,6 @@ export default function NewAziendaPage() {
                       onChange={(e) =>
                         setField("numero_dipendenti_dichiarati", e.target.value)
                       }
-                      placeholder="Es. 12"
                     />
                   </div>
                 </div>
@@ -886,7 +866,6 @@ export default function NewAziendaPage() {
                   id="orario_lavoro"
                   value={form.orario_lavoro}
                   onChange={(e) => setField("orario_lavoro", e.target.value)}
-                  placeholder="Es. 08:00 - 17:00"
                 />
               </div>
               <div className="space-y-1.5">
@@ -898,7 +877,6 @@ export default function NewAziendaPage() {
                   min="0"
                   value={form.metratura_totale}
                   onChange={(e) => setField("metratura_totale", e.target.value)}
-                  placeholder="Es. 250"
                   className="tnum"
                 />
               </div>

@@ -307,6 +307,30 @@ export function StepAttrezzature({
     ]
   );
 
+  // Bulk select/deselect all suggested items for the current ambiente.
+  // Feedback 2026-05-08 (#ac32b03f). Run sequentially so we don't hammer the
+  // backend with N parallel POSTs.
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const toggleAllSuggested = useCallback(async () => {
+    if (!selectedAmbiente || suggestedEquipment.length === 0) return;
+    const allSelected = suggestedEquipment.every((item) =>
+      selectedDescriptions.has(item),
+    );
+    const targets = allSelected
+      ? suggestedEquipment.filter((item) => selectedDescriptions.has(item))
+      : suggestedEquipment.filter((item) => !selectedDescriptions.has(item));
+    if (targets.length === 0) return;
+    setBulkBusy(true);
+    try {
+      for (const item of targets) {
+        // eslint-disable-next-line no-await-in-loop
+        await toggleSuggested(item);
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  }, [selectedAmbiente, suggestedEquipment, selectedDescriptions, toggleSuggested]);
+
   // Custom equipment = items whose descrizione is NOT in ANY suggested list
   const allSuggestedNames = useMemo(() => {
     const names = new Set<string>();
@@ -679,17 +703,41 @@ export function StepAttrezzature({
       {/* Suggested equipment */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">
-            Attrezzature suggerite
-            {selectedAmbiente?.tipo
-              ? ` - ${selectedAmbiente.tipo}`
-              : ""}
-          </CardTitle>
-          <CardDescription>
-            {suggestedEquipment.length > 0
-              ? "Clicca per aggiungere o rimuovere un'attrezzatura dall'elenco"
-              : "Nessun suggerimento disponibile per questo tipo di ambiente. Usa la sezione sottostante per aggiungere attrezzature manualmente."}
-          </CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1">
+              <CardTitle className="text-base">
+                Attrezzature suggerite
+                {selectedAmbiente?.tipo
+                  ? ` - ${selectedAmbiente.tipo}`
+                  : ""}
+              </CardTitle>
+              <CardDescription>
+                {suggestedEquipment.length > 0
+                  ? "Clicca per aggiungere o rimuovere un'attrezzatura dall'elenco"
+                  : "Nessun suggerimento disponibile per questo tipo di ambiente. Usa la sezione sottostante per aggiungere attrezzature manualmente."}
+              </CardDescription>
+            </div>
+            {suggestedEquipment.length > 0 &&
+              (() => {
+                const allSelected = suggestedEquipment.every((item) =>
+                  selectedDescriptions.has(item),
+                );
+                return (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleAllSuggested}
+                    disabled={bulkBusy}
+                  >
+                    {bulkBusy ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : null}
+                    {allSelected ? "Deseleziona tutto" : "Seleziona tutto"}
+                  </Button>
+                );
+              })()}
+          </div>
         </CardHeader>
         {suggestedEquipment.length > 0 && (
           <CardContent>

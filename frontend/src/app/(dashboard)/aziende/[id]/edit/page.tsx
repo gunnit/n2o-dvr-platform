@@ -283,7 +283,6 @@ export default function EditAziendaPage() {
                   name="ragione_sociale"
                   required
                   defaultValue={azienda.ragione_sociale}
-                  placeholder="Es. N2O SRL"
                 />
               </div>
               <div className="space-y-2">
@@ -292,7 +291,6 @@ export default function EditAziendaPage() {
                   id="partita_iva"
                   name="partita_iva"
                   defaultValue={azienda.partita_iva ?? ""}
-                  placeholder="Es. 12345678901"
                   onBlur={(e) => validateField("partita_iva", e.target.value)}
                   className={fieldErrors.partita_iva ? "border-destructive" : ""}
                 />
@@ -308,7 +306,6 @@ export default function EditAziendaPage() {
                   id="codice_ateco"
                   name="codice_ateco"
                   defaultValue={azienda.codice_ateco ?? ""}
-                  placeholder="Es. 56.10.11"
                   onBlur={(e) => validateField("codice_ateco", e.target.value)}
                   className={fieldErrors.codice_ateco ? "border-destructive" : ""}
                 />
@@ -324,7 +321,6 @@ export default function EditAziendaPage() {
                   id="attivita"
                   name="attivita"
                   defaultValue={azienda.attivita ?? ""}
-                  placeholder="Es. Produzione alimentare"
                 />
               </div>
             </div>
@@ -338,7 +334,6 @@ export default function EditAziendaPage() {
                     id="sede_legale_via"
                     name="sede_legale_via"
                     defaultValue={azienda.sede_legale_via ?? ""}
-                    placeholder="Es. Via dei Chiosi 4"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -348,7 +343,6 @@ export default function EditAziendaPage() {
                     id="sede_legale_citta"
                     name="sede_legale_citta"
                     defaultValue={azienda.sede_legale_citta ?? ""}
-                    placeholder="Es. Milano (MI)"
                   />
                 </div>
               </div>
@@ -363,7 +357,6 @@ export default function EditAziendaPage() {
                     id="sede_operativa_via"
                     name="sede_operativa_via"
                     defaultValue={azienda.sede_operativa_via ?? ""}
-                    placeholder="Es. Via Milano 5"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -373,7 +366,6 @@ export default function EditAziendaPage() {
                     id="sede_operativa_citta"
                     name="sede_operativa_citta"
                     defaultValue={azienda.sede_operativa_citta ?? ""}
-                    placeholder="Es. Milano (MI)"
                   />
                 </div>
               </div>
@@ -386,7 +378,6 @@ export default function EditAziendaPage() {
                   id="orario_lavoro"
                   name="orario_lavoro"
                   defaultValue={azienda.orario_lavoro ?? ""}
-                  placeholder="Es. 08:00 - 17:00"
                 />
               </div>
               <div className="space-y-1.5">
@@ -398,7 +389,6 @@ export default function EditAziendaPage() {
                   step="0.1"
                   min="0"
                   defaultValue={azienda.metratura_totale ?? ""}
-                  placeholder="Es. 250"
                   className="tnum"
                 />
               </div>
