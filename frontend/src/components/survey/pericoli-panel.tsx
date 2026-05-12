@@ -131,6 +131,14 @@ export function PericoliPanel({
   const [suggestions, setSuggestions] = useState<PericoloSuggestionItem[]>([]);
   const [pericoli, setPericoli] = useState<PericoloValutazione[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // True once we have either loaded pericoli from the backend or the user
+  // has edited them locally. Until then, the empty `pericoli` array does NOT
+  // represent reality — publishing an applicableCount=0 summary upward would
+  // overwrite whatever the parent had cached from a previous mount and
+  // reset the macro row's indice to the raw P/D defaults. Feedback
+  // #a460cb42 (2026-05-09): "le macrosezioni si resettano come se fossero
+  // di default quando cambio ambiente".
+  const [loadedOnce, setLoadedOnce] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const rischioId = valutazione.id;
@@ -186,6 +194,7 @@ export function PericoliPanel({
       );
     } finally {
       setLoading(false);
+      setLoadedOnce(true);
     }
   }, [apiFetch, aziendaId, ambienteId, rischioId, categoriaLong]);
 
@@ -376,8 +385,12 @@ export function PericoliPanel({
   }, [pericoli]);
 
   useEffect(() => {
+    // See `loadedOnce` declaration: don't publish until we know what the
+    // real pericoli state is, otherwise re-mounting on ambient switch
+    // resets the parent's cached macro indice to defaults.
+    if (!loadedOnce) return;
     onSummaryChange?.(rischioId, externalSummary);
-  }, [externalSummary, onSummaryChange, rischioId]);
+  }, [externalSummary, onSummaryChange, rischioId, loadedOnce]);
 
   const availableSuggestions = useMemo(
     () =>
