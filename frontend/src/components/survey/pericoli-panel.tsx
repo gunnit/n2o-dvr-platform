@@ -95,6 +95,10 @@ interface PericoliPanelProps {
   onSaveMisure?: (rischioId: string, combinedText: string) => Promise<void>;
 }
 
+// Bulk-flag label for "come da valutazione allegata" — see
+// bulkSetReferenceAttached below (feedback #a6f06283).
+const DELEGATED_REFERENCE_LABEL = "Come da valutazione allegata";
+
 function calcIndice(p: number, d: number): number {
   return 2 * d + p;
 }
@@ -401,6 +405,28 @@ export function PericoliPanel({
     [suggestions, pericoli],
   );
 
+  // Bulk-set valutazione_riferimento on all pericoli to defer detail to an
+  // external attached assessment (feedback #a6f06283 — fire risk pattern,
+  // generalised here because the same pattern helps other categorie too).
+  const bulkSetReferenceAttached = useCallback(
+    (set: boolean) => {
+      setPericoli((prev) => {
+        const next = prev.map((p) => ({
+          ...p,
+          valutazione_riferimento: set ? DELEGATED_REFERENCE_LABEL : null,
+        }));
+        scheduleSave(next);
+        return next;
+      });
+      toast.success(
+        set
+          ? "Tutti i pericoli rinviati alla valutazione allegata."
+          : "Rinvio alla valutazione allegata rimosso.",
+      );
+    },
+    [scheduleSave],
+  );
+
   return (
     <div className="border-t bg-muted/30">
       <button
@@ -447,6 +473,39 @@ export function PericoliPanel({
               combinazione (tipo ambiente + attrezzature). Aggiungi un
               pericolo personalizzato sotto.
             </p>
+          )}
+
+          {pericoli.length > 0 && (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {/* Feedback #a6f06283 (2026-05-09): bulk-flag all pericoli as
+                  "Come da valutazione allegata" so the operator can defer
+                  detail to an external attached assessment in one click. */}
+              {(() => {
+                const flagged = pericoli.filter(
+                  (p) =>
+                    p.valutazione_riferimento === DELEGATED_REFERENCE_LABEL,
+                ).length;
+                const allFlagged =
+                  flagged === pericoli.length && pericoli.length > 0;
+                return (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    onClick={() => bulkSetReferenceAttached(!allFlagged)}
+                    title={
+                      allFlagged
+                        ? "Rimuovi il rinvio alla valutazione allegata da tutti i pericoli"
+                        : "Imposta 'Come da valutazione allegata' su tutti i pericoli"
+                    }
+                  >
+                    {allFlagged
+                      ? "Annulla rinvio a valutazione allegata"
+                      : "Come da valutazione allegata"}
+                  </Button>
+                );
+              })()}
+            </div>
           )}
 
           {pericoli.length > 0 && (
