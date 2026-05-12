@@ -3,8 +3,13 @@
 POST /feedback          — any authed user creates a bug/idea/observation
 GET  /feedback          — admin lists org-scoped feedback, filterable
 PATCH /feedback/{id}    — admin updates status
+
+Every successful create is mirrored to a GitHub issue (best-effort) so
+the team triages from the repo. Status changes flow back: `risolto` and
+`non_fara` close the issue; reopening a triaged item reopens it.
 """
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Literal
@@ -18,8 +23,10 @@ from app.db.session import get_db
 from app.dependencies import get_current_user, require_role
 from app.models.user import User
 from app.models.user_feedback import UserFeedback
+from app.services import github_issues
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
+log = logging.getLogger(__name__)
 
 FeedbackType = Literal["bug", "idea", "observation"]
 FeedbackStatus = Literal["nuovo", "in_revisione", "risolto", "non_fara"]
@@ -47,6 +54,8 @@ class FeedbackOut(BaseModel):
     route: str | None
     user_agent: str | None
     status: str
+    github_issue_number: int | None
+    github_issue_url: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -61,6 +70,8 @@ class FeedbackAdminRow(BaseModel):
     route: str | None
     user_agent: str | None
     status: str
+    github_issue_number: int | None
+    github_issue_url: str | None
     user_id: uuid.UUID | None
     user_label: str | None
     created_at: datetime
@@ -85,6 +96,20 @@ async def create_feedback(
     db.add(fb)
     await db.commit()
     await db.refresh(fb)
+
+    # Best-effort mirror. Inline because the GitHub call is cheap (one
+    # POST, ~200ms p95) and we want the issue URL in the response so the
+    # admin UI can link straight to it. Failures are swallowed inside
+    # github_issues — they never break this endpoint.
+    number, html_url = await github_issues.create_issue_from_feedback(
+        fb, user_label=user.full_name or user.email
+    )
+    if number is not None:
+        fb.github_issue_number = number
+        fb.github_issue_url = html_url
+        await db.commit()
+        await db.refresh(fb)
+
     return fb
 
 
@@ -118,6 +143,8 @@ async def list_feedback(
             route=fb.route,
             user_agent=fb.user_agent,
             status=fb.status,
+            github_issue_number=fb.github_issue_number,
+            github_issue_url=fb.github_issue_url,
             user_id=fb.user_id,
             user_label=full_name or email,
             created_at=fb.created_at,
@@ -125,6 +152,12 @@ async def list_feedback(
         )
         for fb, full_name, email in rows
     ]
+
+
+_CLOSE_REASON: dict[str, github_issues.CloseReason] = {
+    "risolto": "completed",
+    "non_fara": "not_planned",
+}
 
 
 @router.patch("/{feedback_id}", response_model=FeedbackOut)
@@ -144,7 +177,19 @@ async def update_feedback(
     if fb is None:
         raise HTTPException(status_code=404, detail="Feedback non trovato")
 
+    prev_status = fb.status
     fb.status = body.status
     await db.commit()
     await db.refresh(fb)
+
+    # Sync the GitHub issue state. Idempotent against GitHub — patching
+    # an already-closed issue to closed is a no-op there.
+    if fb.github_issue_number is not None and prev_status != body.status:
+        close_reason = _CLOSE_REASON.get(body.status)
+        if close_reason is not None:
+            await github_issues.close_issue(fb.github_issue_number, close_reason)
+        elif prev_status in _CLOSE_REASON:
+            # Going from a closed status back to nuovo/in_revisione.
+            await github_issues.reopen_issue(fb.github_issue_number)
+
     return fb

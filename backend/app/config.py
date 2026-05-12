@@ -62,6 +62,19 @@ class Settings(BaseSettings):
     BACKUP_SCHEDULE: str = "Daily 02:00 UTC"
     BACKUP_ALERT_EMAIL: str = "ops@niuexa.ai"
 
+    # GitHub feedback mirror. When GITHUB_TOKEN is set, every new
+    # /feedback POST is also opened as an issue in GITHUB_REPO so the team
+    # can triage in the same place as code work. Best-effort: missing
+    # token = feature off, no errors. The token needs `repo` scope (or
+    # `public_repo` for an OSS repo) — a fine-grained PAT scoped to
+    # Issues: read/write is enough.
+    GITHUB_TOKEN: str = ""
+    GITHUB_REPO: str = "gunnit/n2o-dvr-platform"
+    # Labels every mirrored issue gets. Keep these in the repo's label
+    # list or GitHub will silently drop them.
+    GITHUB_FEEDBACK_LABELS: list[str] = ["user-feedback"]
+    GITHUB_API_TIMEOUT_SECONDS: float = 8.0
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

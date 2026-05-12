@@ -35,6 +35,11 @@ class UserFeedback(Base):
         String, nullable=False, default="nuovo"
     )  # nuovo | in_revisione | risolto | non_fara
 
+    # GitHub mirror — populated best-effort by services/github_issues.py
+    # after the row is committed. Null if mirroring is disabled or failed.
+    github_issue_number: Mapped[int | None] = mapped_column(nullable=True)
+    github_issue_url: Mapped[str | None] = mapped_column(String, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         server_default=func.now(), onupdate=func.now(), nullable=False

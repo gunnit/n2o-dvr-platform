@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import {
   AlertCircle,
   Bug,
+  ExternalLink,
   Lightbulb,
   Loader2,
   MessageCircle,
@@ -44,6 +45,8 @@ interface FeedbackRow {
   route: string | null;
   user_agent: string | null;
   status: FeedbackStatus;
+  github_issue_number: number | null;
+  github_issue_url: string | null;
   user_id: string | null;
   user_label: string | null;
   created_at: string;
@@ -273,6 +276,7 @@ export default function AdminFeedbackPage() {
                   <TableHead>Descrizione</TableHead>
                   <TableHead className="w-[150px]">Utente</TableHead>
                   <TableHead className="w-[160px]">Pagina</TableHead>
+                  <TableHead className="w-[80px]">Issue</TableHead>
                   <TableHead className="w-[100px]">Data</TableHead>
                   <TableHead className="w-[160px]">Stato</TableHead>
                 </TableRow>
@@ -344,6 +348,22 @@ export default function AdminFeedbackPage() {
                           >
                             apri pagina
                           </a>
+                        )}
+                      </TableCell>
+                      <TableCell className="py-3 text-sm">
+                        {row.github_issue_url && row.github_issue_number ? (
+                          <a
+                            href={row.github_issue_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-700 hover:bg-slate-200"
+                            title="Apri issue su GitHub"
+                          >
+                            <ExternalLink className="h-3 w-3" strokeWidth={2} />#
+                            {row.github_issue_number}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
                       <TableCell className="py-3 text-sm text-muted-foreground">
