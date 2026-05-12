@@ -53,6 +53,36 @@ const TIPOLOGIE_CONTRATTUALI = [
   "SOCIO LAVORATORE",
 ];
 
+// Feedback 2026-04-28 (#a964772f, in_revisione): flagging an attrezzatura
+// speciale should auto-tag the related rischio + DPI on this persona,
+// regardless of the mansione. We keep the mapping additive — unticking the
+// attrezzatura does NOT remove implied codes, because the operator may have
+// kept them for other reasons (avoids destructive surprises).
+// Codes match RISCHI_SPECIFICI_CATALOG / DPI_CATALOG in
+// backend/app/services/reference_data.py.
+const ATTREZZATURA_TO_RISCHI: Record<AttrezzaturaSpecialeCode, string[]> = {
+  lavori_in_quota: ["lavori_quota"],
+  trabattelli: ["lavori_quota"],
+  ponteggi: ["lavori_quota"],
+  carrello_elevatore: ["carrello_elevatore", "utilizzo_attrezzature"],
+  ple: ["ple", "lavori_quota"],
+  gru: ["gru"],
+  ruspa_escavatore: ["ruspa_escavatore"],
+  patente_cde: ["guida_automezzi_cde"],
+  adr: ["adr", "agenti_chimici"],
+};
+const ATTREZZATURA_TO_DPI: Record<AttrezzaturaSpecialeCode, string[]> = {
+  lavori_in_quota: ["caschi_industria", "imbracatura_sicurezza", "attrezzature_cadute", "scarpe_punta_rinforzata"],
+  trabattelli: ["caschi_industria", "imbracatura_sicurezza", "scarpe_punta_rinforzata"],
+  ponteggi: ["caschi_industria", "imbracatura_sicurezza", "scarpe_punta_rinforzata"],
+  carrello_elevatore: ["caschi_industria", "scarpe_punta_rinforzata", "indumenti_fluorescenti"],
+  ple: ["caschi_industria", "imbracatura_sicurezza", "scarpe_punta_rinforzata"],
+  gru: ["caschi_industria", "scarpe_punta_rinforzata", "indumenti_fluorescenti"],
+  ruspa_escavatore: ["caschi_industria", "scarpe_punta_rinforzata", "indumenti_fluorescenti"],
+  patente_cde: ["indumenti_fluorescenti", "scarpe_punta_rinforzata"],
+  adr: ["guanti_chimici", "scarpe_punta_rinforzata"],
+};
+
 // User feedback 2026-04-28 (#7 + #8): replace the free-text "qualifiche" field
 // with a fixed flag list. Codes mirror the backend enum and stay stable across
 // label tweaks.
@@ -204,16 +234,24 @@ export function StepPersone({
         ruolo_preposto: editing.ruolo_preposto,
         ruolo_datore_lavoro: editing.ruolo_datore_lavoro,
         ruolo_medico_competente: editing.ruolo_medico_competente,
-        // Only persist is_esterno when MC or RSPP is set — feedback #10
-        // explicitly scopes it to those roles. For everyone else we send
-        // false so toggling roles off correctly clears the flag server-side.
+        // Only persist is_esterno when MC, RSPP, or RLS is set —
+        // feedback #10 (2026-04-29) scoped it to MC/RSPP, #aea960db
+        // (2026-05-04) added RLS so RLS + esterno = RLST.
         is_esterno:
-          editing.ruolo_medico_competente || editing.ruolo_rspp
+          editing.ruolo_medico_competente ||
+          editing.ruolo_rspp ||
+          editing.ruolo_rls
             ? !!editing.is_esterno
             : false,
         qualifiche: editing.qualifiche,
         attrezzature_speciali: editing.attrezzature_speciali,
         ambiente_ids: editing.ambiente_ids,
+        // Feedback #a964772f (2026-04-28): auto-tagged from
+        // attrezzature_speciali so the save round-trip preserves the
+        // implied DPI / rischi instead of dropping back to whatever was
+        // saved last from step-dpi-rischi.
+        dpi_codes: editing.dpi_codes,
+        rischi_specifici_codes: editing.rischi_specifici_codes,
       };
       if (editingIndex === null) {
         const created = await apiFetch<Persona>(
@@ -305,11 +343,24 @@ export function StepPersone({
       setEditing((prev) => {
         if (!prev) return prev;
         const has = prev.attrezzature_speciali.includes(code);
+        if (has) {
+          return {
+            ...prev,
+            attrezzature_speciali: prev.attrezzature_speciali.filter((c) => c !== code),
+          };
+        }
+        // Additive auto-tag of implied rischi + DPI (feedback #a964772f).
+        const impliedRischi = ATTREZZATURA_TO_RISCHI[code] ?? [];
+        const impliedDpi = ATTREZZATURA_TO_DPI[code] ?? [];
+        const mergedRischi = Array.from(
+          new Set([...prev.rischi_specifici_codes, ...impliedRischi]),
+        );
+        const mergedDpi = Array.from(new Set([...prev.dpi_codes, ...impliedDpi]));
         return {
           ...prev,
-          attrezzature_speciali: has
-            ? prev.attrezzature_speciali.filter((c) => c !== code)
-            : [...prev.attrezzature_speciali, code],
+          attrezzature_speciali: [...prev.attrezzature_speciali, code],
+          rischi_specifici_codes: mergedRischi,
+          dpi_codes: mergedDpi,
         };
       });
     },
