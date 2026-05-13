@@ -308,28 +308,87 @@ export function StepAttrezzature({
   );
 
   // Bulk select/deselect all suggested items for the current ambiente.
-  // Feedback 2026-05-08 (#ac32b03f). Run sequentially so we don't hammer the
-  // backend with N parallel POSTs.
+  // Feedback 2026-05-08 (#ac32b03f) and 2026-05-12 (#3bfc481c): the previous
+  // implementation called toggleSuggested in a loop, but each iteration
+  // captured a stale `attrezzature` via toggleSuggested's useCallback closure
+  // (React doesn't re-render between awaits inside one event handler), so
+  // every onChange overwrote the previous one and only the last item stuck.
+  // Maintain a running list seeded from attrezzatureRef and emit onChange
+  // after each item so the UI stays responsive.
   const [bulkBusy, setBulkBusy] = useState(false);
   const toggleAllSuggested = useCallback(async () => {
     if (!selectedAmbiente || suggestedEquipment.length === 0) return;
+    const ambienteId = selectedAmbiente.id;
     const allSelected = suggestedEquipment.every((item) =>
       selectedDescriptions.has(item),
     );
-    const targets = allSelected
-      ? suggestedEquipment.filter((item) => selectedDescriptions.has(item))
-      : suggestedEquipment.filter((item) => !selectedDescriptions.has(item));
-    if (targets.length === 0) return;
+
     setBulkBusy(true);
     try {
-      for (const item of targets) {
-        // eslint-disable-next-line no-await-in-loop
-        await toggleSuggested(item);
+      if (allSelected) {
+        // Deselect all suggested for this ambiente.
+        const toDelete = attrezzatureRef.current.filter(
+          (a) =>
+            a.ambiente_id === ambienteId &&
+            suggestedEquipment.includes(a.descrizione),
+        );
+        for (const target of toDelete) {
+          const running = attrezzatureRef.current.filter(
+            (a) => a.id !== target.id,
+          );
+          onChange(running);
+          try {
+            await persistDelete(target.id);
+          } catch (e) {
+            toast.error(
+              e instanceof Error ? e.message : "Errore nella rimozione",
+            );
+            // Re-insert the row so local state matches server.
+            onChange(attrezzatureRef.current.concat(target));
+          }
+        }
+      } else {
+        // Select all not-yet-selected suggested items.
+        const existingDescriptions = new Set(
+          attrezzatureRef.current
+            .filter((a) => a.ambiente_id === ambienteId)
+            .map((a) => a.descrizione),
+        );
+        const toAdd = suggestedEquipment.filter(
+          (item) => !existingDescriptions.has(item),
+        );
+        for (const descrizione of toAdd) {
+          try {
+            const created = await persistCreate({
+              ambiente_id: ambienteId,
+              descrizione,
+              marcatura_ce: false,
+              verifiche_periodiche: false,
+            });
+            onChange([...attrezzatureRef.current, created]);
+            setPersistedIds((prev) => {
+              const next = new Set(prev);
+              next.add(created.id);
+              return next;
+            });
+          } catch (e) {
+            toast.error(
+              e instanceof Error ? e.message : "Errore nel salvataggio",
+            );
+          }
+        }
       }
     } finally {
       setBulkBusy(false);
     }
-  }, [selectedAmbiente, suggestedEquipment, selectedDescriptions, toggleSuggested]);
+  }, [
+    selectedAmbiente,
+    suggestedEquipment,
+    selectedDescriptions,
+    onChange,
+    persistCreate,
+    persistDelete,
+  ]);
 
   // Custom equipment = items whose descrizione is NOT in ANY suggested list
   const allSuggestedNames = useMemo(() => {

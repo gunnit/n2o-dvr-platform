@@ -143,6 +143,11 @@ export function PericoliPanel({
   // #a460cb42 (2026-05-09): "le macrosezioni si resettano come se fossero
   // di default quando cambio ambiente".
   const [loadedOnce, setLoadedOnce] = useState(false);
+  // Separate from "loaded successfully with zero pericoli" — when the GET
+  // throws transiently (Render cold start, network blip), the empty list
+  // would otherwise render the "Nessun pericolo applicabile" copy and the
+  // operator collapses/re-expands to retry. Feedback #e202bee9 (2026-05-12).
+  const [loadError, setLoadError] = useState<string | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const rischioId = valutazione.id;
@@ -151,6 +156,7 @@ export function PericoliPanel({
   // categoria up front when the operator only reviews a few).
   const loadInitial = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [sugg, existing] = await Promise.all([
         apiFetch<PericoloSuggestionResponse>(
@@ -191,11 +197,10 @@ export function PericoliPanel({
       );
       setPericoli(saved);
     } catch (err) {
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : "Errore caricamento pericoli",
-      );
+      const msg =
+        err instanceof Error ? err.message : "Errore caricamento pericoli";
+      setLoadError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
       setLoadedOnce(true);
@@ -467,7 +472,21 @@ export function PericoliPanel({
             />
           )}
 
-          {pericoli.length === 0 && !loading && (
+          {loadError && !loading && (
+            <div className="flex items-center justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+              <span>Caricamento pericoli non riuscito: {loadError}</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void loadInitial()}
+              >
+                Riprova
+              </Button>
+            </div>
+          )}
+
+          {!loadError && pericoli.length === 0 && !loading && (
             <p className="text-xs italic text-muted-foreground">
               Nessun pericolo applicabile dal catalogo per questa
               combinazione (tipo ambiente + attrezzature). Aggiungi un

@@ -456,6 +456,31 @@ export function StepAmbienti({
   // keystrokes land while a POST is in flight, only the most recent payload
   // is PUT after creation resolves.
   const pendingPutRef = useRef<Map<string, Partial<Ambiente>>>(new Map());
+  // Stable React keys for the rendered rows. The row's `id` flips from the
+  // client-generated UUID to the server-assigned UUID once the POST resolves;
+  // using `ambiente.id` directly as the React key caused the surrounding
+  // <div> to unmount/remount the moment the swap happened, dropping focus
+  // from the <input> the operator was mid-typing into. That's the "first
+  // letter, then Enter, second attempt works" bug (feedback #569776fc /
+  // #d1cb66c9). The default key is the current id; the swap handler stores
+  // the original id under the new id so the rendered key stays stable.
+  // Stored in state (not a ref) so the React Compiler is happy reading it
+  // during render, and so the swap batches with the onChange that triggers
+  // the re-render — both updates land in the same render pass.
+  const [clientKeyMap, setClientKeyMap] = useState<Map<string, string>>(
+    () => new Map(),
+  );
+  const getClientKey = (id: string) => clientKeyMap.get(id) ?? id;
+  const swapClientKey = useCallback((oldId: string, newId: string) => {
+    if (oldId === newId) return;
+    setClientKeyMap((prev) => {
+      const next = new Map(prev);
+      const stable = next.get(oldId) ?? oldId;
+      next.delete(oldId);
+      next.set(newId, stable);
+      return next;
+    });
+  }, []);
   // Always-current snapshot of the ambienti array. Async callbacks below
   // patch by row id (not index) and need the latest list at resolve time so
   // that out-of-order resolutions don't clobber sibling rows.
@@ -558,6 +583,9 @@ export function StepAmbienti({
           });
           persistedIdsRef.current.delete(localId);
           persistedIdsRef.current.add(created.id);
+          // Preserve the React key across the id swap so the <input> the
+          // operator is typing into doesn't unmount.
+          swapClientKey(localId, created.id);
           // Swap local id → server id in the wizard state.
           onChange(
             ambientiRef.current.map((a) => (a.id === localId ? created : a))
@@ -596,7 +624,7 @@ export function StepAmbienti({
         }
       }
     },
-    [ambienti, onChange, apiFetch, basePath]
+    [ambienti, onChange, apiFetch, basePath, swapClientKey]
   );
 
   return (
@@ -624,7 +652,7 @@ export function StepAmbienti({
           )}
 
           {ambienti.map((ambiente, index) => (
-            <div key={ambiente.id}>
+            <div key={getClientKey(ambiente.id)}>
               {index > 0 && <Separator className="mb-6" />}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
