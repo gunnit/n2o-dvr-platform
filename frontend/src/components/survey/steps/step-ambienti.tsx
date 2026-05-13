@@ -544,17 +544,15 @@ export function StepAmbienti({
       };
 
       // Path A: row already persisted on the server — straight PUT.
+      // Don't merge the response back into local state: the operator may
+      // have typed more characters while the PUT was in flight, and
+      // overwriting with the (now-stale) server echo would clobber them.
       if (persistedIdsRef.current.has(localId)) {
         try {
-          const saved = await apiFetch<Ambiente>(`${basePath}/${localId}`, {
+          await apiFetch<Ambiente>(`${basePath}/${localId}`, {
             method: "PUT",
             body: JSON.stringify(payload),
           });
-          onChange(
-            ambientiRef.current.map((a) =>
-              a.id === localId ? { ...a, ...saved } : a
-            )
-          );
         } catch (err) {
           toast.error(
             err instanceof Error ? err.message : "Errore nel salvataggio"
@@ -586,9 +584,17 @@ export function StepAmbienti({
           // Preserve the React key across the id swap so the <input> the
           // operator is typing into doesn't unmount.
           swapClientKey(localId, created.id);
-          // Swap local id → server id in the wizard state.
+          // Swap ONLY the id in the wizard state — never overwrite the
+          // other fields with the server response. The server's `nome`
+          // is whatever we POSTed at the first keystroke (`"M"`); the
+          // operator has typed many more characters since, and replacing
+          // the row wholesale would snap the input back to the stale
+          // first-letter value. Drain via pendingPutRef handles the
+          // server-side catch-up.
           onChange(
-            ambientiRef.current.map((a) => (a.id === localId ? created : a))
+            ambientiRef.current.map((a) =>
+              a.id === localId ? { ...a, id: created.id } : a,
+            ),
           );
           return created;
         } catch (err) {
@@ -604,19 +610,16 @@ export function StepAmbienti({
       inflightCreateRef.current.delete(localId);
 
       // Drain any payload that was coalesced while POST was in flight.
+      // Same reasoning as Path A: don't merge the PUT response into local
+      // state — newer keystrokes during the round-trip would be lost.
       const queued = pendingPutRef.current.get(localId);
       pendingPutRef.current.delete(localId);
       if (created && queued) {
         try {
-          const saved = await apiFetch<Ambiente>(`${basePath}/${created.id}`, {
+          await apiFetch<Ambiente>(`${basePath}/${created.id}`, {
             method: "PUT",
             body: JSON.stringify(queued),
           });
-          onChange(
-            ambientiRef.current.map((a) =>
-              a.id === created.id ? { ...a, ...saved } : a
-            )
-          );
         } catch (err) {
           toast.error(
             err instanceof Error ? err.message : "Errore nel salvataggio"
