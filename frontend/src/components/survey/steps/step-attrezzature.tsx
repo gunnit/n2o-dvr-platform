@@ -390,6 +390,41 @@ export function StepAttrezzature({
     persistDelete,
   ]);
 
+  const [bulkCeBusy, setBulkCeBusy] = useState(false);
+  const toggleAllCe = useCallback(async () => {
+    if (!selectedAmbiente) return;
+    const ambienteId = selectedAmbiente.id;
+    const namedAtts = attrezzatureRef.current.filter(
+      (a) => a.ambiente_id === ambienteId && a.descrizione?.trim(),
+    );
+    if (namedAtts.length === 0) return;
+
+    const newValue = !namedAtts.every((a) => a.marcatura_ce);
+    setBulkCeBusy(true);
+    onChange(
+      attrezzatureRef.current.map((a) =>
+        a.ambiente_id === ambienteId && a.descrizione?.trim()
+          ? { ...a, marcatura_ce: newValue }
+          : a,
+      ),
+    );
+    try {
+      await Promise.all(
+        namedAtts
+          .filter((a) => persistedIds.has(a.id))
+          .map((att) =>
+            persistUpdate(att.id, { marcatura_ce: newValue }).catch((e) => {
+              toast.error(
+                e instanceof Error ? e.message : "Errore nel salvataggio",
+              );
+            }),
+          ),
+      );
+    } finally {
+      setBulkCeBusy(false);
+    }
+  }, [selectedAmbiente, onChange, persistUpdate, persistedIds]);
+
   // Custom equipment = items whose descrizione is NOT in ANY suggested list
   const allSuggestedNames = useMemo(() => {
     const names = new Set<string>();
@@ -953,12 +988,33 @@ export function StepAttrezzature({
         return (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">
-              Attrezzature selezionate ({namedAttrezzature.length})
-            </CardTitle>
-            <CardDescription>
-              Imposta marcatura CE per ogni attrezzatura
-            </CardDescription>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-1">
+                <CardTitle className="text-base">
+                  Attrezzature selezionate ({namedAttrezzature.length})
+                </CardTitle>
+                <CardDescription>
+                  Imposta marcatura CE per ogni attrezzatura
+                </CardDescription>
+              </div>
+              {(() => {
+                const allCe = namedAttrezzature.every((a) => a.marcatura_ce);
+                return (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleAllCe}
+                    disabled={bulkCeBusy}
+                  >
+                    {bulkCeBusy ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : null}
+                    {allCe ? "Rimuovi tutte le CE" : "Seleziona tutte le CE"}
+                  </Button>
+                );
+              })()}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {namedAttrezzature.map((att) => (
