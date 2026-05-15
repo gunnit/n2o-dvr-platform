@@ -37,6 +37,7 @@ interface StepPersoneProps {
 // "IMPIEGATO" è full-time per default; "IMPIEGATO PART-TIME" è voce separata.
 // "CO CO CO" = collaborazione coordinata e continuativa.
 // "SOCIO LAVORATORE" aggiunta su feedback 2026-05-11.
+// "SMART WORKING" aggiunta su feedback 2026-05-14 (issue #14).
 const TIPOLOGIE_CONTRATTUALI = [
   "OPERAIO",
   "OPERAIO QUALIFICATO",
@@ -47,6 +48,7 @@ const TIPOLOGIE_CONTRATTUALI = [
   "COADIUVANTE FAMILIARE",
   "IMPIEGATO",
   "IMPIEGATO PART-TIME",
+  "SMART WORKING",
   "OPERAIO EDILE",
   "CO CO CO",
   "DATORE DI LAVORO",

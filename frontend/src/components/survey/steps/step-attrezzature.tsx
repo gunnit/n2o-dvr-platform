@@ -390,6 +390,48 @@ export function StepAttrezzature({
     persistDelete,
   ]);
 
+  // Feedback issue #8 (2026-05-14): bulk-toggle marcatura CE across every
+  // named attrezzatura in the current ambiente. Mirrors toggleAllSuggested
+  // — single optimistic onChange hop followed by per-row PUT. Skips rows
+  // that aren't persisted yet (no descrizione → not on the server).
+  const toggleAllMarcaturaCe = useCallback(async () => {
+    if (!selectedAmbiente) return;
+    const ambienteId = selectedAmbiente.id;
+    const rows = attrezzatureRef.current.filter(
+      (a) =>
+        a.ambiente_id === ambienteId &&
+        (a.descrizione?.trim() ?? "").length > 0,
+    );
+    if (rows.length === 0) return;
+    const allOn = rows.every((a) => a.marcatura_ce);
+    const targetCe = !allOn;
+    const targetIds = new Set(rows.map((r) => r.id));
+
+    setBulkBusy(true);
+    try {
+      onChange(
+        attrezzatureRef.current.map((a) =>
+          targetIds.has(a.id) && a.marcatura_ce !== targetCe
+            ? { ...a, marcatura_ce: targetCe }
+            : a,
+        ),
+      );
+      for (const r of rows) {
+        if (r.marcatura_ce === targetCe) continue;
+        if (!persistedIds.has(r.id)) continue;
+        try {
+          await persistUpdate(r.id, { marcatura_ce: targetCe });
+        } catch (e) {
+          toast.error(
+            e instanceof Error ? e.message : "Errore nel salvataggio",
+          );
+        }
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  }, [selectedAmbiente, onChange, persistUpdate, persistedIds]);
+
   // Custom equipment = items whose descrizione is NOT in ANY suggested list
   const allSuggestedNames = useMemo(() => {
     const names = new Set<string>();
@@ -950,15 +992,38 @@ export function StepAttrezzature({
           a.descrizione?.trim(),
         );
         if (namedAttrezzature.length === 0) return null;
+        const allCeOn =
+          namedAttrezzature.length > 0 &&
+          namedAttrezzature.every((a) => a.marcatura_ce);
         return (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">
-              Attrezzature selezionate ({namedAttrezzature.length})
-            </CardTitle>
-            <CardDescription>
-              Imposta marcatura CE per ogni attrezzatura
-            </CardDescription>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-1">
+                <CardTitle className="text-base">
+                  Attrezzature selezionate ({namedAttrezzature.length})
+                </CardTitle>
+                <CardDescription>
+                  Imposta marcatura CE per ogni attrezzatura
+                </CardDescription>
+              </div>
+              {namedAttrezzature.length > 1 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleAllMarcaturaCe}
+                  disabled={bulkBusy}
+                >
+                  {bulkBusy ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : null}
+                  {allCeOn
+                    ? "Deseleziona tutte CE"
+                    : "Seleziona tutte CE"}
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {namedAttrezzature.map((att) => (

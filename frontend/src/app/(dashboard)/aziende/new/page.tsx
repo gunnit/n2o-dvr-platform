@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import {
   validatePartitaIva,
   validateCodiceAteco,
+  validateCodiceFiscaleDitta,
   type AziendaFieldErrors,
 } from "@/lib/validators/azienda";
 import type {
@@ -176,6 +177,11 @@ export default function NewAziendaPage() {
   const [seismicLookup, setSeismicLookup] = useState<SeismicLookupState>({
     kind: "idle",
   });
+  // Feedback issue #12 (2026-05-14): one-click "stessa sede legale" flag.
+  // When checked the Sede Operativa block is hidden and on submit we mirror
+  // the legale fields into the operativa fields. The flag is UI-only — the
+  // backend Azienda schema still has separate operativa columns.
+  const [stessaSede, setStessaSede] = useState(false);
 
   // US-5.1: non-admins cannot create clients. Bounce them with a toast.
   useEffect(() => {
@@ -202,11 +208,19 @@ export default function NewAziendaPage() {
     }
   }
 
-  function validateField(name: "partita_iva" | "codice_ateco", value: string) {
+  function validateField(
+    name: "partita_iva" | "codice_ateco" | "codice_fiscale",
+    value: string,
+  ) {
     const msg =
       name === "partita_iva"
         ? validatePartitaIva(value)
-        : validateCodiceAteco(value);
+        : name === "codice_ateco"
+        ? validateCodiceAteco(value)
+        : // codice_fiscale only validates strictly for ditta individuale.
+          form.forma_giuridica === "Ditta Individuale"
+          ? validateCodiceFiscaleDitta(value)
+          : undefined;
     setFieldErrors((prev) => {
       const next = { ...prev };
       if (msg) {
@@ -376,12 +390,20 @@ export default function NewAziendaPage() {
 
     const pivaErr = validatePartitaIva(form.partita_iva);
     const atecoErr = validateCodiceAteco(form.codice_ateco);
+    // Feedback issue #10: enforce the 16-char personal CF only for ditta
+    // individuale. SRL/SPA/etc. can legitimately use the 11-digit P.IVA as
+    // CF and we don't want to break those.
+    const cfErr =
+      form.forma_giuridica === "Ditta Individuale"
+        ? validateCodiceFiscaleDitta(form.codice_fiscale)
+        : undefined;
     const nextErrors: AziendaFieldErrors = {};
     if (!form.ragione_sociale.trim()) {
       nextErrors.ragione_sociale = "Campo obbligatorio";
     }
     if (pivaErr) nextErrors.partita_iva = pivaErr;
     if (atecoErr) nextErrors.codice_ateco = atecoErr;
+    if (cfErr) nextErrors.codice_fiscale = cfErr;
     setFieldErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
       setError("Correggi gli errori segnalati prima di salvare");
@@ -402,6 +424,23 @@ export default function NewAziendaPage() {
       const num = (s: string) => (s.trim() === "" ? null : Number(s));
       const str = (s: string) => (s.trim() === "" ? null : s.trim());
 
+      // Feedback issue #12: when "stessa sede" is checked, mirror sede_legale
+      // values into the operativa columns server-side so downstream consumers
+      // (DVR generation, etc.) see a populated sede_operativa block.
+      const operativaSource = stessaSede
+        ? {
+            via: form.sede_legale_via,
+            citta: form.sede_legale_citta,
+            cap: form.cap_legale,
+            provincia: form.provincia_legale,
+          }
+        : {
+            via: form.sede_operativa_via,
+            citta: form.sede_operativa_citta,
+            cap: form.cap_operativa,
+            provincia: form.provincia_operativa,
+          };
+
       const body = {
         ragione_sociale: form.ragione_sociale.trim(),
         partita_iva: str(form.partita_iva),
@@ -413,10 +452,10 @@ export default function NewAziendaPage() {
         sede_legale_citta: str(form.sede_legale_citta),
         cap_legale: str(form.cap_legale),
         provincia_legale: str(form.provincia_legale)?.toUpperCase() ?? null,
-        sede_operativa_via: str(form.sede_operativa_via),
-        sede_operativa_citta: str(form.sede_operativa_citta),
-        cap_operativa: str(form.cap_operativa),
-        provincia_operativa: str(form.provincia_operativa)?.toUpperCase() ?? null,
+        sede_operativa_via: str(operativaSource.via),
+        sede_operativa_citta: str(operativaSource.citta),
+        cap_operativa: str(operativaSource.cap),
+        provincia_operativa: str(operativaSource.provincia)?.toUpperCase() ?? null,
         pec: str(form.pec),
         email: str(form.email),
         telefono: str(form.telefono),
@@ -567,7 +606,28 @@ export default function NewAziendaPage() {
                   id="codice_fiscale"
                   value={form.codice_fiscale}
                   onChange={(e) => setField("codice_fiscale", e.target.value.toUpperCase())}
+                  onBlur={(e) => validateField("codice_fiscale", e.target.value)}
+                  maxLength={
+                    form.forma_giuridica === "Ditta Individuale" ? 16 : undefined
+                  }
+                  className={
+                    fieldErrors.codice_fiscale ? "border-destructive" : ""
+                  }
                 />
+                {/* Feedback issue #10 (2026-05-14): for ditta individuale the
+                    CF is the titolare's personal CF (16 alphanumeric chars),
+                    not the company P.IVA. Show a hint + soft validation. */}
+                {form.forma_giuridica === "Ditta Individuale" && (
+                  <p className="text-[11px] text-[#64748d]">
+                    Per ditta individuale: inserisci il codice fiscale del
+                    titolare (persona fisica, 16 caratteri).
+                  </p>
+                )}
+                {fieldErrors.codice_fiscale && (
+                  <p className="text-xs text-destructive">
+                    {fieldErrors.codice_fiscale}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -578,7 +638,27 @@ export default function NewAziendaPage() {
                 <select
                   id="forma_giuridica"
                   value={form.forma_giuridica}
-                  onChange={(e) => setField("forma_giuridica", e.target.value)}
+                  onChange={(e) => {
+                    const newForma = e.target.value;
+                    setField("forma_giuridica", newForma);
+                    // Re-evaluate CF whenever forma_giuridica flips, since
+                    // the rule only fires for ditta individuale (issue #10).
+                    // We can't lean on validateField here because it reads
+                    // form.forma_giuridica from a stale closure.
+                    const msg =
+                      newForma === "Ditta Individuale"
+                        ? validateCodiceFiscaleDitta(form.codice_fiscale)
+                        : undefined;
+                    setFieldErrors((prev) => {
+                      const next = { ...prev };
+                      if (msg) {
+                        next.codice_fiscale = msg;
+                      } else {
+                        delete next.codice_fiscale;
+                      }
+                      return next;
+                    });
+                  }}
                   className="h-10 w-full rounded-md border border-[#e5edf5] bg-white px-3 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                 >
                   <option value="">Seleziona...</option>
@@ -678,7 +758,24 @@ export default function NewAziendaPage() {
 
             {/* Sede Operativa */}
             <div className="space-y-3 border-t border-[#e5edf5] pt-6">
-              <h3 className="type-eyebrow">Sede Operativa</h3>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="type-eyebrow">Sede Operativa</h3>
+                <label className="flex cursor-pointer items-center gap-2 text-[12px] text-[#273951]">
+                  <input
+                    type="checkbox"
+                    checked={stessaSede}
+                    onChange={(e) => setStessaSede(e.target.checked)}
+                    className="h-4 w-4 cursor-pointer rounded border-[#cbd5e1] text-primary focus:ring-2 focus:ring-primary/20"
+                  />
+                  <span>Stessa sede legale</span>
+                </label>
+              </div>
+              {stessaSede ? (
+                <p className="rounded-md border border-dashed border-[#cbd5e1] bg-[#f6f9fc] px-3 py-2 text-[12px] text-[#64748d]">
+                  La sede operativa verrà compilata con i valori della sede
+                  legale al momento del salvataggio.
+                </p>
+              ) : (
               <div className="grid gap-4 sm:grid-cols-6">
                 <div className="space-y-1.5 sm:col-span-3">
                   <div className="flex items-center justify-between gap-2">
@@ -726,6 +823,7 @@ export default function NewAziendaPage() {
                   />
                 </div>
               </div>
+              )}
             </div>
 
             {/* Contatti */}

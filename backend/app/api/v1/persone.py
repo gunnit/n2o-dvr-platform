@@ -63,9 +63,13 @@ async def list_persone(
     db: AsyncSession = Depends(get_db),
 ):
     await _get_azienda(azienda_id, org_id, db)
+    # Feedback issue #13 (2026-05-14): list in insertion order so the UI
+    # mirrors the operator's data-entry sequence instead of Postgres' heap
+    # order. created_at has a server_default of now() so it always exists.
     result = await db.execute(
         select(Persona)
         .where(Persona.azienda_id == azienda_id)
+        .order_by(Persona.created_at)
         .options(selectinload(Persona.ambienti))
     )
     return list(result.scalars().all())

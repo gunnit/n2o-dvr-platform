@@ -11,13 +11,6 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Copy,
   HardHat,
   Loader2,
   ShieldAlert,
@@ -273,20 +266,9 @@ export function StepDpiRischi({
     [apiFetch, aziendaId, updatePersona],
   );
 
-  const copyFromOther = useCallback(
-    (toPersonaId: string, fromPersonaId: string) => {
-      const source = latestPersoneRef.current.find(
-        (p) => p.id === fromPersonaId,
-      );
-      if (!source) return;
-      updatePersona(toPersonaId, {
-        dpi_codes: [...source.dpi_codes],
-        rischi_specifici_codes: [...source.rischi_specifici_codes],
-      });
-      toast.success(`Flag copiati da "${source.nominativo}"`);
-    },
-    [updatePersona],
-  );
+  // Feedback issue #9 (2026-05-14): the "Copia da altra persona" dropdown
+  // was removed — operators preferred the bulk "Applica a tutti con stessa
+  // mansione" action below and the per-person copy added clutter.
 
   // Bulk-apply: copy the source persona's flags to all other persone
   // sharing the same mansione. Useful for aziende with many workers in
@@ -462,38 +444,6 @@ export function StepDpiRischi({
                       Applica a tutti con stessa mansione
                     </button>
                   )}
-                {otherPersone.length > 0 && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger className="inline-flex h-8 items-center gap-2 rounded-md border border-[#e5edf5] bg-white px-3 text-xs font-medium text-[#273951] transition-colors hover:bg-[#f6f9fc]">
-                      <Copy className="h-3.5 w-3.5" />
-                      Copia da altra persona
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {otherPersone.map((src) => {
-                        const count =
-                          (src.dpi_codes?.length ?? 0) +
-                          (src.rischi_specifici_codes?.length ?? 0);
-                        return (
-                          <DropdownMenuItem
-                            key={src.id}
-                            onClick={() =>
-                              copyFromOther(currentPersona.id, src.id)
-                            }
-                            disabled={count === 0}
-                          >
-                            <span className="mr-2">{src.nominativo}</span>
-                            <Badge
-                              variant="outline"
-                              className="h-4 rounded-sm px-1 text-[10px]"
-                            >
-                              {count}
-                            </Badge>
-                          </DropdownMenuItem>
-                        );
-                      })}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
               </div>
             </CardHeader>
           </Card>
