@@ -731,7 +731,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         # Build document sections
         self._add_cover_page(doc, azienda, data["generated_at"], version)
-        self._add_table_of_contents(doc)
+        toc_anchors = self._add_table_of_contents(doc)
         self._add_premessa(doc)
         self._add_pre_parte_i(doc, azienda, data["generated_at"])
         self._add_part_i(
@@ -752,6 +752,14 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             extras,
         )
         self._add_part_iv(doc, azienda, data["persone"], extras)
+
+        # Replace the TOC's cached body with the real outline that the
+        # rest of the doc just emitted. Without this Word users who
+        # decline the "update fields?" prompt on open see only the
+        # placeholder line — the user feedback ("indice deve essere
+        # esploso con paginazione e piu dettagliato"). After F9 the
+        # field re-resolves with page numbers from the real headings.
+        self._finalize_table_of_contents(doc, *toc_anchors)
 
         # Save with the filename pattern required by US-2.8 AC2:
         # DVR_<ragione_sociale>_<YYYYMMDD>_v<N>.docx.
@@ -1037,17 +1045,43 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     # ------------------------------------------------------------------
 
     def _setup_styles(self, doc: Document) -> None:
-        """Configure document-wide styles and defaults."""
+        """Configure document-wide styles and defaults.
+
+        Pagination hardening (user feedback 2026-05-12 — "Impaginazzioe
+        dovrebbe rispettare piu le tabelle ei capitoli"):
+          - All heading styles get `keepNext` and `keepLines` set on the
+            style itself so an H1/H2/H3 never sits orphaned at the bottom
+            of a page without at least one following content line and
+            never splits mid-heading on long titles.
+          - `Normal` keeps lines together so a single paragraph doesn't
+            split awkwardly across pages.
+        Both attributes are applied via the underlying XML because the
+        python-docx ParagraphFormat helpers only act on per-paragraph
+        overrides, not the base style.
+        """
+        from docx.oxml import OxmlElement
+
         style = doc.styles["Normal"]
         font = style.font
         font.name = "Calibri"
         font.size = Pt(10)
 
-        # Heading styles
+        # Heading styles — bind pagination behavior to the style so every
+        # heading inherits it without per-call boilerplate.
         for level in range(1, 4):
             heading_style = doc.styles[f"Heading {level}"]
             heading_style.font.name = "Calibri"
             heading_style.font.color.rgb = _HEADER_BG
+
+            # `style.paragraph_format.keep_with_next = True` would set the
+            # value on a per-paragraph override; for a style we have to
+            # touch <w:pPr> directly via the element API.
+            pPr = heading_style.element.get_or_add_pPr()
+            for tag in ("w:keepNext", "w:keepLines"):
+                # Drop any existing entries so toggling is idempotent.
+                for existing in pPr.findall(qn(tag)):
+                    pPr.remove(existing)
+                pPr.append(OxmlElement(tag))
 
         # Page margins
         for section in doc.sections:
@@ -1177,25 +1211,33 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     # Table of contents placeholder
     # ------------------------------------------------------------------
 
-    def _add_table_of_contents(self, doc: Document) -> None:
+    def _add_table_of_contents(self, doc: Document):
         """Add a real Word TOC field that resolves to a clickable indice on
         first open in Word/LibreOffice (Ctrl+A, F9 to refresh).
 
         We emit a `<w:fldChar fldCharType="begin">` + instrText `TOC \\o "1-3" \\h \\z \\u`
         + `<w:fldChar fldCharType="end">` triplet wrapped in a paragraph. Word
-        renders the placeholder text inside; on Ctrl+A then F9 it expands the
-        field into the resolved table of contents tied to the document's
-        Heading 1/2/3 styles. Until the user refreshes, the placeholder hint
-        stays visible — explicitly stated below the field so reviewers know
-        what to do.
+        auto-prompts to update fields on open via the `<w:updateFields/>`
+        setting below; after refresh the field resolves to the real heading
+        list with page numbers.
+
+        The cached body emitted here is a single placeholder line. It is
+        replaced post-generation by `_finalize_table_of_contents`, which
+        walks all real H1/H2/H3 headings emitted after the TOC and rebuilds
+        the body so the unrefreshed view also shows the full structure.
+
+        Returns ``(field_start_p, end_p)`` — the paragraph containing the
+        `fldChar` begin/separate runs and the paragraph containing the
+        `fldChar` end run. The finalizer uses these as anchors to identify
+        the cached-body span.
         """
         from docx.oxml import OxmlElement
 
         doc.add_heading("INDICE", level=1)
 
         # The TOC field paragraph
-        p = doc.add_paragraph()
-        run = p.add_run()
+        field_start_p = doc.add_paragraph()
+        run = field_start_p.add_run()
         # 1) fldChar begin
         fld_begin = OxmlElement("w:fldChar")
         fld_begin.set(qn("w:fldCharType"), "begin")
@@ -1213,22 +1255,16 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         fld_sep.set(qn("w:fldCharType"), "separate")
         run._r.append(fld_sep)
 
-        # Cached body (visible before F9-refresh) — the four-part outline.
-        # Each entry sits inside the field, so when Word resolves the TOC
-        # the entries are replaced by the real heading list. We deliberately
-        # do NOT emit a visible "press F9" instruction paragraph — it would
-        # remain in the rendered docx after the field is updated. Word
-        # auto-prompts to update fields on first open via the
-        # `<w:updateFields/>` setting injected below.
-        for part, title in (
-            ("PARTE I", "Dati Generali dell'Azienda"),
-            ("PARTE II", "Descrizione dell'Attivita e dei Cicli Produttivi"),
-            ("PARTE III", "Valutazione dei Rischi per Ambiente di Lavoro"),
-            ("PARTE IV", "Programma di Miglioramento"),
-        ):
-            cp = doc.add_paragraph()
-            cr = cp.add_run(f"{part} — {title}")
-            cr.font.size = Pt(11)
+        # Cached body — one placeholder line so the field is well-formed
+        # even if the finalizer never runs (e.g. exception during a later
+        # part). The finalizer replaces this with the real heading list.
+        placeholder_p = doc.add_paragraph()
+        placeholder_run = placeholder_p.add_run(
+            "Indice in fase di aggiornamento — premere Ctrl+A e poi F9 per "
+            "ricaricare la tabella dei contenuti."
+        )
+        placeholder_run.font.size = Pt(11)
+        placeholder_run.font.italic = True
 
         # 4) fldChar end on a fresh run so the cached body sits between
         end_p = doc.add_paragraph()
@@ -1253,6 +1289,90 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             pass
 
         doc.add_page_break()
+
+        return field_start_p, end_p
+
+    def _finalize_table_of_contents(self, doc: Document, field_start_p, end_p) -> None:
+        """Replace the TOC field's cached body with the real outline.
+
+        Walks all paragraphs emitted after ``end_p`` (i.e. Premessa onward),
+        keeps Heading 1/2/3 styles, then rewrites the cached body between
+        ``field_start_p`` and ``end_p`` so the pre-F9 view of the TOC shows
+        the actual document structure instead of a generic placeholder.
+
+        We can't emit real page numbers here — those come from Word's layout
+        engine when the field is refreshed — so cached entries are
+        page-number-free. The `<w:updateFields/>` setting written by
+        `_add_table_of_contents` still prompts Word to refresh on first
+        open, restoring page numbers automatically.
+        """
+        body = doc.element.body
+        children = list(body)
+        try:
+            start_idx = children.index(field_start_p._p)
+            end_idx = children.index(end_p._p)
+        except ValueError:
+            # Anchors not found — be defensive and leave the placeholder.
+            return
+
+        # Collect H1/H2/H3 headings emitted after the TOC. Anything before
+        # ``end_p`` belongs to the cover page or the TOC itself.
+        entries: list[tuple[int, str]] = []
+        for para in doc.paragraphs:
+            style_name = (para.style.name if para.style else "") or ""
+            if not style_name.startswith("Heading "):
+                continue
+            try:
+                level = int(style_name.split(" ")[1])
+            except (IndexError, ValueError):
+                continue
+            if level not in (1, 2, 3):
+                continue
+            # Only headings after the TOC end fldChar contribute.
+            try:
+                para_idx = children.index(para._p)
+            except ValueError:
+                continue
+            if para_idx <= end_idx:
+                continue
+            text = (para.text or "").strip()
+            if not text:
+                continue
+            entries.append((level, text))
+
+        if not entries:
+            return
+
+        # Remove the existing cached body paragraphs (between
+        # field_start_p exclusive and end_p exclusive).
+        for el in children[start_idx + 1 : end_idx]:
+            body.remove(el)
+
+        # Re-locate end_p after removals.
+        end_idx = list(body).index(end_p._p)
+
+        # Insert new cached body paragraphs in order before end_p. We
+        # create each via doc.add_paragraph (appended at body tail), then
+        # move the element to the correct slot. python-docx doesn't
+        # expose a public "insert paragraph before" helper.
+        for level, text in entries:
+            new_p = doc.add_paragraph()
+            # Indent by level so H2/H3 read as a sub-outline pre-refresh.
+            # 0.0/0.4/0.8cm matches what Word's default "TOC 1/2/3"
+            # styles render after F9 refresh — close enough that the
+            # cached view doesn't visually jump when the field updates.
+            indent_cm = (level - 1) * 0.4
+            if indent_cm > 0:
+                new_p.paragraph_format.left_indent = Cm(indent_cm)
+            new_p.paragraph_format.space_after = Pt(2)
+            run = new_p.add_run(text)
+            run.font.size = Pt(11) if level == 1 else Pt(10)
+            run.bold = level == 1
+
+            # Move new_p from body tail to just before end_p.
+            body.remove(new_p._p)
+            end_idx = list(body).index(end_p._p)
+            body.insert(end_idx, new_p._p)
 
     def _add_premessa(self, doc: Document) -> None:
         """Premessa — the legal preamble required by D.Lgs. 81/2008 art. 28.
@@ -1405,7 +1525,13 @@ class DVRMasterGenerator(BaseDocumentGenerator):
           14  Sostanze chimiche / Produttore / Attivita
           15–17 Static hazard library (Sicurezza / Salute / Trasversali)
         """
-        doc.add_heading("PARTE I — DATI GENERALI DELL'AZIENDA", level=1)
+        # Each Parte starts on a fresh page so the section break is
+        # visually unambiguous regardless of where the previous part
+        # ended. We do this on the heading itself rather than appending
+        # an extra `add_page_break()` so the cached TOC outline (which
+        # walks paragraphs in order) stays compact.
+        h = doc.add_heading("PARTE I — DATI GENERALI DELL'AZIENDA", level=1)
+        h.paragraph_format.page_break_before = True
 
         # Table 3 — Presentazione dell'azienda
         doc.add_heading("1. Presentazione dell'Azienda", level=2)
@@ -1534,9 +1660,13 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         # referencing the legal requirement (audit F-003).
         self._add_servizi_igienico_assistenziali_section(doc, azienda, persone)
 
-        # Table 13 — Macchine, attrezzature ed impianti
+        # Table 13 — Macchine, attrezzature ed impianti.
+        # Pass ambienti so the renderer can resolve ambiente_id → nome
+        # without lazy-loading `attrezzatura.ambiente` (the base loader
+        # doesn't selectinload that relationship, and lazy access in an
+        # async session raises MissingGreenlet).
         doc.add_heading("7. Macchine, Attrezzature ed Impianti", level=2)
-        self._add_attrezzature_table(doc, attrezzature)
+        self._add_attrezzature_table(doc, attrezzature, ambienti)
         doc.add_paragraph("")
 
         # Table 14 — Sostanze, prodotti e preparati chimici
@@ -1803,19 +1933,66 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         run.font.size = Pt(8)
         run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
 
-    def _add_attrezzature_table(self, doc: Document, attrezzature: list) -> None:
-        """Template Table 13 — Descrizione | Marcata CE | Verifiche periodiche."""
-        headers = ["Macchine, Attrezzature ed Impianti", "Marcata CE", "Verifiche Periodiche"]
+    def _add_attrezzature_table(
+        self,
+        doc: Document,
+        attrezzature: list,
+        ambienti: list | None = None,
+    ) -> None:
+        """Template Table 13 — global equipment inventory (Parte I §7).
+
+        Columns: Descrizione | Ambiente | Marcata CE | Verifiche periodiche.
+
+        Rationale for the Ambiente column (feedback 2026-05-12: "macchine
+        attrezzature impianti non mette le cose giuste"): the previous
+        3-column variant rendered 1 row per piece of equipment with no
+        location context, so identical descriptions (e.g. two "TRAPANO A
+        COLONNA" rows from two different ambienti) looked like
+        duplicates. Surfacing the ambiente name keeps the per-row signal
+        and lets the reader cross-reference the per-ambiente blocks in
+        Parte III.
+
+        We resolve `ambiente_id → nome` via the in-memory ambienti list
+        rather than lazy-loading `attrezzatura.ambiente`: the base
+        loader doesn't selectinload that backref, and lazy access in an
+        async session raises MissingGreenlet. ``ambienti=None`` keeps
+        the old "Ambiente: —" behavior for any caller that doesn't
+        thread the list through (defensive — no current callsite hits
+        this branch).
+
+        Rows are grouped by ambiente name so identical ambienti cluster
+        together — matches operator expectation when scanning the list.
+        """
+        amb_name_by_id: dict = {}
+        if ambienti:
+            for amb in ambienti:
+                amb_name_by_id[amb.id] = (amb.nome or "—").upper()
+
+        headers = [
+            "Macchine, Attrezzature ed Impianti",
+            "Ambiente",
+            "Marcata CE",
+            "Verifiche Periodiche",
+        ]
         if not attrezzature:
-            rows = [["Nessuna attrezzatura registrata.", "—", "—"]]
+            rows = [["Nessuna attrezzatura registrata.", "—", "—", "—"]]
         else:
+            def _amb_label(a) -> str:
+                amb_id = getattr(a, "ambiente_id", None)
+                return amb_name_by_id.get(amb_id, "—")
+
+            sorted_att = sorted(
+                attrezzature,
+                key=lambda a: (_amb_label(a), (a.descrizione or "").lower()),
+            )
             rows = [
                 [
                     (a.descrizione or "—").upper(),
+                    _amb_label(a),
                     "SI" if a.marcatura_ce else "NO",
                     "SI" if a.verifiche_periodiche else "NO",
                 ]
-                for a in attrezzature
+                for a in sorted_att
             ]
         self._add_data_table(doc, headers, rows)
 
@@ -1931,10 +2108,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
           2.3 Scala di Probabilita (P).
           2.4 Scala del Danno (D).
         """
-        doc.add_heading(
+        h = doc.add_heading(
             "PARTE II — DESCRIZIONE DELL'ATTIVITA E METODOLOGIA DI VALUTAZIONE",
             level=1,
         )
+        h.paragraph_format.page_break_before = True
 
         # Template Table 18 — Azienda identity block at the top of Parte II
         self._add_azienda_header_table(doc, azienda)
@@ -2148,10 +2326,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
           - Trailing: 4 sections covering mansioni con rischi specifici,
             DPI per mansione, segnaletica di sicurezza, programma formazione.
         """
-        doc.add_heading(
+        h = doc.add_heading(
             "PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO",
             level=1,
         )
+        h.paragraph_format.page_break_before = True
 
         self._add_azienda_header_table(doc, azienda)
         doc.add_paragraph("")
@@ -3038,7 +3217,8 @@ class DVRMasterGenerator(BaseDocumentGenerator):
           §4.13 Dichiarazione del Datore di Lavoro
           (signature grid Table 110)
         """
-        doc.add_heading("PARTE IV — PROGRAMMA DI MIGLIORAMENTO", level=1)
+        h = doc.add_heading("PARTE IV — PROGRAMMA DI MIGLIORAMENTO", level=1)
+        h.paragraph_format.page_break_before = True
 
         # Template Table 108 — Azienda header
         self._add_azienda_header_table(doc, azienda)
@@ -3469,7 +3649,13 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     def _add_key_value_table(
         self, doc: Document, rows: list[tuple[str, str]]
     ) -> None:
-        """Add a simple two-column key-value table."""
+        """Add a simple two-column key-value table.
+
+        Each row gets `cantSplit` so a key/value pair never breaks across
+        a page boundary — readability win for anagrafica / identity
+        blocks where the label dangling alone on the previous page was
+        the most jarring case in operator feedback (2026-05-12).
+        """
         table = doc.add_table(rows=len(rows), cols=2)
         table.style = "Table Grid"
 
@@ -3496,10 +3682,23 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 self._set_cell_bg(cell_key, _LIGHT_GRAY)
                 self._set_cell_bg(cell_val, _LIGHT_GRAY)
 
+            # Don't split this row across pages.
+            self._set_row_cant_split(table.rows[i])
+
     def _add_data_table(
         self, doc: Document, headers: list[str], rows: list[list[str]]
     ) -> None:
-        """Add a multi-column data table with styled header."""
+        """Add a multi-column data table with styled header.
+
+        Pagination behaviour:
+          - The header row carries `tblHeader` (so Word repeats it on
+            every page when the table breaks) plus `cantSplit` so the
+            header itself never dangles split.
+          - Data rows get `cantSplit` so a single row never breaks
+            across pages. Whole tables are still allowed to span pages —
+            blanket-locking them would push huge attrezzatura/pericoli
+            tables onto a fresh page and waste vertical space.
+        """
         table = doc.add_table(rows=1, cols=len(headers))
         table.style = "Table Grid"
 
@@ -3515,6 +3714,9 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             run.font.color.rgb = _HEADER_TEXT
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             self._set_cell_bg(cell, _HEADER_BG)
+
+        self._set_row_repeat_as_header(header_row)
+        self._set_row_cant_split(header_row)
 
         # Data rows
         for row_idx, row_data in enumerate(rows):
@@ -3535,6 +3737,8 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 for cell in row.cells:
                     self._set_cell_bg(cell, _LIGHT_GRAY)
 
+            self._set_row_cant_split(row)
+
     @staticmethod
     def _set_cell_bg(cell, color: RGBColor) -> None:
         """Set a table cell's background (shading) color.
@@ -3549,3 +3753,30 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             shading_elm.append(shading)
         shading.set(qn("w:fill"), f"{color}")
         shading.set(qn("w:val"), "clear")
+
+    @staticmethod
+    def _set_row_cant_split(row) -> None:
+        """Mark a table row so Word never splits it across pages.
+
+        Emits `<w:trPr><w:cantSplit/></w:trPr>` on the row's <w:tr>.
+        Idempotent — re-applying just leaves the existing flag in place.
+        """
+        from docx.oxml import OxmlElement
+
+        trPr = row._tr.get_or_add_trPr()
+        if trPr.find(qn("w:cantSplit")) is None:
+            trPr.append(OxmlElement("w:cantSplit"))
+
+    @staticmethod
+    def _set_row_repeat_as_header(row) -> None:
+        """Mark a row as a repeating table header.
+
+        When Word reflows the table across pages it re-emits this row at
+        the top of each subsequent page. Combined with `cantSplit` it's
+        the standard pattern for long data tables.
+        """
+        from docx.oxml import OxmlElement
+
+        trPr = row._tr.get_or_add_trPr()
+        if trPr.find(qn("w:tblHeader")) is None:
+            trPr.append(OxmlElement("w:tblHeader"))
