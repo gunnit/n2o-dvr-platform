@@ -2,6 +2,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -246,6 +247,44 @@ async def list_ambiente_foto(
         .order_by(AmbienteFoto.created_at.desc())
     )
     return result.scalars().all()
+
+
+@router.get("/{ambiente_id}/foto/{foto_id}/content")
+async def get_ambiente_foto_content(
+    azienda_id: uuid.UUID,
+    ambiente_id: uuid.UUID,
+    foto_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream raw photo bytes for inline preview in the survey UI.
+
+    Feedback issue #7 (2026-05-14): operators want to see what they
+    uploaded, not just a filename + size. The frontend fetches this with
+    a bearer token, wraps the response in a blob URL, and assigns it to
+    an <img>. We don't expose a publicly signed URL because the photo
+    can contain people / planimetrie / sensitive workplace details —
+    keeping auth on the bytes is the simpler privacy posture.
+    """
+    await _get_ambiente_for_org(azienda_id, ambiente_id, org_id, db)
+    result = await db.execute(
+        select(AmbienteFoto).where(
+            AmbienteFoto.id == foto_id, AmbienteFoto.ambiente_id == ambiente_id
+        )
+    )
+    foto = result.scalar_one_or_none()
+    if not foto:
+        raise NotFoundError("Foto not found")
+    file_path = Path(foto.file_path)
+    # Storage volumes can be wiped during dev/test resets even while the
+    # DB row survives — surface that as 404 rather than a 500.
+    if not file_path.exists():
+        raise NotFoundError("Foto file missing on storage")
+    return FileResponse(
+        path=str(file_path),
+        media_type=foto.content_type or "application/octet-stream",
+        filename=foto.filename or f"{foto_id}",
+    )
 
 
 @router.delete("/{ambiente_id}/foto/{foto_id}", status_code=204)

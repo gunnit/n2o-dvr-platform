@@ -10,6 +10,8 @@ import { ImagePlus, Loader2, Plus, Trash2, X } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import type { Ambiente } from "@/types";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 // Server-side photo record attached to an ambiente.
 // The orchestrator will move this to types/index.ts later.
 interface AmbienteFoto {
@@ -177,6 +179,17 @@ function AmbienteFotoGrid({ aziendaId, ambienteId }: AmbienteFotoGridProps) {
   const [foto, setFoto] = useState<AmbienteFoto[]>([]);
   const [available, setAvailable] = useState<boolean | null>(null);
   const [uploading, setUploading] = useState(false);
+  // Feedback issue #7 (2026-05-14): inline thumbnails of uploaded photos.
+  // Maps foto.id -> object URL. The backend exposes the bytes behind an
+  // auth-gated endpoint (no public signed URL because photos can include
+  // people and sensitive workplace layouts), so we fetch with the bearer
+  // token, wrap in a blob URL, and revoke when the row goes away. The ref
+  // mirrors state so the unmount cleanup sees the live URL map.
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
+  const previewUrlsRef = useRef<Record<string, string>>({});
+  useEffect(() => {
+    previewUrlsRef.current = previewUrls;
+  }, [previewUrls]);
   // Files that failed to upload due to a network error and should be retried
   // when `online` fires. One retry attempt is acceptable for US-1.3.
   const pendingRetryRef = useRef<File[]>([]);
@@ -213,6 +226,54 @@ function AmbienteFotoGrid({ aziendaId, ambienteId }: AmbienteFotoGridProps) {
       cancelled = true;
     };
   }, [apiFetch, isAuthenticated, basePath]);
+
+  // Feedback issue #7: lazy-load thumbnail blobs for any foto we don't have
+  // a preview URL for yet. Bearer-auth is required, so we can't just point
+  // <img src> at the endpoint directly. We fetch the bytes, wrap in a blob
+  // URL, and stash in state. Revocation runs on unmount + on row deletion.
+  useEffect(() => {
+    if (!isAuthenticated || foto.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      // Refresh the token via the same path useApi uses — avoids reimplementing
+      // the NextAuth session round-trip inline.
+      const sessionRes = await fetch("/api/auth/session").catch(() => null);
+      const sess = sessionRes ? await sessionRes.json().catch(() => null) : null;
+      const token = sess?.accessToken;
+      if (!token) return;
+      const needed = foto.filter((f) => !previewUrls[f.id]);
+      for (const f of needed) {
+        if (cancelled) break;
+        try {
+          const res = await fetch(`${API_URL}${basePath}/${f.id}/content`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) continue;
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          if (cancelled) {
+            URL.revokeObjectURL(url);
+            break;
+          }
+          setPreviewUrls((prev) => ({ ...prev, [f.id]: url }));
+        } catch {
+          // Network blip — leave the icon fallback; next foto-list update retries.
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [foto, isAuthenticated, basePath, previewUrls]);
+
+  // Revoke all blob URLs when the grid unmounts (ambiente switch / page leave).
+  useEffect(() => {
+    return () => {
+      Object.values(previewUrlsRef.current).forEach((u) =>
+        URL.revokeObjectURL(u),
+      );
+    };
+  }, []);
 
   const uploadOne = useCallback(
     async (file: File): Promise<AmbienteFoto | null> => {
@@ -335,6 +396,15 @@ function AmbienteFotoGrid({ aziendaId, ambienteId }: AmbienteFotoGridProps) {
       try {
         await apiFetch(`${basePath}/${fotoId}`, { method: "DELETE" });
         setFoto((prev) => prev.filter((f) => f.id !== fotoId));
+        // Free the blob URL for the deleted photo so we don't leak memory
+        // when the operator deletes + re-uploads many times in one session.
+        setPreviewUrls((prev) => {
+          const url = prev[fotoId];
+          if (url) URL.revokeObjectURL(url);
+          const next = { ...prev };
+          delete next[fotoId];
+          return next;
+        });
       } catch (err) {
         toast.error(
           err instanceof Error ? err.message : "Errore durante l'eliminazione"
@@ -382,33 +452,45 @@ function AmbienteFotoGrid({ aziendaId, ambienteId }: AmbienteFotoGridProps) {
 
       {foto.length > 0 && (
         <div className="flex flex-wrap gap-3">
-          {foto.map((f) => (
-            <div
-              key={f.id}
-              className="group relative w-[110px] rounded-md border bg-muted/20 p-1.5"
-            >
-              <div className="relative flex h-[80px] w-full items-center justify-center overflow-hidden rounded bg-muted">
-                <ImagePlus className="h-6 w-6 text-muted-foreground/50" />
-                <button
-                  type="button"
-                  onClick={() => handleDelete(f.id)}
-                  aria-label="Elimina foto"
-                  className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-background/90 text-destructive shadow-sm transition hover:bg-destructive hover:text-destructive-foreground"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-              <p
-                className="mt-1 truncate text-[10px] font-medium"
-                title={f.filename}
+          {foto.map((f) => {
+            const previewUrl = previewUrls[f.id];
+            return (
+              <div
+                key={f.id}
+                className="group relative w-[110px] rounded-md border bg-muted/20 p-1.5"
               >
-                {f.filename}
-              </p>
-              <p className="text-[10px] text-muted-foreground">
-                {formatBytes(f.size_bytes)}
-              </p>
-            </div>
-          ))}
+                <div className="relative flex h-[80px] w-full items-center justify-center overflow-hidden rounded bg-muted">
+                  {previewUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={previewUrl}
+                      alt={f.filename}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <ImagePlus className="h-6 w-6 text-muted-foreground/50" />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(f.id)}
+                    aria-label="Elimina foto"
+                    className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-background/90 text-destructive shadow-sm transition hover:bg-destructive hover:text-destructive-foreground"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+                <p
+                  className="mt-1 truncate text-[10px] font-medium"
+                  title={f.filename}
+                >
+                  {f.filename}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  {formatBytes(f.size_bytes)}
+                </p>
+              </div>
+            );
+          })}
         </div>
       )}
 
