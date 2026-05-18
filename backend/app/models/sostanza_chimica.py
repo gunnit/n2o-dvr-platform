@@ -16,6 +16,7 @@ class SostanzaChimica(Base):
     nome_prodotto: Mapped[str] = mapped_column(String, nullable=False)
     produttore: Mapped[str | None] = mapped_column(String)
     attivita_uso: Mapped[str | None] = mapped_column(Text)
+    destinazione_uso: Mapped[str | None] = mapped_column(Text)
     pittogrammi: Mapped[list[str] | None] = mapped_column(ARRAY(String))
     stato_miscela: Mapped[str | None] = mapped_column(String)
     frasi_h: Mapped[list[str] | None] = mapped_column(ARRAY(String))

@@ -54,6 +54,18 @@ class SDSExtraction(BaseModel):
     )
     produttore_confidence: float = Field(ge=0.0, le=1.0)
 
+    # Intended use — Section 1.2 of the SDS ("Pertinenti usi identificati")
+    destinazione_uso: str | None = Field(
+        description=(
+            "Manufacturer-declared identified use from Section 1.2 of the SDS "
+            "('Pertinenti usi identificati della sostanza o miscela'). One "
+            "concise Italian phrase, e.g. 'Detergente professionale per "
+            "superfici dure', 'Lubrificante per macchine utensili'. None if "
+            "the section is missing or unreadable."
+        )
+    )
+    destinazione_uso_confidence: float = Field(ge=0.0, le=1.0)
+
     # Physical state — Section 9 of the SDS
     stato_miscela: StatoMiscela | None = Field(
         description="Physical state of the substance/mixture at room temp."

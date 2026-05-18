@@ -86,6 +86,7 @@ _ATTREZZATURA_FIELDS = (
 _SOSTANZA_FIELDS = (
     "nome_prodotto",
     "produttore",
+    "destinazione_uso",
     "stato_miscela",
     "pittogrammi",
     "frasi_h",

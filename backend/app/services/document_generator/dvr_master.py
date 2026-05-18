@@ -2012,11 +2012,19 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             "Sostanza / Prodotto",
             "Produttore / Distributore",
             "Attivita / Uso",
+            "Destinazione d'uso",
             "Stato",
             "Pittogrammi GHS",
         ]
         if not sostanze:
-            rows = [["Nessuna sostanza chimica registrata.", "—", "—", "—", "—"]]
+            rows = [[
+                "Nessuna sostanza chimica registrata.",
+                "—",
+                "—",
+                "—",
+                "—",
+                "—",
+            ]]
             self._add_data_table(doc, headers, rows)
             return
 
@@ -2028,6 +2036,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 (s.nome_prodotto or "—").upper(),
                 (s.produttore or "—").upper(),
                 (getattr(s, "attivita_uso", None) or "—"),
+                (getattr(s, "destinazione_uso", None) or "—"),
                 (getattr(s, "stato_miscela", None) or "—").upper(),
                 pittogrammi_text,
             ])

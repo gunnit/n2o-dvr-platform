@@ -9,6 +9,7 @@ class SostanzaChimicaBase(BaseModel):
     nome_prodotto: str
     produttore: str | None = None
     attivita_uso: str | None = None
+    destinazione_uso: str | None = None
     pittogrammi: list[str] | None = None
     stato_miscela: str | None = None
     frasi_h: list[str] | None = None
@@ -28,6 +29,7 @@ class SostanzaChimicaUpdate(BaseModel):
     nome_prodotto: str | None = None
     produttore: str | None = None
     attivita_uso: str | None = None
+    destinazione_uso: str | None = None
     pittogrammi: list[str] | None = None
     stato_miscela: str | None = None
     frasi_h: list[str] | None = None

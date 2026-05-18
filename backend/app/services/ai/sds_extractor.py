@@ -35,6 +35,12 @@ Linee guida per i campi:
 - nome_prodotto: cerca in Sezione 1.1 "Identificatore del prodotto".
 - produttore: cerca in Sezione 1.3 "Identificazione del fornitore" -- nome
   ragione sociale, NON l'indirizzo.
+- destinazione_uso: cerca in Sezione 1.2 "Pertinenti usi identificati della
+  sostanza o miscela". Sintetizza in UNA frase italiana concisa (max ~80
+  caratteri) il primo uso identificato dal produttore. Esempi:
+  "Detergente professionale per superfici dure", "Lubrificante per
+  macchine utensili", "Diluente per vernici a solvente". Se la sezione
+  elenca solo gli "Usi sconsigliati" o non e' compilata, restituisci null.
 - stato_miscela: cerca in Sezione 9.1 "Stato fisico". Mappa a uno dei
   valori ammessi (solido / liquido / gassoso / aerosol / polvere / pasta /
   altro). Se incerto, usa "altro".
@@ -109,6 +115,7 @@ def to_db_dict(
     return {
         "nome_prodotto": extraction.nome_prodotto or "(da revisionare)",
         "produttore": extraction.produttore,
+        "destinazione_uso": extraction.destinazione_uso,
         "stato_miscela": extraction.stato_miscela,
         "pittogrammi": list(extraction.pittogrammi),
         "frasi_h": list(extraction.frasi_h),
@@ -129,6 +136,7 @@ def low_confidence_fields(extraction: SDSExtraction) -> list[str]:
     fields = {
         "nome_prodotto": extraction.nome_prodotto_confidence,
         "produttore": extraction.produttore_confidence,
+        "destinazione_uso": extraction.destinazione_uso_confidence,
         "stato_miscela": extraction.stato_miscela_confidence,
         "pittogrammi": extraction.pittogrammi_confidence,
         "frasi_h": extraction.frasi_h_confidence,

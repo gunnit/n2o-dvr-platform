@@ -262,6 +262,8 @@ export interface SostanzaChimica {
   azienda_id: string;
   nome_prodotto: string;
   produttore: string | null;
+  attivita_uso?: string | null;
+  destinazione_uso?: string | null;
   pittogrammi: string[];
   stato_miscela: string | null;
   frasi_h: string[];

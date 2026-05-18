@@ -74,6 +74,7 @@ function createEmptySostanza(aziendaId: string): SostanzaChimica {
     azienda_id: aziendaId,
     nome_prodotto: "",
     produttore: null,
+    destinazione_uso: null,
     pittogrammi: [],
     stato_miscela: null,
     frasi_h: [],
@@ -631,6 +632,7 @@ export function StepSostanze({
         const payload = {
           nome_prodotto: row.nome_prodotto,
           produttore: row.produttore ?? null,
+          destinazione_uso: row.destinazione_uso ?? null,
           stato_miscela: row.stato_miscela ?? null,
           pittogrammi: row.pittogrammi ?? [],
           frasi_h: row.frasi_h ?? [],
@@ -660,6 +662,7 @@ export function StepSostanze({
                     ...created,
                     nome_prodotto: s.nome_prodotto,
                     produttore: s.produttore,
+                    destinazione_uso: s.destinazione_uso ?? created.destinazione_uso ?? null,
                     stato_miscela: s.stato_miscela,
                     pittogrammi: s.pittogrammi ?? created.pittogrammi ?? [],
                     frasi_h: s.frasi_h ?? created.frasi_h ?? [],
@@ -908,6 +911,27 @@ export function StepSostanze({
                           </option>
                         ))}
                       </select>
+                    </div>
+
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor={`sost-dest-${index}`}>
+                        Destinazione d&apos;uso
+                      </Label>
+                      <Input
+                        id={`sost-dest-${index}`}
+                        value={sost.destinazione_uso ?? ""}
+                        onChange={(e) =>
+                          updateSostanza(index, {
+                            destinazione_uso: e.target.value || null,
+                          })
+                        }
+                        placeholder="Es. Detergente professionale per superfici dure"
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        Uso identificato dal produttore (SDS § 1.2). Compilato
+                        automaticamente dall&apos;estrazione AI quando
+                        disponibile.
+                      </p>
                     </div>
                   </div>
 
