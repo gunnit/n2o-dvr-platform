@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Numeric, String, Text, func
+from sqlalchemy import ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,6 +19,13 @@ class Ambiente(Base):
     superficie_mq: Mapped[float | None] = mapped_column(Numeric)
     preposto_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("persone.id"))
     descrizione_attivita: Mapped[str | None] = mapped_column(Text)
+    # Operator-controlled display order within an azienda. Feedback #22
+    # (2026-05-18): the list endpoint had no ordering, so insertion order
+    # was effectively random — operators want both predictable ordering
+    # *and* a way to reshuffle (up/down arrows in the survey UI). We
+    # auto-assign max(ordine)+1 on create and let the PATCH endpoint move
+    # rows around individually.
+    ordine: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     azienda: Mapped["Azienda"] = relationship(back_populates="ambienti")

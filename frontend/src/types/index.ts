@@ -107,6 +107,9 @@ export interface Ambiente {
   superficie_mq: number | null;
   preposto_id: string | null;
   descrizione_attivita: string | null;
+  // Operator-controlled position in the survey list. Server-assigned on
+  // create (max+1) and editable via PATCH .../ordine — see feedback #22.
+  ordine: number;
 }
 
 export type LivelloRischio =

@@ -6,7 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { ImagePlus, Loader2, Plus, Trash2, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ImagePlus,
+  Loader2,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import type { Ambiente } from "@/types";
 
@@ -80,7 +88,7 @@ const ALLOWED_FOTO_EXTENSIONS = [".jpg", ".jpeg", ".png", ".heic"];
 const INVALID_FOTO_MESSAGE =
   "Formato non supportato o file troppo grande (max 10 MB)";
 
-function createEmptyAmbiente(aziendaId: string): Ambiente {
+function createEmptyAmbiente(aziendaId: string, ordine: number): Ambiente {
   return {
     id: crypto.randomUUID(),
     azienda_id: aziendaId,
@@ -89,6 +97,7 @@ function createEmptyAmbiente(aziendaId: string): Ambiente {
     superficie_mq: null,
     preposto_id: null,
     descrizione_attivita: null,
+    ordine,
   };
 }
 
@@ -572,8 +581,78 @@ export function StepAmbienti({
   }, [ambienti]);
 
   const addAmbiente = useCallback(() => {
-    onChange([...ambienti, createEmptyAmbiente(aziendaId)]);
+    // New row goes to the end of the list visually; the server picks the
+    // canonical `ordine` on POST (max+1) and the response replaces this
+    // placeholder. We seed `ordine` here so the local list stays sorted
+    // by ordine even before the round-trip completes.
+    const nextOrdine = ambienti.length
+      ? Math.max(...ambienti.map((a) => a.ordine ?? 0)) + 1
+      : 0;
+    onChange([...ambienti, createEmptyAmbiente(aziendaId, nextOrdine)]);
   }, [ambienti, onChange, aziendaId]);
+
+  // Feedback #22: arrow-button reorder. We swap the two affected rows in
+  // local state optimistically, then PATCH both rows so the server agrees.
+  // On error we revert. We deliberately don't use dnd-kit here even though
+  // the package is installed — on mobile (the primary survey device) drag
+  // handles are fiddly inside a long form, whereas two icon buttons are
+  // unambiguous and accessible.
+  const moveAmbiente = useCallback(
+    async (index: number, direction: "up" | "down") => {
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= ambienti.length) return;
+      const a = ambienti[index];
+      const b = ambienti[targetIndex];
+      if (!a || !b) return;
+
+      const aOrdine = a.ordine ?? index;
+      const bOrdine = b.ordine ?? targetIndex;
+
+      // Build the new list with the two rows swapped *and* their `ordine`
+      // values swapped, so the visual order matches the canonical sort key.
+      const swapped = ambienti.map((row, i) => {
+        if (i === index) return { ...b, ordine: aOrdine };
+        if (i === targetIndex) return { ...a, ordine: bOrdine };
+        return row;
+      });
+      onChange(swapped);
+
+      // Only PATCH rows that the server actually knows about. A row that
+      // hasn't been persisted yet (no nome, or POST still in flight)
+      // doesn't need a network update — its `ordine` will be sent with
+      // the eventual POST/PUT cycle.
+      const aPersisted = persistedIdsRef.current.has(a.id);
+      const bPersisted = persistedIdsRef.current.has(b.id);
+
+      try {
+        const tasks: Promise<unknown>[] = [];
+        if (aPersisted) {
+          tasks.push(
+            apiFetch(`${basePath}/${a.id}/ordine`, {
+              method: "PATCH",
+              body: JSON.stringify({ ordine: bOrdine }),
+            }),
+          );
+        }
+        if (bPersisted) {
+          tasks.push(
+            apiFetch(`${basePath}/${b.id}/ordine`, {
+              method: "PATCH",
+              body: JSON.stringify({ ordine: aOrdine }),
+            }),
+          );
+        }
+        await Promise.all(tasks);
+      } catch (err) {
+        // Revert on failure so the UI doesn't lie about persisted state.
+        onChange(ambienti);
+        toast.error(
+          err instanceof Error ? err.message : "Errore nel riordinamento",
+        );
+      }
+    },
+    [ambienti, onChange, apiFetch, basePath],
+  );
 
   const removeAmbiente = useCallback(
     async (index: number) => {
@@ -745,13 +824,37 @@ export function StepAmbienti({
                     Ambiente {index + 1}
                     {ambiente.nome ? ` - ${ambiente.nome}` : ""}
                   </h3>
-                  <Button
-                    variant="destructive"
-                    size="icon-sm"
-                    onClick={() => removeAmbiente(index)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    {/* Feedback #22: up/down to reshuffle the survey list */}
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      onClick={() => moveAmbiente(index, "up")}
+                      disabled={index === 0}
+                      aria-label="Sposta ambiente su"
+                      title="Sposta su"
+                    >
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      onClick={() => moveAmbiente(index, "down")}
+                      disabled={index === ambienti.length - 1}
+                      aria-label="Sposta ambiente giu"
+                      title="Sposta giu"
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="icon-sm"
+                      onClick={() => removeAmbiente(index)}
+                      aria-label="Elimina ambiente"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">

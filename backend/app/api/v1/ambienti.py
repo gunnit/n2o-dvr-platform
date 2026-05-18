@@ -13,7 +13,12 @@ from app.dependencies import get_current_org
 from app.models.ambiente import Ambiente
 from app.models.ambiente_foto import AmbienteFoto
 from app.models.azienda import Azienda
-from app.schemas.ambiente import AmbienteCreate, AmbienteResponse, AmbienteUpdate
+from app.schemas.ambiente import (
+    AmbienteCreate,
+    AmbienteReorder,
+    AmbienteResponse,
+    AmbienteUpdate,
+)
 from app.schemas.ambiente_foto import AmbienteFotoResponse
 
 router = APIRouter(prefix="/aziende/{azienda_id}/ambienti", tags=["ambienti"])
@@ -36,7 +41,14 @@ async def list_ambienti(
     db: AsyncSession = Depends(get_db),
 ):
     await _get_azienda(azienda_id, org_id, db)
-    result = await db.execute(select(Ambiente).where(Ambiente.azienda_id == azienda_id))
+    # Feedback #22 (2026-05-18): respect the operator-chosen order. We tier
+    # on (ordine, created_at) so rows with identical ordine (legacy data,
+    # concurrent backfill ties) still come back in a deterministic order.
+    result = await db.execute(
+        select(Ambiente)
+        .where(Ambiente.azienda_id == azienda_id)
+        .order_by(Ambiente.ordine, Ambiente.created_at)
+    )
     return result.scalars().all()
 
 
@@ -48,7 +60,18 @@ async def create_ambiente(
     db: AsyncSession = Depends(get_db),
 ):
     await _get_azienda(azienda_id, org_id, db)
-    ambiente = Ambiente(**body.model_dump(), azienda_id=azienda_id)
+    # Feedback #22: server assigns the next ordine slot so newly created
+    # ambienti always land at the end of the list — operators can shuffle
+    # afterwards via the PATCH /ordine endpoint.
+    max_ordine = await db.execute(
+        select(func.coalesce(func.max(Ambiente.ordine), -1)).where(
+            Ambiente.azienda_id == azienda_id
+        )
+    )
+    next_ordine = max_ordine.scalar_one() + 1
+    ambiente = Ambiente(
+        **body.model_dump(), azienda_id=azienda_id, ordine=next_ordine
+    )
     db.add(ambiente)
     await db.commit()
     await db.refresh(ambiente)
@@ -91,6 +114,37 @@ async def update_ambiente(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(ambiente, field, value)
 
+    await db.commit()
+    await db.refresh(ambiente)
+    return ambiente
+
+
+@router.patch("/{ambiente_id}/ordine", response_model=AmbienteResponse)
+async def reorder_ambiente(
+    azienda_id: uuid.UUID,
+    ambiente_id: uuid.UUID,
+    body: AmbienteReorder,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Move an ambiente to a new ordinal position (feedback #22).
+
+    The UI invokes this twice per swap (once per affected row). We don't
+    cascade renumbering server-side because the client already computes the
+    target ordine values — keeping this endpoint as a simple per-row write
+    avoids transaction-scope races when the operator hammers the arrows.
+    """
+    await _get_azienda(azienda_id, org_id, db)
+    result = await db.execute(
+        select(Ambiente).where(
+            Ambiente.id == ambiente_id, Ambiente.azienda_id == azienda_id
+        )
+    )
+    ambiente = result.scalar_one_or_none()
+    if not ambiente:
+        raise NotFoundError("Ambiente not found")
+
+    ambiente.ordine = body.ordine
     await db.commit()
     await db.refresh(ambiente)
     return ambiente
