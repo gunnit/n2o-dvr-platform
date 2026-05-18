@@ -1162,8 +1162,8 @@ export function RischiEditor({
             </div>
           </div>
 
-          <div className="overflow-x-auto px-6 pb-6">
-            <Table>
+          <div className="px-6 pb-6">
+            <Table className="table-fixed">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[180px]">
@@ -1348,15 +1348,28 @@ export function RischiEditor({
                       </TableRow>
                       {showPericoli && (
                         <TableRow className="hover:bg-transparent">
-                          <TableCell colSpan={6} className="p-0">
-                            <PericoliPanel
-                              aziendaId={aziendaId}
-                              ambienteId={val.ambiente_id}
-                              valutazione={val}
-                              categoriaLong={long as string}
-                              onSummaryChange={handlePericoliSummary}
-                              onSaveMisure={handleSaveMisure}
-                            />
+                          {/* Feedback #16 (2026-05-18): the colspan cell hosts
+                              the AI MeasuresPanel, whose long Italian titoli /
+                              descrizione strings inherit `whitespace-nowrap`
+                              from the shadcn TableCell default and were
+                              forcing the whole outer table to overflow
+                              horizontally on subsequent rows once measures
+                              had been generated. Force wrapping + min-w-0 so
+                              the drill-down stays contained. */}
+                          <TableCell
+                            colSpan={6}
+                            className="w-full min-w-0 whitespace-normal break-words p-0 align-top"
+                          >
+                            <div className="w-full min-w-0">
+                              <PericoliPanel
+                                aziendaId={aziendaId}
+                                ambienteId={val.ambiente_id}
+                                valutazione={val}
+                                categoriaLong={long as string}
+                                onSummaryChange={handlePericoliSummary}
+                                onSaveMisure={handleSaveMisure}
+                              />
+                            </div>
                           </TableCell>
                         </TableRow>
                       )}

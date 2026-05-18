@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
+import { Loader2, Sparkles } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -113,6 +114,7 @@ export default function StressAssessmentPage() {
   const [misureLivello, setMisureLivello] = useState<Livello | null>(null);
   const [finalizing, setFinalizing] = useState(false);
   const [finalizeMessage, setFinalizeMessage] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
   // Track the last saved text per row so we can detect dirty state on blur.
   const lastSavedTextRef = useRef<Map<string, string>>(new Map());
 
@@ -345,6 +347,76 @@ export default function StressAssessmentPage() {
     ]);
   }, []);
 
+  // Feedback #20 (2026-05-18): ask gpt-5.4-mini for misure correttive
+  // tailored to the live answers. Adds each suggested line to the
+  // measures list as a personalized entry — the operator still reviews,
+  // edits, and saves. We never auto-persist into misure_correttive.
+  const suggestWithAI = useCallback(async () => {
+    setAiLoading(true);
+    try {
+      const raw = window.localStorage.getItem(`stress-draft-${aziendaId}`);
+      const answers: AnswersMap = raw ? JSON.parse(raw) : {};
+      if (Object.keys(answers).length === 0) {
+        toast.error(
+          "Compila almeno alcuni indicatori prima di chiedere suggerimenti AI",
+        );
+        return;
+      }
+
+      const token = await getAuthToken();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const res = await fetch(
+        `${apiUrl}/api/v1/aziende/${aziendaId}/stress/ai-misure`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ answers }),
+        },
+      );
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.detail || `Errore ${res.status}`);
+      }
+      const data = (await res.json()) as { suggestion: string };
+
+      // Split the suggestion (one measure per line). Strip any leading
+      // bullet/numbering the model might add despite the prompt.
+      const lines = data.suggestion
+        .split(/\r?\n/)
+        .map((s) => s.replace(/^\s*[-*•]\s*/, "").replace(/^\s*\d+[.)]\s*/, "").trim())
+        .filter((s) => s.length > 0);
+
+      if (lines.length === 0) {
+        toast.error("L'AI non ha prodotto suggerimenti utilizzabili");
+        return;
+      }
+
+      setMisure((prev) => [
+        ...prev,
+        ...lines.map((text) => ({
+          id: makeId(),
+          text,
+          personalizzata: true,
+        })),
+      ]);
+      toast.success(
+        `${lines.length} misure suggerite dall'AI. Rivedile e clicca «Salva» per archiviarle.`,
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? `Suggerimento AI fallito: ${err.message}`
+          : "Suggerimento AI fallito",
+      );
+    } finally {
+      setAiLoading(false);
+    }
+  }, [apiUrl, aziendaId]);
+
   const finalize = useCallback(async () => {
     setFinalizing(true);
     setFinalizeMessage(null);
@@ -412,6 +484,25 @@ export default function StressAssessmentPage() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={suggestWithAI}
+                disabled={aiLoading}
+                title="Genera misure correttive con AI (gpt-5.4-mini) basate sulle risposte INAIL compilate"
+              >
+                {aiLoading ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Analisi…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                    Suggerisci con AI
+                  </>
+                )}
+              </Button>
               <span className="text-xs uppercase tracking-wide text-muted-foreground">
                 livello attuale
               </span>
