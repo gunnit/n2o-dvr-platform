@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { AlertTriangle, Check, Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, Check, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -85,6 +86,26 @@ const EMPTY_FORM: AziendaFormState = {
 };
 
 type AiMeta = Partial<Record<keyof AziendaFormState, AziendaAutofillFieldMeta>>;
+
+// Feedback issue #11 (2026-05-14): clients with more than one operating
+// location need to declare them all. We keep a single primary
+// `sede_operativa_*` (the columns already on `aziende`) and store the
+// extras as a JSONB list. UI-side this is just a small list editor.
+type SedeExtra = {
+  via: string;
+  citta: string;
+  comune: string;
+  provincia: string;
+  cap: string;
+};
+
+const EMPTY_SEDE: SedeExtra = {
+  via: "",
+  citta: "",
+  comune: "",
+  provincia: "",
+  cap: "",
+};
 
 // Result of /api/v1/lookup/seismic-zone — kept in lockstep with the survey
 // step-azienda type so any backend shape change surfaces in both places.
@@ -182,6 +203,9 @@ export default function NewAziendaPage() {
   // the legale fields into the operativa fields. The flag is UI-only — the
   // backend Azienda schema still has separate operativa columns.
   const [stessaSede, setStessaSede] = useState(false);
+  // Feedback issue #11 (2026-05-14): additional sedi operative beyond the
+  // primary one. Stored server-side as JSONB on aziende.sedi_operative_extra.
+  const [sediExtra, setSediExtra] = useState<SedeExtra[]>([]);
 
   // US-5.1: non-admins cannot create clients. Bounce them with a toast.
   useEffect(() => {
@@ -346,6 +370,9 @@ export default function NewAziendaPage() {
         const next = { ...prev };
         for (const [key, raw] of Object.entries(data.values)) {
           if (raw == null) continue;
+          // Issue #11: extras come back as a list — they don't belong in
+          // the scalar form state, they go to sediExtra below.
+          if (Array.isArray(raw)) continue;
           const k = key as keyof AziendaFormState;
           if (!(k in next)) continue;
           if (next[k] !== "") continue; // don't overwrite operator edits
@@ -353,6 +380,24 @@ export default function NewAziendaPage() {
         }
         return next;
       });
+      // Issue #11: route additional sedi operative (from openapi.com
+      // Registro Imprese unità locali) into the sediExtra state. Only
+      // fills the list when it's currently empty — never overwrites
+      // operator-entered rows.
+      const extrasFromApi = data.values.sedi_operative_extra;
+      if (Array.isArray(extrasFromApi) && extrasFromApi.length > 0) {
+        setSediExtra((prev) =>
+          prev.length === 0
+            ? extrasFromApi.map((s) => ({
+                via: s.via || "",
+                citta: s.citta || "",
+                comune: s.comune || "",
+                provincia: s.provincia || "",
+                cap: s.cap || "",
+              }))
+            : prev,
+        );
+      }
       setAiMeta((prev) => {
         const next: AiMeta = { ...prev };
         for (const [key, m] of Object.entries(data.meta)) {
@@ -473,6 +518,18 @@ export default function NewAziendaPage() {
         orario_lavoro: str(form.orario_lavoro),
         metratura_totale: num(form.metratura_totale),
         zona_sismica: num(form.zona_sismica),
+        // Issue #11: ship the extras as JSONB. Drop completely-empty rows
+        // (operator added then never filled in) and normalise province to
+        // uppercase to match the primary columns' contract.
+        sedi_operative_extra: sediExtra
+          .map((s) => ({
+            via: s.via.trim(),
+            citta: s.citta.trim(),
+            comune: s.comune.trim(),
+            provincia: s.provincia.trim().toUpperCase(),
+            cap: s.cap.trim(),
+          }))
+          .filter((s) => s.via || s.citta || s.comune || s.cap),
       };
 
       const res = await fetch(`${API_URL}/api/v1/aziende`, {
@@ -521,7 +578,10 @@ export default function NewAziendaPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
                 <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="ragione_sociale">Ragione Sociale *</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="ragione_sociale">Ragione Sociale *</Label>
+                    <HelpTooltip text="Denominazione legale della società come registrata in camera di commercio (es. 'Acme SRL')." />
+                  </div>
                   {aiMeta.ragione_sociale && <AiBadge meta={aiMeta.ragione_sociale} />}
                 </div>
                 <Input
@@ -537,7 +597,10 @@ export default function NewAziendaPage() {
 
               <div className="space-y-2 sm:col-span-2">
                 <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="partita_iva">Partita IVA</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="partita_iva">Partita IVA</Label>
+                    <HelpTooltip text="Codice fiscale aziendale di 11 cifre. Usato per l'autofill dei dati dalla camera di commercio (VIES + registri pubblici)." />
+                  </div>
                   {aiMeta.partita_iva && <AiBadge meta={aiMeta.partita_iva} />}
                 </div>
                 <div className="flex gap-2">
@@ -684,7 +747,10 @@ export default function NewAziendaPage() {
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="codice_ateco">Codice ATECO</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="codice_ateco">Codice ATECO</Label>
+                    <HelpTooltip text="Classificazione ISTAT dell'attività economica nel formato XX.XX o XX.XX.XX (es. 62.01.00 = produzione di software). Determina i rischi tipici di settore." />
+                  </div>
                   {aiMeta.codice_ateco && <AiBadge meta={aiMeta.codice_ateco} />}
                 </div>
                 <Input
@@ -706,7 +772,10 @@ export default function NewAziendaPage() {
               <div className="grid gap-4 sm:grid-cols-6">
                 <div className="space-y-1.5 sm:col-span-3">
                   <div className="flex items-center justify-between gap-2">
-                    <Label htmlFor="sede_legale_via">Via / Indirizzo</Label>
+                    <div className="flex items-center gap-1.5">
+                      <Label htmlFor="sede_legale_via">Via / Indirizzo</Label>
+                      <HelpTooltip text="Indirizzo della sede legale dichiarato in visura camerale (via e numero civico)." />
+                    </div>
                     {aiMeta.sede_legale_via && <AiBadge meta={aiMeta.sede_legale_via} />}
                   </div>
                   <Input
@@ -717,7 +786,10 @@ export default function NewAziendaPage() {
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
                   <div className="flex items-center justify-between gap-2">
-                    <Label htmlFor="sede_legale_citta">Citt&agrave;</Label>
+                    <div className="flex items-center gap-1.5">
+                      <Label htmlFor="sede_legale_citta">Citt&agrave;</Label>
+                      <HelpTooltip text="Comune della sede legale (es. 'Milano'). Diverso dal comune operativo se la società ha sedi separate." />
+                    </div>
                     {aiMeta.sede_legale_citta && <AiBadge meta={aiMeta.sede_legale_citta} />}
                   </div>
                   <Input
@@ -779,7 +851,10 @@ export default function NewAziendaPage() {
               <div className="grid gap-4 sm:grid-cols-6">
                 <div className="space-y-1.5 sm:col-span-3">
                   <div className="flex items-center justify-between gap-2">
-                    <Label htmlFor="sede_operativa_via">Via / Indirizzo</Label>
+                    <div className="flex items-center gap-1.5">
+                      <Label htmlFor="sede_operativa_via">Via / Indirizzo</Label>
+                      <HelpTooltip text="Indirizzo dove si svolge effettivamente l'attività. Può coincidere con la sede legale o essere un'unità locale separata." />
+                    </div>
                     {aiMeta.sede_operativa_via && <AiBadge meta={aiMeta.sede_operativa_via} />}
                   </div>
                   <Input
@@ -790,7 +865,10 @@ export default function NewAziendaPage() {
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
                   <div className="flex items-center justify-between gap-2">
-                    <Label htmlFor="sede_operativa_citta">Citt&agrave;</Label>
+                    <div className="flex items-center gap-1.5">
+                      <Label htmlFor="sede_operativa_citta">Citt&agrave;</Label>
+                      <HelpTooltip text="Comune della sede operativa. Usato anche per la lookup zona sismica." />
+                    </div>
                     {aiMeta.sede_operativa_citta && <AiBadge meta={aiMeta.sede_operativa_citta} />}
                   </div>
                   <Input
@@ -825,6 +903,186 @@ export default function NewAziendaPage() {
               </div>
               )}
             </div>
+
+            {/* Altre sedi operative (issue #11) — additional sedi beyond the
+                primary one above. Stored as JSONB on the row. We deliberately
+                make this a simple list editor (no AI fill) — the operator can
+                add as many as they need and remove any row. */}
+            {!stessaSede && (
+              <div className="space-y-3 border-t border-[#e5edf5] pt-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="type-eyebrow">Altre sedi operative</h3>
+                    <HelpTooltip text="Unità locali aggiuntive oltre alla sede operativa principale. Vengono elencate nel DVR insieme alla sede principale." />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setSediExtra((prev) => [...prev, { ...EMPTY_SEDE }])
+                    }
+                    className="gap-1.5"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Aggiungi sede
+                  </Button>
+                </div>
+                {sediExtra.length === 0 ? (
+                  <p className="text-[12px] text-[#64748d]">
+                    Nessuna sede aggiuntiva. Premi &quot;Aggiungi sede&quot; per
+                    inserirne una.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {sediExtra.map((sede, idx) => (
+                      <div
+                        key={idx}
+                        className="rounded-md border border-[#e5edf5] bg-[#f6f9fc] p-3"
+                      >
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <span className="text-[12px] font-medium text-[#273951]">
+                            Sede #{idx + 2}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setSediExtra((prev) =>
+                                prev.filter((_, i) => i !== idx),
+                              )
+                            }
+                            className="h-7 gap-1 text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Rimuovi
+                          </Button>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-6">
+                          <div className="space-y-1 sm:col-span-3">
+                            <Label
+                              htmlFor={`sede-extra-${idx}-via`}
+                              className="text-[11px]"
+                            >
+                              Via / Indirizzo
+                            </Label>
+                            <Input
+                              id={`sede-extra-${idx}-via`}
+                              value={sede.via}
+                              onChange={(e) =>
+                                setSediExtra((prev) =>
+                                  prev.map((s, i) =>
+                                    i === idx ? { ...s, via: e.target.value } : s,
+                                  ),
+                                )
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1 sm:col-span-3">
+                            <Label
+                              htmlFor={`sede-extra-${idx}-citta`}
+                              className="text-[11px]"
+                            >
+                              Citt&agrave;
+                            </Label>
+                            <Input
+                              id={`sede-extra-${idx}-citta`}
+                              value={sede.citta}
+                              onChange={(e) =>
+                                setSediExtra((prev) =>
+                                  prev.map((s, i) =>
+                                    i === idx
+                                      ? { ...s, citta: e.target.value }
+                                      : s,
+                                  ),
+                                )
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1 sm:col-span-2">
+                            <Label
+                              htmlFor={`sede-extra-${idx}-comune`}
+                              className="text-[11px]"
+                            >
+                              Comune (se diverso)
+                            </Label>
+                            <Input
+                              id={`sede-extra-${idx}-comune`}
+                              value={sede.comune}
+                              onChange={(e) =>
+                                setSediExtra((prev) =>
+                                  prev.map((s, i) =>
+                                    i === idx
+                                      ? { ...s, comune: e.target.value }
+                                      : s,
+                                  ),
+                                )
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1 sm:col-span-2">
+                            <Label
+                              htmlFor={`sede-extra-${idx}-prov`}
+                              className="text-[11px]"
+                            >
+                              Prov.
+                            </Label>
+                            <Input
+                              id={`sede-extra-${idx}-prov`}
+                              value={sede.provincia}
+                              onChange={(e) =>
+                                setSediExtra((prev) =>
+                                  prev.map((s, i) =>
+                                    i === idx
+                                      ? {
+                                          ...s,
+                                          provincia: e.target.value
+                                            .toUpperCase()
+                                            .slice(0, 2),
+                                        }
+                                      : s,
+                                  ),
+                                )
+                              }
+                              maxLength={2}
+                            />
+                          </div>
+                          <div className="space-y-1 sm:col-span-2">
+                            <Label
+                              htmlFor={`sede-extra-${idx}-cap`}
+                              className="text-[11px]"
+                            >
+                              CAP
+                            </Label>
+                            <Input
+                              id={`sede-extra-${idx}-cap`}
+                              value={sede.cap}
+                              onChange={(e) =>
+                                setSediExtra((prev) =>
+                                  prev.map((s, i) =>
+                                    i === idx
+                                      ? {
+                                          ...s,
+                                          cap: e.target.value
+                                            .replace(/\D/g, "")
+                                            .slice(0, 5),
+                                        }
+                                      : s,
+                                  ),
+                                )
+                              }
+                              inputMode="numeric"
+                              maxLength={5}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Contatti */}
             <div className="space-y-3 border-t border-[#e5edf5] pt-6">
@@ -937,7 +1195,10 @@ export default function NewAziendaPage() {
                   </div>
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-2">
-                      <Label htmlFor="numero_dipendenti_dichiarati">N° Dipendenti</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label htmlFor="numero_dipendenti_dichiarati">N° Dipendenti</Label>
+                        <HelpTooltip text="Conteggio dei lavoratori subordinati al momento del DVR. Include apprendisti e collaboratori coordinati equiparati." />
+                      </div>
                       {aiMeta.numero_dipendenti_dichiarati && (
                         <AiBadge meta={aiMeta.numero_dipendenti_dichiarati} />
                       )}

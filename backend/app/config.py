@@ -37,6 +37,13 @@ class Settings(BaseSettings):
     # configured. VIES alone already gives ragione sociale + indirizzo.
     SERPER_API_KEY: str = ""
     FIRECRAWL_API_KEY: str = ""
+    # openapi.com Italian Registro Imprese / visura lookup (issue #6,
+    # 2026-05-14). Paid, structured data — ragione sociale, REA, ATECO,
+    # sede legale, unità locali. Set ``OPENAPI_API_KEY`` to enable;
+    # missing key = source skipped, pipeline falls back to VIES + Serper.
+    # Use the prod URL for billed traffic and the test URL for staging.
+    OPENAPI_API_KEY: str = ""
+    OPENAPI_REGISTRY_URL: str = "https://company.openapi.com/IT-start"
     AZIENDA_AUTOFILL_TIMEOUT_SECONDS: float = 12.0
 
     # Google Drive

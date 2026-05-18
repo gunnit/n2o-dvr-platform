@@ -12,6 +12,16 @@ export interface Azienda {
   sede_operativa_citta: string | null;
   cap_operativa: string | null;
   provincia_operativa: string | null;
+  // Issue #11 (2026-05-14): additional sedi operative beyond the primary
+  // one. JSONB column on aziende. Always returned as an array (server
+  // default '[]'), never null.
+  sedi_operative_extra: Array<{
+    via: string;
+    citta: string;
+    comune: string;
+    provincia: string;
+    cap: string;
+  }>;
   attivita: string | null;
   codice_ateco: string | null;
   pec: string | null;
@@ -397,7 +407,18 @@ export interface AziendaAutofillFieldMeta {
 
 export interface AziendaAutofillResponse {
   partita_iva: string;
-  values: Partial<Record<keyof Azienda, string | number | null>>;
+  // Most autofill fields come back as scalars; issue #11's
+  // ``sedi_operative_extra`` is the only list-valued one (extras pulled
+  // from the openapi.com Registro Imprese unità locali list).
+  values: Partial<
+    Record<
+      keyof Azienda,
+      | string
+      | number
+      | Array<{ via: string; citta: string; comune: string; provincia: string; cap: string }>
+      | null
+    >
+  >;
   meta: Partial<Record<keyof Azienda, AziendaAutofillFieldMeta>>;
   warnings: string[];
 }

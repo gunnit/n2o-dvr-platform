@@ -19,6 +19,7 @@ import re
 from typing import Any
 from urllib.parse import urlparse
 
+from app.config import settings
 from app.core.exceptions import AIError
 from app.schemas.azienda import (
     AziendaAutofillFieldMeta,
@@ -30,6 +31,10 @@ from app.services.azienda_autofill.consolidator import (
     consolidate,
 )
 from app.services.azienda_autofill.firecrawl import scrape_site
+from app.services.azienda_autofill.openapi_registry import (
+    OpenAPIRegistryResult,
+    lookup_openapi_registry,
+)
 from app.services.azienda_autofill.serper import SerperResult, search_piva
 from app.services.azienda_autofill.snippet_extractor import (
     ExtractedFacts,
@@ -184,6 +189,7 @@ def _build_response(
     *,
     partita_iva: str,
     vies: VIESResult | None,
+    openapi_reg: OpenAPIRegistryResult | None,
     serper: list[SerperResult],
     facts: ExtractedFacts,
     homepage_url: str | None,
@@ -221,6 +227,63 @@ def _build_response(
         _set("sede_legale_citta", vies.sede_legale_citta, "high", "VIES")
         _set("cap_legale", vies.cap_legale, "high", "VIES")
         _set("provincia_legale", vies.provincia_legale, "high", "VIES")
+
+    # 1b. openapi.com Registro Imprese — paid, structured visura. We mark
+    # high confidence too because it's the official Italian camera di
+    # commercio data, with stronger schema guarantees than the snippet
+    # parser. VIES already-set fields aren't overwritten (the `_set`
+    # helper noops on present keys via the higher priority loop above —
+    # but `_set` itself doesn't dedupe, so we check explicitly).
+    if openapi_reg:
+        _registry_specs: tuple[tuple[str, Any], ...] = (
+            ("ragione_sociale", openapi_reg.ragione_sociale),
+            ("forma_giuridica", openapi_reg.forma_giuridica),
+            ("codice_fiscale", openapi_reg.codice_fiscale),
+            ("rea", openapi_reg.rea),
+            ("codice_ateco", _normalize_ateco(openapi_reg.codice_ateco)),
+            ("data_costituzione", _plausible_data_costituzione(openapi_reg.data_costituzione)),
+            ("capitale_sociale", openapi_reg.capitale_sociale),
+            ("pec", openapi_reg.pec),
+            ("sede_legale_via", openapi_reg.sede_legale_via),
+            ("sede_legale_citta", openapi_reg.sede_legale_citta),
+            ("cap_legale", _normalize_cap(openapi_reg.cap_legale)),
+            ("provincia_legale", _normalize_provincia(openapi_reg.provincia_legale)),
+        )
+        for field, value in _registry_specs:
+            if field in values:
+                continue
+            _set(field, value, "high", "openapi.com Registro Imprese")
+        # Issue #11: unità locali → primary sede operativa + extras list.
+        unita = openapi_reg.sedi_operative or []
+        if unita:
+            primary = unita[0]
+            for field, key in (
+                ("sede_operativa_via", "via"),
+                ("sede_operativa_citta", "citta"),
+                ("cap_operativa", "cap"),
+                ("provincia_operativa", "provincia"),
+            ):
+                if field in values:
+                    continue
+                v = primary.get(key)
+                if field == "cap_operativa":
+                    v = _normalize_cap(v)
+                elif field == "provincia_operativa":
+                    v = _normalize_provincia(v)
+                _set(field, v, "high", "openapi.com Registro Imprese")
+            if len(unita) > 1:
+                # The frontend's autofill merger ignores keys not in
+                # AziendaFormState, but the create payload now accepts
+                # sedi_operative_extra — surface it so the operator's
+                # subsequent submit carries them. Confidence stays high
+                # because each entry came from the registry.
+                extras = [s for s in unita[1:] if any(s.values())]
+                if extras:
+                    values["sedi_operative_extra"] = extras  # type: ignore[assignment]
+                    meta["sedi_operative_extra"] = AziendaAutofillFieldMeta(
+                        confidence="high",
+                        source="openapi.com Registro Imprese",
+                    )
 
     # 2. Deterministic snippet extractors — medium confidence, but the
     # fields are explicit "Field: value" matches in registry-formatted
@@ -317,10 +380,17 @@ async def autofill_from_piva(partita_iva: str) -> AziendaAutofillResponse:
     """
     warnings: list[str] = []
 
-    # Run VIES + Serper concurrently — they don't depend on each other.
+    # Run VIES + Serper + openapi.com (paid Registro Imprese) concurrently —
+    # they don't depend on each other. openapi.com is the paid upgrade
+    # operators asked for in feedback #6 (2026-05-14): structured visura
+    # with REA/ATECO/sede + unità locali, vs the snippet-derived data we
+    # used before. Soft-fails when ``OPENAPI_API_KEY`` is unset.
     vies_task = asyncio.create_task(lookup_vies(partita_iva))
     serper_task = asyncio.create_task(search_piva(partita_iva))
-    vies, serper = await asyncio.gather(vies_task, serper_task)
+    openapi_task = asyncio.create_task(lookup_openapi_registry(partita_iva))
+    vies, serper, openapi_reg = await asyncio.gather(
+        vies_task, serper_task, openapi_task
+    )
 
     if vies is None:
         warnings.append("VIES non disponibile.")
@@ -329,6 +399,13 @@ async def autofill_from_piva(partita_iva: str) -> AziendaAutofillResponse:
 
     if not serper:
         warnings.append("Ricerca Google non disponibile (Serper key mancante o errore).")
+
+    if openapi_reg is None:
+        # Only warn when the key was configured (a transport / auth
+        # failure). Missing key is the expected dev / sandbox state — the
+        # source is just opted out, no UI noise needed.
+        if settings.OPENAPI_API_KEY:
+            warnings.append("openapi.com Registro Imprese non disponibile.")
 
     # Deterministic snippet extraction (no network, no AI). These are
     # the "Field: value" hits from registry snippets — ATECO, REA, PEC,
@@ -361,6 +438,7 @@ async def autofill_from_piva(partita_iva: str) -> AziendaAutofillResponse:
     response = _build_response(
         partita_iva=partita_iva,
         vies=vies,
+        openapi_reg=openapi_reg,
         serper=serper,
         facts=facts,
         homepage_url=homepage_url,

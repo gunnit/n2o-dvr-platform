@@ -85,6 +85,11 @@ class AziendaBase(BaseModel):
     sede_operativa_citta: str | None = None
     cap_operativa: str | None = None
     provincia_operativa: str | None = None
+    # Issue #11 (2026-05-14): additional sedi operative beyond the primary
+    # one above. Stored as JSONB on the row. Each entry: {via, citta,
+    # comune, provincia, cap}. Defaults to [] so legacy callers continue
+    # to work unchanged.
+    sedi_operative_extra: list[dict[str, str]] = []
     attivita: str | None = None
     codice_ateco: str | None = None
     pec: str | None = None
@@ -143,6 +148,7 @@ class AziendaUpdate(BaseModel):
     sede_operativa_citta: str | None = None
     cap_operativa: str | None = None
     provincia_operativa: str | None = None
+    sedi_operative_extra: list[dict[str, str]] | None = None
     attivita: str | None = None
     codice_ateco: str | None = None
     pec: str | None = None
@@ -231,6 +237,11 @@ class AziendaAutofillResponse(BaseModel):
     """
 
     partita_iva: str
-    values: dict[str, str | int | float | None]
+    # ``values`` is dict[field_name, value]. Most fields are scalars (str /
+    # int / float) but issue #11's ``sedi_operative_extra`` is a list of
+    # dicts ([{via, citta, comune, provincia, cap}]). Pydantic v2 handles
+    # the mixed union here cleanly — the frontend dispatches on field
+    # name, not type.
+    values: dict[str, str | int | float | list[dict[str, str]] | None]
     meta: dict[str, AziendaAutofillFieldMeta]
     warnings: list[str] = []

@@ -1,8 +1,9 @@
 import uuid
 from datetime import date, datetime
+from typing import Any
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, LargeBinary, Numeric, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, LargeBinary, Numeric, String, Text, func, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -23,6 +24,17 @@ class Azienda(Base):
     sede_operativa_citta: Mapped[str | None] = mapped_column(String)
     cap_operativa: Mapped[str | None] = mapped_column(String(5))
     provincia_operativa: Mapped[str | None] = mapped_column(String(2))
+    # Feedback issue #11 (2026-05-14): clients with multiple operating
+    # locations. The four `sede_operativa_*` columns above hold the primary
+    # / "headquarters" operating address; this JSONB column carries the
+    # extras as `[{"via": "...", "citta": "...", "comune": "...",
+    # "provincia": "...", "cap": "..."}]`. We picked JSONB over a separate
+    # `sedi_operative` table because (a) every consumer needs the whole
+    # list together with the azienda row anyway, (b) extras are never
+    # joined or filtered on, and (c) it keeps the migration trivial.
+    sedi_operative_extra: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
     attivita: Mapped[str | None] = mapped_column(Text)
     codice_ateco: Mapped[str | None] = mapped_column(String)
     codice_fiscale: Mapped[str | None] = mapped_column(String)

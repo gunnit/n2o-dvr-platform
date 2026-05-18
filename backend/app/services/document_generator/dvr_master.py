@@ -2394,6 +2394,22 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                     azienda.sede_operativa_via, azienda.sede_operativa_citta
                 ))
             )
+        # Issue #11 (2026-05-14): when the client has more than one
+        # operating address, list the extras as additional rows under the
+        # "Altre sedi operative" label. The list is whatever the operator
+        # entered in the aziende form — empty rows have already been
+        # filtered out at submit time, but defend against missing-attr
+        # for older Azienda rows that pre-date the JSONB column.
+        extras = getattr(azienda, "sedi_operative_extra", None) or []
+        for sede in extras:
+            if not isinstance(sede, dict):
+                continue
+            line = self._format_address(
+                sede.get("via"),
+                sede.get("citta") or sede.get("comune"),
+            )
+            if line and line != "—":
+                rows.append(("Altre sedi operative", line))
         self._add_key_value_table(doc, rows)
 
     def _add_environment_section(
