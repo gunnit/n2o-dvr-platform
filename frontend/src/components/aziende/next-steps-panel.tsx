@@ -219,9 +219,12 @@ function computeSteps(
 
   const docsCompleted = documenti.filter((d) => DOWNLOADABLE.has(d.status));
   const docsStale = documenti.filter((d) => d.stale_snapshot);
-  const docsBlocked =
-    !surveyDelivered ||
-    (applicableRisks.length > 0 && missingMeasures > 0);
+  // #17b — Misure di prevenzione / miglioramento are at the operator's
+  // discretion ("LE MISURE SONO A DISCREZIONE DI CHI REDIGE IL DVR",
+  // feedback 2026-05-18). We only hard-block generation on the sopralluogo
+  // gate; missing measures stay surfaced as a warning step above but no
+  // longer prevent the operator from generating the DVR.
+  const docsBlocked = !surveyDelivered;
 
   const steps: Step[] = [];
 
@@ -321,9 +324,7 @@ function computeSteps(
 
   if (docsBlocked) {
     docStatus = "blocked";
-    docDetail = !surveyDelivered
-      ? "Disponibile dopo la firma del sopralluogo."
-      : `Definisci prima le misure per i ${missingMeasures} rischi mancanti.`;
+    docDetail = "Disponibile dopo la firma del sopralluogo.";
     docCta = undefined;
   } else if (docsCompleted.length === 0) {
     docStatus = "todo";

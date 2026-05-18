@@ -242,16 +242,22 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
         rows.length === 0
           ? 0
           : Math.max(...rows.map((r) => r.ordine)) + 1;
-      const created = await apiFetch<MisuraMiglioramento>(
+      await apiFetch<MisuraMiglioramento>(
         `/api/v1/aziende/${aziendaId}/misure-miglioramento`,
         {
           method: "POST",
           body: JSON.stringify({ ...payload, ordine: nextOrdine }),
         },
       );
-      setRows((prev) => [...prev, created]);
+      // #17a — Always refetch after a successful write instead of relying
+      // on optimistic local merges. Two concurrent saves (the operator's
+      // reported repro: clicking Salva twice on a slow connection) could
+      // race the setRows callbacks and silently drop a row; an explicit
+      // server reload makes "ciò che vedo == ciò che è salvato" the
+      // single source of truth.
       setCreateDraft(EMPTY_DRAFT);
       setCreateOpen(false);
+      await load();
       toast.success("Misura salvata");
     } catch (err) {
       toast.error(
@@ -278,19 +284,21 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
       curr.map((r) => (r.id === editingId ? { ...r, ...payload } : r)),
     );
     try {
-      const updated = await apiFetch<MisuraMiglioramento>(
+      await apiFetch<MisuraMiglioramento>(
         `/api/v1/aziende/${aziendaId}/misure-miglioramento/${editingId}`,
         {
           method: "PUT",
           body: JSON.stringify(payload),
         },
       );
-      setRows((curr) =>
-        curr.map((r) => (r.id === editingId ? updated : r)),
-      );
-      toast.success("Misura salvata");
+      // #17a — Refetch after PUT so the grid reflects whatever the server
+      // actually stored (incl. updated_at, server-normalized fields). The
+      // earlier optimistic-only path could desync if a second save fired
+      // before the first PATCH response merged back into state.
       setEditingId(null);
       setEditDraft(EMPTY_DRAFT);
+      await load();
+      toast.success("Misura salvata");
     } catch (err) {
       setRows(prev);
       toast.error(
@@ -313,8 +321,11 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
         `/api/v1/aziende/${aziendaId}/misure-miglioramento/${deleteRow.id}`,
         { method: "DELETE" },
       );
-      toast.success("Misura eliminata");
       setDeleteRow(null);
+      // #17a — Same refetch-after-write pattern as create/update so the
+      // grid never drifts from the server after a destructive action.
+      await load();
+      toast.success("Misura eliminata");
     } catch (err) {
       setRows(prev);
       toast.error(
