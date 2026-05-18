@@ -303,7 +303,7 @@ function SDSUploadZone({
       <div className="mb-6">
         <h3 className="flex items-center gap-2 font-heading text-xl font-bold text-on-surface">
           <Sparkles className="h-5 w-5 text-primary" />
-          Carica schede di sicurezza (SDS)
+          Carica schede di sicurezza delle sostanze chimiche (SDS)
         </h3>
         <p className="mt-1 text-sm text-on-surface-variant">
           Trascina fino a {MAX_FILES_PER_BATCH} PDF (max {MAX_FILE_SIZE_MB} MB

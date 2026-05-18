@@ -53,6 +53,9 @@ const TIPOLOGIE_CONTRATTUALI = [
   "CO CO CO",
   "DATORE DI LAVORO",
   "SOCIO LAVORATORE",
+  // added 2026-05-18 (issue #23)
+  "APPRENDISTA",
+  "ARTIGIANO",
 ];
 
 // Feedback 2026-04-28 (#a964772f, in_revisione): flagging an attrezzatura
