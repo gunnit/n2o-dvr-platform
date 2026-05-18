@@ -432,6 +432,47 @@ export function StepAttrezzature({
     }
   }, [selectedAmbiente, onChange, persistUpdate, persistedIds]);
 
+  // Feedback #34 (2026-05-18): bulk-toggle "verifiche periodiche" with the
+  // same pattern as toggleAllMarcaturaCe. The field exists on the model but
+  // the UI was previously removed.
+  const toggleAllVerifichePeriodiche = useCallback(async () => {
+    if (!selectedAmbiente) return;
+    const ambienteId = selectedAmbiente.id;
+    const rows = attrezzatureRef.current.filter(
+      (a) =>
+        a.ambiente_id === ambienteId &&
+        (a.descrizione?.trim() ?? "").length > 0,
+    );
+    if (rows.length === 0) return;
+    const allOn = rows.every((a) => a.verifiche_periodiche);
+    const target = !allOn;
+    const targetIds = new Set(rows.map((r) => r.id));
+
+    setBulkBusy(true);
+    try {
+      onChange(
+        attrezzatureRef.current.map((a) =>
+          targetIds.has(a.id) && a.verifiche_periodiche !== target
+            ? { ...a, verifiche_periodiche: target }
+            : a,
+        ),
+      );
+      for (const r of rows) {
+        if (r.verifiche_periodiche === target) continue;
+        if (!persistedIds.has(r.id)) continue;
+        try {
+          await persistUpdate(r.id, { verifiche_periodiche: target });
+        } catch (e) {
+          toast.error(
+            e instanceof Error ? e.message : "Errore nel salvataggio",
+          );
+        }
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  }, [selectedAmbiente, onChange, persistUpdate, persistedIds]);
+
   // Custom equipment = items whose descrizione is NOT in ANY suggested list
   const allSuggestedNames = useMemo(() => {
     const names = new Set<string>();
@@ -995,6 +1036,9 @@ export function StepAttrezzature({
         const allCeOn =
           namedAttrezzature.length > 0 &&
           namedAttrezzature.every((a) => a.marcatura_ce);
+        const allVerOn =
+          namedAttrezzature.length > 0 &&
+          namedAttrezzature.every((a) => a.verifiche_periodiche);
         return (
         <Card>
           <CardHeader>
@@ -1004,24 +1048,41 @@ export function StepAttrezzature({
                   Attrezzature selezionate ({namedAttrezzature.length})
                 </CardTitle>
                 <CardDescription>
-                  Imposta marcatura CE per ogni attrezzatura
+                  Imposta marcatura CE e verifiche periodiche per ogni
+                  attrezzatura
                 </CardDescription>
               </div>
               {namedAttrezzature.length > 1 && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={toggleAllMarcaturaCe}
-                  disabled={bulkBusy}
-                >
-                  {bulkBusy ? (
-                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  ) : null}
-                  {allCeOn
-                    ? "Deseleziona tutte CE"
-                    : "Seleziona tutte CE"}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleAllMarcaturaCe}
+                    disabled={bulkBusy}
+                  >
+                    {bulkBusy ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : null}
+                    {allCeOn
+                      ? "Deseleziona tutte CE"
+                      : "Seleziona tutte CE"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleAllVerifichePeriodiche}
+                    disabled={bulkBusy}
+                  >
+                    {bulkBusy ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : null}
+                    {allVerOn
+                      ? "Deseleziona tutte verifiche"
+                      : "Seleziona tutte verifiche"}
+                  </Button>
+                </div>
               )}
             </div>
           </CardHeader>
@@ -1046,6 +1107,21 @@ export function StepAttrezzature({
                     className="accent-primary"
                   />
                   Marcatura CE
+                </label>
+
+                <label className="flex items-center gap-2 rounded-lg border border-input px-3 py-1.5 text-sm transition-colors hover:bg-muted has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+                  <input
+                    type="checkbox"
+                    checked={att.verifiche_periodiche}
+                    onChange={(e) => {
+                      updateLocal(att.id, {
+                        verifiche_periodiche: e.target.checked,
+                      });
+                      void commitAttrezzatura(att.id);
+                    }}
+                    className="accent-primary"
+                  />
+                  Verifiche periodiche
                 </label>
 
                 <Button
@@ -1130,6 +1206,20 @@ export function StepAttrezzature({
                           className="accent-primary"
                         />
                         Marcatura CE
+                      </label>
+                      <label className="flex items-center gap-2 rounded-lg border border-input px-4 py-2 text-sm transition-colors hover:bg-muted has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+                        <input
+                          type="checkbox"
+                          checked={att.verifiche_periodiche}
+                          onChange={(e) => {
+                            updateLocal(att.id, {
+                              verifiche_periodiche: e.target.checked,
+                            });
+                            void commitAttrezzatura(att.id);
+                          }}
+                          className="accent-primary"
+                        />
+                        Verifiche periodiche
                       </label>
                     </div>
                   </div>

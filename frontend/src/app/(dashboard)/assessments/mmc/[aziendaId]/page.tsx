@@ -103,6 +103,35 @@ export default function MmcAssessmentPage() {
     }
   }, [aziendaId]);
 
+  const deleteValutazione = useCallback(
+    async (valutazioneId: string, nominativo: string) => {
+      if (
+        !window.confirm(
+          `Eliminare la valutazione MMC più recente di ${nominativo}? L'operazione è irreversibile.`,
+        )
+      ) {
+        return;
+      }
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const headers = await authHeaders();
+        const res = await fetch(`${apiUrl}/api/v1/mmc/${valutazioneId}`, {
+          method: "DELETE",
+          headers,
+        });
+        if (!res.ok && res.status !== 204) {
+          throw new Error(`Errore ${res.status}`);
+        }
+        await refetchValutazioni();
+      } catch (err) {
+        setLoadError(
+          err instanceof Error ? err.message : "Eliminazione fallita",
+        );
+      }
+    },
+    [refetchValutazioni],
+  );
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -315,6 +344,17 @@ export default function MmcAssessmentPage() {
                       <span className="text-emerald-700/80">
                         — Valutato il {formatDateIt(v.created_at)}
                       </span>
+                    ) : null}
+                    {v ? (
+                      <button
+                        type="button"
+                        aria-label={`Elimina ultima valutazione di ${p.nominativo}`}
+                        title="Elimina valutazione più recente"
+                        onClick={() => deleteValutazione(v.id, p.nominativo)}
+                        className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-emerald-600/70 hover:bg-rose-100 hover:text-rose-700"
+                      >
+                        ×
+                      </button>
                     ) : null}
                   </li>
                 );

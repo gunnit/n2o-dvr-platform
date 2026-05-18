@@ -9,7 +9,6 @@ import { AlertTriangle, Check, Loader2, Plus, Sparkles, Trash2 } from "lucide-re
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -580,7 +579,6 @@ export default function NewAziendaPage() {
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5">
                     <Label htmlFor="ragione_sociale">Ragione Sociale *</Label>
-                    <HelpTooltip text="Denominazione legale della società come registrata in camera di commercio (es. 'Acme SRL')." />
                   </div>
                   {aiMeta.ragione_sociale && <AiBadge meta={aiMeta.ragione_sociale} />}
                 </div>
@@ -599,7 +597,6 @@ export default function NewAziendaPage() {
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5">
                     <Label htmlFor="partita_iva">Partita IVA</Label>
-                    <HelpTooltip text="Codice fiscale aziendale di 11 cifre. Usato per l'autofill dei dati dalla camera di commercio (VIES + registri pubblici)." />
                   </div>
                   {aiMeta.partita_iva && <AiBadge meta={aiMeta.partita_iva} />}
                 </div>
@@ -749,7 +746,6 @@ export default function NewAziendaPage() {
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5">
                     <Label htmlFor="codice_ateco">Codice ATECO</Label>
-                    <HelpTooltip text="Classificazione ISTAT dell'attività economica nel formato XX.XX o XX.XX.XX (es. 62.01.00 = produzione di software). Determina i rischi tipici di settore." />
                   </div>
                   {aiMeta.codice_ateco && <AiBadge meta={aiMeta.codice_ateco} />}
                 </div>
@@ -774,7 +770,6 @@ export default function NewAziendaPage() {
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
                       <Label htmlFor="sede_legale_via">Via / Indirizzo</Label>
-                      <HelpTooltip text="Indirizzo della sede legale dichiarato in visura camerale (via e numero civico)." />
                     </div>
                     {aiMeta.sede_legale_via && <AiBadge meta={aiMeta.sede_legale_via} />}
                   </div>
@@ -788,7 +783,6 @@ export default function NewAziendaPage() {
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
                       <Label htmlFor="sede_legale_citta">Citt&agrave;</Label>
-                      <HelpTooltip text="Comune della sede legale (es. 'Milano'). Diverso dal comune operativo se la società ha sedi separate." />
                     </div>
                     {aiMeta.sede_legale_citta && <AiBadge meta={aiMeta.sede_legale_citta} />}
                   </div>
@@ -853,7 +847,6 @@ export default function NewAziendaPage() {
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
                       <Label htmlFor="sede_operativa_via">Via / Indirizzo</Label>
-                      <HelpTooltip text="Indirizzo dove si svolge effettivamente l'attività. Può coincidere con la sede legale o essere un'unità locale separata." />
                     </div>
                     {aiMeta.sede_operativa_via && <AiBadge meta={aiMeta.sede_operativa_via} />}
                   </div>
@@ -867,7 +860,6 @@ export default function NewAziendaPage() {
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
                       <Label htmlFor="sede_operativa_citta">Citt&agrave;</Label>
-                      <HelpTooltip text="Comune della sede operativa. Usato anche per la lookup zona sismica." />
                     </div>
                     {aiMeta.sede_operativa_citta && <AiBadge meta={aiMeta.sede_operativa_citta} />}
                   </div>
@@ -913,7 +905,6 @@ export default function NewAziendaPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-1.5">
                     <h3 className="type-eyebrow">Altre sedi operative</h3>
-                    <HelpTooltip text="Unità locali aggiuntive oltre alla sede operativa principale. Vengono elencate nel DVR insieme alla sede principale." />
                   </div>
                   <Button
                     type="button"
@@ -1197,7 +1188,6 @@ export default function NewAziendaPage() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5">
                         <Label htmlFor="numero_dipendenti_dichiarati">N° Dipendenti</Label>
-                        <HelpTooltip text="Conteggio dei lavoratori subordinati al momento del DVR. Include apprendisti e collaboratori coordinati equiparati." />
                       </div>
                       {aiMeta.numero_dipendenti_dichiarati && (
                         <AiBadge meta={aiMeta.numero_dipendenti_dichiarati} />

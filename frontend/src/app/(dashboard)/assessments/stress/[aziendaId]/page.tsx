@@ -117,6 +117,10 @@ export default function StressAssessmentPage() {
   const [aiLoading, setAiLoading] = useState(false);
   // Track the last saved text per row so we can detect dirty state on blur.
   const lastSavedTextRef = useRef<Map<string, string>>(new Map());
+  // Feedback #31 (2026-05-18): bump on every successful save/delete so the
+  // per-row "Salvato / Da salvare" badge re-renders. The ref alone won't
+  // trigger React renders.
+  const [savedTick, setSavedTick] = useState(0);
 
   // Load azienda metadata (best-effort — if auth not set up, we fall back to
   // the raw id so the UI still works for testing).
@@ -190,16 +194,19 @@ export default function StressAssessmentPage() {
             lastSavedTextRef.current = new Map(
               fromLibrary.map((m) => [m.id, m.text]),
             );
+            setSavedTick((t) => t + 1);
             setMisure(merged);
           }
         } else if (!cancelled) {
           setMisure(defaults);
           lastSavedTextRef.current = new Map();
+          setSavedTick((t) => t + 1);
         }
       } catch {
         if (!cancelled) {
           setMisure(defaults);
           lastSavedTextRef.current = new Map();
+          setSavedTick((t) => t + 1);
         }
       }
     }
@@ -256,6 +263,7 @@ export default function StressAssessmentPage() {
           if (!res.ok) throw new Error(`Errore ${res.status}`);
           const saved = (await res.json()) as StressMisuraLibreria;
           lastSavedTextRef.current.set(id, saved.testo);
+          setSavedTick((t) => t + 1);
           setMisure((prev) =>
             prev.map((m) =>
               m.id === id
@@ -280,6 +288,7 @@ export default function StressAssessmentPage() {
           if (!res.ok) throw new Error(`Errore ${res.status}`);
           const saved = (await res.json()) as StressMisuraLibreria;
           lastSavedTextRef.current.set(id, saved.testo);
+          setSavedTick((t) => t + 1);
           setMisure((prev) =>
             prev.map((m) =>
               m.id === id
@@ -335,6 +344,7 @@ export default function StressAssessmentPage() {
         }
       }
       lastSavedTextRef.current.delete(id);
+      setSavedTick((t) => t + 1);
       setMisure((prev) => prev.filter((m) => m.id !== id));
     },
     [apiUrl, aziendaId, misure],
@@ -529,47 +539,83 @@ export default function StressAssessmentPage() {
             </p>
           )}
           <ul className="space-y-2">
-            {misure.map((m, idx) => (
-              <li
-                key={m.id}
-                className="group rounded-md border border-border bg-background p-3"
-              >
-                <div className="flex flex-wrap items-start gap-2">
-                  <Badge variant="outline" className="mt-0.5 shrink-0 text-[10px]">
-                    {idx + 1}
-                  </Badge>
-                  <textarea
-                    className="flex-1 min-w-0 resize-none bg-transparent text-sm leading-relaxed outline-none focus:outline-none"
-                    rows={Math.max(2, Math.ceil((m.text.length || 20) / 90))}
-                    value={m.text}
-                    placeholder="Descrivi la misura correttiva…"
-                    onChange={(e) => updateMisuraText(m.id, e.target.value)}
-                    onBlur={() => saveMisura(m.id)}
-                  />
-                  <div className="flex shrink-0 items-center gap-2">
-                    {m.personalizzata && (
-                      <Badge variant="secondary">Personalizzato</Badge>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => saveMisura(m.id)}
-                    >
-                      Salva
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
-                      onClick={() => removeMisura(m.id)}
-                    >
-                      Rimuovi
-                    </Button>
+            {misure.map((m, idx) => {
+              // savedTick keeps this dependent on lastSavedTextRef mutations
+              void savedTick;
+              const lastSaved = lastSavedTextRef.current.get(m.id);
+              const trimmed = m.text.trim();
+              const isDefaultUntouched =
+                m.originalText !== undefined &&
+                m.originalText === m.text &&
+                !m.libraryId;
+              const persisted = lastSaved !== undefined;
+              const dirty =
+                !!trimmed && !isDefaultUntouched && lastSaved !== m.text;
+              return (
+                <li
+                  key={m.id}
+                  className={cn(
+                    "group rounded-md border p-3 transition-colors",
+                    dirty
+                      ? "border-amber-300 bg-amber-50/40"
+                      : persisted
+                        ? "border-emerald-300/60 bg-emerald-50/30"
+                        : "border-border bg-background",
+                  )}
+                >
+                  <div className="flex flex-wrap items-start gap-2">
+                    <Badge variant="outline" className="mt-0.5 shrink-0 text-[10px]">
+                      {idx + 1}
+                    </Badge>
+                    <textarea
+                      className="flex-1 min-w-0 resize-none bg-transparent text-sm leading-relaxed outline-none focus:outline-none"
+                      rows={Math.max(2, Math.ceil((m.text.length || 20) / 90))}
+                      value={m.text}
+                      placeholder="Descrivi la misura correttiva…"
+                      onChange={(e) => updateMisuraText(m.id, e.target.value)}
+                      onBlur={() => saveMisura(m.id)}
+                    />
+                    <div className="flex shrink-0 items-center gap-2">
+                      {m.personalizzata && (
+                        <Badge variant="secondary">Personalizzato</Badge>
+                      )}
+                      {dirty ? (
+                        <Badge
+                          variant="outline"
+                          className="border-amber-400/70 text-amber-700"
+                        >
+                          Da salvare
+                        </Badge>
+                      ) : persisted ? (
+                        <Badge
+                          variant="outline"
+                          className="border-emerald-400/70 text-emerald-700"
+                        >
+                          ✓ Salvato
+                        </Badge>
+                      ) : null}
+                      <Button
+                        variant={dirty ? "default" : "ghost"}
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => saveMisura(m.id)}
+                        disabled={!dirty}
+                      >
+                        Salva
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                        onClick={() => removeMisura(m.id)}
+                      >
+                        Rimuovi
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
           <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
             <Button variant="outline" size="sm" onClick={addMisura}>
