@@ -19,6 +19,27 @@ import type { Azienda } from "@/types";
 
 const EMPTY_SUMMARY: VdtSummary = summarize([]);
 
+interface VdtValutazioneRow {
+  id: string;
+  persona_id: string | null;
+  postazione: string;
+  ore_settimanali: number;
+  esposto: boolean;
+  created_at: string;
+}
+
+function formatDateIt(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    return `${dd}/${mm}/${d.getFullYear()}`;
+  } catch {
+    return iso;
+  }
+}
+
 async function authHeaders(): Promise<HeadersInit> {
   let token: string | null = null;
   try {
@@ -39,10 +60,28 @@ export default function VdtAssessmentPage() {
 
   const [azienda, setAzienda] = useState<Azienda | null>(null);
   const [persone, setPersone] = useState<PersonaOption[]>([]);
+  const [existingValutazioni, setExistingValutazioni] = useState<VdtValutazioneRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [summary, setSummary] = useState<VdtSummary>(EMPTY_SUMMARY);
   const [finalizing, setFinalizing] = useState(false);
   const [finalizeMessage, setFinalizeMessage] = useState<string | null>(null);
+
+  const refetchValutazioni = useCallback(async () => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const headers = await authHeaders();
+      const res = await fetch(
+        `${apiUrl}/api/v1/aziende/${aziendaId}/vdt`,
+        { headers },
+      );
+      if (res.ok) {
+        const rows = (await res.json()) as VdtValutazioneRow[];
+        setExistingValutazioni(Array.isArray(rows) ? rows : []);
+      }
+    } catch {
+      /* noop */
+    }
+  }, [aziendaId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,9 +89,10 @@ export default function VdtAssessmentPage() {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         const headers = await authHeaders();
-        const [azRes, persRes] = await Promise.all([
+        const [azRes, persRes, vdtRes] = await Promise.all([
           fetch(`${apiUrl}/api/v1/aziende/${aziendaId}`, { headers }),
           fetch(`${apiUrl}/api/v1/aziende/${aziendaId}/persone`, { headers }),
+          fetch(`${apiUrl}/api/v1/aziende/${aziendaId}/vdt`, { headers }),
         ]);
         if (!azRes.ok) throw new Error(`Errore ${azRes.status}`);
         const azData = (await azRes.json()) as Azienda;
@@ -60,6 +100,12 @@ export default function VdtAssessmentPage() {
         if (persRes.ok) {
           const persData = (await persRes.json()) as PersonaOption[];
           if (!cancelled) setPersone(persData);
+        }
+        if (vdtRes.ok) {
+          const vdtData = (await vdtRes.json()) as VdtValutazioneRow[];
+          if (!cancelled) {
+            setExistingValutazioni(Array.isArray(vdtData) ? vdtData : []);
+          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -74,6 +120,23 @@ export default function VdtAssessmentPage() {
       cancelled = true;
     };
   }, [aziendaId]);
+
+  // Most-recent valutazione per persona_id, for "Già valutati" surfacing.
+  const valutatePerPersona = useMemo(() => {
+    const map = new Map<string, VdtValutazioneRow>();
+    for (const row of existingValutazioni) {
+      if (!row.persona_id) continue;
+      const prev = map.get(row.persona_id);
+      if (!prev || new Date(row.created_at) > new Date(prev.created_at)) {
+        map.set(row.persona_id, row);
+      }
+    }
+    return map;
+  }, [existingValutazioni]);
+
+  const personeGiaValutate = useMemo(() => {
+    return persone.filter((p) => valutatePerPersona.has(p.id));
+  }, [persone, valutatePerPersona]);
 
   const allClassified = summary.total > 0 && summary.incompleti === 0;
 
@@ -131,6 +194,8 @@ export default function VdtAssessmentPage() {
       setFinalizeMessage(
         `Valutazione archiviata: ${saved} postazioni salvate · ${summary.esposti} esposti.`,
       );
+      // Re-fetch so the "Già valutati" badge reflects the new rows.
+      await refetchValutazioni();
     } catch (err) {
       setFinalizeMessage(
         err instanceof Error
@@ -140,7 +205,7 @@ export default function VdtAssessmentPage() {
     } finally {
       setFinalizing(false);
     }
-  }, [aziendaId, summary]);
+  }, [aziendaId, summary, refetchValutazioni]);
 
   const pageSubtitle = useMemo(() => {
     if (loadError) return `Azienda ${aziendaId} (metadati non disponibili)`;
@@ -162,6 +227,42 @@ export default function VdtAssessmentPage() {
           <p className="text-sm text-muted-foreground">{pageSubtitle}</p>
         </div>
       </div>
+
+      {personeGiaValutate.length > 0 && (
+        <Card className="border-emerald-300/60 bg-emerald-50/60">
+          <CardContent className="space-y-2 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">
+                Già valutati: {personeGiaValutate.length}
+              </Badge>
+              <span className="text-xs text-muted-foreground">
+                Lavoratori con almeno una valutazione VDT in archivio.
+              </span>
+            </div>
+            <ul className="flex flex-wrap gap-2 text-xs">
+              {personeGiaValutate.map((p) => {
+                const v = valutatePerPersona.get(p.id);
+                return (
+                  <li
+                    key={p.id}
+                    className="flex items-center gap-1 rounded-md border border-emerald-300/70 bg-white px-2 py-1 text-emerald-900"
+                  >
+                    <span aria-hidden className="text-emerald-600">
+                      ✓
+                    </span>
+                    <span className="font-medium">{p.nominativo}</span>
+                    {v ? (
+                      <span className="text-emerald-700/80">
+                        — Valutato il {formatDateIt(v.created_at)}
+                      </span>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       <VdtForm
         aziendaId={aziendaId}
