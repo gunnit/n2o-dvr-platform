@@ -304,6 +304,11 @@ export default function PersoneTab({ persone, ambienti }: PersoneTabProps) {
                                 Esterno
                               </span>
                             )}
+                            {p.training_recente_completato && (
+                              <span className="rounded-sm border border-emerald-300 bg-emerald-50 px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide text-emerald-800">
+                                Formaz. OK
+                              </span>
+                            )}
                           </div>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[#64748d] tnum">
                             {cfMasked && <span>{cfMasked}</span>}

@@ -30,6 +30,9 @@ class PersonaBase(BaseModel):
     dpi_codes: list[str] = Field(default_factory=list)
     rischi_specifici_codes: list[str] = Field(default_factory=list)
     dpi_rischi_note: str | None = None
+    # Feedback #3 (2026-05-19): training-aggiornata flag. Bool only — no
+    # date / expiry until the client asks for it.
+    training_recente_completato: bool = False
 
 
 class PersonaCreate(PersonaBase):
@@ -57,6 +60,7 @@ class PersonaUpdate(BaseModel):
     dpi_codes: list[str] | None = None
     rischi_specifici_codes: list[str] | None = None
     dpi_rischi_note: str | None = None
+    training_recente_completato: bool | None = None
     # When present the M2M is rewritten; when absent it is left untouched.
     ambiente_ids: list[uuid.UUID] | None = None
 

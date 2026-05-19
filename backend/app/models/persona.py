@@ -52,6 +52,13 @@ class Persona(Base):
         JSONB, nullable=False, default=list, server_default="[]"
     )
     dpi_rischi_note: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Feedback #3 (2026-05-19): explicit flag tracking whether this worker has
+    # completed the most recent mandatory training cycle (D.Lgs. 81/2008 art. 37).
+    # Bool only — last-training-date and expiry deferred until the client confirms
+    # they want to manage that level of detail.
+    training_recente_completato: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     azienda: Mapped["Azienda"] = relationship(back_populates="persone")

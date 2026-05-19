@@ -95,6 +95,9 @@ export interface Persona {
   dpi_codes: string[];
   rischi_specifici_codes: string[];
   dpi_rischi_note: string | null;
+  // Feedback #3 (2026-05-19): per-worker flag for whether the most recent
+  // mandatory training cycle is completed (D.Lgs. 81/2008 art. 37).
+  training_recente_completato: boolean;
   ambiente_ids: string[];
 }
 

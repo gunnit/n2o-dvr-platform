@@ -2800,6 +2800,29 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             "Programma di Formazione, Informazione ed Addestramento", level=2
         )
 
+        # Feedback #3 (2026-05-19): surface the current training-completion
+        # status so the DdL sees at a glance how many workers still need the
+        # latest cycle before the programma table.
+        total = len(persone)
+        if total > 0:
+            done = sum(
+                1 for p in persone if getattr(p, "training_recente_completato", False)
+            )
+            pending = total - done
+            if pending == 0:
+                doc.add_paragraph(
+                    f"Stato formazione attuale: tutti i {total} lavoratori "
+                    "hanno completato la formazione piu recente."
+                )
+            else:
+                noun = "lavoratore" if pending == 1 else "lavoratori"
+                verb = "necessita" if pending == 1 else "necessitano"
+                doc.add_paragraph(
+                    f"Stato formazione attuale: {done}/{total} lavoratori "
+                    f"hanno completato la formazione piu recente; "
+                    f"{pending} {noun} {verb} di aggiornamento."
+                )
+
         rows: list[list[str]] = []
 
         # Generic worker formation — applies to every mansione.

@@ -139,6 +139,7 @@ function createEmptyPersona(aziendaId: string): Persona {
     dpi_codes: [],
     rischi_specifici_codes: [],
     dpi_rischi_note: null,
+    training_recente_completato: false,
   };
 }
 
@@ -257,6 +258,7 @@ export function StepPersone({
         // saved last from step-dpi-rischi.
         dpi_codes: editing.dpi_codes,
         rischi_specifici_codes: editing.rischi_specifici_codes,
+        training_recente_completato: editing.training_recente_completato,
       };
       if (editingIndex === null) {
         const created = await apiFetch<Persona>(
@@ -800,6 +802,28 @@ export function StepPersone({
                   </label>
                 </div>
               )}
+
+              {/* Formazione aggiornata — feedback #3 (2026-05-19).
+                  D.Lgs. 81/2008 art. 37: ogni lavoratore deve avere
+                  formazione generale + specifica all'assunzione e
+                  aggiornamento quinquennale. Il flag traccia se il ciclo
+                  piu recente e' stato completato. */}
+              <div className="space-y-2">
+                <Label>Formazione obbligatoria</Label>
+                <label className="flex items-center gap-2 rounded-lg border border-input px-3 py-1.5 text-sm transition-colors hover:bg-muted has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+                  <input
+                    type="checkbox"
+                    checked={!!editing.training_recente_completato}
+                    onChange={(e) =>
+                      updateEditing({
+                        training_recente_completato: e.target.checked,
+                      })
+                    }
+                    className="accent-primary"
+                  />
+                  Formazione piu recente completata (D.Lgs. 81/2008 art. 37)
+                </label>
+              </div>
             </div>
           )}
 
