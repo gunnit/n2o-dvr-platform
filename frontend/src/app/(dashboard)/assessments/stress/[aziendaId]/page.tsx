@@ -115,6 +115,15 @@ export default function StressAssessmentPage() {
   const [finalizing, setFinalizing] = useState(false);
   const [finalizeMessage, setFinalizeMessage] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  // Feedback #31 (2026-05-18): hydrate the checklist from any persisted
+  // StressValutazione before mounting the checklist component, so a
+  // returning operator sees the previous run instead of an empty form.
+  // The checklist reads localStorage on mount, so we have to write the
+  // saved answers BEFORE it renders — gate render on `hydrated`.
+  const [hydrated, setHydrated] = useState(false);
+  // Timestamp of the latest persisted valutazione, for the finalize
+  // banner. Null until the operator confirms at least once.
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   // Track the last saved text per row so we can detect dirty state on blur.
   const lastSavedTextRef = useRef<Map<string, string>>(new Map());
   // Feedback #31 (2026-05-18): bump on every successful save/delete so the
@@ -146,6 +155,74 @@ export default function StressAssessmentPage() {
       }
     }
     if (aziendaId) load();
+    return () => {
+      cancelled = true;
+    };
+  }, [aziendaId, apiUrl]);
+
+  // Hydrate checklist answers from any persisted StressValutazione. Runs
+  // once on mount. We write into localStorage (the StressChecklist owns
+  // its state via that key) and only then flip `hydrated` so the
+  // checklist mounts with the right initial answers.
+  useEffect(() => {
+    let cancelled = false;
+    async function hydrateFromServer() {
+      if (!aziendaId) return;
+      try {
+        const token = await getAuthToken();
+        const res = await fetch(
+          `${apiUrl}/api/v1/aziende/${aziendaId}/stress/valutazione`,
+          {
+            headers: token
+              ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
+              : { "Content-Type": "application/json" },
+          },
+        );
+        if (res.ok) {
+          const data = (await res.json()) as null | {
+            area_a_eventi_sentinella?: Record<string, string>;
+            area_b_contenuto_lavoro?: Record<string, string>;
+            area_c_contesto_lavoro?: Record<string, string>;
+            updated_at?: string;
+            livello_rischio?: string | null;
+            punteggio_totale?: number | null;
+          };
+          if (data && !cancelled) {
+            const merged: Record<string, string> = {
+              ...(data.area_a_eventi_sentinella ?? {}),
+              ...(data.area_b_contenuto_lavoro ?? {}),
+              ...(data.area_c_contesto_lavoro ?? {}),
+            };
+            // Only overwrite the local draft if (a) there's no local
+            // draft yet, or (b) the local draft is empty. We don't want
+            // to clobber an in-progress edit the operator made offline.
+            const existing = window.localStorage.getItem(
+              `stress-draft-${aziendaId}`,
+            );
+            const hasLocalEdits =
+              existing &&
+              Object.keys(JSON.parse(existing || "{}")).length > 0;
+            if (!hasLocalEdits && Object.keys(merged).length > 0) {
+              window.localStorage.setItem(
+                `stress-draft-${aziendaId}`,
+                JSON.stringify(merged),
+              );
+            }
+            if (data.updated_at) setSavedAt(data.updated_at);
+            if (data.livello_rischio && data.punteggio_totale !== undefined) {
+              setFinalizeMessage(
+                `Ultima valutazione archiviata: totale ${data.punteggio_totale ?? "—"} — livello ${data.livello_rischio}`,
+              );
+            }
+          }
+        }
+      } catch {
+        // Swallow — the checklist still works without a server-side row.
+      } finally {
+        if (!cancelled) setHydrated(true);
+      }
+    }
+    hydrateFromServer();
     return () => {
       cancelled = true;
     };
@@ -437,17 +514,34 @@ export default function StressAssessmentPage() {
       const raw = window.localStorage.getItem(`stress-draft-${aziendaId}`);
       const answers: AnswersMap = raw ? JSON.parse(raw) : {};
 
-      const res = await fetch(`${apiUrl}/api/v1/calculate/stress`, {
-        method: "POST",
-        headers: token
-          ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
-          : { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers }),
-      });
-      if (!res.ok) throw new Error(`API error ${res.status}`);
-      const data = await res.json();
+      // Feedback #31: PUT to the upsert endpoint so the valutazione is
+      // actually archived in the fascicolo. The endpoint runs the same
+      // calculator server-side, persists raw answers + scores + livello,
+      // and returns the computed result so we can show the operator the
+      // totale + livello immediately.
+      const res = await fetch(
+        `${apiUrl}/api/v1/aziende/${aziendaId}/stress/valutazione`,
+        {
+          method: "PUT",
+          headers: token
+            ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
+            : { "Content-Type": "application/json" },
+          body: JSON.stringify({ answers }),
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || `API error ${res.status}`);
+      }
+      const data = (await res.json()) as {
+        punteggio_totale: number | null;
+        livello_rischio: string | null;
+        updated_at: string;
+      };
+      if (data.updated_at) setSavedAt(data.updated_at);
+      toast.success("Valutazione archiviata nel fascicolo cliente");
       setFinalizeMessage(
-        `Valutazione confermata: totale ${data.totale} — livello ${data.livello}`,
+        `Valutazione archiviata: totale ${data.punteggio_totale ?? "—"} — livello ${data.livello_rischio ?? "—"}`,
       );
     } catch (err) {
       setFinalizeMessage(
@@ -481,7 +575,16 @@ export default function StressAssessmentPage() {
         </div>
       </div>
 
-      <StressChecklist aziendaId={aziendaId} onResultChange={setResult} />
+      {hydrated ? (
+        <StressChecklist aziendaId={aziendaId} onResultChange={setResult} />
+      ) : (
+        <Card>
+          <CardContent className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Caricamento valutazione precedente…
+          </CardContent>
+        </Card>
+      )}
 
       {/* Corrective measures — US-3.8 */}
       <Card>
@@ -639,6 +742,11 @@ export default function StressAssessmentPage() {
                 ? `Tutti i ${INDICATORS.length} indicatori compilati. La valutazione sarà archiviata nel fascicolo cliente.`
                 : `Mancano ${result.unanswered.length} indicatori. Completa la checklist per confermare.`}
             </p>
+            {savedAt && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Ultimo salvataggio: {new Date(savedAt).toLocaleString("it-IT")}
+              </p>
+            )}
             {finalizeMessage && (
               <p
                 className={cn(

@@ -26,6 +26,7 @@ from app.api.v1.sorveglianza import router as sorveglianza_router
 from app.api.v1.sostanze_chimiche import router as sostanze_chimiche_router
 from app.api.v1.stress_ai import router as stress_ai_router
 from app.api.v1.stress_misure import router as stress_misure_router
+from app.api.v1.stress_valutazione import router as stress_valutazione_router
 from app.api.v1.survey import router as survey_router
 from app.api.v1.users import router as users_router
 from app.api.v1.vdt import router as vdt_router
@@ -57,6 +58,7 @@ api_router.include_router(sorveglianza_router)
 api_router.include_router(pos_router)
 api_router.include_router(stress_misure_router)
 api_router.include_router(stress_ai_router)
+api_router.include_router(stress_valutazione_router)
 api_router.include_router(vdt_router)
 api_router.include_router(admin_backups_router)
 api_router.include_router(users_router)

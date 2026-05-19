@@ -7,6 +7,7 @@ Loads are async, reused across generators to avoid N+1 in Celery task.
 import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.biologico_valutazione import BiologicoValutazione
 from app.models.duvri import Duvri
@@ -47,7 +48,15 @@ async def load_microclima(db: AsyncSession, azienda_id: uuid.UUID) -> list[Micro
 
 
 async def load_gestanti(db: AsyncSession, azienda_id: uuid.UUID) -> list[GestantiValutazione]:
-    r = await db.execute(select(GestantiValutazione).where(GestantiValutazione.azienda_id == azienda_id))
+    # selectinload persona so the allegato generator can render
+    # `g.persona.nominativo` without triggering MissingGreenlet in the
+    # async session. Feedback #32 — without this the lavoratrice's
+    # name silently rendered as "—" on every scheda.
+    r = await db.execute(
+        select(GestantiValutazione)
+        .options(selectinload(GestantiValutazione.persona))
+        .where(GestantiValutazione.azienda_id == azienda_id)
+    )
     return list(r.scalars().all())
 
 

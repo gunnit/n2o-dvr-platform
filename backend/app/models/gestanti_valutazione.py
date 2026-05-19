@@ -6,12 +6,16 @@ e misure di adeguamento.
 
 import uuid
 from datetime import datetime, date
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Date, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.persona import Persona
 
 
 class GestantiValutazione(Base):
@@ -20,6 +24,9 @@ class GestantiValutazione(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     azienda_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("aziende.id", ondelete="CASCADE"))
     persona_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("persone.id", ondelete="CASCADE"))
+    # Eager-load this when generating the allegato (lazy access raises
+    # MissingGreenlet in the async session). See data_loader.load_gestanti.
+    persona: Mapped["Persona"] = relationship(lazy="raise_on_sql")
     stato: Mapped[str] = mapped_column(String, default="gestante")  # gestante / puerpera / allattamento
     data_notifica: Mapped[date | None] = mapped_column(Date)
     data_presunto_parto: Mapped[date | None] = mapped_column(Date)

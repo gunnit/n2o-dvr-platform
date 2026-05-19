@@ -65,7 +65,29 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
             add_heading(doc, "Rischi identificati e misure di adeguamento", level=3)
             rischi = g.rischi_vietati or []
             if rischi:
-                rows = [[r.get("rischio", ""), r.get("allegato", ""), r.get("misura", "")] for r in rischi]
+                # Feedback #32: the gestanti API persists rows with keys
+                # {risk_key, allegato, descrizione, action, justification,
+                # misura_alternativa}. Old code read "rischio"/"misura" which
+                # never existed, so the table came out empty. Map onto the
+                # actual schema; the "Misura adottata" column shows the
+                # alternative measure (action=reject) or the acceptance
+                # justification (action=accept).
+                rows = []
+                for r in rischi:
+                    descrizione = (
+                        r.get("descrizione")
+                        or r.get("rischio")
+                        or r.get("risk_key")
+                        or ""
+                    )
+                    allegato = r.get("allegato", "")
+                    misura = (
+                        r.get("misura_alternativa")
+                        or r.get("justification")
+                        or r.get("misura")
+                        or ""
+                    )
+                    rows.append([descrizione, allegato, misura])
                 add_data_table(doc, ["Rischio", "Allegato D.Lgs. 151/2001", "Misura adottata"], rows)
             else:
                 add_paragraph(doc, "Nessun rischio vietato identificato.", italic=True)
