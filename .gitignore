@@ -108,3 +108,11 @@ tmp/
 /*.yml
 /email-*.md
 /step*.png
+
+# Ad-hoc Playwright / QA / admin screenshots at root (any name).
+# Anything worth keeping belongs under docs/ or a project subfolder.
+/*.png
+
+# Disposable feedback / API snapshots pulled during admin investigations.
+/feedback_*.json
+/feedback_*.txt
