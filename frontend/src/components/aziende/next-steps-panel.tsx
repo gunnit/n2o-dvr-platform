@@ -10,6 +10,7 @@ import {
   FileText,
   Sparkles,
   ShieldAlert,
+  Target,
 } from "lucide-react";
 import type {
   Azienda,
@@ -73,6 +74,7 @@ export type NextStepsCallbacks = {
   // Distinct from onOpenRischi which may switch the parent tab.
   onEditRischi: () => void;
   onOpenAssessments: () => void;
+  onOpenMiglioramento: () => void;
   onOpenDocumenti: () => void;
   onGenerateDocs: () => void;
   generatingDocs: boolean;
@@ -82,14 +84,26 @@ export function NextStepsPanel({
   azienda,
   rischi,
   documenti,
+  miglioramentoCount,
   callbacks,
 }: {
   azienda: Azienda;
   rischi: ValutazioneRischio[];
   documenti: DocumentoGenerato[];
+  // Count of rows in the misure_miglioramento table for the azienda.
+  // Drives the Piano di Miglioramento step status — null means we haven't
+  // loaded yet (the step renders as a neutral 'todo' until the parent fills
+  // it in, so the panel doesn't lie about progress).
+  miglioramentoCount: number | null;
   callbacks: NextStepsCallbacks;
 }) {
-  const steps = computeSteps(azienda, rischi, documenti, callbacks);
+  const steps = computeSteps(
+    azienda,
+    rischi,
+    documenti,
+    miglioramentoCount,
+    callbacks,
+  );
   const doneCount = steps.filter((s) => s.status === "done").length;
   const total = steps.length;
   const progress = Math.round((doneCount / total) * 100);
@@ -203,6 +217,7 @@ function computeSteps(
   azienda: Azienda,
   rischi: ValutazioneRischio[],
   documenti: DocumentoGenerato[],
+  miglioramentoCount: number | null,
   cb: NextStepsCallbacks,
 ): Step[] {
   const surveyDelivered = SURVEY_DELIVERED.has(
@@ -298,6 +313,30 @@ function computeSteps(
         label: allCovered ? "Rivedi rischi" : "Apri editor rischi",
         onClick: cb.onEditRischi,
         primary: !allCovered,
+      },
+    });
+  }
+
+  // 3c. Piano di Miglioramento — surfaces once the operator has at least
+  // one applicable risk so they have something to generate measures from.
+  // Status reflects whether any misure_miglioramento rows exist; the page
+  // itself has the "Genera con AI" CTA, so we just point the operator at
+  // it. Skipped until the parent loads miglioramentoCount (null) to avoid
+  // misreporting a "todo" before we know.
+  if (applicableRisks.length > 0 && miglioramentoCount !== null) {
+    const hasMisure = miglioramentoCount > 0;
+    steps.push({
+      id: "miglioramento",
+      status: hasMisure ? "done" : "todo",
+      title: "Piano di Miglioramento",
+      detail: hasMisure
+        ? `${miglioramentoCount} ${miglioramentoCount === 1 ? "misura" : "misure"} nel Programma di Miglioramento (DVR §4.1).`
+        : "Genera con AI o aggiungi manualmente le misure di prevenzione per ogni pericolo valutato.",
+      icon: Target,
+      cta: {
+        label: hasMisure ? "Apri piano" : "Apri e genera",
+        onClick: cb.onOpenMiglioramento,
+        primary: !hasMisure,
       },
     });
   }

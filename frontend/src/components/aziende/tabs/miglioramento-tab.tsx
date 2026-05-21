@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Save, Target, Trash2, X } from "lucide-react";
+import { Pencil, Plus, Save, Sparkles, Target, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -164,6 +164,12 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
   const [deleteRow, setDeleteRow] = useState<MisuraMiglioramento | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // AI batch-generation state. The endpoint can take ~10-30s for a wide
+  // azienda (5 in-flight OpenAI calls server-side), so we keep the button
+  // disabled and surface a spinner the whole time rather than firing the
+  // request twice.
+  const [generatingAi, setGeneratingAi] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -311,6 +317,42 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
     }
   }
 
+  async function handleGenerateAi() {
+    setGeneratingAi(true);
+    try {
+      const res = await apiFetch<{
+        generated: number;
+        skipped: number;
+        pericoli_considered: number;
+      }>(
+        `/api/v1/aziende/${aziendaId}/misure-miglioramento/genera-da-rischi`,
+        { method: "POST" },
+      );
+      await load();
+      if (res.pericoli_considered === 0) {
+        toast.info(
+          "Nessun pericolo con indice ≥ 5: valuta prima i rischi, poi riprova.",
+        );
+      } else if (res.generated === 0 && res.skipped > 0) {
+        toast.info(
+          `Tutti i ${res.skipped} pericoli sopra soglia hanno già delle misure. Elimina le righe esistenti per rigenerare.`,
+        );
+      } else {
+        toast.success(
+          `${res.generated} misure generate (${res.skipped} pericoli saltati perché già coperti).`,
+        );
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Generazione AI non riuscita.",
+      );
+    } finally {
+      setGeneratingAi(false);
+    }
+  }
+
   async function handleDelete() {
     if (!deleteRow) return;
     setDeleting(true);
@@ -350,17 +392,30 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
         subtitle={subtitle}
         accent="navy"
         action={
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => {
-              setCreateDraft(EMPTY_DRAFT);
-              setCreateOpen(true);
-            }}
-          >
-            <Plus className="h-3.5 w-3.5" strokeWidth={2} />
-            Aggiungi misura
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleGenerateAi}
+              disabled={generatingAi}
+              title="Genera misure di miglioramento per ogni pericolo con indice ≥ 5"
+            >
+              <Sparkles className="h-3.5 w-3.5" strokeWidth={2} />
+              {generatingAi ? "Generazione..." : "Genera con AI"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                setCreateDraft(EMPTY_DRAFT);
+                setCreateOpen(true);
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+              Aggiungi misura
+            </Button>
+          </div>
         }
       />
 
@@ -375,19 +430,31 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
           <EmptyState
             icon={Target}
             title="Nessuna misura di miglioramento"
-            body="Le misure auto-seedate dai pericoli ad alto indice (I≥7) appariranno qui dopo la rigenerazione del DVR."
+            body="Genera in un colpo solo le misure di prevenzione/protezione per ogni pericolo valutato con indice ≥ 5, oppure aggiungile manualmente."
             action={
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => {
-                  setCreateDraft(EMPTY_DRAFT);
-                  setCreateOpen(true);
-                }}
-              >
-                <Plus className="h-3.5 w-3.5" strokeWidth={2} />
-                Aggiungi misura
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleGenerateAi}
+                  disabled={generatingAi}
+                >
+                  <Sparkles className="h-3.5 w-3.5" strokeWidth={2} />
+                  {generatingAi ? "Generazione..." : "Genera con AI"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setCreateDraft(EMPTY_DRAFT);
+                    setCreateOpen(true);
+                  }}
+                >
+                  <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+                  Aggiungi misura
+                </Button>
+              </div>
             }
           />
         ) : (

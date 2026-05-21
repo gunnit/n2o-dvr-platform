@@ -89,6 +89,13 @@ export default function AziendaDetailPage() {
   const [attrezzature, setAttrezzature] = useState<Attrezzatura[]>([]);
   const [rischi, setRischi] = useState<ValutazioneRischio[]>([]);
   const [documenti, setDocumenti] = useState<DocumentoGenerato[]>([]);
+  // Count is fetched alongside the rest so the NextStepsPanel "Piano di
+  // Miglioramento" card knows whether to surface as todo or done. Null =
+  // not loaded yet; the panel skips the card in that case rather than
+  // showing a misleading "todo" before the data lands.
+  const [miglioramentoCount, setMiglioramentoCount] = useState<number | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [generatingDocs, setGeneratingDocs] = useState(false);
@@ -127,7 +134,7 @@ export default function AziendaDetailPage() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [az, per, amb, att, ris, doc] = await Promise.all([
+      const [az, per, amb, att, ris, doc, mig] = await Promise.all([
         apiCall<Azienda>(`/api/v1/aziende/${id}`),
         apiCall<Persona[]>(`/api/v1/aziende/${id}/persone`).catch(() => []),
         apiCall<Ambiente[]>(`/api/v1/aziende/${id}/ambienti`).catch(() => []),
@@ -140,6 +147,9 @@ export default function AziendaDetailPage() {
         apiCall<DocumentoGenerato[]>(`/api/v1/aziende/${id}/documents`).catch(
           () => [],
         ),
+        apiCall<{ id: string }[]>(
+          `/api/v1/aziende/${id}/misure-miglioramento`,
+        ).catch(() => []),
       ]);
       setAzienda(az);
       setPersone(per);
@@ -147,6 +157,7 @@ export default function AziendaDetailPage() {
       setAttrezzature(att);
       setRischi(ris);
       setDocumenti(doc);
+      setMiglioramentoCount(mig.length);
     } catch {
       setError("Errore nel caricamento dei dati");
     } finally {
@@ -379,6 +390,7 @@ export default function AziendaDetailPage() {
         azienda={azienda}
         rischi={rischi}
         documenti={documenti}
+        miglioramentoCount={miglioramentoCount}
         callbacks={{
           onResumeSurvey: () => router.push(`/survey/${id}`),
           onOpenDescrizione: () => {
@@ -403,6 +415,7 @@ export default function AziendaDetailPage() {
               : router.push(`/assessments/risk/${id}`),
           onEditRischi: () => router.push(`/assessments/risk/${id}`),
           onOpenAssessments: () => router.push("/assessments"),
+          onOpenMiglioramento: () => handleTabChange("miglioramento"),
           onOpenDocumenti: () => handleTabChange("documenti"),
           onGenerateDocs: handleGenerateDocs,
           generatingDocs,
