@@ -61,7 +61,11 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
             headers = ["Ambiente", "INF", "SI", "PI", "Totale", "Livello", "Uscite", "Estintori"]
             rows = []
             for v in incendi:
-                amb_name = ambienti_map[v.ambiente_id].nome if v.ambiente_id in ambienti_map else "—"
+                amb_name = (
+                ambienti_map[v.ambiente_id].nome
+                if v.ambiente_id in ambienti_map
+                else (v.nome_area or "—")
+            )
                 rows.append([
                     amb_name, str(v.inf), str(v.si), str(v.pi),
                     str(v.punteggio_totale or (v.inf + v.si + v.pi)),
@@ -72,7 +76,11 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
 
         add_heading(doc, "Misure di prevenzione e protezione", level=2)
         for v in incendi:
-            amb_name = ambienti_map[v.ambiente_id].nome if v.ambiente_id in ambienti_map else "—"
+            amb_name = (
+                ambienti_map[v.ambiente_id].nome
+                if v.ambiente_id in ambienti_map
+                else (v.nome_area or "—")
+            )
             add_heading(doc, amb_name, level=3)
             add_paragraph(doc, v.misure_prevenzione or "Misure standard: estintori a portata, vie di fuga segnalate e libere, idoneo sistema di allarme.")
 

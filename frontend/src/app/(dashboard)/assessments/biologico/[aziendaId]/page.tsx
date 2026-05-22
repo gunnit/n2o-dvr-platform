@@ -35,6 +35,9 @@ export default function BiologicoAssessmentPage({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [savedSummary, setSavedSummary] = useState<
+    { settore: string; livello: string | null; updated_at: string }[]
+  >([]);
 
   // --------------------------------------------------------------- Azienda
   useEffect(() => {
@@ -51,17 +54,38 @@ export default function BiologicoAssessmentPage({
         } catch {
           /* noop */
         }
-        const res = await fetch(`${apiUrl}/api/v1/aziende/${aziendaId}`, {
-          headers: token
-            ? {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              }
-            : { "Content-Type": "application/json" },
-        });
-        if (!res.ok) throw new Error(`Errore ${res.status}`);
-        const data = (await res.json()) as Azienda;
+        const headers = token
+          ? {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            }
+          : { "Content-Type": "application/json" };
+        const [azRes, valRes] = await Promise.all([
+          fetch(`${apiUrl}/api/v1/aziende/${aziendaId}`, { headers }),
+          fetch(
+            `${apiUrl}/api/v1/aziende/${aziendaId}/biologico-valutazioni`,
+            { headers },
+          ),
+        ]);
+        if (!azRes.ok) throw new Error(`Errore ${azRes.status}`);
+        const data = (await azRes.json()) as Azienda;
         if (!cancelled) setAzienda(data);
+        if (valRes.ok) {
+          const rows = (await valRes.json()) as Array<{
+            settore: string;
+            livello_rischio: string | null;
+            created_at: string;
+          }>;
+          if (!cancelled) {
+            setSavedSummary(
+              rows.map((r) => ({
+                settore: r.settore,
+                livello: r.livello_rischio,
+                updated_at: r.created_at,
+              })),
+            );
+          }
+        }
       } catch (err) {
         if (!cancelled) {
           setLoadError(
@@ -131,14 +155,27 @@ export default function BiologicoAssessmentPage({
           body: JSON.stringify(body),
         },
       );
-      if (res.status === 404 || res.status === 405) {
-        setSaveMessage(
-          "Valutazione salvata in locale. L'endpoint di persistenza server non è ancora attivo — la bozza è conservata in questo browser.",
-        );
-        setDirty(false);
-        return;
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`API ${res.status}: ${txt}`);
       }
-      if (!res.ok) throw new Error(`API ${res.status}`);
+      const saved = (await res.json()) as {
+        settore: string;
+        livello_rischio: string | null;
+        created_at: string;
+      };
+      // Refresh the "valutazioni archiviate" summary so the new save appears.
+      setSavedSummary((prev) => {
+        const filtered = prev.filter((r) => r.settore !== saved.settore);
+        return [
+          ...filtered,
+          {
+            settore: saved.settore,
+            livello: saved.livello_rischio,
+            updated_at: saved.created_at,
+          },
+        ];
+      });
       setSaveMessage(
         `Valutazione salvata: livello ${result.livello} (rapporto ${(
           result.ratio * 100
@@ -179,6 +216,31 @@ export default function BiologicoAssessmentPage({
         </div>
       </div>
 
+      {savedSummary.length > 0 && (
+        <Card className="border-emerald-200/60 bg-emerald-50/40">
+          <CardContent className="py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-emerald-800">
+              Valutazioni archiviate
+            </p>
+            <ul className="mt-2 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+              {savedSummary.map((s) => (
+                <li
+                  key={s.settore}
+                  className="flex items-center justify-between rounded-md bg-background px-3 py-2 ring-1 ring-border"
+                >
+                  <span className="capitalize">{s.settore}</span>
+                  {s.livello ? (
+                    <Badge variant="outline">{s.livello}</Badge>
+                  ) : (
+                    <Badge variant="secondary">—</Badge>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
       <BiologicoForm
         aziendaId={aziendaId}
         onStateChange={setState}
@@ -203,9 +265,8 @@ export default function BiologicoAssessmentPage({
               <p
                 className={cn(
                   "mt-1 text-xs",
-                  saveMessage.startsWith("Errore") ||
-                    saveMessage.startsWith("Valutazione salvata in locale")
-                    ? "text-amber-700"
+                  saveMessage.startsWith("Errore")
+                    ? "text-destructive"
                     : "text-emerald-700",
                 )}
               >

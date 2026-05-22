@@ -7,11 +7,15 @@ project convention.
 from __future__ import annotations
 
 import uuid
-from typing import Literal
+from datetime import date, datetime
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.data.dlgs_151_2001 import Allegato
+
+
+Stato = Literal["gestante", "puerpera", "allattamento"]
 
 
 class CrossReferenceRequest(BaseModel):
@@ -104,3 +108,59 @@ class DecisionRequest(BaseModel):
 class DecisionResponse(BaseModel):
     valutazione_id: uuid.UUID
     persisted_decisions: list[dict]
+
+
+# -----------------------------------------------------------------------------
+# CRUD schemas — one row per (persona). Lets the frontend create/load/edit the
+# signature block + state alongside the decision flow.
+# -----------------------------------------------------------------------------
+
+
+class GestantiCreate(BaseModel):
+    persona_id: uuid.UUID
+    stato: Stato = "gestante"
+    data_notifica: date | None = None
+    data_presunto_parto: date | None = None
+    misure_adeguamento: str | None = None
+    mansione_alternativa: str | None = None
+    richiesta_astensione_anticipata: bool = False
+    firma_lavoratrice: str | None = None
+    firma_datore_lavoro: str | None = None
+    firma_rspp: str | None = None
+    firma_medico_competente: str | None = None
+    note: str | None = None
+
+
+class GestantiUpdate(BaseModel):
+    stato: Stato | None = None
+    data_notifica: date | None = None
+    data_presunto_parto: date | None = None
+    misure_adeguamento: str | None = None
+    mansione_alternativa: str | None = None
+    richiesta_astensione_anticipata: bool | None = None
+    firma_lavoratrice: str | None = None
+    firma_datore_lavoro: str | None = None
+    firma_rspp: str | None = None
+    firma_medico_competente: str | None = None
+    note: str | None = None
+
+
+class GestantiResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    azienda_id: uuid.UUID
+    persona_id: uuid.UUID
+    stato: str
+    data_notifica: date | None
+    data_presunto_parto: date | None
+    rischi_vietati: list[Any]
+    misure_adeguamento: str | None
+    mansione_alternativa: str | None
+    richiesta_astensione_anticipata: bool
+    firma_lavoratrice: str | None
+    firma_datore_lavoro: str | None
+    firma_rspp: str | None
+    firma_medico_competente: str | None
+    note: str | None
+    created_at: datetime

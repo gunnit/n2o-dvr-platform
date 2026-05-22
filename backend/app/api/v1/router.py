@@ -6,6 +6,7 @@ from app.api.v1.ambienti import router as ambienti_router
 from app.api.v1.attrezzature import router as attrezzature_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.aziende import router as aziende_router
+from app.api.v1.biologico_valutazioni import router as biologico_router
 from app.api.v1.calculations import router as calculations_router
 from app.api.v1.documents import download_router as documents_download_router
 from app.api.v1.documents import router as documents_router
@@ -13,7 +14,9 @@ from app.api.v1.duvri import router as duvri_router
 from app.api.v1.feedback import router as feedback_router
 from app.api.v1.gestanti import router as gestanti_router
 from app.api.v1.haccp import router as haccp_router
+from app.api.v1.incendio_valutazioni import router as incendio_router
 from app.api.v1.lookups import router as lookups_router
+from app.api.v1.microclima_valutazioni import router as microclima_router
 from app.api.v1.misure_miglioramento import router as misure_miglioramento_router
 from app.api.v1.mmc import router as mmc_router
 from app.api.v1.pee_procedures import router as pee_procedures_router
@@ -48,9 +51,12 @@ api_router.include_router(calculations_router)
 api_router.include_router(ai_feedback_router)
 api_router.include_router(feedback_router)
 api_router.include_router(gestanti_router)
+api_router.include_router(biologico_router)
 api_router.include_router(haccp_router)
+api_router.include_router(incendio_router)
 api_router.include_router(pee_procedures_router)
 api_router.include_router(lookups_router)
+api_router.include_router(microclima_router)
 api_router.include_router(misure_miglioramento_router)
 api_router.include_router(mmc_router)
 api_router.include_router(duvri_router)

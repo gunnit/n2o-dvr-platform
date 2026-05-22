@@ -34,14 +34,53 @@ const AZIONE_PER_LIVELLO: Record<FireLivello, string> = {
     "Rischio incendio alto: attivare immediatamente misure straordinarie di prevenzione e protezione, coinvolgere il professionista antincendio, presentare SCIA ai VV.F. ove dovuta, adottare impianti di rilevazione e spegnimento automatici e garantire formazione di livello 3 agli addetti all'emergenza.",
 };
 
+// Server livello (BASSO/MEDIO/ALTO) <-> UI livello (Basso/Medio/Alto).
+type ServerLivello = "BASSO" | "MEDIO" | "ALTO";
+function toUi(l: ServerLivello | null): FireLivello | null {
+  if (!l) return null;
+  return { BASSO: "Basso", MEDIO: "Medio", ALTO: "Alto" }[l] as FireLivello;
+}
+
+interface ServerRow {
+  id: string;
+  azienda_id: string;
+  ambiente_id: string | null;
+  nome_area: string | null;
+  inf: number;
+  si: number;
+  pi: number;
+  punteggio_totale: number | null;
+  livello_rischio: ServerLivello | null;
+  created_at: string;
+  updated_at: string;
+}
+
+async function authHeaders(): Promise<HeadersInit> {
+  try {
+    const s = await fetch("/api/auth/session");
+    const session = await s.json();
+    if (session?.accessToken) {
+      return {
+        Authorization: `Bearer ${session.accessToken}`,
+        "Content-Type": "application/json",
+      };
+    }
+  } catch {
+    /* noop */
+  }
+  return { "Content-Type": "application/json" };
+}
+
 // ---------------------------------------------------------------------------
 
 export default function IncendioAssessmentPage() {
   const params = useParams<{ aziendaId: string }>();
   const aziendaId = params.aziendaId;
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const [azienda, setAzienda] = useState<Azienda | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [existing, setExisting] = useState<ServerRow[]>([]);
   const form = useIncendioForm();
   const [result, setResult] = useState<IncendioResult>({
     areas: [],
@@ -52,38 +91,57 @@ export default function IncendioAssessmentPage() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
 
-  // Track dirty state from RHF.
   useEffect(() => {
     const subscription = form.watch(() => setDirty(form.formState.isDirty));
     return () => subscription.unsubscribe();
   }, [form]);
 
-  // Load azienda metadata (best-effort — mirrors stress/mmc page pattern).
+  const refetchExisting = useCallback(async () => {
+    const headers = await authHeaders();
+    const res = await fetch(
+      `${apiUrl}/api/v1/aziende/${aziendaId}/incendio-valutazioni`,
+      { headers },
+    );
+    if (!res.ok) throw new Error(`Errore ${res.status}`);
+    const rows = (await res.json()) as ServerRow[];
+    setExisting(rows);
+    return rows;
+  }, [apiUrl, aziendaId]);
+
+  // Initial load: azienda + existing valutazioni. Hydrate form from existing
+  // rows so the user sees their last save instead of an empty form.
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        const apiUrl =
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        let token: string | null = null;
-        try {
-          const s = await fetch("/api/auth/session");
-          const session = await s.json();
-          token = session?.accessToken ?? null;
-        } catch {
-          /* noop */
+        const headers = await authHeaders();
+        const [azRes, rowsRes] = await Promise.all([
+          fetch(`${apiUrl}/api/v1/aziende/${aziendaId}`, { headers }),
+          fetch(
+            `${apiUrl}/api/v1/aziende/${aziendaId}/incendio-valutazioni`,
+            { headers },
+          ),
+        ]);
+        if (!azRes.ok) throw new Error(`Errore azienda ${azRes.status}`);
+        const azData = (await azRes.json()) as Azienda;
+        if (cancelled) return;
+        setAzienda(azData);
+
+        if (rowsRes.ok) {
+          const rows = (await rowsRes.json()) as ServerRow[];
+          if (cancelled) return;
+          setExisting(rows);
+          if (rows.length > 0) {
+            form.reset({
+              areas: rows.map((r) => ({
+                nome: r.nome_area ?? "",
+                inf: r.inf as 1 | 2 | 3,
+                si: r.si as 1 | 2 | 3,
+                pi: r.pi as 1 | 2 | 3,
+              })),
+            });
+          }
         }
-        const res = await fetch(`${apiUrl}/api/v1/aziende/${aziendaId}`, {
-          headers: token
-            ? {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              }
-            : { "Content-Type": "application/json" },
-        });
-        if (!res.ok) throw new Error(`Errore ${res.status}`);
-        const data = (await res.json()) as Azienda;
-        if (!cancelled) setAzienda(data);
       } catch (err) {
         if (!cancelled) {
           setLoadError(
@@ -98,64 +156,55 @@ export default function IncendioAssessmentPage() {
     return () => {
       cancelled = true;
     };
-  }, [aziendaId]);
+    // form is stable; we don't want to re-run on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aziendaId, apiUrl]);
 
+  // Save: delete existing rows for this azienda, then POST one row per area.
+  // Simpler than diffing — for a small list (typically 1-5 areas) the cost is
+  // negligible and the resulting state is always consistent with the form.
   const save = useCallback(async () => {
     if (!result.allComplete || result.areas.length === 0) return;
     setSaving(true);
     setSaveMessage(null);
     try {
-      const apiUrl =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      let token: string | null = null;
-      try {
-        const s = await fetch("/api/auth/session");
-        const session = await s.json();
-        token = session?.accessToken ?? null;
-      } catch {
-        /* noop */
-      }
+      const headers = await authHeaders();
 
-      // Cross-check with backend for the worst-case (max livello) area —
-      // ensures the front-end calculation matches the server's band logic.
-      const worst = result.areas.reduce((acc, cur) =>
-        (cur.totale ?? 0) > (acc.totale ?? 0) ? cur : acc,
-      );
-      if (
-        worst.inf === undefined ||
-        worst.si === undefined ||
-        worst.pi === undefined
-      )
-        return;
-
-      const res = await fetch(`${apiUrl}/api/v1/calculate/fire-risk`, {
-        method: "POST",
-        headers: token
-          ? {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            }
-          : { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          inf: worst.inf,
-          si: worst.si,
-          pi: worst.pi,
-        }),
-      });
-      if (!res.ok) throw new Error(`API error ${res.status}`);
-      const data = (await res.json()) as {
-        totale: number;
-        livello: FireLivello;
-      };
-
-      if (data.totale !== worst.totale || data.livello !== worst.livello) {
-        throw new Error(
-          `Discrepanza: locale ${worst.totale}/${worst.livello}, server ${data.totale}/${data.livello}`,
+      // 1. Delete any previously-saved rows.
+      for (const old of existing) {
+        await fetch(
+          `${apiUrl}/api/v1/aziende/${aziendaId}/incendio-valutazioni/${old.id}`,
+          { method: "DELETE", headers },
         );
       }
 
+      // 2. POST one row per area from the form.
+      for (const area of result.areas) {
+        if (
+          area.inf === undefined ||
+          area.si === undefined ||
+          area.pi === undefined
+        )
+          continue;
+        const body = JSON.stringify({
+          nome_area: area.nome || null,
+          inf: area.inf,
+          si: area.si,
+          pi: area.pi,
+        });
+        const res = await fetch(
+          `${apiUrl}/api/v1/aziende/${aziendaId}/incendio-valutazioni`,
+          { method: "POST", headers, body },
+        );
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(`Salvataggio area "${area.nome}" fallito: ${txt}`);
+        }
+      }
+
+      const fresh = await refetchExisting();
       setSaveMessage(
-        `Valutazione archiviata: ${result.areas.length} area/e · livello massimo ${result.maxLivello}.`,
+        `Valutazione salvata: ${fresh.length} area/e archiviata/e.`,
       );
       form.reset(form.getValues()); // marks RHF as pristine
       setDirty(false);
@@ -168,7 +217,7 @@ export default function IncendioAssessmentPage() {
     } finally {
       setSaving(false);
     }
-  }, [result, form]);
+  }, [result, existing, apiUrl, aziendaId, form, refetchExisting]);
 
   const pageSubtitle = useMemo(() => {
     if (loadError) return `Azienda ${aziendaId} (metadati non disponibili)`;
@@ -188,9 +237,7 @@ export default function IncendioAssessmentPage() {
             <Badge variant="secondary">Allegato Rischio Incendio</Badge>
             <span>D.Lgs. 81/2008 · D.M. 03/09/2021</span>
           </div>
-          <h1 className="mt-2 type-h1">
-            Valutazione Rischio Incendio
-          </h1>
+          <h1 className="mt-2 type-h1">Valutazione Rischio Incendio</h1>
           <p className="text-sm text-muted-foreground">{pageSubtitle}</p>
         </div>
         {dirty && (
@@ -202,6 +249,47 @@ export default function IncendioAssessmentPage() {
           </Badge>
         )}
       </div>
+
+      {existing.length > 0 && (
+        <Card className="border-emerald-200/60 bg-emerald-50/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">
+              Valutazioni archiviate ({existing.length})
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Modifica i valori qui sotto e premi "Salva valutazione" per
+              aggiornare il fascicolo.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+              {existing.map((r) => {
+                const livello = toUi(r.livello_rischio);
+                return (
+                  <li
+                    key={r.id}
+                    className="flex items-center justify-between rounded-md bg-background px-3 py-2 ring-1 ring-border"
+                  >
+                    <span className="truncate">{r.nome_area || "—"}</span>
+                    {livello ? (
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ring-1",
+                          BAND_CLASS[livello],
+                        )}
+                      >
+                        {livello} · {r.punteggio_totale}/9
+                      </span>
+                    ) : (
+                      <Badge variant="secondary">—</Badge>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       <IncendioForm form={form} onResultChange={setResult} />
 
@@ -265,10 +353,7 @@ export default function IncendioAssessmentPage() {
             )}
           </div>
           <div className="flex gap-2">
-            <Button
-              disabled={!result.allComplete || saving}
-              onClick={save}
-            >
+            <Button disabled={!result.allComplete || saving} onClick={save}>
               {saving ? "Salvataggio in corso…" : "Salva valutazione"}
             </Button>
           </div>

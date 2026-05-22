@@ -123,6 +123,40 @@ export default function GestantiAssessmentPage() {
     };
   }, [aziendaId]);
 
+  // --- Saved valutazioni (lets the operator see who already has a record).
+  const [savedRows, setSavedRows] = useState<
+    Array<{
+      id: string;
+      persona_id: string;
+      stato: string;
+      data_notifica: string | null;
+    }>
+  >([]);
+
+  const refetchSaved = useCallback(async () => {
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(
+        `${API_URL}/api/v1/aziende/${aziendaId}/gestanti`,
+        { headers },
+      );
+      if (!res.ok) return;
+      const rows = (await res.json()) as Array<{
+        id: string;
+        persona_id: string;
+        stato: string;
+        data_notifica: string | null;
+      }>;
+      setSavedRows(rows);
+    } catch {
+      /* best-effort */
+    }
+  }, [aziendaId]);
+
+  useEffect(() => {
+    if (aziendaId) refetchSaved();
+  }, [aziendaId, refetchSaved]);
+
   // --- Female workers list --------------------------------------------
   useEffect(() => {
     let cancelled = false;
@@ -259,21 +293,97 @@ export default function GestantiAssessmentPage() {
 
   const markDirty = useCallback(() => setDirty(true), []);
 
+  // Hydrate the signature/state block from the existing GestantiValutazione
+  // whenever a worker is selected and the cross-reference returned a real
+  // valutazione_id. Without this the operator sees stale firmwide state from
+  // the previously selected worker.
+  useEffect(() => {
+    if (!matchData?.valutazione_id) return;
+    let cancelled = false;
+    async function loadDetails() {
+      try {
+        const headers = await authHeaders();
+        const res = await fetch(
+          `${API_URL}/api/v1/aziende/${aziendaId}/gestanti/${matchData?.valutazione_id}`,
+          { headers },
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          stato: "gestante" | "puerpera" | "allattamento";
+          data_notifica: string | null;
+          data_presunto_parto: string | null;
+          firma_lavoratrice: string | null;
+          firma_datore_lavoro: string | null;
+          firma_rspp: string | null;
+          firma_medico_competente: string | null;
+        };
+        if (cancelled) return;
+        setStato(data.stato || "gestante");
+        setDataNotifica(data.data_notifica || "");
+        setDataPresuntoParto(data.data_presunto_parto || "");
+        setFirmaLavoratrice(data.firma_lavoratrice || "");
+        setFirmaDdl(data.firma_datore_lavoro || "");
+        setFirmaRspp(data.firma_rspp || "");
+        setFirmaMedico(data.firma_medico_competente || "");
+        setDirty(false);
+      } catch {
+        /* ignore — best-effort hydration */
+      }
+    }
+    loadDetails();
+    return () => {
+      cancelled = true;
+    };
+  }, [aziendaId, matchData?.valutazione_id]);
+
   const handleSave = useCallback(async () => {
-    // The signature block persists on an out-of-scope endpoint (survey wizard
-    // owns GestantiValutazione creation). Here we only acknowledge the save
-    // intent until that wiring lands — the cross-reference decisions are
-    // persisted in real time via the decision endpoint above.
+    if (!selectedId) {
+      setSaveMessage("Seleziona prima una lavoratrice.");
+      return;
+    }
     setSaving(true);
     setSaveMessage(null);
     try {
-      // Intentional no-op with success feedback: until the create/update
-      // endpoint for GestantiValutazione.firma_* fields is exposed, we just
-      // flip dirty-state. This keeps the Salva UX consistent with the
-      // other assessment pages.
-      await new Promise((r) => setTimeout(r, 250));
+      const headers = await authHeaders();
+      const valId = matchData?.valutazione_id;
+      const body = JSON.stringify({
+        stato,
+        data_notifica: dataNotifica || null,
+        data_presunto_parto: dataPresuntoParto || null,
+        firma_lavoratrice: firmaLavoratrice || null,
+        firma_datore_lavoro: firmaDdl || null,
+        firma_rspp: firmaRspp || null,
+        firma_medico_competente: firmaMedico || null,
+      });
+      const res = valId
+        ? await fetch(
+            `${API_URL}/api/v1/aziende/${aziendaId}/gestanti/${valId}`,
+            { method: "PATCH", headers, body },
+          )
+        : await fetch(`${API_URL}/api/v1/aziende/${aziendaId}/gestanti`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              persona_id: selectedId,
+              stato,
+              data_notifica: dataNotifica || null,
+              data_presunto_parto: dataPresuntoParto || null,
+              firma_lavoratrice: firmaLavoratrice || null,
+              firma_datore_lavoro: firmaDdl || null,
+              firma_rspp: firmaRspp || null,
+              firma_medico_competente: firmaMedico || null,
+            }),
+          });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`API ${res.status}: ${txt}`);
+      }
       setDirty(false);
-      setSaveMessage("Dati lavoratrice archiviati in bozza locale.");
+      setSaveMessage("Valutazione salvata.");
+      // Refresh cross-reference to surface the new valutazione_id if created,
+      // and refresh the list of saved records.
+      if (selectedId) await runCrossReference(selectedId);
+      await refetchSaved();
     } catch (err) {
       setSaveMessage(
         err instanceof Error ? `Errore: ${err.message}` : "Errore sconosciuto",
@@ -281,7 +391,20 @@ export default function GestantiAssessmentPage() {
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [
+    aziendaId,
+    selectedId,
+    matchData,
+    stato,
+    dataNotifica,
+    dataPresuntoParto,
+    firmaLavoratrice,
+    firmaDdl,
+    firmaRspp,
+    firmaMedico,
+    runCrossReference,
+    refetchSaved,
+  ]);
 
   const pageSubtitle = useMemo(() => {
     if (loadError) return `Azienda ${aziendaId} (metadati non disponibili)`;
@@ -308,6 +431,40 @@ export default function GestantiAssessmentPage() {
           <p className="text-sm text-muted-foreground">{pageSubtitle}</p>
         </div>
       </div>
+
+      {savedRows.length > 0 && (
+        <Card className="border-emerald-200/60 bg-emerald-50/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">
+              Valutazioni archiviate ({savedRows.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2 md:grid-cols-3">
+              {savedRows.map((r) => {
+                const w = workers.find((x) => x.id === r.persona_id);
+                return (
+                  <li
+                    key={r.id}
+                    className="flex items-center justify-between rounded-md bg-background px-3 py-2 ring-1 ring-border"
+                  >
+                    <button
+                      type="button"
+                      className="truncate text-left hover:underline"
+                      onClick={() => setSelectedId(r.persona_id)}
+                    >
+                      {w?.nominativo || "Lavoratrice"}
+                    </button>
+                    <Badge variant="outline" className="capitalize">
+                      {r.stato}
+                    </Badge>
+                  </li>
+                );
+              })}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       <WorkerSelector
         workers={workers}

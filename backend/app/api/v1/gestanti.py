@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +29,9 @@ from app.schemas.gestanti import (
     CrossReferenceResponse,
     DecisionRequest,
     DecisionResponse,
+    GestantiCreate,
+    GestantiResponse,
+    GestantiUpdate,
     RiskMatch,
 )
 
@@ -131,7 +134,10 @@ async def cross_reference(
     if not persona:
         raise NotFoundError("Lavoratrice non trovata")
 
-    # Existing valutazione (if any) for "is_new" comparison.
+    # Existing valutazione (if any) for "is_new" comparison. If none exists
+    # yet, create a stub so the operator can immediately record decisions —
+    # the decision endpoint requires a valutazione_id and the form has no
+    # other entry point to bootstrap one.
     result = await db.execute(
         select(GestantiValutazione).where(
             GestantiValutazione.azienda_id == azienda_id,
@@ -139,6 +145,16 @@ async def cross_reference(
         )
     )
     valutazione = result.scalar_one_or_none()
+    if valutazione is None:
+        valutazione = GestantiValutazione(
+            azienda_id=azienda_id,
+            persona_id=persona.id,
+            stato="gestante",
+            rischi_vietati=[],
+        )
+        db.add(valutazione)
+        await db.commit()
+        await db.refresh(valutazione)
     existing = _index_existing_decisions(valutazione)
 
     # Collect all workers (used to propose an alternative mansione).
@@ -250,3 +266,158 @@ async def record_decision(
         valutazione_id=val.id,
         persisted_decisions=list(val.rischi_vietati or []),
     )
+
+
+# ---------------------------------------------------------------------------
+# CRUD endpoints — one row per (azienda, persona). Lets the frontend list
+# saved valutazioni, edit signature/state, and remove records.
+# ---------------------------------------------------------------------------
+
+
+async def _validate_persona(
+    azienda_id: uuid.UUID, persona_id: uuid.UUID, db: AsyncSession
+) -> Persona:
+    result = await db.execute(
+        select(Persona).where(
+            Persona.id == persona_id, Persona.azienda_id == azienda_id
+        )
+    )
+    persona = result.scalar_one_or_none()
+    if not persona:
+        raise BadRequestError("persona_id non appartiene a questa azienda")
+    return persona
+
+
+@router.get(
+    "/aziende/{azienda_id}/gestanti", response_model=list[GestantiResponse]
+)
+async def list_gestanti(
+    azienda_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+) -> list[GestantiValutazione]:
+    await _get_azienda(azienda_id, org_id, db)
+    result = await db.execute(
+        select(GestantiValutazione)
+        .where(GestantiValutazione.azienda_id == azienda_id)
+        .order_by(GestantiValutazione.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.post(
+    "/aziende/{azienda_id}/gestanti",
+    response_model=GestantiResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_gestanti(
+    azienda_id: uuid.UUID,
+    body: GestantiCreate,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+) -> GestantiValutazione:
+    """Create or upsert a GestantiValutazione for one lavoratrice.
+
+    Upsert by (azienda_id, persona_id): if a row already exists it is
+    updated with the new fields (preserving rischi_vietati).
+    """
+    await _get_azienda(azienda_id, org_id, db)
+    await _validate_persona(azienda_id, body.persona_id, db)
+
+    existing = await db.execute(
+        select(GestantiValutazione).where(
+            GestantiValutazione.azienda_id == azienda_id,
+            GestantiValutazione.persona_id == body.persona_id,
+        )
+    )
+    row = existing.scalar_one_or_none()
+    payload = body.model_dump()
+    if row:
+        for k, v in payload.items():
+            if k == "persona_id":
+                continue
+            setattr(row, k, v)
+    else:
+        row = GestantiValutazione(
+            azienda_id=azienda_id, rischi_vietati=[], **payload
+        )
+        db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+
+@router.get(
+    "/aziende/{azienda_id}/gestanti/{valutazione_id}",
+    response_model=GestantiResponse,
+)
+async def get_gestanti(
+    azienda_id: uuid.UUID,
+    valutazione_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+) -> GestantiValutazione:
+    await _get_azienda(azienda_id, org_id, db)
+    result = await db.execute(
+        select(GestantiValutazione).where(
+            GestantiValutazione.id == valutazione_id,
+            GestantiValutazione.azienda_id == azienda_id,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if not row:
+        raise NotFoundError("Valutazione Gestanti non trovata")
+    return row
+
+
+@router.patch(
+    "/aziende/{azienda_id}/gestanti/{valutazione_id}",
+    response_model=GestantiResponse,
+)
+async def update_gestanti(
+    azienda_id: uuid.UUID,
+    valutazione_id: uuid.UUID,
+    body: GestantiUpdate,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+) -> GestantiValutazione:
+    await _get_azienda(azienda_id, org_id, db)
+    result = await db.execute(
+        select(GestantiValutazione).where(
+            GestantiValutazione.id == valutazione_id,
+            GestantiValutazione.azienda_id == azienda_id,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if not row:
+        raise NotFoundError("Valutazione Gestanti non trovata")
+    updates = body.model_dump(exclude_unset=True)
+    for k, v in updates.items():
+        setattr(row, k, v)
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+
+@router.delete(
+    "/aziende/{azienda_id}/gestanti/{valutazione_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_gestanti(
+    azienda_id: uuid.UUID,
+    valutazione_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await _get_azienda(azienda_id, org_id, db)
+    result = await db.execute(
+        select(GestantiValutazione).where(
+            GestantiValutazione.id == valutazione_id,
+            GestantiValutazione.azienda_id == azienda_id,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if not row:
+        raise NotFoundError("Valutazione Gestanti non trovata")
+    await db.delete(row)
+    await db.commit()

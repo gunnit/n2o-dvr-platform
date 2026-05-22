@@ -199,11 +199,13 @@ function NumericField({
 export interface MicroclimaFormProps {
   aziendaId: string;
   onResultChange?: (result: PmvResult | null) => void;
+  onSaved?: () => void;
 }
 
 export function MicroclimaPmvForm({
   aziendaId,
   onResultChange,
+  onSaved,
 }: MicroclimaFormProps) {
   const storageKey = `microclima-pmv-draft-${aziendaId}`;
 
@@ -211,6 +213,67 @@ export function MicroclimaPmvForm({
   const [result, setResult] = useState<PmvResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nomeArea, setNomeArea] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  const handleSave = useCallback(async () => {
+    if (!result) return;
+    setSaving(true);
+    setSaveMessage(null);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      let token: string | null = null;
+      try {
+        const s = await fetch("/api/auth/session");
+        const session = await s.json();
+        token = session?.accessToken ?? null;
+      } catch {
+        /* noop */
+      }
+      const body = JSON.stringify({
+        nome_area: nomeArea || null,
+        tipo_ambiente: "moderato",
+        temperatura_aria: inputs.air_temp,
+        temperatura_radiante: inputs.mean_radiant_temp,
+        velocita_aria: inputs.air_velocity,
+        umidita_relativa: inputs.humidity,
+        metabolismo: inputs.metabolic_rate,
+        isolamento_vestiario: inputs.clothing_insulation,
+        pmv: result.pmv,
+        ppd: result.ppd,
+        categoria_comfort: result.category,
+        livello_rischio: result.compliant ? "BASSO" : "MEDIO",
+      });
+      const res = await fetch(
+        `${apiUrl}/api/v1/aziende/${aziendaId}/microclima-valutazioni`,
+        {
+          method: "POST",
+          headers: token
+            ? {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              }
+            : { "Content-Type": "application/json" },
+          body,
+        },
+      );
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`API ${res.status}: ${txt}`);
+      }
+      setSaveMessage(
+        `Salvata: ${nomeArea || "(area senza nome)"} — PMV ${result.pmv.toFixed(2)}, PPD ${result.ppd.toFixed(1)}%.`,
+      );
+      onSaved?.();
+    } catch (err) {
+      setSaveMessage(
+        err instanceof Error ? `Errore: ${err.message}` : "Errore sconosciuto",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }, [aziendaId, inputs, nomeArea, onSaved, result]);
 
   // Hydrate from localStorage
   useEffect(() => {
@@ -498,6 +561,45 @@ export function MicroclimaPmvForm({
         </CardContent>
       </Card>
 
+      {/* Save to dossier */}
+      <Card className="border-primary/30 bg-primary/5">
+        <CardContent className="space-y-3 py-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+            <div>
+              <Label htmlFor="pmv-nome-area" className="text-xs">
+                Nome / identificativo area
+              </Label>
+              <Input
+                id="pmv-nome-area"
+                placeholder="Es. Ufficio open-space"
+                value={nomeArea}
+                onChange={(e) => setNomeArea(e.target.value)}
+              />
+            </div>
+            <div className="flex items-end">
+              <Button
+                disabled={!result || saving}
+                onClick={handleSave}
+              >
+                {saving ? "Salvataggio…" : "Salva nel fascicolo"}
+              </Button>
+            </div>
+          </div>
+          {saveMessage && (
+            <p
+              className={cn(
+                "text-xs",
+                saveMessage.startsWith("Errore")
+                  ? "text-destructive"
+                  : "text-emerald-700",
+              )}
+            >
+              {saveMessage}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Reset */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-4">
         <div className="text-xs text-muted-foreground">
@@ -603,11 +705,13 @@ function ChoiceButton({
 export interface MicroclimaPhsFormProps {
   aziendaId: string;
   onResultChange?: (result: PhsResult | null) => void;
+  onSaved?: () => void;
 }
 
 export function MicroclimaPhsForm({
   aziendaId,
   onResultChange,
+  onSaved,
 }: MicroclimaPhsFormProps) {
   const storageKey = `microclima-phs-draft-${aziendaId}`;
 
@@ -615,6 +719,67 @@ export function MicroclimaPhsForm({
   const [result, setResult] = useState<PhsResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nomeArea, setNomeArea] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  const handleSavePhs = useCallback(async () => {
+    if (!result) return;
+    setSaving(true);
+    setSaveMessage(null);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      let token: string | null = null;
+      try {
+        const s = await fetch("/api/auth/session");
+        const session = await s.json();
+        token = session?.accessToken ?? null;
+      } catch {
+        /* noop */
+      }
+      const body = JSON.stringify({
+        nome_area: nomeArea || null,
+        tipo_ambiente: "severo_caldo",
+        temperatura_aria: inputs.air_temp,
+        temperatura_radiante: inputs.mean_radiant_temp,
+        velocita_aria: inputs.air_velocity,
+        umidita_relativa: inputs.humidity,
+        metabolismo: inputs.metabolic_rate,
+        isolamento_vestiario: inputs.clothing_insulation,
+        phs_sw_tot: result.sweat_loss_g ?? null,
+        phs_t_re: result.t_re ?? null,
+        dlim_loss50: result.d_lim_loss_50 ?? null,
+        livello_rischio: result.livello ?? null,
+      });
+      const res = await fetch(
+        `${apiUrl}/api/v1/aziende/${aziendaId}/microclima-valutazioni`,
+        {
+          method: "POST",
+          headers: token
+            ? {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              }
+            : { "Content-Type": "application/json" },
+          body,
+        },
+      );
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`API ${res.status}: ${txt}`);
+      }
+      setSaveMessage(
+        `Salvata: ${nomeArea || "(area senza nome)"} — d_lim ${result.d_lim?.toFixed(0)} min.`,
+      );
+      onSaved?.();
+    } catch (err) {
+      setSaveMessage(
+        err instanceof Error ? `Errore: ${err.message}` : "Errore sconosciuto",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }, [aziendaId, inputs, nomeArea, onSaved, result]);
 
   useEffect(() => {
     try {
@@ -911,6 +1076,42 @@ export function MicroclimaPhsForm({
               />
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Save to dossier */}
+      <Card className="border-primary/30 bg-primary/5">
+        <CardContent className="space-y-3 py-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+            <div>
+              <Label htmlFor="phs-nome-area" className="text-xs">
+                Nome / identificativo area
+              </Label>
+              <Input
+                id="phs-nome-area"
+                placeholder="Es. Reparto fonderia"
+                value={nomeArea}
+                onChange={(e) => setNomeArea(e.target.value)}
+              />
+            </div>
+            <div className="flex items-end">
+              <Button disabled={!result || saving} onClick={handleSavePhs}>
+                {saving ? "Salvataggio…" : "Salva nel fascicolo"}
+              </Button>
+            </div>
+          </div>
+          {saveMessage && (
+            <p
+              className={cn(
+                "text-xs",
+                saveMessage.startsWith("Errore")
+                  ? "text-destructive"
+                  : "text-emerald-700",
+              )}
+            >
+              {saveMessage}
+            </p>
+          )}
         </CardContent>
       </Card>
 

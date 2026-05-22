@@ -21,6 +21,9 @@ class IncendioValutazione(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     azienda_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("aziende.id", ondelete="CASCADE"))
     ambiente_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("ambienti.id", ondelete="SET NULL"))
+    # Free-text area label used when the operator hasn't formalised the
+    # location in the ambienti table yet (e.g. "Magazzino materie prime").
+    nome_area: Mapped[str | None] = mapped_column(String(255))
     # Inflammability / Sources of ignition / Persons (presenza persone)
     inf: Mapped[int] = mapped_column(Integer, default=1)  # 1-3
     si: Mapped[int] = mapped_column(Integer, default=1)
@@ -42,3 +45,6 @@ class IncendioValutazione(Base):
     idranti_presenti: Mapped[int] = mapped_column(Integer, default=0)
     uscite_emergenza: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), onupdate=func.now()
+    )

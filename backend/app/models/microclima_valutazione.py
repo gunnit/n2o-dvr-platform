@@ -19,6 +19,7 @@ class MicroclimaValutazione(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     azienda_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("aziende.id", ondelete="CASCADE"))
     ambiente_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("ambienti.id", ondelete="SET NULL"))
+    nome_area: Mapped[str | None] = mapped_column(String(255))
     # Whether to evaluate moderate (PMV/PPD) or severe heat (PHS)
     tipo_ambiente: Mapped[str] = mapped_column(String, default="moderato")  # moderato / severo_caldo / severo_freddo
     # PMV/PPD inputs
@@ -39,3 +40,6 @@ class MicroclimaValutazione(Base):
     livello_rischio: Mapped[str | None] = mapped_column(String)
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), onupdate=func.now()
+    )
