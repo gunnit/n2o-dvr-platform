@@ -54,7 +54,7 @@ export default function BiologicoAssessmentPage({
         } catch {
           /* noop */
         }
-        const headers = token
+        const headers: Record<string, string> = token
           ? {
               Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",

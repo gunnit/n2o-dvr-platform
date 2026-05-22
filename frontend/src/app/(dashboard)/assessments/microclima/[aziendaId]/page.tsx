@@ -79,7 +79,7 @@ export default function MicroclimaAssessmentPage() {
         } catch {
           /* noop */
         }
-        const headers = token
+        const headers: Record<string, string> = token
           ? {
               Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
