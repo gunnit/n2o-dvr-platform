@@ -21,6 +21,10 @@ class StressValutazione(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     azienda_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("aziende.id", ondelete="CASCADE"))
     gruppo_omogeneo: Mapped[str] = mapped_column(String, default="Azienda intera")
+    # Feedback #17: per-mansione stress assessments. NULL means "Generale"
+    # (legacy / company-wide assessment). The upsert endpoint keys on
+    # (azienda_id, gruppo_omogeneo, mansione) so each role gets its own row.
+    mansione: Mapped[str | None] = mapped_column(String, nullable=True)
     # Each area stores the indicator responses as JSONB: {indicator_key: bool|int}
     # Scoring per INAIL method (see stress_calculator.py)
     area_a_eventi_sentinella: Mapped[dict] = mapped_column(JSONB, default=dict)

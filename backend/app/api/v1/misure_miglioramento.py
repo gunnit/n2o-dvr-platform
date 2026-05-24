@@ -269,10 +269,21 @@ async def genera_da_rischi(
     new_rows: list[MisuraMiglioramento] = []
     ordine = next_ordine
     for per, misure in results:
+        # Build a concise risk label from the pericolo so the "Rischio"
+        # column surfaces what the measure addresses rather than
+        # repeating the AI's measure title.
+        risk_label_parts: list[str] = []
+        if per.pericolo:
+            risk_label_parts.append(per.pericolo)
+        if per.rischio:
+            risk_label_parts.append(per.rischio)
+        risk_label = " — ".join(risk_label_parts) if risk_label_parts else "Rischio non specificato"
+
         for m in misure:
             # Concatenate the AI's structured fields into the T109 grid:
-            # the titolo becomes the headline misura, the operational
-            # descrizione + normative reference goes into procedura.
+            # misura = risk description (UI: "Rischio")
+            # misura_miglioramento = AI-generated measure (UI: "Misura di Miglioramento")
+            # procedura = operational description (UI: "Attivita")
             procedura_parts: list[str] = [m.descrizione]
             if m.riferimento_normativo:
                 procedura_parts.append(
@@ -281,7 +292,8 @@ async def genera_da_rischi(
             row = MisuraMiglioramento(
                 azienda_id=azienda_id,
                 pericolo_valutazione_id=per.id,
-                misura=m.titolo,
+                misura=risk_label,
+                misura_miglioramento=m.titolo,
                 procedura="\n".join(procedura_parts),
                 # `tipo` is the lever (tecnica/dpi/formazione/...) — useful
                 # for the operator deciding how to allocate budget.

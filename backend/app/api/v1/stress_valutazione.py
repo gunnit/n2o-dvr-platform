@@ -19,9 +19,10 @@ canonical row.
 """
 
 import uuid
+from typing import Optional
 
-from fastapi import APIRouter, Depends, Response
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Query, Response
+from sqlalchemy import distinct, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
@@ -87,6 +88,7 @@ def _serialize(val: StressValutazione, calc: dict | None = None) -> StressValuta
         id=val.id,
         azienda_id=val.azienda_id,
         gruppo_omogeneo=val.gruppo_omogeneo,
+        mansione=val.mansione,
         area_a_eventi_sentinella=val.area_a_eventi_sentinella or {},
         area_b_contenuto_lavoro=val.area_b_contenuto_lavoro or {},
         area_c_contesto_lavoro=val.area_c_contesto_lavoro or {},
@@ -112,16 +114,21 @@ def _serialize(val: StressValutazione, calc: dict | None = None) -> StressValuta
 async def get_valutazione(
     azienda_id: uuid.UUID,
     response: Response,
+    mansione: Optional[str] = Query(None, description="Filter by mansione (null = Generale)"),
     org_id: uuid.UUID = Depends(get_current_org),
     db: AsyncSession = Depends(get_db),
 ):
     await _get_azienda(azienda_id, org_id, db)
-    result = await db.execute(
-        select(StressValutazione)
-        .where(StressValutazione.azienda_id == azienda_id)
-        .order_by(StressValutazione.updated_at.desc())
-        .limit(1)
+    q = select(StressValutazione).where(
+        StressValutazione.azienda_id == azienda_id,
     )
+    # Filter by mansione: explicit value or NULL (Generale)
+    if mansione is not None:
+        q = q.where(StressValutazione.mansione == mansione)
+    else:
+        q = q.where(StressValutazione.mansione.is_(None))
+    q = q.order_by(StressValutazione.updated_at.desc()).limit(1)
+    result = await db.execute(q)
     val = result.scalar_one_or_none()
     if val is None:
         # 200 with null body — the frontend distinguishes "no run yet"
@@ -142,6 +149,56 @@ async def get_valutazione(
     return _serialize(val, calc)
 
 
+@router.get(
+    "/all",
+    response_model=list[StressValutazioneResponse],
+    responses={200: {"description": "All valutazioni for the azienda"}},
+)
+async def list_valutazioni(
+    azienda_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return every stress valutazione for the azienda (all mansioni)."""
+    await _get_azienda(azienda_id, org_id, db)
+    result = await db.execute(
+        select(StressValutazione)
+        .where(StressValutazione.azienda_id == azienda_id)
+        .order_by(StressValutazione.mansione.asc().nullsfirst(), StressValutazione.updated_at.desc())
+    )
+    rows = result.scalars().all()
+    out: list[StressValutazioneResponse] = []
+    for val in rows:
+        flat = {
+            **(val.area_a_eventi_sentinella or {}),
+            **(val.area_b_contenuto_lavoro or {}),
+            **(val.area_c_contesto_lavoro or {}),
+        }
+        calc = calculate_stress(flat)
+        out.append(_serialize(val, calc))
+    return out
+
+
+@router.get(
+    "/mansioni",
+    response_model=list[str],
+    responses={200: {"description": "Distinct mansioni with saved valutazioni"}},
+)
+async def list_mansioni(
+    azienda_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return distinct mansioni that have a persisted stress valutazione."""
+    await _get_azienda(azienda_id, org_id, db)
+    result = await db.execute(
+        select(distinct(StressValutazione.mansione))
+        .where(StressValutazione.azienda_id == azienda_id)
+    )
+    # Return non-null mansioni. The NULL entry (Generale) is implicit.
+    return [r for r in result.scalars().all() if r is not None]
+
+
 @router.put("", response_model=StressValutazioneResponse)
 async def upsert_valutazione(
     azienda_id: uuid.UUID,
@@ -152,25 +209,32 @@ async def upsert_valutazione(
     await _get_azienda(azienda_id, org_id, db)
 
     gruppo = (body.gruppo_omogeneo or "Azienda intera").strip() or "Azienda intera"
+    # Feedback #17: per-mansione stress assessments. Normalize empty
+    # string to NULL (= Generale).
+    mansione = (body.mansione or "").strip() or None
 
     calc = calculate_stress(body.answers)
     area_a, area_b, area_c = _split_answers_by_area(body.answers)
 
-    # Upsert keyed by (azienda_id, gruppo_omogeneo). One valutazione per
-    # gruppo: re-confirming overwrites scores so the fascicolo always
-    # shows the most recent run.
-    result = await db.execute(
-        select(StressValutazione).where(
-            StressValutazione.azienda_id == azienda_id,
-            StressValutazione.gruppo_omogeneo == gruppo,
-        )
+    # Upsert keyed by (azienda_id, gruppo_omogeneo, mansione). One
+    # valutazione per group+role: re-confirming overwrites scores so
+    # the fascicolo always shows the most recent run.
+    q = select(StressValutazione).where(
+        StressValutazione.azienda_id == azienda_id,
+        StressValutazione.gruppo_omogeneo == gruppo,
     )
+    if mansione is not None:
+        q = q.where(StressValutazione.mansione == mansione)
+    else:
+        q = q.where(StressValutazione.mansione.is_(None))
+    result = await db.execute(q)
     val = result.scalar_one_or_none()
 
     if val is None:
         val = StressValutazione(
             azienda_id=azienda_id,
             gruppo_omogeneo=gruppo,
+            mansione=mansione,
         )
         db.add(val)
 

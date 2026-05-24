@@ -13,6 +13,7 @@ import {
   Target,
 } from "lucide-react";
 import type {
+  Ambiente,
   Azienda,
   ValutazioneRischio,
   DocumentoGenerato,
@@ -82,12 +83,18 @@ export type NextStepsCallbacks = {
 
 export function NextStepsPanel({
   azienda,
+  ambienti = [],
   rischi,
   documenti,
   miglioramentoCount,
   callbacks,
 }: {
   azienda: Azienda;
+  // Environments belonging to the azienda. Drives the Valutazione Rischi
+  // step: "done" when every ambiente has at least one risk with P and D set.
+  // Defaults to [] so the panel compiles even if the parent hasn't been
+  // updated to pass it yet (step falls back to "todo").
+  ambienti?: Ambiente[];
   rischi: ValutazioneRischio[];
   documenti: DocumentoGenerato[];
   // Count of rows in the misure_miglioramento table for the azienda.
@@ -99,6 +106,7 @@ export function NextStepsPanel({
 }) {
   const steps = computeSteps(
     azienda,
+    ambienti,
     rischi,
     documenti,
     miglioramentoCount,
@@ -215,6 +223,7 @@ function StepRow({ step, index }: { step: Step; index: number }) {
 
 function computeSteps(
   azienda: Azienda,
+  ambienti: Ambiente[],
   rischi: ValutazioneRischio[],
   documenti: DocumentoGenerato[],
   miglioramentoCount: number | null,
@@ -227,10 +236,6 @@ function computeSteps(
   const hasDescrizione = (azienda.descrizione_attivita ?? "").trim().length > 0;
 
   const applicableRisks = rischi.filter((r) => r.applicabile);
-  const risksWithMeasures = applicableRisks.filter(
-    (r) => (r.misure_prevenzione ?? "").trim().length > 0,
-  );
-  const missingMeasures = applicableRisks.length - risksWithMeasures.length;
 
   const docsCompleted = documenti.filter((d) => DOWNLOADABLE.has(d.status));
   const docsStale = documenti.filter((d) => d.stale_snapshot);
@@ -275,49 +280,43 @@ function computeSteps(
       : { label: "Apri", onClick: cb.onOpenDescrizione },
   });
 
-  // 3a. Valuta rischi — surfaced once the sopralluogo is delivered but
-  // no rischi have been entered yet. Replaces the previous mid-wizard
-  // step with a CTA that points at the standalone /assessments/risk/[id]
-  // editor (extraction 2026-04-30). When at least one applicable risk
-  // exists we drop straight to the Misure di prevenzione step instead.
-  if (surveyDelivered && applicableRisks.length === 0) {
+  // 3. Valutazione Rischi — "done" when every ambiente has at least one
+  // risk with P and D set, "warning" when some but not all are covered,
+  // "todo" otherwise. Surfaced once the sopralluogo is delivered.
+  if (surveyDelivered) {
+    const evaluatedAmbienteIds = new Set(
+      rischi
+        .filter((r) => r.probabilita_p != null && r.danno_d != null)
+        .map((r) => r.ambiente_id),
+    );
+    const allEvaluated =
+      ambienti.length > 0 && evaluatedAmbienteIds.size >= ambienti.length;
+    const someEvaluated = evaluatedAmbienteIds.size > 0;
+
+    let riskStatus: StepStatus;
+    if (allEvaluated) {
+      riskStatus = "done";
+    } else if (someEvaluated) {
+      riskStatus = "warning";
+    } else {
+      riskStatus = "todo";
+    }
+
     steps.push({
       id: "valuta-rischi",
-      status: "todo",
-      title: "Valuta rischi",
-      detail:
-        "Apri la pagina dedicata per assegnare P/D, applicabilità e pericoli specifici per ogni ambiente.",
+      status: riskStatus,
+      title: "Valutazione Rischi",
+      detail: "Valutare i rischi presenti all'interno dell'azienda",
       icon: ShieldAlert,
       cta: {
-        label: "Apri valutazione",
-        onClick: cb.onOpenRischi,
-        primary: true,
+        label: allEvaluated ? "Rivedi rischi" : "Apri valutazione",
+        onClick: allEvaluated ? cb.onEditRischi : cb.onOpenRischi,
+        primary: !allEvaluated,
       },
     });
   }
 
-  // 3b. Misure di prevenzione (skip if no risks yet — sopralluogo not done).
-  // CTA goes to the standalone editor where the AI suggester actually lives;
-  // tab-switching here was a no-op when the user was already on the rischi tab.
-  if (applicableRisks.length > 0) {
-    const allCovered = missingMeasures === 0;
-    steps.push({
-      id: "misure",
-      status: allCovered ? "done" : "warning",
-      title: "Misure di prevenzione",
-      detail: allCovered
-        ? `${applicableRisks.length} rischi su ${applicableRisks.length} con misure definite.`
-        : `${missingMeasures} ${missingMeasures === 1 ? "rischio" : "rischi"} senza misure (su ${applicableRisks.length}). Apri l'editor per definirle o generarle con AI.`,
-      icon: ShieldAlert,
-      cta: {
-        label: allCovered ? "Rivedi rischi" : "Apri editor rischi",
-        onClick: cb.onEditRischi,
-        primary: !allCovered,
-      },
-    });
-  }
-
-  // 3c. Piano di Miglioramento — surfaces once the operator has at least
+  // 4. Piano di Miglioramento — surfaces once the operator has at least
   // one applicable risk so they have something to generate measures from.
   // Status reflects whether any misure_miglioramento rows exist; the page
   // itself has the "Genera con AI" CTA, so we just point the operator at
@@ -341,7 +340,7 @@ function computeSteps(
     });
   }
 
-  // 4. Valutazioni specialistiche — informational. We can't compute
+  // 5. Valutazioni specialistiche — informational. We can't compute
   // applicability client-side without backend hints, so we just point
   // the user at the dedicated page when the sopralluogo is closed.
   if (surveyDelivered) {
@@ -356,7 +355,7 @@ function computeSteps(
     });
   }
 
-  // 5. Genera documenti
+  // 6. Genera documenti
   let docStatus: StepStatus;
   let docDetail: string;
   let docCta: Step["cta"];

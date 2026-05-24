@@ -43,8 +43,11 @@ class MisuraMiglioramento(Base):
         ForeignKey("pericoli_valutazione.id", ondelete="SET NULL")
     )
 
-    # T109 columns — five free-text fields (operator-editable).
+    # T109 columns — six free-text fields (operator-editable).
     misura: Mapped[str] = mapped_column(Text, nullable=False)
+    # The concrete improvement measure (prevenzione/protezione action).
+    # Added in feedback round #7; populated by AI via suggest_measures().
+    misura_miglioramento: Mapped[str | None] = mapped_column(Text)
     procedura: Mapped[str | None] = mapped_column(Text)
     risorse: Mapped[str | None] = mapped_column(Text)
     responsabile: Mapped[str | None] = mapped_column(String)

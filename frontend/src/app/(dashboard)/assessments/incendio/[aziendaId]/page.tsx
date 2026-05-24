@@ -21,7 +21,7 @@ import {
   type FireLivello,
 } from "@/components/assessments/incendio/incendio-form";
 import { IncendioVvfBanner } from "@/components/assessments/incendio/incendio-vvf-banner";
-import type { Azienda } from "@/types";
+import type { Ambiente, Azienda } from "@/types";
 
 // Italian action text per livello (kept for the "Azione consigliata" summary
 // card — the per-area checklist lives inside `IncendioMeasures`).
@@ -79,6 +79,7 @@ export default function IncendioAssessmentPage() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const [azienda, setAzienda] = useState<Azienda | null>(null);
+  const [ambienti, setAmbienti] = useState<Ambiente[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [existing, setExisting] = useState<ServerRow[]>([]);
   const form = useIncendioForm();
@@ -115,17 +116,24 @@ export default function IncendioAssessmentPage() {
     async function load() {
       try {
         const headers = await authHeaders();
-        const [azRes, rowsRes] = await Promise.all([
+        const [azRes, rowsRes, ambRes] = await Promise.all([
           fetch(`${apiUrl}/api/v1/aziende/${aziendaId}`, { headers }),
           fetch(
             `${apiUrl}/api/v1/aziende/${aziendaId}/incendio-valutazioni`,
             { headers },
           ),
+          fetch(`${apiUrl}/api/v1/aziende/${aziendaId}/ambienti`, {
+            headers,
+          }),
         ]);
         if (!azRes.ok) throw new Error(`Errore azienda ${azRes.status}`);
         const azData = (await azRes.json()) as Azienda;
         if (cancelled) return;
         setAzienda(azData);
+        if (ambRes.ok) {
+          const ambData = (await ambRes.json()) as Ambiente[];
+          if (!cancelled) setAmbienti(ambData);
+        }
 
         if (rowsRes.ok) {
           const rows = (await rowsRes.json()) as ServerRow[];
@@ -291,7 +299,7 @@ export default function IncendioAssessmentPage() {
         </Card>
       )}
 
-      <IncendioForm form={form} onResultChange={setResult} />
+      <IncendioForm form={form} onResultChange={setResult} ambienti={ambienti} />
 
       {/* Azione consigliata riepilogo (livello massimo) */}
       <Card>

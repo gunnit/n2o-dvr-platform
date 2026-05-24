@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, Plus, Sparkles, Users, X } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
   StressChecklist,
@@ -35,6 +37,25 @@ interface StressMisuraLibreria {
   personalizzato: boolean;
   created_at: string;
 }
+
+// Persisted valutazione shape from the API
+interface PersistedValutazione {
+  id: string;
+  mansione: string | null;
+  area_a_eventi_sentinella?: Record<string, string>;
+  area_b_contenuto_lavoro?: Record<string, string>;
+  area_c_contesto_lavoro?: Record<string, string>;
+  updated_at?: string;
+  livello_rischio?: string | null;
+  punteggio_totale?: number | null;
+}
+
+const DEFAULT_MANSIONI = [
+  "Operaio",
+  "Impiegato",
+  "Dirigente",
+  "Preposto",
+];
 
 const DEFAULT_MEASURES: Record<Livello, string[]> = {
   BASSO: [
@@ -100,6 +121,22 @@ async function getAuthToken(): Promise<string | null> {
   }
 }
 
+/** Build the localStorage key for a mansione draft. NULL mansione = "Generale". */
+function draftKey(aziendaId: string, mansione: string | null): string {
+  const suffix = mansione ?? "__generale__";
+  return `stress-draft-${aziendaId}-${suffix}`;
+}
+
+// ---------------------------------------------------------------------------
+// Mansione summary badge for the tab list
+// ---------------------------------------------------------------------------
+
+interface MansioneSummary {
+  mansione: string | null;
+  livello: string | null;
+  punteggio: number | null;
+}
+
 // ---------------------------------------------------------------------------
 
 export default function StressAssessmentPage() {
@@ -115,24 +152,22 @@ export default function StressAssessmentPage() {
   const [finalizing, setFinalizing] = useState(false);
   const [finalizeMessage, setFinalizeMessage] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
-  // Feedback #31 (2026-05-18): hydrate the checklist from any persisted
-  // StressValutazione before mounting the checklist component, so a
-  // returning operator sees the previous run instead of an empty form.
-  // The checklist reads localStorage on mount, so we have to write the
-  // saved answers BEFORE it renders — gate render on `hydrated`.
   const [hydrated, setHydrated] = useState(false);
-  // Timestamp of the latest persisted valutazione, for the finalize
-  // banner. Null until the operator confirms at least once.
   const [savedAt, setSavedAt] = useState<string | null>(null);
-  // Track the last saved text per row so we can detect dirty state on blur.
   const lastSavedTextRef = useRef<Map<string, string>>(new Map());
-  // Feedback #31 (2026-05-18): bump on every successful save/delete so the
-  // per-row "Salvato / Da salvare" badge re-renders. The ref alone won't
-  // trigger React renders.
   const [savedTick, setSavedTick] = useState(0);
 
-  // Load azienda metadata (best-effort — if auth not set up, we fall back to
-  // the raw id so the UI still works for testing).
+  // Feedback #17: per-mansione state
+  const [mansioni, setMansioni] = useState<string[]>([]);
+  const [activeMansione, setActiveMansione] = useState<string | null>(null);
+  const [addingMansione, setAddingMansione] = useState(false);
+  const [newMansioneName, setNewMansioneName] = useState("");
+  const [summaries, setSummaries] = useState<MansioneSummary[]>([]);
+
+  // The tab value string: null mansione maps to "__generale__"
+  const activeTabValue = activeMansione ?? "__generale__";
+
+  // Load azienda metadata (best-effort)
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -160,53 +195,79 @@ export default function StressAssessmentPage() {
     };
   }, [aziendaId, apiUrl]);
 
-  // Hydrate checklist answers from any persisted StressValutazione. Runs
-  // once on mount. We write into localStorage (the StressChecklist owns
-  // its state via that key) and only then flip `hydrated` so the
-  // checklist mounts with the right initial answers.
+  // Fetch all existing valutazioni to build mansioni list + summaries
+  const refreshSummaries = useCallback(async () => {
+    try {
+      const token = await getAuthToken();
+      const res = await fetch(
+        `${apiUrl}/api/v1/aziende/${aziendaId}/stress/valutazione/all`,
+        {
+          headers: token
+            ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
+            : { "Content-Type": "application/json" },
+        },
+      );
+      if (res.ok) {
+        const data = (await res.json()) as PersistedValutazione[];
+        const sums: MansioneSummary[] = data.map((v) => ({
+          mansione: v.mansione,
+          livello: v.livello_rischio ?? null,
+          punteggio: v.punteggio_totale ?? null,
+        }));
+        setSummaries(sums);
+        // Merge saved mansioni into the mansioni list
+        const saved = data
+          .map((v) => v.mansione)
+          .filter((m): m is string => m !== null);
+        setMansioni((prev) => {
+          const set = new Set([...prev, ...saved]);
+          return Array.from(set);
+        });
+      }
+    } catch {
+      // non-critical
+    }
+  }, [apiUrl, aziendaId]);
+
+  // Hydrate checklist answers from persisted StressValutazione for the
+  // active mansione. Runs on mount and when mansione changes.
   useEffect(() => {
     let cancelled = false;
     async function hydrateFromServer() {
       if (!aziendaId) return;
+      setHydrated(false);
+      setFinalizeMessage(null);
+      setSavedAt(null);
+      // Reset measures so they reload for the new mansione's livello
+      setMisureLivello(null);
       try {
         const token = await getAuthToken();
-        const res = await fetch(
+        const url = new URL(
           `${apiUrl}/api/v1/aziende/${aziendaId}/stress/valutazione`,
-          {
-            headers: token
-              ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
-              : { "Content-Type": "application/json" },
-          },
         );
+        if (activeMansione !== null) {
+          url.searchParams.set("mansione", activeMansione);
+        }
+        const res = await fetch(url.toString(), {
+          headers: token
+            ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
+            : { "Content-Type": "application/json" },
+        });
         if (res.ok) {
-          const data = (await res.json()) as null | {
-            area_a_eventi_sentinella?: Record<string, string>;
-            area_b_contenuto_lavoro?: Record<string, string>;
-            area_c_contesto_lavoro?: Record<string, string>;
-            updated_at?: string;
-            livello_rischio?: string | null;
-            punteggio_totale?: number | null;
-          };
+          const data = (await res.json()) as PersistedValutazione | null;
           if (data && !cancelled) {
             const merged: Record<string, string> = {
               ...(data.area_a_eventi_sentinella ?? {}),
               ...(data.area_b_contenuto_lavoro ?? {}),
               ...(data.area_c_contesto_lavoro ?? {}),
             };
-            // Only overwrite the local draft if (a) there's no local
-            // draft yet, or (b) the local draft is empty. We don't want
-            // to clobber an in-progress edit the operator made offline.
-            const existing = window.localStorage.getItem(
-              `stress-draft-${aziendaId}`,
-            );
+            const key = draftKey(aziendaId, activeMansione);
+            const existing = window.localStorage.getItem(key);
             const hasLocalEdits =
               existing &&
               Object.keys(JSON.parse(existing || "{}")).length > 0;
             if (!hasLocalEdits && Object.keys(merged).length > 0) {
-              window.localStorage.setItem(
-                `stress-draft-${aziendaId}`,
-                JSON.stringify(merged),
-              );
+              window.localStorage.setItem(key, JSON.stringify(merged));
             }
             if (data.updated_at) setSavedAt(data.updated_at);
             if (data.livello_rischio && data.punteggio_totale !== undefined) {
@@ -223,14 +284,46 @@ export default function StressAssessmentPage() {
       }
     }
     hydrateFromServer();
+    // Also refresh summaries on mount
+    refreshSummaries();
     return () => {
       cancelled = true;
     };
-  }, [aziendaId, apiUrl]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aziendaId, apiUrl, activeMansione]);
 
-  // Rebuild the measures panel whenever the risk level changes. For each
-  // band we: (1) seed with defaults, (2) fetch the per-client library for
-  // that band and append every library entry tagged as personalizzata.
+  // Fetch saved mansioni from the server on mount
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchMansioni() {
+      try {
+        const token = await getAuthToken();
+        const res = await fetch(
+          `${apiUrl}/api/v1/aziende/${aziendaId}/stress/valutazione/mansioni`,
+          {
+            headers: token
+              ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
+              : { "Content-Type": "application/json" },
+          },
+        );
+        if (res.ok && !cancelled) {
+          const data = (await res.json()) as string[];
+          setMansioni((prev) => {
+            const set = new Set([...prev, ...data]);
+            return Array.from(set);
+          });
+        }
+      } catch {
+        // non-critical
+      }
+    }
+    fetchMansioni();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl, aziendaId]);
+
+  // Rebuild the measures panel whenever the risk level changes.
   useEffect(() => {
     if (result.livello === misureLivello) return;
     const livello = result.livello;
@@ -240,7 +333,6 @@ export default function StressAssessmentPage() {
     let cancelled = false;
 
     async function hydrate() {
-      // Start with default scaffolded list.
       const defaults: Misura[] = DEFAULT_MEASURES[livello].map((text) => ({
         id: makeId(),
         text,
@@ -301,19 +393,13 @@ export default function StressAssessmentPage() {
     setMisure((prev) => prev.map((m) => (m.id === id ? { ...m, text } : m)));
   }, []);
 
-  // Persist a measure row to the per-client library.
-  // - If it already has libraryId + the text changed, PUT it.
-  // - Else if the text is non-empty and differs from the original default
-  //   (or the row had no originalText, i.e. was user-added), POST it.
   const saveMisura = useCallback(
     async (id: string) => {
       const row = misure.find((m) => m.id === id);
       if (!row) return;
       const trimmed = row.text.trim();
       if (!trimmed) return;
-      // Skip if unchanged since last save.
       if (lastSavedTextRef.current.get(id) === row.text) return;
-      // Skip if this is a default row that hasn't actually been edited.
       if (
         row.originalText !== undefined &&
         row.originalText === row.text &&
@@ -395,7 +481,6 @@ export default function StressAssessmentPage() {
     async (id: string) => {
       const row = misure.find((m) => m.id === id);
       if (!row) return;
-      // If the row has a library id, delete it server-side first.
       if (row.libraryId) {
         try {
           const token = await getAuthToken();
@@ -434,14 +519,10 @@ export default function StressAssessmentPage() {
     ]);
   }, []);
 
-  // Feedback #20 (2026-05-18): ask gpt-5.4-mini for misure correttive
-  // tailored to the live answers. Adds each suggested line to the
-  // measures list as a personalized entry — the operator still reviews,
-  // edits, and saves. We never auto-persist into misure_correttive.
   const suggestWithAI = useCallback(async () => {
     setAiLoading(true);
     try {
-      const raw = window.localStorage.getItem(`stress-draft-${aziendaId}`);
+      const raw = window.localStorage.getItem(draftKey(aziendaId, activeMansione));
       const answers: AnswersMap = raw ? JSON.parse(raw) : {};
       if (Object.keys(answers).length === 0) {
         toast.error(
@@ -470,8 +551,6 @@ export default function StressAssessmentPage() {
       }
       const data = (await res.json()) as { suggestion: string };
 
-      // Split the suggestion (one measure per line). Strip any leading
-      // bullet/numbering the model might add despite the prompt.
       const lines = data.suggestion
         .split(/\r?\n/)
         .map((s) => s.replace(/^\s*[-*•]\s*/, "").replace(/^\s*\d+[.)]\s*/, "").trim())
@@ -502,7 +581,7 @@ export default function StressAssessmentPage() {
     } finally {
       setAiLoading(false);
     }
-  }, [apiUrl, aziendaId]);
+  }, [apiUrl, aziendaId, activeMansione]);
 
   const finalize = useCallback(async () => {
     setFinalizing(true);
@@ -510,15 +589,9 @@ export default function StressAssessmentPage() {
     try {
       const token = await getAuthToken();
 
-      // Pull answers directly from localStorage (the checklist owns the state)
-      const raw = window.localStorage.getItem(`stress-draft-${aziendaId}`);
+      const raw = window.localStorage.getItem(draftKey(aziendaId, activeMansione));
       const answers: AnswersMap = raw ? JSON.parse(raw) : {};
 
-      // Feedback #31: PUT to the upsert endpoint so the valutazione is
-      // actually archived in the fascicolo. The endpoint runs the same
-      // calculator server-side, persists raw answers + scores + livello,
-      // and returns the computed result so we can show the operator the
-      // totale + livello immediately.
       const res = await fetch(
         `${apiUrl}/api/v1/aziende/${aziendaId}/stress/valutazione`,
         {
@@ -526,7 +599,10 @@ export default function StressAssessmentPage() {
           headers: token
             ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
             : { "Content-Type": "application/json" },
-          body: JSON.stringify({ answers }),
+          body: JSON.stringify({
+            answers,
+            mansione: activeMansione,
+          }),
         },
       );
       if (!res.ok) {
@@ -543,6 +619,8 @@ export default function StressAssessmentPage() {
       setFinalizeMessage(
         `Valutazione archiviata: totale ${data.punteggio_totale ?? "—"} — livello ${data.livello_rischio ?? "—"}`,
       );
+      // Refresh the summaries panel
+      refreshSummaries();
     } catch (err) {
       setFinalizeMessage(
         err instanceof Error
@@ -552,13 +630,52 @@ export default function StressAssessmentPage() {
     } finally {
       setFinalizing(false);
     }
-  }, [apiUrl, aziendaId]);
+  }, [apiUrl, aziendaId, activeMansione, refreshSummaries]);
 
   const pageSubtitle = useMemo(() => {
     if (loadError) return `Azienda ${aziendaId} (metadati non disponibili)`;
     if (azienda) return azienda.ragione_sociale ?? `Azienda ${aziendaId}`;
-    return "Caricamento…";
+    return "Caricamento...";
   }, [azienda, aziendaId, loadError]);
+
+  // Handle adding a new custom mansione
+  const handleAddMansione = useCallback(() => {
+    const trimmed = newMansioneName.trim();
+    if (!trimmed) return;
+    if (mansioni.includes(trimmed)) {
+      toast.error("Questa mansione esiste già");
+      return;
+    }
+    setMansioni((prev) => [...prev, trimmed]);
+    setActiveMansione(trimmed);
+    setNewMansioneName("");
+    setAddingMansione(false);
+  }, [newMansioneName, mansioni]);
+
+  // Handle removing a mansione tab (only custom ones)
+  const handleRemoveMansione = useCallback(
+    (m: string) => {
+      setMansioni((prev) => prev.filter((x) => x !== m));
+      if (activeMansione === m) {
+        setActiveMansione(null);
+      }
+    },
+    [activeMansione],
+  );
+
+  // Handle tab change
+  const handleTabChange = useCallback((value: string | number | null) => {
+    if (value === null) return;
+    const strValue = String(value);
+    if (strValue === "__generale__") {
+      setActiveMansione(null);
+    } else {
+      setActiveMansione(strValue);
+    }
+  }, []);
+
+  // The mansione label shown in the UI
+  const mansioneLabel = activeMansione ?? "Generale";
 
   return (
     <div className="space-y-6">
@@ -566,7 +683,7 @@ export default function StressAssessmentPage() {
         <div>
           <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
             <Badge variant="secondary">Allegato Stress Lavoro-Correlato</Badge>
-            <span>D.Lgs. 81/2008 · INAIL Metodo Indicatori Oggettivi</span>
+            <span>D.Lgs. 81/2008 - INAIL Metodo Indicatori Oggettivi</span>
           </div>
           <h1 className="mt-2 type-h1">
             Valutazione Stress Lavoro-Correlato
@@ -575,13 +692,163 @@ export default function StressAssessmentPage() {
         </div>
       </div>
 
+      {/* Mansione selector */}
+      <Card>
+        <CardHeader className="border-b pb-3">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm">Valutazione per mansione</CardTitle>
+          </div>
+          <CardDescription className="text-xs">
+            Compila una checklist separata per ogni mansione. La valutazione
+            &laquo;Generale&raquo; copre l'azienda intera.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <Tabs value={activeTabValue} onValueChange={handleTabChange}>
+            <div className="flex flex-wrap items-center gap-2">
+              <TabsList className="flex-wrap h-auto gap-1">
+                <TabsTrigger value="__generale__" className="gap-1.5">
+                  Generale
+                  {summaries.find((s) => s.mansione === null)?.livello && (
+                    <LivelloMicroBadge livello={summaries.find((s) => s.mansione === null)!.livello!} />
+                  )}
+                </TabsTrigger>
+                {mansioni.map((m) => (
+                  <TabsTrigger key={m} value={m} className="gap-1.5 group/tab">
+                    {m}
+                    {summaries.find((s) => s.mansione === m)?.livello && (
+                      <LivelloMicroBadge livello={summaries.find((s) => s.mansione === m)!.livello!} />
+                    )}
+                    <button
+                      type="button"
+                      className="ml-0.5 rounded-sm p-0.5 opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover/tab:opacity-100 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveMansione(m);
+                      }}
+                      title={`Rimuovi ${m}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+
+              {addingMansione ? (
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    className="h-8 w-40 text-sm"
+                    placeholder="Nome mansione..."
+                    value={newMansioneName}
+                    onChange={(e) => setNewMansioneName((e.target as HTMLInputElement).value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleAddMansione();
+                      if (e.key === "Escape") {
+                        setAddingMansione(false);
+                        setNewMansioneName("");
+                      }
+                    }}
+                    autoFocus
+                  />
+                  <Button size="sm" variant="outline" className="h-8" onClick={handleAddMansione}>
+                    Aggiungi
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8"
+                    onClick={() => {
+                      setAddingMansione(false);
+                      setNewMansioneName("");
+                    }}
+                  >
+                    Annulla
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  {DEFAULT_MANSIONI.filter((m) => !mansioni.includes(m)).length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {DEFAULT_MANSIONI.filter((m) => !mansioni.includes(m)).map((m) => (
+                        <Button
+                          key={m}
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => {
+                            setMansioni((prev) => [...prev, m]);
+                          }}
+                        >
+                          + {m}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs gap-1"
+                    onClick={() => setAddingMansione(true)}
+                  >
+                    <Plus className="h-3 w-3" />
+                    Altra mansione
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Summary of all mansioni with persisted assessments */}
+            {summaries.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {summaries.map((s, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs cursor-pointer transition-colors",
+                      (s.mansione ?? "__generale__") === activeTabValue
+                        ? "border-primary/40 bg-primary/5"
+                        : "border-border bg-background hover:bg-muted/50",
+                    )}
+                    onClick={() => handleTabChange(s.mansione ?? "__generale__")}
+                  >
+                    <span className="font-medium">{s.mansione ?? "Generale"}</span>
+                    <span className="text-muted-foreground">
+                      {s.punteggio !== null ? `${s.punteggio}/67` : "--"}
+                    </span>
+                    {s.livello && <LivelloMicroBadge livello={s.livello} />}
+                  </div>
+                ))}
+              </div>
+            )}
+
+          </Tabs>
+        </CardContent>
+      </Card>
+
+      {/* Active mansione banner */}
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Badge variant="outline" className="text-xs">
+          Mansione: {mansioneLabel}
+        </Badge>
+        <span>
+          Compilazione checklist INAIL per{" "}
+          <strong className="text-foreground">{mansioneLabel}</strong>
+        </span>
+      </div>
+
       {hydrated ? (
-        <StressChecklist aziendaId={aziendaId} onResultChange={setResult} />
+        <StressChecklist
+          key={activeTabValue}
+          aziendaId={aziendaId}
+          mansione={activeMansione}
+          onResultChange={setResult}
+        />
       ) : (
         <Card>
           <CardContent className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Caricamento valutazione precedente…
+            Caricamento valutazione precedente...
           </CardContent>
         </Card>
       )}
@@ -607,7 +874,7 @@ export default function StressAssessmentPage() {
                 {aiLoading ? (
                   <>
                     <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    Analisi…
+                    Analisi...
                   </>
                 ) : (
                   <>
@@ -674,7 +941,7 @@ export default function StressAssessmentPage() {
                       className="flex-1 min-w-0 resize-none bg-transparent text-sm leading-relaxed outline-none focus:outline-none"
                       rows={Math.max(2, Math.ceil((m.text.length || 20) / 90))}
                       value={m.text}
-                      placeholder="Descrivi la misura correttiva…"
+                      placeholder="Descrivi la misura correttiva..."
                       onChange={(e) => updateMisuraText(m.id, e.target.value)}
                       onBlur={() => saveMisura(m.id)}
                     />
@@ -694,7 +961,7 @@ export default function StressAssessmentPage() {
                           variant="outline"
                           className="border-emerald-400/70 text-emerald-700"
                         >
-                          ✓ Salvato
+                          Salvato
                         </Badge>
                       ) : null}
                       <Button
@@ -725,7 +992,7 @@ export default function StressAssessmentPage() {
               + Aggiungi misura
             </Button>
             <p className="text-[11px] text-muted-foreground">
-              Le misure modificate sono contrassegnate come «Personalizzato» e
+              Le misure modificate sono contrassegnate come &laquo;Personalizzato&raquo; e
               salvate nella libreria del cliente.
             </p>
           </div>
@@ -736,11 +1003,13 @@ export default function StressAssessmentPage() {
       <Card className="border-primary/30 bg-primary/5">
         <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
           <div>
-            <p className="text-sm font-medium">Conferma valutazione</p>
+            <p className="text-sm font-medium">
+              Conferma valutazione{activeMansione ? ` — ${activeMansione}` : ""}
+            </p>
             <p className="text-xs text-muted-foreground">
               {allAnswered
-                ? `Tutti i ${INDICATORS.length} indicatori compilati. La valutazione sarà archiviata nel fascicolo cliente.`
-                : `Mancano ${result.unanswered.length} indicatori. Completa la checklist per confermare.`}
+                ? `Tutti i ${INDICATORS.length} indicatori compilati per ${mansioneLabel}. La valutazione sarà archiviata nel fascicolo cliente.`
+                : `Mancano ${result.unanswered.length} indicatori per ${mansioneLabel}. Completa la checklist per confermare.`}
             </p>
             {savedAt && (
               <p className="mt-1 text-[11px] text-muted-foreground">
@@ -765,16 +1034,36 @@ export default function StressAssessmentPage() {
               disabled={!allAnswered || finalizing}
               onClick={finalize}
             >
-              {finalizing ? "Conferma in corso…" : "Conferma valutazione"}
+              {finalizing ? "Conferma in corso..." : "Conferma valutazione"}
             </Button>
           </div>
         </CardContent>
       </Card>
 
       <p className="text-[11px] text-muted-foreground">
-        Conteggio indicatori: {answeredCount} / {INDICATORS.length} · bozza
-        salvata in locale (chiave: <code>stress-draft-{aziendaId}</code>)
+        Conteggio indicatori: {answeredCount} / {INDICATORS.length} - bozza
+        salvata in locale (mansione: {mansioneLabel})
       </p>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Small livello badge for tab headers and summaries
+// ---------------------------------------------------------------------------
+
+function LivelloMicroBadge({ livello }: { livello: string }) {
+  const upper = livello.toUpperCase();
+  return (
+    <span
+      className={cn(
+        "inline-flex h-4 items-center rounded px-1 text-[10px] font-medium ring-1",
+        upper === "BASSO" && "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30",
+        upper === "MEDIO" && "bg-amber-500/15 text-amber-800 ring-amber-500/30",
+        upper === "ALTO" && "bg-rose-500/15 text-rose-700 ring-rose-500/30",
+      )}
+    >
+      {livello}
+    </span>
   );
 }

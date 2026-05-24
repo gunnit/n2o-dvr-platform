@@ -26,6 +26,7 @@ class StressValutazioneUpsert(BaseModel):
 
     answers: dict[str, str] = Field(default_factory=dict)
     gruppo_omogeneo: str | None = None
+    mansione: str | None = None
     misure_correttive: str | None = None
     note: str | None = None
 
@@ -36,6 +37,7 @@ class StressValutazioneResponse(BaseModel):
     id: uuid.UUID
     azienda_id: uuid.UUID
     gruppo_omogeneo: str
+    mansione: str | None
     area_a_eventi_sentinella: dict[str, Any]
     area_b_contenuto_lavoro: dict[str, Any]
     area_c_contesto_lavoro: dict[str, Any]

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import type { Ambiente } from "@/types";
 
 import {
   BAND_CLASS,
@@ -115,6 +116,7 @@ export interface IncendioAreaCardProps {
   index: number;
   totalAreas: number;
   result: AreaResult | undefined;
+  ambienti?: Ambiente[];
   onDuplicate: () => void;
   onRemove: () => void;
 }
@@ -123,6 +125,7 @@ export function IncendioAreaCard({
   index,
   totalAreas,
   result,
+  ambienti = [],
   onDuplicate,
   onRemove,
 }: IncendioAreaCardProps) {
@@ -157,24 +160,64 @@ export function IncendioAreaCard({
                 </span>
               )}
             </div>
-            <div className="mt-2 max-w-md">
-              <label
-                htmlFor={`areas.${index}.nome`}
-                className="text-[11px] uppercase tracking-wide text-muted-foreground"
-              >
-                Nome / identificativo area
-              </label>
-              <Input
-                id={`areas.${index}.nome`}
-                placeholder="Es. Magazzino materie prime"
-                aria-invalid={areaErrors?.nome ? true : undefined}
-                {...register(`areas.${index}.nome`)}
-              />
-              {areaErrors?.nome && (
-                <p className="mt-1 text-[11px] text-destructive">
-                  {areaErrors.nome.message}
-                </p>
+            <div className="mt-2 max-w-md space-y-2">
+              {ambienti.length > 0 && (
+                <div>
+                  <label
+                    htmlFor={`areas.${index}.ambiente_select`}
+                    className="text-[11px] uppercase tracking-wide text-muted-foreground"
+                  >
+                    Locale / Ambiente
+                  </label>
+                  <select
+                    id={`areas.${index}.ambiente_select`}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    value=""
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val && val !== "__altro__") {
+                        setValue(`areas.${index}.nome`, val, {
+                          shouldValidate: true,
+                          shouldDirty: true,
+                        });
+                      }
+                      // Reset the select so it always shows the placeholder,
+                      // acting as a "pick to fill" control.
+                      e.target.value = "";
+                    }}
+                  >
+                    <option value="" disabled>
+                      Seleziona ambiente...
+                    </option>
+                    {ambienti.map((amb) => (
+                      <option key={amb.id} value={amb.nome}>
+                        {amb.nome}
+                        {amb.tipo ? ` (${amb.tipo})` : ""}
+                      </option>
+                    ))}
+                    <option value="__altro__">Altro (inserisci manualmente)</option>
+                  </select>
+                </div>
               )}
+              <div>
+                <label
+                  htmlFor={`areas.${index}.nome`}
+                  className="text-[11px] uppercase tracking-wide text-muted-foreground"
+                >
+                  Nome / identificativo area
+                </label>
+                <Input
+                  id={`areas.${index}.nome`}
+                  placeholder="Es. Magazzino materie prime"
+                  aria-invalid={areaErrors?.nome ? true : undefined}
+                  {...register(`areas.${index}.nome`)}
+                />
+                {areaErrors?.nome && (
+                  <p className="mt-1 text-[11px] text-destructive">
+                    {areaErrors.nome.message}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 

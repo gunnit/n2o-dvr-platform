@@ -155,8 +155,6 @@ interface DuvriFormState {
   oggetto_appalto: string;
   data_inizio: string;
   data_fine: string;
-  importo_appalto: string;
-  costi_sicurezza: string;
   note: string;
   interferenze: InterferenzaItem[];
   attrezzature_appaltatore: AppaltatoreAttrezzatura[];
@@ -169,8 +167,6 @@ const EMPTY_FORM: DuvriFormState = {
   oggetto_appalto: "",
   data_inizio: "",
   data_fine: "",
-  importo_appalto: "",
-  costi_sicurezza: "",
   note: "",
   interferenze: [],
   attrezzature_appaltatore: [],
@@ -184,10 +180,6 @@ function toFormState(d: DuvriResponse): DuvriFormState {
     oggetto_appalto: d.oggetto_appalto,
     data_inizio: d.data_inizio ?? "",
     data_fine: d.data_fine ?? "",
-    importo_appalto:
-      d.importo_appalto != null ? String(d.importo_appalto) : "",
-    costi_sicurezza:
-      d.costi_sicurezza != null ? String(d.costi_sicurezza) : "",
     note: d.note ?? "",
     interferenze: d.interferenze.map((i) => ({
       ...i,
@@ -207,12 +199,6 @@ function toPayload(form: DuvriFormState) {
     oggetto_appalto: form.oggetto_appalto.trim(),
     data_inizio: form.data_inizio || null,
     data_fine: form.data_fine || null,
-    importo_appalto: form.importo_appalto
-      ? Number(form.importo_appalto)
-      : null,
-    costi_sicurezza: form.costi_sicurezza
-      ? Number(form.costi_sicurezza)
-      : null,
     note: form.note.trim() || null,
     interferenze: form.interferenze
       .filter((i) => i.rischio.trim() || i.misure.trim())
@@ -573,18 +559,6 @@ export default function DuvriListPage() {
                     {d.data_inizio || "—"} → {d.data_fine || "—"}
                   </p>
                 </div>
-                <div>
-                  <p className="text-xs font-medium uppercase text-muted-foreground">
-                    Importo / Costi sicurezza
-                  </p>
-                  <p>
-                    {d.importo_appalto != null ? `€ ${d.importo_appalto}` : "—"}
-                    {" / "}
-                    {d.costi_sicurezza != null
-                      ? `€ ${d.costi_sicurezza}`
-                      : "—"}
-                  </p>
-                </div>
               </div>
               {d.interferenze.length > 0 && (
                 <div>
@@ -713,30 +687,6 @@ export default function DuvriListPage() {
                   value={form.data_fine}
                   onChange={(e) =>
                     setForm({ ...form, data_fine: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="importo">Importo appalto (€)</Label>
-                <Input
-                  id="importo"
-                  type="number"
-                  step="0.01"
-                  value={form.importo_appalto}
-                  onChange={(e) =>
-                    setForm({ ...form, importo_appalto: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="costi">Costi sicurezza interferenza (€)</Label>
-                <Input
-                  id="costi"
-                  type="number"
-                  step="0.01"
-                  value={form.costi_sicurezza}
-                  onChange={(e) =>
-                    setForm({ ...form, costi_sicurezza: e.target.value })
                   }
                 />
               </div>

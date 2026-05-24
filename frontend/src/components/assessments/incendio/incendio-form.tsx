@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+import type { Ambiente } from "@/types";
 import { IncendioAreaCard } from "./incendio-area-card";
 
 // ---------------------------------------------------------------------------
@@ -176,9 +177,10 @@ export function computeIncendioResult(values: IncendioFormValues): IncendioResul
 export interface IncendioFormProps {
   form: UseFormReturn<IncendioFormValues>;
   onResultChange?: (result: IncendioResult) => void;
+  ambienti?: Ambiente[];
 }
 
-export function IncendioForm({ form, onResultChange }: IncendioFormProps) {
+export function IncendioForm({ form, onResultChange, ambienti = [] }: IncendioFormProps) {
   const { control, watch } = form;
   const { fields, append, remove } = useFieldArray({
     control,
@@ -255,6 +257,7 @@ export function IncendioForm({ form, onResultChange }: IncendioFormProps) {
                 index={index}
                 totalAreas={fields.length}
                 result={area}
+                ambienti={ambienti}
                 onDuplicate={() => handleDuplicate(index)}
                 onRemove={() => handleRemove(index)}
               />

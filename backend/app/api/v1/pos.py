@@ -18,7 +18,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.core.exceptions import NotFoundError
+from pydantic import BaseModel as PydanticBaseModel
+
+from app.core.exceptions import AIError, NotFoundError
 from app.db.session import get_db
 from app.dependencies import get_current_org
 from app.models.azienda import Azienda
@@ -256,3 +258,53 @@ async def update_phases(
     await db.commit()
     await db.refresh(pos)
     return pos
+
+
+# --- AI phase suggestion endpoint ------------------------------------------
+
+
+class PhaseSuggestRequest(PydanticBaseModel):
+    """Request body for AI-powered phase detail suggestions."""
+    fase_nome: str
+
+
+class PhaseSuggestResponse(PydanticBaseModel):
+    """AI-generated phase details."""
+    descrizione: str
+    rischi: list[str]
+    dpi: list[str]
+
+
+@router.post("/meta/suggest-phase", response_model=PhaseSuggestResponse)
+async def suggest_phase_details(
+    azienda_id: uuid.UUID,
+    body: PhaseSuggestRequest,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+) -> PhaseSuggestResponse:
+    """Generate AI suggestions for a POS construction phase.
+
+    Given a phase name (e.g. "Scavo", "Montaggio ponteggi"), returns a
+    suggested description, list of typical risks, and required DPI. The
+    operator reviews and can edit before saving.
+    """
+    await _get_azienda(azienda_id, org_id, db)
+
+    if not body.fase_nome.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Nome fase richiesto per la generazione AI.",
+        )
+
+    from app.services.ai.pos_phase_suggester import suggest_phase_details as _suggest
+
+    try:
+        result = await _suggest(body.fase_nome.strip())
+    except AIError as exc:
+        raise HTTPException(status_code=502, detail=exc.detail) from exc
+
+    return PhaseSuggestResponse(
+        descrizione=result.descrizione,
+        rischi=result.rischi,
+        dpi=result.dpi,
+    )

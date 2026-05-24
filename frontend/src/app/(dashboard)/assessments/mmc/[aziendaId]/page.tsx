@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { Pencil, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
@@ -30,9 +32,22 @@ interface MmcValutazioneRow {
   id: string;
   persona_id: string | null;
   compito: string;
+  peso_kg: number;
+  sesso: string;
+  fascia_eta: string;
+  altezza_cm: number | null;
+  dislocazione_cm: number | null;
+  distanza_cm: number | null;
+  angolo_gradi: number | null;
+  giudizio_presa: string | null;
+  frequenza_atti_min: number | null;
+  durata_min: number | null;
+  cp: number | null;
   indice_ir: number | null;
   livello_rischio: string | null;
   area_classificazione: string | null;
+  note: string | null;
+  misure_proposte: string | null;
   created_at: string;
 }
 
@@ -60,6 +75,49 @@ const GRIP_TO_LABEL: Record<"buona" | "discreta" | "scarsa", "Buono" | "Discreto
   scarsa: "Scarso",
 };
 
+const LABEL_TO_GRIP: Record<string, "buona" | "discreta" | "scarsa"> = {
+  Buono: "buona",
+  Discreto: "discreta",
+  Scarso: "scarsa",
+};
+
+const MIN_TO_DURATION: Record<number, "breve" | "media" | "lunga"> = {
+  30: "breve",
+  90: "media",
+  240: "lunga",
+};
+
+/** Convert saved API rows for one persona back into MmcFormValues for editing. */
+function rowsToFormValues(
+  rows: MmcValutazioneRow[],
+): Partial<MmcFormValues> {
+  const first = rows[0];
+  if (!first) return {};
+
+  const lifts: LiftValues[] = rows.map((r, i) => ({
+    name: r.compito || `Sollevamento ${i + 1}`,
+    altezza: r.altezza_cm ?? 75,
+    dislocazione: r.dislocazione_cm ?? 25,
+    distanza: r.distanza_cm ?? 25,
+    angolo: r.angolo_gradi ?? 0,
+    presa: LABEL_TO_GRIP[r.giudizio_presa ?? ""] ?? "buona",
+    frequenza: r.frequenza_atti_min ?? 1,
+    durata: MIN_TO_DURATION[r.durata_min ?? 30] ?? "breve",
+    peso_reale: r.peso_kg ?? 10,
+  }));
+
+  return {
+    worker_sesso: first.sesso === "F" ? "F" : "M",
+    worker_eta: 30, // will be overridden by CF-derived if available
+    cp_override: first.cp ?? undefined,
+    cp_motivazione: first.note ?? "",
+    lifts,
+    measures: first.misure_proposte
+      ? first.misure_proposte.split("\n").filter(Boolean)
+      : [],
+  };
+}
+
 async function authHeaders(): Promise<HeadersInit> {
   let token: string | null = null;
   try {
@@ -86,6 +144,11 @@ export default function MmcAssessmentPage() {
   const [finalizing, setFinalizing] = useState(false);
   const [finalizeMessage, setFinalizeMessage] = useState<string | null>(null);
 
+  // Edit-mode state: when non-null, the form is pre-filled with existing
+  // assessment data and saves via PATCH instead of POST.
+  const [editingIds, setEditingIds] = useState<string[] | null>(null);
+  const [editFormKey, setEditFormKey] = useState(0);
+
   const refetchValutazioni = useCallback(async () => {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -104,10 +167,20 @@ export default function MmcAssessmentPage() {
   }, [aziendaId]);
 
   const deleteValutazione = useCallback(
-    async (valutazioneId: string, nominativo: string) => {
+    async (personaId: string, nominativo: string) => {
+      // Find all assessment rows for this persona.
+      const rows = existingValutazioni.filter(
+        (r) => r.persona_id === personaId,
+      );
+      if (!rows.length) return;
+
+      const countLabel =
+        rows.length === 1
+          ? "la valutazione MMC"
+          : `tutte le ${rows.length} valutazioni MMC`;
       if (
         !window.confirm(
-          `Eliminare la valutazione MMC più recente di ${nominativo}? L'operazione è irreversibile.`,
+          `Sei sicuro di voler eliminare ${countLabel} di ${nominativo}? L'operazione è irreversibile.`,
         )
       ) {
         return;
@@ -115,12 +188,19 @@ export default function MmcAssessmentPage() {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         const headers = await authHeaders();
-        const res = await fetch(`${apiUrl}/api/v1/mmc/${valutazioneId}`, {
-          method: "DELETE",
-          headers,
-        });
-        if (!res.ok && res.status !== 204) {
-          throw new Error(`Errore ${res.status}`);
+        for (const row of rows) {
+          const res = await fetch(
+            `${apiUrl}/api/v1/aziende/${aziendaId}/mmc/${row.id}`,
+            { method: "DELETE", headers },
+          );
+          if (!res.ok && res.status !== 204) {
+            throw new Error(`Errore ${res.status}`);
+          }
+        }
+        // If we were editing this persona, exit edit mode.
+        if (editingIds && selectedPersonaId === personaId) {
+          setEditingIds(null);
+          setEditFormKey((k) => k + 1);
         }
         await refetchValutazioni();
       } catch (err) {
@@ -129,8 +209,35 @@ export default function MmcAssessmentPage() {
         );
       }
     },
-    [refetchValutazioni],
+    [aziendaId, existingValutazioni, editingIds, selectedPersonaId, refetchValutazioni],
   );
+
+  /** Load all assessments for a persona into the form for editing. */
+  const startEditing = useCallback(
+    (personaId: string) => {
+      // Gather all rows for this persona (may be multiple lifts).
+      const rows = existingValutazioni
+        .filter((r) => r.persona_id === personaId)
+        .sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        );
+      if (!rows.length) return;
+
+      setEditingIds(rows.map((r) => r.id));
+      setSelectedPersonaId(personaId);
+      setFinalizeMessage(null);
+      // Bump the edit key so the form remounts with editFormValues.
+      setEditFormKey((k) => k + 1);
+    },
+    [existingValutazioni],
+  );
+
+  const cancelEditing = useCallback(() => {
+    setEditingIds(null);
+    setFinalizeMessage(null);
+    setEditFormKey((k) => k + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -219,16 +326,31 @@ export default function MmcAssessmentPage() {
     } as const;
   }, [selectedPersona]);
 
+  // When editing, compute form values from the saved rows.
+  const editFormValues = useMemo<Partial<MmcFormValues> | undefined>(() => {
+    if (!editingIds) return undefined;
+    const rows = existingValutazioni.filter((r) => editingIds.includes(r.id));
+    if (!rows.length) return undefined;
+    return rowsToFormValues(rows);
+  }, [editingIds, existingValutazioni]);
+
   // Pass to MmcForm via initialValues. We also key the form by personaId so
   // changing the dropdown remounts with the right defaults — this avoids
   // mutating an in-progress form state for a different worker.
+  // In edit mode, merge CF-derived age/sex on top of the saved data.
   const formInitialValues = useMemo<Partial<MmcFormValues> | undefined>(() => {
-    if (!cfDerived) return undefined;
-    return {
-      worker_eta: Math.max(15, Math.min(70, cfDerived.age)),
-      worker_sesso: cfDerived.sex,
-    };
-  }, [cfDerived]);
+    const cfPart = cfDerived
+      ? {
+          worker_eta: Math.max(15, Math.min(70, cfDerived.age)),
+          worker_sesso: cfDerived.sex as "M" | "F",
+        }
+      : {};
+    if (editFormValues) {
+      return { ...editFormValues, ...cfPart };
+    }
+    if (Object.keys(cfPart).length) return cfPart;
+    return undefined;
+  }, [cfDerived, editFormValues]);
 
   const handleFinalize = async (values: MmcFormValues, result: MmcResult) => {
     setFinalizing(true);
@@ -248,48 +370,86 @@ export default function MmcAssessmentPage() {
       const fasciaEta = fasciaEtaFromAge(ageForBand);
       const measuresText = (values.measures ?? []).filter(Boolean).join("\n");
 
-      // Persist one MmcValutazione per lift. Server runs NIOSH math from
-      // inputs (single source of truth in app.data.niosh_factors) and
-      // returns the persisted row with derived multipliers + IR + zone.
-      const created = [];
-      for (let i = 0; i < values.lifts.length; i++) {
-        const lift: LiftValues = values.lifts[i];
-        const body = {
-          persona_id: personaId,
-          compito: lift.name?.trim() || `Sollevamento ${i + 1}`,
-          peso_kg: lift.peso_reale,
-          sesso: values.worker_sesso,
-          fascia_eta: fasciaEta,
-          altezza_cm: Math.round(lift.altezza),
-          dislocazione_cm: Math.round(lift.dislocazione),
-          distanza_cm: Math.round(lift.distanza),
-          angolo_gradi: Math.round(lift.angolo),
-          giudizio_presa: GRIP_TO_LABEL[lift.presa],
-          frequenza_atti_min: lift.frequenza,
-          durata_min: DURATION_TO_MIN[lift.durata],
-          cp: values.cp_override,
-          note: values.cp_motivazione || null,
-          misure_proposte: measuresText || null,
-        };
-        const res = await fetch(
-          `${apiUrl}/api/v1/aziende/${aziendaId}/mmc`,
-          { method: "POST", headers, body: JSON.stringify(body) },
-        );
-        if (!res.ok) {
-          const detail = await res.text().catch(() => "");
-          throw new Error(`API error ${res.status}: ${detail.slice(0, 200)}`);
+      // Build the payload for each lift.
+      const buildBody = (lift: LiftValues, i: number) => ({
+        persona_id: personaId,
+        compito: lift.name?.trim() || `Sollevamento ${i + 1}`,
+        peso_kg: lift.peso_reale,
+        sesso: values.worker_sesso,
+        fascia_eta: fasciaEta,
+        altezza_cm: Math.round(lift.altezza),
+        dislocazione_cm: Math.round(lift.dislocazione),
+        distanza_cm: Math.round(lift.distanza),
+        angolo_gradi: Math.round(lift.angolo),
+        giudizio_presa: GRIP_TO_LABEL[lift.presa],
+        frequenza_atti_min: lift.frequenza,
+        durata_min: DURATION_TO_MIN[lift.durata],
+        cp: values.cp_override,
+        note: values.cp_motivazione || null,
+        misure_proposte: measuresText || null,
+      });
+
+      const saved = [];
+
+      if (editingIds && editingIds.length > 0) {
+        // ---- EDIT MODE: PATCH existing rows, POST extras, DELETE surplus ----
+        for (let i = 0; i < values.lifts.length; i++) {
+          const body = buildBody(values.lifts[i], i);
+          if (i < editingIds.length) {
+            // PATCH the existing row.
+            const res = await fetch(
+              `${apiUrl}/api/v1/aziende/${aziendaId}/mmc/${editingIds[i]}`,
+              { method: "PATCH", headers, body: JSON.stringify(body) },
+            );
+            if (!res.ok) {
+              const detail = await res.text().catch(() => "");
+              throw new Error(`API error ${res.status}: ${detail.slice(0, 200)}`);
+            }
+            saved.push(await res.json());
+          } else {
+            // More lifts than before — POST the extras.
+            const res = await fetch(
+              `${apiUrl}/api/v1/aziende/${aziendaId}/mmc`,
+              { method: "POST", headers, body: JSON.stringify(body) },
+            );
+            if (!res.ok) {
+              const detail = await res.text().catch(() => "");
+              throw new Error(`API error ${res.status}: ${detail.slice(0, 200)}`);
+            }
+            saved.push(await res.json());
+          }
         }
-        const data = await res.json();
-        created.push(data);
+        // If fewer lifts than before, delete the surplus rows.
+        for (let i = values.lifts.length; i < editingIds.length; i++) {
+          await fetch(
+            `${apiUrl}/api/v1/aziende/${aziendaId}/mmc/${editingIds[i]}`,
+            { method: "DELETE", headers },
+          );
+        }
+        setEditingIds(null);
+      } else {
+        // ---- CREATE MODE: POST each lift as a new row ----
+        for (let i = 0; i < values.lifts.length; i++) {
+          const body = buildBody(values.lifts[i], i);
+          const res = await fetch(
+            `${apiUrl}/api/v1/aziende/${aziendaId}/mmc`,
+            { method: "POST", headers, body: JSON.stringify(body) },
+          );
+          if (!res.ok) {
+            const detail = await res.text().catch(() => "");
+            throw new Error(`API error ${res.status}: ${detail.slice(0, 200)}`);
+          }
+          saved.push(await res.json());
+        }
       }
 
       const worstIr = result.worst?.ir ?? 0;
       setFinalizeMessage(
-        `Valutazione MMC archiviata: ${created.length} sollevamento/i salvati nel DVR. ` +
+        `Valutazione MMC archiviata: ${saved.length} sollevamento/i salvati nel DVR. ` +
           `IR peggiore ${worstIr.toFixed(2)} - ` +
           `zona ${result.worst?.zona ?? "—"}.`,
       );
-      // Re-fetch so the "Già valutati" badge reflects the new rows.
+      // Re-fetch so the "Già valutati" badge reflects the new/updated rows.
       await refetchValutazioni();
     } catch (err) {
       setFinalizeMessage(
@@ -331,29 +491,55 @@ export default function MmcAssessmentPage() {
             <ul className="flex flex-wrap gap-2 text-xs">
               {personeGiaValutate.map((p) => {
                 const v = valutatePerPersona.get(p.id);
+                const isBeingEdited =
+                  editingIds !== null && selectedPersonaId === p.id;
                 return (
                   <li
                     key={p.id}
-                    className="flex items-center gap-1 rounded-md border border-emerald-300/70 bg-white px-2 py-1 text-emerald-900"
+                    className={cn(
+                      "flex items-center gap-1 rounded-md border bg-white px-2 py-1",
+                      isBeingEdited
+                        ? "border-blue-400 bg-blue-50 text-blue-900"
+                        : "border-emerald-300/70 text-emerald-900",
+                    )}
                   >
-                    <span aria-hidden className="text-emerald-600">
-                      ✓
+                    <span
+                      aria-hidden
+                      className={
+                        isBeingEdited ? "text-blue-500" : "text-emerald-600"
+                      }
+                    >
+                      {isBeingEdited ? "..." : "✓"}
                     </span>
                     <span className="font-medium">{p.nominativo}</span>
-                    {v ? (
+                    {v && !isBeingEdited ? (
                       <span className="text-emerald-700/80">
                         — Valutato il {formatDateIt(v.created_at)}
                       </span>
                     ) : null}
+                    {isBeingEdited ? (
+                      <span className="text-blue-600/80">— In modifica</span>
+                    ) : null}
+                    {v && !isBeingEdited ? (
+                      <button
+                        type="button"
+                        aria-label={`Modifica valutazione di ${p.nominativo}`}
+                        title="Modifica valutazione"
+                        onClick={() => startEditing(p.id)}
+                        className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded text-emerald-600/70 hover:bg-blue-100 hover:text-blue-700"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    ) : null}
                     {v ? (
                       <button
                         type="button"
-                        aria-label={`Elimina ultima valutazione di ${p.nominativo}`}
-                        title="Elimina valutazione più recente"
-                        onClick={() => deleteValutazione(v.id, p.nominativo)}
-                        className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-emerald-600/70 hover:bg-rose-100 hover:text-rose-700"
+                        aria-label={`Elimina valutazione di ${p.nominativo}`}
+                        title="Elimina valutazione"
+                        onClick={() => deleteValutazione(p.id, p.nominativo)}
+                        className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded text-emerald-600/70 hover:bg-rose-100 hover:text-rose-700"
                       >
-                        ×
+                        <Trash2 className="h-3 w-3" />
                       </button>
                     ) : null}
                   </li>
@@ -375,7 +561,14 @@ export default function MmcAssessmentPage() {
           <select
             id="mmc-persona"
             value={selectedPersonaId}
-            onChange={(e) => setSelectedPersonaId(e.target.value)}
+            onChange={(e) => {
+              setSelectedPersonaId(e.target.value);
+              // Switching persona exits edit mode.
+              if (editingIds) {
+                setEditingIds(null);
+                setEditFormKey((k) => k + 1);
+              }
+            }}
             className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
           >
             <option value="">— Nessun lavoratore (valutazione generica) —</option>
@@ -412,11 +605,28 @@ export default function MmcAssessmentPage() {
         </div>
       )}
 
+      {editingIds !== null && (
+        <div className="flex items-center justify-between rounded-md border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          <span>
+            Stai modificando una valutazione esistente. Le modifiche
+            sovrascriveranno i dati precedenti.
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={cancelEditing}
+            className="text-blue-700 hover:text-blue-900"
+          >
+            <X className="mr-1 h-4 w-4" />
+            Annulla modifica
+          </Button>
+        </div>
+      )}
+
       <MmcForm
-        // Remount when persona changes so CF-derived defaults take effect.
-        // The form state is per-worker anyway, so resetting on switch is the
-        // expected UX (and avoids stale lifts carrying over).
-        key={selectedPersonaId || "no-persona"}
+        // Remount when persona changes or when entering/exiting edit mode.
+        key={`${selectedPersonaId || "no-persona"}-${editFormKey}`}
         aziendaId={aziendaId}
         finalizing={finalizing}
         initialValues={formInitialValues}

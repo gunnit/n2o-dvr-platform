@@ -14,7 +14,8 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, GripVertical, Trash2 } from "lucide-react";
+import { ChevronDown, GripVertical, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import type { UseFormReturn } from "react-hook-form";
 
 import { Badge } from "@/components/ui/badge";
@@ -25,8 +26,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
+import { useApi } from "@/hooks/use-api";
+
 import { PhaseDetailForm } from "./phase-detail-form";
 import type { PhasesUpdateValues, PhaseValues } from "./phase-schema";
+
+interface PhaseSuggestResponse {
+  descrizione: string;
+  rischi: string[];
+  dpi: string[];
+}
 
 interface PhaseCardProps {
   /** The phase id — also the dnd-kit sortable key. */
@@ -35,6 +44,7 @@ interface PhaseCardProps {
   form: UseFormReturn<PhasesUpdateValues>;
   /** All phases (used to render the dependency chip-picker). */
   allPhases: PhaseValues[];
+  aziendaId: string;
   onRemove: () => void;
 }
 
@@ -43,9 +53,12 @@ export function PhaseCard({
   index,
   form,
   allPhases,
+  aziendaId,
   onRemove,
 }: PhaseCardProps) {
   const [open, setOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const { apiFetch } = useApi();
   const {
     attributes,
     listeners,
@@ -67,6 +80,40 @@ export function PhaseCard({
 
   // Eligible predecessors: every other phase, named for the dropdown.
   const candidates = allPhases.filter((p) => p.id !== phase?.id);
+
+  const generateWithAi = async () => {
+    const nome = phase?.nome?.trim();
+    if (!nome) {
+      toast.error("Inserisci il nome della fase prima di generare con AI.");
+      return;
+    }
+    setAiLoading(true);
+    try {
+      const result = await apiFetch<PhaseSuggestResponse>(
+        `/api/v1/aziende/${aziendaId}/pos/meta/suggest-phase`,
+        {
+          method: "POST",
+          body: JSON.stringify({ fase_nome: nome }),
+        },
+      );
+      form.setValue(`${base}.descrizione` as const, result.descrizione, {
+        shouldDirty: true,
+      });
+      form.setValue(`${base}.rischi` as const, result.rischi, {
+        shouldDirty: true,
+      });
+      form.setValue(`${base}.dpi` as const, result.dpi, {
+        shouldDirty: true,
+      });
+      toast.success("Dettagli generati con AI — controlla e modifica se necessario.");
+    } catch (err) {
+      toast.error(
+        (err as Error).message || "Generazione AI non riuscita. Riprova.",
+      );
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const togglePredecessor = (predId: string) => {
     const next = dipendeDa.includes(predId)
@@ -125,7 +172,24 @@ export function PhaseCard({
       {open && (
         <CardContent className="space-y-4">
           <div>
-            <Label className="text-xs">Descrizione</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs">Descrizione</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={aiLoading || !phase?.nome?.trim()}
+                onClick={generateWithAi}
+                title="Genera descrizione, rischi e DPI con AI"
+              >
+                {aiLoading ? (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-1 h-3 w-3" />
+                )}
+                {aiLoading ? "Generazione…" : "Genera con AI"}
+              </Button>
+            </div>
             <Textarea
               {...form.register(`${base}.descrizione` as const)}
               rows={2}

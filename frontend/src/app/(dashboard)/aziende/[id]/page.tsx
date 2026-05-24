@@ -388,6 +388,7 @@ export default function AziendaDetailPage() {
 
       <NextStepsPanel
         azienda={azienda}
+        ambienti={ambienti}
         rischi={rischi}
         documenti={documenti}
         miglioramentoCount={miglioramentoCount}

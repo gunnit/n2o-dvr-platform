@@ -355,6 +355,8 @@ function AnswerButton({
 
 export interface StressChecklistProps {
   aziendaId: string;
+  /** Feedback #17: scope the checklist to a specific mansione. NULL = Generale. */
+  mansione?: string | null;
   onResultChange?: (result: StressResult) => void;
 }
 
@@ -381,17 +383,35 @@ function groupIndicators(): AreaGroup[] {
   }));
 }
 
-export function StressChecklist({ aziendaId, onResultChange }: StressChecklistProps) {
-  const storageKey = `stress-draft-${aziendaId}`;
+export function StressChecklist({ aziendaId, mansione, onResultChange }: StressChecklistProps) {
+  // Feedback #17: scope localStorage by mansione so each role has
+  // its own draft. NULL mansione uses the "__generale__" suffix.
+  const mansioneSuffix = mansione ?? "__generale__";
+  const storageKey = `stress-draft-${aziendaId}-${mansioneSuffix}`;
 
   const [answers, setAnswers] = useState<AnswersMap>({});
   const [showUnanswered, setShowUnanswered] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
-  // Hydrate from localStorage on mount or aziendaId change
+  // Hydrate from localStorage on mount or aziendaId/mansione change.
+  // Includes migration from the legacy key format (pre-feedback-#17).
   useEffect(() => {
     try {
-      const raw = typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null;
+      let raw = typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null;
+
+      // Migrate legacy key (stress-draft-{aziendaId}) to the new
+      // mansione-scoped key (stress-draft-{aziendaId}-__generale__)
+      // when loading the Generale tab for the first time.
+      if (!raw && mansione == null && typeof window !== "undefined") {
+        const legacyKey = `stress-draft-${aziendaId}`;
+        const legacyRaw = window.localStorage.getItem(legacyKey);
+        if (legacyRaw) {
+          raw = legacyRaw;
+          window.localStorage.setItem(storageKey, legacyRaw);
+          window.localStorage.removeItem(legacyKey);
+        }
+      }
+
       if (raw) {
         const parsed = JSON.parse(raw) as AnswersMap;
         setAnswers(parsed ?? {});
@@ -402,7 +422,7 @@ export function StressChecklist({ aziendaId, onResultChange }: StressChecklistPr
       setAnswers({});
     }
     setShowUnanswered(false);
-  }, [storageKey]);
+  }, [storageKey, aziendaId, mansione]);
 
   // Persist on change
   useEffect(() => {

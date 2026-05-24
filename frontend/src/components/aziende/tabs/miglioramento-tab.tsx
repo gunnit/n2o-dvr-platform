@@ -42,6 +42,7 @@ interface MisuraMiglioramento {
   azienda_id: string;
   pericolo_valutazione_id: string | null;
   misura: string;
+  misura_miglioramento: string | null;
   procedura: string | null;
   risorse: string | null;
   responsabile: string | null;
@@ -57,6 +58,7 @@ interface MisuraMiglioramento {
 // drive the visible business fields here.
 interface MisuraDraft {
   misura: string;
+  misura_miglioramento: string;
   procedura: string;
   risorse: string;
   responsabile: string;
@@ -66,6 +68,7 @@ interface MisuraDraft {
 
 const EMPTY_DRAFT: MisuraDraft = {
   misura: "",
+  misura_miglioramento: "",
   procedura: "",
   risorse: "",
   responsabile: "",
@@ -208,6 +211,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
     setEditingId(row.id);
     setEditDraft({
       misura: row.misura,
+      misura_miglioramento: row.misura_miglioramento ?? "",
       procedura: row.procedura ?? "",
       risorse: row.risorse ?? "",
       responsabile: row.responsabile ?? "",
@@ -226,6 +230,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
     // values cleanly and the UI doesn't render hollow "—".
     return {
       misura: draft.misura.trim(),
+      misura_miglioramento: draft.misura_miglioramento.trim() || null,
       procedura: draft.procedura.trim() || null,
       risorse: draft.risorse.trim() || null,
       responsabile: draft.responsabile.trim() || null,
@@ -459,23 +464,24 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
           />
         ) : (
           <div className="overflow-hidden rounded-md border border-[#e5edf5]">
-            <Table>
+            <Table className="table-fixed w-full">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[150px]">Priorità</TableHead>
-                  <TableHead className="min-w-[260px]">Misura</TableHead>
-                  <TableHead className="min-w-[200px]">Procedura</TableHead>
-                  <TableHead className="min-w-[140px]">Risorse</TableHead>
-                  <TableHead className="min-w-[140px]">Responsabile</TableHead>
-                  <TableHead className="min-w-[140px]">Scadenza</TableHead>
-                  <TableHead className="w-[110px] text-right">Azioni</TableHead>
+                  <TableHead className="w-[100px]">Priorità</TableHead>
+                  <TableHead className="w-[18%]">Rischio</TableHead>
+                  <TableHead className="w-[18%]">Misura di Miglioramento</TableHead>
+                  <TableHead className="w-[18%]">Attività</TableHead>
+                  <TableHead className="w-[10%]">Risorse</TableHead>
+                  <TableHead className="w-[10%]">Responsabile</TableHead>
+                  <TableHead className="w-[10%]">Scadenza</TableHead>
+                  <TableHead className="w-[80px] text-right">Azioni</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading && sortedRows.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={7}
+                      colSpan={8}
                       className="py-8 text-center text-[13px] text-[#64748d]"
                     >
                       Caricamento...
@@ -511,7 +517,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                         )}
                       </TableCell>
 
-                      {/* Misura */}
+                      {/* Rischio */}
                       <TableCell className="py-3">
                         {isEditing ? (
                           <Textarea
@@ -524,16 +530,40 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                             }
                             rows={3}
                             className="min-h-16"
-                            placeholder="Descrivi la misura"
+                            placeholder="Descrivi il rischio identificato"
                           />
                         ) : (
-                          <p className="whitespace-pre-wrap text-[13px] leading-[1.5] text-[#061b31]">
+                          <p className="whitespace-pre-wrap text-[13px] leading-[1.5] text-[#061b31] line-clamp-3">
                             {row.misura}
                           </p>
                         )}
                       </TableCell>
 
-                      {/* Procedura */}
+                      {/* Misura di Miglioramento */}
+                      <TableCell className="py-3">
+                        {isEditing ? (
+                          <Textarea
+                            value={editDraft.misura_miglioramento}
+                            onChange={(e) =>
+                              setEditDraft((d) => ({
+                                ...d,
+                                misura_miglioramento: e.target.value,
+                              }))
+                            }
+                            rows={3}
+                            className="min-h-16"
+                            placeholder="Misura di prevenzione/protezione"
+                          />
+                        ) : row.misura_miglioramento ? (
+                          <p className="whitespace-pre-wrap text-[13px] leading-[1.5] text-[#061b31] line-clamp-3">
+                            {row.misura_miglioramento}
+                          </p>
+                        ) : (
+                          <span className="text-[#64748d]">—</span>
+                        )}
+                      </TableCell>
+
+                      {/* Attività */}
                       <TableCell className="py-3">
                         {isEditing ? (
                           <Textarea
@@ -546,10 +576,10 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                             }
                             rows={3}
                             className="min-h-16"
-                            placeholder="Procedura di attuazione"
+                            placeholder="Attività correlata"
                           />
                         ) : row.procedura ? (
-                          <p className="whitespace-pre-wrap text-[13px] leading-[1.5] text-[#273951]">
+                          <p className="whitespace-pre-wrap text-[13px] leading-[1.5] text-[#273951] line-clamp-3">
                             {row.procedura}
                           </p>
                         ) : (
@@ -572,7 +602,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                             placeholder="Risorse necessarie"
                           />
                         ) : row.risorse ? (
-                          <span className="text-[13px] text-[#273951]">
+                          <span className="block truncate text-[13px] text-[#273951]" title={row.risorse}>
                             {row.risorse}
                           </span>
                         ) : (
@@ -595,7 +625,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                             placeholder="Es. RSPP"
                           />
                         ) : row.responsabile ? (
-                          <span className="text-[13px] text-[#273951]">
+                          <span className="block truncate text-[13px] text-[#273951]" title={row.responsabile}>
                             {row.responsabile}
                           </span>
                         ) : (
@@ -618,7 +648,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                             placeholder="Es. Entro 6 mesi"
                           />
                         ) : row.scadenza ? (
-                          <span className="text-[13px] text-[#273951]">
+                          <span className="block truncate text-[13px] text-[#273951]" title={row.scadenza}>
                             {row.scadenza}
                           </span>
                         ) : (
@@ -693,7 +723,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Aggiungi misura di miglioramento</DialogTitle>
+            <DialogTitle>Aggiungi voce al piano</DialogTitle>
             <DialogDescription>
               Compila i campi del Programma di Miglioramento (DVR §4.1).
             </DialogDescription>
@@ -702,7 +732,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="misura-misura">
-                Misura <span className="text-[#b51648]">*</span>
+                Rischio <span className="text-[#b51648]">*</span>
               </Label>
               <Textarea
                 id="misura-misura"
@@ -711,12 +741,28 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                   setCreateDraft((d) => ({ ...d, misura: e.target.value }))
                 }
                 rows={3}
-                placeholder="Descrivi la misura di miglioramento"
+                placeholder="Descrivi il rischio identificato"
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="misura-procedura">Procedura</Label>
+              <Label htmlFor="misura-misura-miglioramento">Misura di Miglioramento</Label>
+              <Textarea
+                id="misura-misura-miglioramento"
+                value={createDraft.misura_miglioramento}
+                onChange={(e) =>
+                  setCreateDraft((d) => ({
+                    ...d,
+                    misura_miglioramento: e.target.value,
+                  }))
+                }
+                rows={2}
+                placeholder="Misura di prevenzione/protezione"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="misura-procedura">Attività</Label>
               <Textarea
                 id="misura-procedura"
                 value={createDraft.procedura}
@@ -727,7 +773,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                   }))
                 }
                 rows={2}
-                placeholder="Procedura di attuazione"
+                placeholder="Attività correlata"
               />
             </div>
 

@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 class MisuraMiglioramentoBase(BaseModel):
     misura: str = Field(..., min_length=1)
+    misura_miglioramento: str | None = None
     procedura: str | None = None
     risorse: str | None = None
     responsabile: str | None = None
@@ -29,6 +30,7 @@ class MisuraMiglioramentoCreate(MisuraMiglioramentoBase):
 
 class MisuraMiglioramentoUpdate(BaseModel):
     misura: str | None = None
+    misura_miglioramento: str | None = None
     procedura: str | None = None
     risorse: str | None = None
     responsabile: str | None = None

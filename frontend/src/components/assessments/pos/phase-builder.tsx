@@ -253,6 +253,7 @@ export function PhaseBuilder({
                     index={i}
                     form={form}
                     allPhases={phases}
+                    aziendaId={aziendaId}
                     onRemove={() => handleRemovePhase(i)}
                   />
                 ))}
