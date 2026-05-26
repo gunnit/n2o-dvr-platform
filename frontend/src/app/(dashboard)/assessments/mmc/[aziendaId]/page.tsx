@@ -352,7 +352,10 @@ export default function MmcAssessmentPage() {
     return undefined;
   }, [cfDerived, editFormValues]);
 
-  const handleFinalize = async (values: MmcFormValues, result: MmcResult) => {
+  const handleFinalize = async (
+    values: MmcFormValues,
+    result: MmcResult,
+  ): Promise<boolean> => {
     setFinalizing(true);
     setFinalizeMessage(null);
     try {
@@ -451,12 +454,17 @@ export default function MmcAssessmentPage() {
       );
       // Re-fetch so the "Già valutati" badge reflects the new/updated rows.
       await refetchValutazioni();
+      // Tell MmcForm to clear its dirty state — without this the
+      // "Modifiche non salvate" badge stays on after a successful save
+      // and operators report "non si salva" (feedback #55).
+      return true;
     } catch (err) {
       setFinalizeMessage(
         err instanceof Error
           ? `Errore salvataggio: ${err.message}`
           : "Errore salvataggio sconosciuto",
       );
+      return false;
     } finally {
       setFinalizing(false);
     }

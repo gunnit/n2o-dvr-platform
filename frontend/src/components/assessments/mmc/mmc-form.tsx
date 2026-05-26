@@ -365,7 +365,11 @@ export interface MmcFormProps {
   initialValues?: Partial<MmcFormValues>;
   finalizing?: boolean;
   onResult?: (r: MmcResult) => void;
-  onFinalize?: (v: MmcFormValues, r: MmcResult) => void;
+  // Return `true` from the caller's success branch and the form resets
+  // its dirty state so the "Modifiche non salvate" badge disappears.
+  // Returning `false` / `void` / throwing leaves the form as-is (the
+  // caller is expected to surface the error elsewhere). Feedback #55.
+  onFinalize?: (v: MmcFormValues, r: MmcResult) => void | Promise<void | boolean>;
   // Legacy listeners kept for existing page — invoked on each change.
   onResultChange?: (r: MmcResult) => void;
   onInputsChange?: (v: MmcFormValues) => void;
@@ -446,13 +450,19 @@ export function MmcForm({
     return () => sub.unsubscribe();
   }, [form, onInputsChange]);
 
-  const onSubmit = form.handleSubmit((v) => {
+  const onSubmit = form.handleSubmit(async (v) => {
     const cpErr = validateCpOverride(v);
     if (cpErr) {
       form.setError("cp_motivazione", { type: "manual", message: cpErr });
       return;
     }
-    onFinalize?.(v, aggregate);
+    const result = await onFinalize?.(v, aggregate);
+    // Caller opts in to the dirty-reset by returning `true` from the
+    // success branch. Anything else leaves the form alone — operators
+    // need to see "Modifiche non salvate" stay on after a failed save.
+    if (result === true) {
+      form.reset(v);
+    }
   });
 
   const isDirty = form.formState.isDirty;

@@ -70,5 +70,8 @@ class PersonaResponse(PersonaBase):
     azienda_id: uuid.UUID
     # US-1.4: ambienti assegnati exposed as a flat list of IDs.
     ambiente_ids: list[uuid.UUID] = Field(default_factory=list)
+    # Feedback #54: server-assigned display order. Persisted but not
+    # operator-editable yet (no reorder UI on the persone step — TBD).
+    ordine: int = 0
 
     model_config = {"from_attributes": True}

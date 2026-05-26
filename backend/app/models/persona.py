@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, String, func
+from sqlalchemy import Boolean, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -59,6 +59,11 @@ class Persona(Base):
     training_recente_completato: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+    # Operator-controlled display order within an azienda. Feedback #54
+    # (2026-05-25): created_at-only ordering tied to heap order for
+    # same-transaction inserts (bulk-add, "copia da altra persona") —
+    # mirrors the same fix applied to ambienti in o6k7l8m9n0o1.
+    ordine: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     azienda: Mapped["Azienda"] = relationship(back_populates="persone")

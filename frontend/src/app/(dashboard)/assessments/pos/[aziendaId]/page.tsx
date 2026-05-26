@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { Loader2, RotateCcw, Save } from "lucide-react";
+import { Loader2, Plus, RotateCcw, Save, X } from "lucide-react";
 import { toast } from "sonner";
+
+import { Input } from "@/components/ui/input";
 
 import {
   Card,
@@ -43,6 +45,28 @@ import {
  * MVP — we auto-create one if none exists so the operator lands on a
  * usable editor regardless of whether they've visited the azienda before.
  */
+
+// Feedback #61 (2026-05-26): sentinel value persisted inside a DPI
+// matrix cell to indicate "this role does not perform this operation".
+// We use a __underscore__ key that can never collide with a real DPI
+// code (the catalog keys are lowercase alphanum). The docx generator
+// recognises the same sentinel and renders "Non effettua" instead of
+// the DPI list.
+const NON_EFFETTUA = "__non_effettua__";
+
+// Slugify a free-text label so it can live alongside catalog keys in
+// dpi_matrix_roles / dpi_matrix_phases. We strip accents, lowercase,
+// and underscore-join — same shape as backend catalog keys, so the
+// label fallback (key.replaceAll('_',' ')) reads naturally.
+function slugify(input: string): string {
+  return input
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
 
 // Orchestrator will move these to frontend/src/types/index.ts.
 interface DpiCatalog {
@@ -135,6 +159,12 @@ export default function PosDpiMatrixPage() {
   const [regenOpen, setRegenOpen] = useState(false);
   const [regenRunning, setRegenRunning] = useState(false);
   const [openCell, setOpenCell] = useState<{ phase: string; role: string } | null>(null);
+  // Feedback #59/#60: free-text inputs for adding custom roles/phases
+  // that are not in the backend catalog. Persisted into dpi_matrix_roles
+  // / dpi_matrix_phases as slugified keys; labels render via the
+  // existing labelRole / labelPhase fallback (key→spaces).
+  const [customRoleInput, setCustomRoleInput] = useState("");
+  const [customPhaseInput, setCustomPhaseInput] = useState("");
 
   // Debounce matrix saves so clicking multiple DPI chips in a row batches
   // into one POST instead of hammering the backend.
@@ -233,6 +263,85 @@ export default function PosDpiMatrixPage() {
     void persist(pos, pos.dpi_matrix);
   };
 
+  // Feedback #59/#60: add a custom role/phase. We slugify so the key
+  // looks like the catalog ones (lowercase_underscore) and the label
+  // fallback in labelRole/labelPhase renders it nicely. Persisted
+  // immediately — no need for the operator to blur a chip.
+  const addCustomRole = () => {
+    if (!pos) return;
+    const slug = slugify(customRoleInput);
+    if (!slug) return;
+    if (pos.dpi_matrix_roles.includes(slug)) {
+      toast.error("Questo ruolo è già presente.");
+      return;
+    }
+    const next: Pos = {
+      ...pos,
+      dpi_matrix_roles: [...pos.dpi_matrix_roles, slug],
+    };
+    setPos(next);
+    setCustomRoleInput("");
+    void persist(next, next.dpi_matrix);
+  };
+
+  const addCustomPhase = () => {
+    if (!pos) return;
+    const slug = slugify(customPhaseInput);
+    if (!slug) return;
+    if (pos.dpi_matrix_phases.includes(slug)) {
+      toast.error("Questa fase è già presente.");
+      return;
+    }
+    const next: Pos = {
+      ...pos,
+      dpi_matrix_phases: [...pos.dpi_matrix_phases, slug],
+    };
+    setPos(next);
+    setCustomPhaseInput("");
+    void persist(next, next.dpi_matrix);
+  };
+
+  // Remove a custom role/phase. Only meaningful for non-catalog keys
+  // (catalog keys are toggled via the standard chip click). Cleans up
+  // the related matrix cells so we don't leave orphan data.
+  const removeCustomRole = (role: string) => {
+    if (!pos) return;
+    const nextMatrix: DpiMatrix = {};
+    for (const [phase, row] of Object.entries(pos.dpi_matrix ?? {})) {
+      const { [role]: _drop, ...rest } = row;
+      nextMatrix[phase] = rest;
+    }
+    const next: Pos = {
+      ...pos,
+      dpi_matrix_roles: pos.dpi_matrix_roles.filter((r) => r !== role),
+      dpi_matrix: nextMatrix,
+    };
+    setPos(next);
+    void persist(next, next.dpi_matrix);
+  };
+
+  const removeCustomPhase = (phase: string) => {
+    if (!pos) return;
+    const { [phase]: _drop, ...nextMatrix } = pos.dpi_matrix ?? {};
+    const next: Pos = {
+      ...pos,
+      dpi_matrix_phases: pos.dpi_matrix_phases.filter((p) => p !== phase),
+      dpi_matrix: nextMatrix,
+    };
+    setPos(next);
+    void persist(next, next.dpi_matrix);
+  };
+
+  // Custom roles/phases = those in the POS state but not in the catalog.
+  const customRoles = useMemo(
+    () => pos?.dpi_matrix_roles.filter((r) => !catalog?.roles.includes(r)) ?? [],
+    [pos, catalog],
+  );
+  const customPhases = useMemo(
+    () => pos?.dpi_matrix_phases.filter((p) => !catalog?.phases.includes(p)) ?? [],
+    [pos, catalog],
+  );
+
   // --- Card 3: matrix cell edits -----------------------------------------
   const cellDpi = (phase: string, role: string): string[] => {
     if (!pos) return [];
@@ -242,9 +351,31 @@ export default function PosDpiMatrixPage() {
   const toggleCellDpi = (phase: string, role: string, code: string) => {
     if (!pos) return;
     const current = cellDpi(phase, role);
-    const nextCodes = current.includes(code)
-      ? current.filter((c) => c !== code)
-      : [...current, code];
+    // Feedback #61: toggling any real DPI code clears the "non effettua"
+    // sentinel — the operator is implicitly saying the role does perform
+    // the operation after all.
+    const cleaned = current.filter((c) => c !== NON_EFFETTUA);
+    const nextCodes = cleaned.includes(code)
+      ? cleaned.filter((c) => c !== code)
+      : [...cleaned, code];
+    const nextMatrix: DpiMatrix = {
+      ...pos.dpi_matrix,
+      [phase]: { ...(pos.dpi_matrix?.[phase] ?? {}), [role]: nextCodes },
+    };
+    const next: Pos = { ...pos, dpi_matrix: nextMatrix };
+    setPos(next);
+    scheduleSave(next);
+  };
+
+  // Feedback #61: flip the "non effettua questa operazione" flag for a
+  // single cell. When enabled the cell holds only the sentinel and all
+  // DPI codes are cleared. Disabling restores an empty array (operator
+  // re-picks DPI codes).
+  const toggleCellNonEffettua = (phase: string, role: string) => {
+    if (!pos) return;
+    const current = cellDpi(phase, role);
+    const isNonEffettua = current.includes(NON_EFFETTUA);
+    const nextCodes = isNonEffettua ? [] : [NON_EFFETTUA];
     const nextMatrix: DpiMatrix = {
       ...pos.dpi_matrix,
       [phase]: { ...(pos.dpi_matrix?.[phase] ?? {}), [role]: nextCodes },
@@ -330,30 +461,76 @@ export default function PosDpiMatrixPage() {
         <CardHeader>
           <CardTitle>Ruoli in cantiere</CardTitle>
           <CardDescription>
-            Seleziona i ruoli coinvolti nei lavori. Le modifiche sono salvate quando
-            esci dal campo.
+            Seleziona i ruoli coinvolti nei lavori. Puoi aggiungere mansioni
+            personalizzate non presenti nel catalogo (feedback #60).
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2" onBlur={persistSelection}>
-          {catalog.roles.map((role) => {
-            const selected = pos.dpi_matrix_roles.includes(role);
-            return (
-              <button
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2" onBlur={persistSelection}>
+            {catalog.roles.map((role) => {
+              const selected = pos.dpi_matrix_roles.includes(role);
+              return (
+                <button
+                  key={role}
+                  type="button"
+                  onClick={() => toggleRole(role)}
+                  onBlur={persistSelection}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-sm transition",
+                    selected
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-input bg-background hover:bg-muted"
+                  )}
+                >
+                  {labelRole(role)}
+                </button>
+              );
+            })}
+            {/* Feedback #60: chip per ogni ruolo personalizzato, con × per
+                rimuoverlo. Sempre "selezionato" (è presente perché
+                l'operatore l'ha aggiunto manualmente). */}
+            {customRoles.map((role) => (
+              <span
                 key={role}
-                type="button"
-                onClick={() => toggleRole(role)}
-                onBlur={persistSelection}
-                className={cn(
-                  "rounded-full border px-3 py-1 text-sm transition",
-                  selected
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-input bg-background hover:bg-muted"
-                )}
+                className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary px-3 py-1 text-sm text-primary-foreground"
               >
                 {labelRole(role)}
-              </button>
-            );
-          })}
+                <button
+                  type="button"
+                  aria-label={`Rimuovi ruolo ${labelRole(role)}`}
+                  onClick={() => removeCustomRole(role)}
+                  className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full hover:bg-primary-foreground/20"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+          {/* Feedback #60: input + Aggiungi per ruoli non in catalogo. */}
+          <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+            <Input
+              value={customRoleInput}
+              onChange={(e) => setCustomRoleInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addCustomRole();
+                }
+              }}
+              placeholder="Es. Lattoniere, Posatore di pavimenti…"
+              className="h-9 w-72"
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={addCustomRole}
+              disabled={!customRoleInput.trim()}
+            >
+              <Plus className="mr-1 h-3 w-3" />
+              Aggiungi mansione
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -362,31 +539,74 @@ export default function PosDpiMatrixPage() {
         <CardHeader>
           <CardTitle>Fasi per la matrice DPI</CardTitle>
           <CardDescription>
-            Seleziona le fasi standard usate come colonne della matrice DPI
-            (sotto). Le fasi reali del cantiere si gestiscono nel
-            phase-builder in alto.
+            Seleziona le fasi standard o aggiungi lavorazioni personalizzate
+            (feedback #59). Le fasi qui scelte diventano le colonne della
+            matrice DPI sottostante.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2" onBlur={persistSelection}>
-          {catalog.phases.map((phase) => {
-            const selected = pos.dpi_matrix_phases.includes(phase);
-            return (
-              <button
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2" onBlur={persistSelection}>
+            {catalog.phases.map((phase) => {
+              const selected = pos.dpi_matrix_phases.includes(phase);
+              return (
+                <button
+                  key={phase}
+                  type="button"
+                  onClick={() => togglePhase(phase)}
+                  onBlur={persistSelection}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-sm transition",
+                    selected
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-input bg-background hover:bg-muted"
+                  )}
+                >
+                  {labelPhase(phase)}
+                </button>
+              );
+            })}
+            {/* Feedback #59: chip per fasi personalizzate. */}
+            {customPhases.map((phase) => (
+              <span
                 key={phase}
-                type="button"
-                onClick={() => togglePhase(phase)}
-                onBlur={persistSelection}
-                className={cn(
-                  "rounded-full border px-3 py-1 text-sm transition",
-                  selected
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-input bg-background hover:bg-muted"
-                )}
+                className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary px-3 py-1 text-sm text-primary-foreground"
               >
                 {labelPhase(phase)}
-              </button>
-            );
-          })}
+                <button
+                  type="button"
+                  aria-label={`Rimuovi fase ${labelPhase(phase)}`}
+                  onClick={() => removeCustomPhase(phase)}
+                  className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full hover:bg-primary-foreground/20"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+            <Input
+              value={customPhaseInput}
+              onChange={(e) => setCustomPhaseInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addCustomPhase();
+                }
+              }}
+              placeholder="Es. Tinteggiatura interni, Cappotto termico…"
+              className="h-9 w-72"
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={addCustomPhase}
+              disabled={!customPhaseInput.trim()}
+            >
+              <Plus className="mr-1 h-3 w-3" />
+              Aggiungi lavorazione
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -459,29 +679,59 @@ export default function PosDpiMatrixPage() {
                               }
                             }}
                           >
-                            <div className="flex flex-wrap gap-1">
-                              {codes.length === 0 ? (
-                                <span className="text-xs italic text-muted-foreground">
-                                  Nessun DPI
-                                </span>
-                              ) : (
-                                codes.map((c) => (
-                                  <Badge
-                                    key={c}
-                                    variant="secondary"
-                                    className="text-[11px]"
-                                  >
-                                    {catalog.dpi_catalog[c] ?? c}
-                                  </Badge>
-                                ))
-                              )}
-                            </div>
-                            {isOpen && (
+                            {(() => {
+                              const isNonEffettua = codes.includes(NON_EFFETTUA);
+                              const realCodes = codes.filter(
+                                (c) => c !== NON_EFFETTUA,
+                              );
+                              return (
+                                <div className="flex flex-wrap gap-1">
+                                  {/* Feedback #61: visualizza "Non effettua"
+                                      come stato distinto da "Nessun DPI". */}
+                                  {isNonEffettua ? (
+                                    <span className="text-xs italic text-muted-foreground">
+                                      Non effettua questa operazione
+                                    </span>
+                                  ) : realCodes.length === 0 ? (
+                                    <span className="text-xs italic text-muted-foreground">
+                                      Nessun DPI
+                                    </span>
+                                  ) : (
+                                    realCodes.map((c) => (
+                                      <Badge
+                                        key={c}
+                                        variant="secondary"
+                                        className="text-[11px]"
+                                      >
+                                        {catalog.dpi_catalog[c] ?? c}
+                                      </Badge>
+                                    ))
+                                  )}
+                                </div>
+                              );
+                            })()}
+                            {isOpen && (() => {
+                              const isNonEffettua = codes.includes(NON_EFFETTUA);
+                              return (
                               <div
                                 className="mt-2 rounded-md border bg-popover p-2 text-popover-foreground shadow-md"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                <div className="mb-1 text-xs font-medium text-muted-foreground">
+                                {/* Feedback #61: opzione "Non effettua questa
+                                    operazione". Quando attiva, la cella
+                                    contiene solo il sentinel e le checkbox
+                                    DPI sono disabilitate. */}
+                                <label className="mb-2 flex items-center gap-2 text-xs font-medium">
+                                  <input
+                                    type="checkbox"
+                                    checked={isNonEffettua}
+                                    onChange={() =>
+                                      toggleCellNonEffettua(phase, role)
+                                    }
+                                  />
+                                  <span>Non effettua questa operazione</span>
+                                </label>
+                                <div className="mb-1 border-t pt-2 text-xs font-medium text-muted-foreground">
                                   DPI richiesti
                                 </div>
                                 <div className="flex flex-col gap-1">
@@ -490,11 +740,16 @@ export default function PosDpiMatrixPage() {
                                     return (
                                       <label
                                         key={code}
-                                        className="flex items-center gap-2 text-xs"
+                                        className={cn(
+                                          "flex items-center gap-2 text-xs",
+                                          isNonEffettua &&
+                                            "opacity-50",
+                                        )}
                                       >
                                         <input
                                           type="checkbox"
                                           checked={checked}
+                                          disabled={isNonEffettua}
                                           onChange={() =>
                                             toggleCellDpi(phase, role, code)
                                           }
@@ -515,7 +770,8 @@ export default function PosDpiMatrixPage() {
                                   </Button>
                                 </div>
                               </div>
-                            )}
+                              );
+                            })()}
                           </td>
                         );
                       })}

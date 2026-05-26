@@ -1,7 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -63,13 +63,13 @@ async def list_persone(
     db: AsyncSession = Depends(get_db),
 ):
     await _get_azienda(azienda_id, org_id, db)
-    # Feedback issue #13 (2026-05-14): list in insertion order so the UI
-    # mirrors the operator's data-entry sequence instead of Postgres' heap
-    # order. created_at has a server_default of now() so it always exists.
+    # Feedback #54 (2026-05-25): order by (ordine, created_at) so legacy
+    # rows backfilled to the same ordine bucket stay deterministic, and
+    # newly created rows land at the end of the list (max+1 on create).
     result = await db.execute(
         select(Persona)
         .where(Persona.azienda_id == azienda_id)
-        .order_by(Persona.created_at)
+        .order_by(Persona.ordine, Persona.created_at)
         .options(selectinload(Persona.ambienti))
     )
     return list(result.scalars().all())
@@ -84,7 +84,15 @@ async def create_persona(
 ):
     await _get_azienda(azienda_id, org_id, db)
     payload = body.model_dump(exclude={"ambiente_ids"})
-    persona = Persona(**payload, azienda_id=azienda_id)
+    # Feedback #54: server-assigned ordine so bulk-add lands rows at the
+    # end of the list. Mirrors ambienti's max(ordine)+1 pattern.
+    max_ordine = await db.execute(
+        select(func.coalesce(func.max(Persona.ordine), -1)).where(
+            Persona.azienda_id == azienda_id
+        )
+    )
+    next_ordine = max_ordine.scalar_one() + 1
+    persona = Persona(**payload, azienda_id=azienda_id, ordine=next_ordine)
     persona.ambienti = await _resolve_ambienti(azienda_id, body.ambiente_ids, db)
     db.add(persona)
     await db.commit()

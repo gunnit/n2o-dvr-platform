@@ -211,7 +211,10 @@ def _render_modalita_organizzative(doc, pos) -> None:
     items = [
         ("Orario di lavoro", pos.orario_lavoro_cantiere),
         ("Turni", pos.turni_descrizione),
-        ("Riunioni di coordinamento", pos.riunioni_coordinamento),
+        # Feedback #57 (2026-05-26): label "Riunioni di coordinamento"
+        # rinominato in "Descrizione del cantiere". DB column unchanged
+        # (riunioni_coordinamento) — solo etichetta utente / docx.
+        ("Descrizione del cantiere", pos.riunioni_coordinamento),
     ]
     if not any(v for _, v in items):
         return
@@ -253,9 +256,17 @@ def _render_organizzazione_logistica(doc, pos) -> None:
 
 
 def _dpi_labels(codes: list[str]) -> str:
-    """Render a list of DPI codes as comma-separated Italian labels."""
+    """Render a list of DPI codes as comma-separated Italian labels.
+
+    Feedback #61 (2026-05-26): the frontend stores the literal string
+    ``__non_effettua__`` in a cell when the operator declared that a
+    role does not perform a given phase. We collapse it to a single
+    Italian-readable label so the printed POS doesn't leak the sentinel.
+    """
     if not codes:
         return "—"
+    if "__non_effettua__" in codes:
+        return "Non effettua questa operazione"
     return ", ".join(DPI_CATALOG.get(c, c) for c in codes)
 
 

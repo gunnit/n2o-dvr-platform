@@ -92,62 +92,62 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
   );
 
   return (
-    <Tabs defaultValue="rischi" className="w-full">
+    <div className="space-y-4">
+      {/* Feedback #58 (2026-05-26): Rischi + DPI sempre visibili sopra
+          le schede. Prima erano nascosti dentro due tab separati e
+          l'operatore doveva alternare per inserirli. Ora affiancati
+          (rischi + DPI sulla stessa riga, mezzi sotto). */}
+      <div className="rounded-md border bg-muted/30 p-3">
+        <div className="grid gap-3 md:grid-cols-2">
+          <Controller
+            control={control}
+            name={`${base}.rischi` as const}
+            render={({ field }) => (
+              <CsvField
+                label={`Rischi della fase (${summary.rischi})`}
+                value={field.value ?? []}
+                onChange={field.onChange}
+                placeholder="Caduta dall'alto, Schiacciamento, Rumore"
+              />
+            )}
+          />
+          <Controller
+            control={control}
+            name={`${base}.dpi` as const}
+            render={({ field }) => (
+              <CsvField
+                label={`DPI obbligatori (${summary.dpi})`}
+                value={field.value ?? []}
+                onChange={field.onChange}
+                placeholder="Casco, Scarpe, Imbragatura"
+              />
+            )}
+          />
+        </div>
+        <div className="mt-3">
+          <Controller
+            control={control}
+            name={`${base}.mezzi` as const}
+            render={({ field }) => (
+              <CsvField
+                label={`Mezzi e attrezzature (${summary.mezzi})`}
+                value={field.value ?? []}
+                onChange={field.onChange}
+                placeholder="Escavatore, Autobetoniera"
+              />
+            )}
+          />
+        </div>
+      </div>
+
+    <Tabs defaultValue="niosh" className="w-full">
       <TabsList>
-        <TabsTrigger value="rischi">Rischi ({summary.rischi})</TabsTrigger>
-        <TabsTrigger value="dpi-mezzi">
-          DPI {summary.dpi} · Mezzi {summary.mezzi}
-        </TabsTrigger>
         <TabsTrigger value="niosh">NIOSH {niosh ? "✓" : ""}</TabsTrigger>
         <TabsTrigger value="rumore">Rumore {rumore ? "✓" : ""}</TabsTrigger>
         <TabsTrigger value="vibrazioni">
           Vibrazioni {vibr ? "✓" : ""}
         </TabsTrigger>
       </TabsList>
-
-      {/* --- Rischi --------------------------------------------------- */}
-      <TabsContent value="rischi" className="space-y-3 pt-3">
-        <Controller
-          control={control}
-          name={`${base}.rischi` as const}
-          render={({ field }) => (
-            <CsvField
-              label="Rischi della fase"
-              value={field.value ?? []}
-              onChange={field.onChange}
-              placeholder="Caduta dall'alto, Schiacciamento, Rumore"
-            />
-          )}
-        />
-      </TabsContent>
-
-      {/* --- DPI + Mezzi --------------------------------------------- */}
-      <TabsContent value="dpi-mezzi" className="space-y-3 pt-3">
-        <Controller
-          control={control}
-          name={`${base}.dpi` as const}
-          render={({ field }) => (
-            <CsvField
-              label="DPI obbligatori"
-              value={field.value ?? []}
-              onChange={field.onChange}
-              placeholder="Casco, Scarpe, Imbragatura"
-            />
-          )}
-        />
-        <Controller
-          control={control}
-          name={`${base}.mezzi` as const}
-          render={({ field }) => (
-            <CsvField
-              label="Mezzi e attrezzature"
-              value={field.value ?? []}
-              onChange={field.onChange}
-              placeholder="Escavatore, Autobetoniera"
-            />
-          )}
-        />
-      </TabsContent>
 
       {/* --- NIOSH --------------------------------------------------- */}
       <TabsContent value="niosh" className="space-y-3 pt-3">
@@ -444,5 +444,6 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
         )}
       </TabsContent>
     </Tabs>
+    </div>
   );
 }

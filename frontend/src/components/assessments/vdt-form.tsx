@@ -145,9 +145,20 @@ export interface VdtFormProps {
   aziendaId: string;
   persone: PersonaOption[];
   onSummaryChange?: (summary: VdtSummary) => void;
+  // Feedback #56: parent bumps this counter after a successful save so
+  // the form clears its workers + localStorage draft. Operators were
+  // reporting "non si salva" because the old draft kept sitting in the
+  // form after a save, looking unsaved. A simple monotonic counter is
+  // enough — comparing against the last value the form has seen.
+  clearSignal?: number;
 }
 
-export function VdtForm({ aziendaId, persone, onSummaryChange }: VdtFormProps) {
+export function VdtForm({
+  aziendaId,
+  persone,
+  onSummaryChange,
+  clearSignal,
+}: VdtFormProps) {
   const storageKey = `vdt-draft-${aziendaId}`;
 
   const [workers, setWorkers] = useState<VdtWorker[]>([]);
@@ -216,6 +227,18 @@ export function VdtForm({ aziendaId, persone, onSummaryChange }: VdtFormProps) {
       /* noop */
     }
   }, [storageKey]);
+
+  // React to the parent's clearSignal bumps. Guarded by `hydrated` so
+  // we never wipe a draft before it has loaded — that would race the
+  // initial-hydration effect on mount.
+  useEffect(() => {
+    if (!hydrated) return;
+    if (clearSignal === undefined) return;
+    resetDraft();
+    // Intentionally omit resetDraft from deps: it changes when storageKey
+    // changes but we only want to react to clearSignal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clearSignal, hydrated]);
 
   const hasEsposti = summary.esposti > 0;
 

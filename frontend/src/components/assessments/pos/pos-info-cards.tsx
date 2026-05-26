@@ -388,7 +388,7 @@ export function PosInfoEditor({
           <CardTitle>Modalità organizzative</CardTitle>
           <CardDescription>
             Orario di lavoro effettivo del cantiere, eventuali turni e
-            descrizione delle riunioni di coordinamento previste.
+            descrizione generale del cantiere.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -415,10 +415,15 @@ export function PosInfoEditor({
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="pos-riunioni">Riunioni di coordinamento</Label>
+            {/* Feedback #57 (2026-05-26): label rinominato da "Riunioni di
+                coordinamento" a "Descrizione del cantiere". Il campo DB
+                resta `riunioni_coordinamento` per non rompere i POS
+                generati: il significato si estende a descrizione generale
+                del cantiere (riunioni, peculiarità, contesto operativo). */}
+            <Label htmlFor="pos-riunioni">Descrizione del cantiere</Label>
             <Textarea
               id="pos-riunioni"
-              placeholder="Periodiche riunioni con informazione e formazione ai lavoratori; presenza del CSE in occasione di inizio lavori, primo ingresso lavoratori, ecc."
+              placeholder="Caratteristiche del cantiere, peculiarità operative, riunioni di coordinamento, presenza del CSE in occasione di inizio lavori, primo ingresso lavoratori, ecc."
               value={values.riunioni_coordinamento ?? ""}
               onChange={(e) =>
                 update("riunioni_coordinamento", e.target.value || null)

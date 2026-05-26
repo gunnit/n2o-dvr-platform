@@ -65,6 +65,10 @@ export default function VdtAssessmentPage() {
   const [summary, setSummary] = useState<VdtSummary>(EMPTY_SUMMARY);
   const [finalizing, setFinalizing] = useState(false);
   const [finalizeMessage, setFinalizeMessage] = useState<string | null>(null);
+  // Bumped after every successful finalize so VdtForm clears its draft +
+  // workers. Feedback #56 — operators kept reporting "non si salva"
+  // because the old form rows sat there after a successful save.
+  const [clearSignal, setClearSignal] = useState(0);
 
   const refetchValutazioni = useCallback(async () => {
     try {
@@ -225,6 +229,10 @@ export default function VdtAssessmentPage() {
       );
       // Re-fetch so the "Già valutati" badge reflects the new rows.
       await refetchValutazioni();
+      // Clear the in-progress form + localStorage draft so the operator
+      // sees an empty form (ready for the next worker) instead of the
+      // just-saved rows still sitting there looking dirty. Feedback #56.
+      setClearSignal((s) => s + 1);
     } catch (err) {
       setFinalizeMessage(
         err instanceof Error
@@ -308,6 +316,7 @@ export default function VdtAssessmentPage() {
         aziendaId={aziendaId}
         persone={persone}
         onSummaryChange={setSummary}
+        clearSignal={clearSignal}
       />
 
       <Card className="border-primary/30 bg-primary/5">
