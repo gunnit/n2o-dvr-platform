@@ -27,13 +27,29 @@ DpiMatrix = dict[str, dict[str, list[str]]]
 class PosBase(BaseModel):
     cantiere_indirizzo: str = Field(..., min_length=1, max_length=500)
     cantiere_descrizione: str | None = None
+    # Soggetti di riferimento (All. XV punto 3.2.1 b). CSE keeps the historic
+    # `coordinatore_sicurezza` name for backwards compatibility; CSP lives in
+    # the new `coordinatore_progettazione` field.
     committente: str | None = Field(None, max_length=255)
+    progettista_responsabile: str | None = Field(None, max_length=255)
     direttore_lavori: str | None = Field(None, max_length=255)
-    coordinatore_sicurezza: str | None = Field(None, max_length=255)
+    direttore_operativo_edilizia: str | None = Field(None, max_length=255)
+    direttore_operativo_impianti: str | None = Field(None, max_length=255)
+    responsabile_lavori: str | None = Field(None, max_length=255)
+    coordinatore_progettazione: str | None = Field(None, max_length=255)
+    coordinatore_sicurezza: str | None = Field(None, max_length=255)  # CSE
     data_inizio: date | None = None
     data_fine: date | None = None
     importo_lavori: float | None = None
     numero_massimo_lavoratori: int | None = None
+    # Modalità organizzative (All. XV punto 3.2.1 c). Free-text.
+    orario_lavoro_cantiere: str | None = None
+    turni_descrizione: str | None = None
+    riunioni_coordinamento: str | None = None
+    # Organizzazione logistica.
+    monoblocchi_installati: bool = False
+    monoblocchi_dettagli: str | None = None
+    modalita_pasti: str | None = None
     fasi_lavorative: list[dict] = Field(default_factory=list)
     valutazione_rumore: dict = Field(default_factory=dict)
     valutazione_vibrazioni: dict = Field(default_factory=dict)
@@ -51,12 +67,23 @@ class PosCreate(BaseModel):
     cantiere_indirizzo: str = Field(..., min_length=1, max_length=500)
     cantiere_descrizione: str | None = None
     committente: str | None = Field(None, max_length=255)
+    progettista_responsabile: str | None = Field(None, max_length=255)
     direttore_lavori: str | None = Field(None, max_length=255)
+    direttore_operativo_edilizia: str | None = Field(None, max_length=255)
+    direttore_operativo_impianti: str | None = Field(None, max_length=255)
+    responsabile_lavori: str | None = Field(None, max_length=255)
+    coordinatore_progettazione: str | None = Field(None, max_length=255)
     coordinatore_sicurezza: str | None = Field(None, max_length=255)
     data_inizio: date | None = None
     data_fine: date | None = None
     importo_lavori: float | None = None
     numero_massimo_lavoratori: int | None = None
+    orario_lavoro_cantiere: str | None = None
+    turni_descrizione: str | None = None
+    riunioni_coordinamento: str | None = None
+    monoblocchi_installati: bool = False
+    monoblocchi_dettagli: str | None = None
+    modalita_pasti: str | None = None
     fasi_lavorative: list[dict] = Field(default_factory=list)
     valutazione_rumore: dict = Field(default_factory=dict)
     valutazione_vibrazioni: dict = Field(default_factory=dict)
@@ -72,12 +99,23 @@ class PosUpdate(BaseModel):
     cantiere_indirizzo: str | None = Field(None, min_length=1, max_length=500)
     cantiere_descrizione: str | None = None
     committente: str | None = Field(None, max_length=255)
+    progettista_responsabile: str | None = Field(None, max_length=255)
     direttore_lavori: str | None = Field(None, max_length=255)
+    direttore_operativo_edilizia: str | None = Field(None, max_length=255)
+    direttore_operativo_impianti: str | None = Field(None, max_length=255)
+    responsabile_lavori: str | None = Field(None, max_length=255)
+    coordinatore_progettazione: str | None = Field(None, max_length=255)
     coordinatore_sicurezza: str | None = Field(None, max_length=255)
     data_inizio: date | None = None
     data_fine: date | None = None
     importo_lavori: float | None = None
     numero_massimo_lavoratori: int | None = None
+    orario_lavoro_cantiere: str | None = None
+    turni_descrizione: str | None = None
+    riunioni_coordinamento: str | None = None
+    monoblocchi_installati: bool | None = None
+    monoblocchi_dettagli: str | None = None
+    modalita_pasti: str | None = None
     fasi_lavorative: list[dict] | None = None
     valutazione_rumore: dict | None = None
     valutazione_vibrazioni: dict | None = None

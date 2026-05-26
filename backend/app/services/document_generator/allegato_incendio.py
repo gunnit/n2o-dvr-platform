@@ -22,6 +22,45 @@ from app.services.document_generator.docx_utils import (
 TEMPLATE = TEMPLATES_DIR / "ALLEGATO RISCHIO INCENDIO.docx"
 TIPO_DOC = "allegato_incendio"
 
+# Six prevention areas per REFERENCE_DATA.md §4.5. Each area has tiered
+# measures keyed by the area's livello_rischio so an inspector sees a
+# concrete plan, not generic boilerplate.
+PREVENTION_CATEGORIES: list[tuple[str, str]] = [
+    ("1. Ridurre la probabilita di insorgenza di un incendio",
+     "Controllo periodico degli impianti elettrici, separazione materiali infiammabili, divieti di fumo, manutenzione apparecchiature."),
+    ("2. Garantire l'esodo delle persone in sicurezza",
+     "Vie di fuga sgombre e segnalate, porte tagliafuoco verificate, illuminazione di emergenza, punto di raccolta esterno."),
+    ("3. Sistemi di allarme e segnalazione rapida",
+     "Rilevatori di fumo/calore, pulsanti manuali di allarme, sirena acustica/luminosa, procedura di chiamata 115."),
+    ("4. Estinzione dell'incendio",
+     "Estintori (verifica semestrale), idranti UNI 45/70 dove richiesti, attrezzature di primo intervento, addetti formati."),
+    ("5. Efficienza dei sistemi di protezione antincendio",
+     "Manutenzione periodica registro antincendio, verifiche annuali estintori/idranti/rivelatori, controllo porte REI."),
+    ("6. Informazione e formazione dei lavoratori",
+     "Corso antincendio (basso/medio/alto livello) D.M. 02/09/2021, esercitazione annuale, aggiornamento triennale."),
+]
+
+# Per-livello specific recommendations to layer on top of the generic
+# categories. Higher risk -> more demanding measures.
+LIVELLO_SPECIFIC_MEASURES: dict[str, list[str]] = {
+    "BASSO": [
+        "Esercitazione antincendio almeno annuale.",
+        "Verifica estintori semestrale a cura di tecnico abilitato.",
+        "Addetti antincendio formazione 4 ore (livello 1-FOR).",
+    ],
+    "MEDIO": [
+        "Esercitazione antincendio almeno annuale con scenari multipli (esodo, primo intervento).",
+        "Verifica estintori semestrale; impianto rivelazione + allarme periodicamente testato.",
+        "Addetti antincendio formazione 8 ore (livello 2-FOR) + idoneita tecnica per gli ambienti soggetti a CPI.",
+    ],
+    "ALTO": [
+        "Esercitazione antincendio semestrale; coinvolgimento VV.F. nei piani di emergenza complessi.",
+        "Sistema di rivelazione automatica e spegnimento (sprinkler / aerosol) dove tecnicamente fattibile.",
+        "Addetti antincendio formazione 16 ore (livello 3-FOR) + idoneita tecnica obbligatoria; CPI in corso di validita.",
+        "Coordinamento con il responsabile CPI per aggiornamenti periodici.",
+    ],
+}
+
 
 class AllegatoIncendioGenerator(BaseDocumentGenerator):
     async def generate(self) -> str:
@@ -74,18 +113,69 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
                 ])
             add_data_table(doc, headers, rows)
 
-        add_heading(doc, "Misure di prevenzione e protezione", level=2)
+        # Company-wide aggregate (worst-case across areas + counts).
+        if incendi:
+            livelli = [v.livello_rischio or "" for v in incendi]
+            counts = {
+                "BASSO": livelli.count("BASSO"),
+                "MEDIO": livelli.count("MEDIO"),
+                "ALTO": livelli.count("ALTO"),
+            }
+            order = {"BASSO": 0, "MEDIO": 1, "ALTO": 2}
+            worst = max((l for l in livelli if l in order), key=order.get, default="—")
+
+            add_heading(doc, "Esito complessivo aziendale", level=2)
+            add_kv_table(doc, [
+                ("Ambienti valutati", str(len(incendi))),
+                ("Aree a rischio BASSO", str(counts["BASSO"])),
+                ("Aree a rischio MEDIO", str(counts["MEDIO"])),
+                ("Aree a rischio ALTO", str(counts["ALTO"])),
+                ("Livello aziendale (worst-case)", worst),
+            ])
+
+        add_heading(doc, "Misure di prevenzione e protezione per area", level=2)
+        add_paragraph(
+            doc,
+            "Per ciascuna area di lavoro le misure sono organizzate nelle 6 categorie "
+            "di prevenzione previste dal D.M. 03/09/2021 (REFERENCE_DATA §4.5). "
+            "Alle misure standard si aggiungono prescrizioni specifiche calibrate "
+            "sul livello di rischio assegnato.",
+            italic=True,
+            size=9,
+        )
         for v in incendi:
             amb_name = (
                 ambienti_map[v.ambiente_id].nome
                 if v.ambiente_id in ambienti_map
                 else (v.nome_area or "—")
             )
-            add_heading(doc, amb_name, level=3)
-            add_paragraph(doc, v.misure_prevenzione or "Misure standard: estintori a portata, vie di fuga segnalate e libere, idoneo sistema di allarme.")
+            livello = (v.livello_rischio or "BASSO").upper()
+            add_heading(doc, f"{amb_name} — livello {livello}", level=3)
+
+            # 6-category prevention table
+            cat_rows = [[cat, contenuto] for cat, contenuto in PREVENTION_CATEGORIES]
+            add_data_table(doc, ["Categoria di prevenzione", "Misure"], cat_rows)
+
+            # Livello-specific addenda
+            add_heading(doc, f"Prescrizioni aggiuntive — livello {livello}", level=4)
+            for m in LIVELLO_SPECIFIC_MEASURES.get(livello, LIVELLO_SPECIFIC_MEASURES["BASSO"]):
+                add_paragraph(doc, f"• {m}")
+
+            # Operator-supplied measures, if any
+            if v.misure_prevenzione:
+                add_heading(doc, "Misure aggiuntive registrate", level=4)
+                add_paragraph(doc, v.misure_prevenzione)
 
         add_heading(doc, "Gestione dell'emergenza", level=2)
         add_paragraph(doc, "Il personale e addestrato all'uso degli estintori. Il piano di emergenza (allegato PEE) descrive procedure dettagliate per ogni scenario d'incendio. E prevista esercitazione antincendio almeno annuale (D.M. 02/09/2021 art. 6).")
+
+        add_heading(doc, "Sottoscrizione", level=2)
+        add_data_table(doc, ["Ruolo", "Nominativo", "Firma"], [
+            ["Datore di Lavoro", azienda.ragione_sociale or "", "________________________"],
+            ["RSPP", "________________________", "________________________"],
+            ["Addetto antincendio coordinatore", "________________________", "________________________"],
+            ["Data", generated_at.strftime("%d/%m/%Y"), ""],
+        ])
 
         version = await self._next_version()
         output_dir = self._get_output_dir()

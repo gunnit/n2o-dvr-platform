@@ -29,6 +29,11 @@ import {
   promoteLegacyPhase,
   type PhaseValues,
 } from "@/components/assessments/pos/phase-schema";
+import {
+  PosAnagraficaSummary,
+  PosInfoEditor,
+  type PosInfoFields,
+} from "@/components/assessments/pos/pos-info-cards";
 
 /**
  * POS DPI matrix editor (US-4.8).
@@ -50,7 +55,7 @@ interface DpiMatrix {
   [phase: string]: { [role: string]: string[] };
 }
 
-interface Pos {
+interface Pos extends PosInfoFields {
   id: string;
   azienda_id: string;
   cantiere_indirizzo: string;
@@ -61,6 +66,26 @@ interface Pos {
   // back via PUT /pos/{id}/fasi by <PhaseBuilder>. Optional so legacy
   // rows still parse.
   fasi_lavorative?: PhaseValues[];
+}
+
+/** Pull the editable subset out of the full POS row for the info editor. */
+function infoFieldsOf(p: Pos): PosInfoFields {
+  return {
+    committente: p.committente ?? null,
+    progettista_responsabile: p.progettista_responsabile ?? null,
+    direttore_lavori: p.direttore_lavori ?? null,
+    direttore_operativo_edilizia: p.direttore_operativo_edilizia ?? null,
+    direttore_operativo_impianti: p.direttore_operativo_impianti ?? null,
+    responsabile_lavori: p.responsabile_lavori ?? null,
+    coordinatore_progettazione: p.coordinatore_progettazione ?? null,
+    coordinatore_sicurezza: p.coordinatore_sicurezza ?? null,
+    orario_lavoro_cantiere: p.orario_lavoro_cantiere ?? null,
+    turni_descrizione: p.turni_descrizione ?? null,
+    riunioni_coordinamento: p.riunioni_coordinamento ?? null,
+    monoblocchi_installati: p.monoblocchi_installati ?? false,
+    monoblocchi_dettagli: p.monoblocchi_dettagli ?? null,
+    modalita_pasti: p.modalita_pasti ?? null,
+  };
 }
 
 // --- Italian labels for the role/phase keys returned by the backend.
@@ -266,11 +291,25 @@ export default function PosDpiMatrixPage() {
       <header>
         <h1 className="type-h1">POS — Cantiere</h1>
         <p className="text-sm text-muted-foreground">
-          Costruisci le fasi lavorative del cantiere (US-4.7) e personalizza
-          la matrice DPI per ruolo / fase (US-4.8). Le modifiche al phase
-          builder vanno salvate manualmente; la matrice DPI è auto-salvata.
+          Inserisci soggetti di riferimento, modalità organizzative e
+          logistica del cantiere, costruisci le fasi lavorative (US-4.7) e
+          personalizza la matrice DPI per ruolo / fase (US-4.8). I campi
+          testuali sono auto-salvati; il phase builder richiede il pulsante
+          &quot;Salva fasi&quot;.
         </p>
       </header>
+
+      {/* Anagrafica + dipendenti — read-only summary linking back to
+          azienda/persone pages (Luca's 2026-05-25 POS template Groups A & B). */}
+      <PosAnagraficaSummary aziendaId={aziendaId} />
+
+      {/* Editable info cards: soggetti di riferimento, modalità
+          organizzative, organizzazione logistica (Groups D, E, F). */}
+      <PosInfoEditor
+        aziendaId={aziendaId}
+        posId={pos.id}
+        initial={infoFieldsOf(pos)}
+      />
 
       {/* US-4.7 — Phase builder (rischi, NIOSH, rumore, vibrazioni, drag-drop, dipende_da) */}
       <PhaseBuilder

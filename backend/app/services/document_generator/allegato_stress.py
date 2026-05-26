@@ -18,6 +18,15 @@ from app.services.document_generator.docx_utils import (
     replace_placeholders,
     slugify,
 )
+from app.services.stress_calculator import (
+    FINAL_THRESHOLDS,
+    TOTALE_B_THRESHOLDS,
+    TOTALE_C_THRESHOLDS,
+    _area_a_converted,
+    _azione_per_livello,
+    _band,
+    get_default_measures,
+)
 
 TEMPLATE = TEMPLATES_DIR / "ALLEGATO STRESS DA LAVORO CORRELATO.docx"
 TIPO_DOC = "allegato_stress"
@@ -42,35 +51,72 @@ class AllegatoStressGenerator(BaseDocumentGenerator):
             ("Azienda", azienda.ragione_sociale or ""),
             ("Gruppo omogeneo", stress.gruppo_omogeneo if stress else "N/D"),
             ("Data valutazione", generated_at.strftime("%d/%m/%Y")),
-            ("Metodologia", "INAIL 2011 - 3 aree: Eventi Sentinella (A), Contenuto (B), Contesto (C)"),
+            ("Metodologia", "INAIL 2011 - 3 aree: A Indicatori Aziendali, B Contesto del lavoro, C Contenuto del lavoro"),
         ])
 
         add_heading(doc, "Inquadramento normativo", level=2)
         add_paragraph(doc, "Art. 28 comma 1-bis del D.Lgs. 81/2008 prevede la valutazione del rischio stress lavoro-correlato secondo le indicazioni della Commissione Consultiva Permanente (metodologia INAIL 2011).")
 
         if stress:
+            # INAIL bands per REFERENCE_DATA §3.4:
+            #   Area A: raw 0-40 → converted 0/2/5 with band BASSO/MEDIO/ALTO
+            #   Area B (Contesto, max 26): BASSO 0-8 / MEDIO 9-17 / ALTO 18-26
+            #   Area C (Contenuto, max 36): BASSO 0-13 / MEDIO 14-25 / ALTO 26-36
+            #   Total: BASSO 0-17 / MEDIO 18-34 / ALTO 35-67
+            a_raw = stress.punteggio_a or 0
+            b_raw = stress.punteggio_b or 0
+            c_raw = stress.punteggio_c or 0
+            a_conv, a_livello = _area_a_converted(a_raw)
+            b_livello = _band(max(b_raw, 0), TOTALE_B_THRESHOLDS)
+            c_livello = _band(max(c_raw, 0), TOTALE_C_THRESHOLDS)
+            totale = stress.punteggio_totale if stress.punteggio_totale is not None else (a_conv + b_raw + c_raw)
+            livello_final = stress.livello_rischio or _band(max(totale, 0), FINAL_THRESHOLDS)
+
             add_heading(doc, "Punteggi per area", level=2)
-            add_data_table(doc, ["Area", "Punteggio", "Livello parziale"], [
-                ["A - Eventi sentinella (infortuni, assenze, turnover)", str(stress.punteggio_a or 0), _livello(stress.punteggio_a)],
-                ["B - Contenuto del lavoro (ritmi, monotonia, orari)", str(stress.punteggio_b or 0), _livello(stress.punteggio_b)],
-                ["C - Contesto del lavoro (comunicazione, autonomia)", str(stress.punteggio_c or 0), _livello(stress.punteggio_c)],
+            add_data_table(doc, ["Area", "Punteggio grezzo", "Convertito", "Livello parziale"], [
+                ["A - Indicatori aziendali (infortuni, assenze, turnover)", f"{a_raw} / 40", str(a_conv), a_livello],
+                ["B - Contesto del lavoro (organizzazione, ruoli, rapporti)", f"{b_raw} / 26", str(max(b_raw, 0)), b_livello],
+                ["C - Contenuto del lavoro (ambiente, compiti, ritmo, orario)", f"{c_raw} / 36", str(c_raw), c_livello],
             ])
+            add_paragraph(
+                doc,
+                "Nota: il punteggio dell'Area A è convertito sulla scala 0/2/5 prima di essere sommato a B e C (max teorico totale = 67). Soglie: 0-17 BASSO, 18-34 MEDIO, 35-67 ALTO.",
+                italic=True,
+                size=9,
+            )
+
             add_heading(doc, "Esito complessivo", level=2)
             add_kv_table(doc, [
-                ("Punteggio totale (A+B+C)", str(stress.punteggio_totale or 0)),
-                ("Livello di rischio", stress.livello_rischio or "—"),
-                ("Misure correttive pianificate", stress.misure_correttive or "Monitoraggio e aggiornamento annuale"),
+                ("Punteggio totale (A conv + B + C)", f"{totale} / 67"),
+                ("Livello di rischio", livello_final),
+                ("Azione conseguente", _azione_per_livello(livello_final)),
             ])
 
+            add_heading(doc, "Misure correttive", level=2)
+            if stress.misure_correttive:
+                add_paragraph(doc, stress.misure_correttive)
+            else:
+                for m in get_default_measures(livello_final):
+                    add_paragraph(doc, f"• {m}")
+
             add_heading(doc, "Dettaglio indicatori per area", level=2)
-            _area_detail(doc, "Area A - Eventi Sentinella", stress.area_a_eventi_sentinella or {})
-            _area_detail(doc, "Area B - Contenuto del lavoro", stress.area_b_contenuto_lavoro or {})
-            _area_detail(doc, "Area C - Contesto del lavoro", stress.area_c_contesto_lavoro or {})
+            # NB: model field names are swapped vs INAIL labels (area_b_contenuto_lavoro
+            # actually holds Contesto answers and vice versa). Show under the
+            # correct INAIL heading regardless of column name.
+            _area_detail(doc, "Area A - Indicatori Aziendali", stress.area_a_eventi_sentinella or {})
+            _area_detail(doc, "Area B - Contesto del lavoro", stress.area_b_contenuto_lavoro or {})
+            _area_detail(doc, "Area C - Contenuto del lavoro", stress.area_c_contesto_lavoro or {})
         else:
             add_paragraph(doc, "Nessuna valutazione stress lavoro-correlato disponibile per questa azienda.", italic=True)
 
-        add_heading(doc, "Azioni successive", level=2)
-        add_paragraph(doc, "In presenza di rischio medio o alto e richiesta una valutazione approfondita con questionari soggettivi (HSE, OSI, ecc.) e l'adozione di misure correttive specifiche.")
+        add_heading(doc, "Sottoscrizione", level=2)
+        add_data_table(doc, ["Ruolo", "Nominativo", "Firma"], [
+            ["Datore di Lavoro", azienda.ragione_sociale or "", "________________________"],
+            ["RSPP", "________________________", "________________________"],
+            ["Medico Competente", "________________________", "________________________"],
+            ["RLS", "________________________", "________________________"],
+            ["Data", generated_at.strftime("%d/%m/%Y"), ""],
+        ])
 
         version = await self._next_version()
         output_dir = self._get_output_dir()
@@ -87,16 +133,6 @@ class AllegatoStressGenerator(BaseDocumentGenerator):
         )
         r = await self.db.execute(stmt)
         return (r.scalar() or 0) + 1
-
-
-def _livello(p: int | None) -> str:
-    if p is None:
-        return "—"
-    if p <= 2:
-        return "BASSO"
-    if p <= 4:
-        return "MEDIO"
-    return "ALTO"
 
 
 def _area_detail(doc, title: str, payload: dict) -> None:

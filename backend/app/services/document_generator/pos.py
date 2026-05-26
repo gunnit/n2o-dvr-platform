@@ -18,7 +18,40 @@ from app.services.document_generator.docx_utils import (
     replace_placeholders,
     slugify,
 )
-from app.services.dpi_rules import DPI_CATALOG, build_default_matrix
+from app.services.dpi_rules import (
+    DPI_CATALOG,
+    PHASES_CONSTRUCTION,
+    ROLES_CONSTRUCTION,
+    build_default_matrix,
+)
+
+# Italian labels for the standard phases — used when the operator hasn't
+# defined custom fasi yet so the document still ships with a defensible
+# 8-phase skeleton (D.Lgs. 81/2008 All. XV punto 3.2.1 d).
+_PHASE_LABELS_IT: dict[str, str] = {
+    "allestimento_cantiere": "Allestimento del cantiere",
+    "scavi": "Scavi e movimento terra",
+    "fondazioni": "Fondazioni",
+    "getto_calcestruzzo": "Getto del calcestruzzo",
+    "montaggio_ponteggi": "Montaggio dei ponteggi",
+    "opere_murarie": "Opere murarie / strutturali",
+    "finiture": "Finiture (intonaco, copertura, facciata)",
+    "smobilizzo_cantiere": "Smobilizzo del cantiere",
+}
+
+# Italian labels for the standard construction roles.
+_ROLE_LABELS_IT: dict[str, str] = {
+    "carpentiere": "Carpentiere",
+    "manovale": "Manovale",
+    "gruista": "Gruista",
+    "operatore_escavatore": "Operatore escavatore",
+    "ponteggiatore": "Ponteggiatore",
+    "saldatore": "Saldatore",
+    "elettricista": "Elettricista",
+    "muratore": "Muratore",
+    "capo_cantiere": "Capo cantiere",
+    "autista_mezzi": "Autista mezzi",
+}
 from app.services.pos_phases import dependency_violations_after_ordering
 from app.schemas.pos_phase import PosPhase
 from pydantic import ValidationError
@@ -31,6 +64,7 @@ class PosGenerator(BaseDocumentGenerator):
     async def generate(self) -> str:
         data = await self.load_data()
         azienda = data["azienda"]
+        persone = data.get("persone") or []
         generated_at = data["generated_at"]
         pos_rows = await load_pos(self.db, self.azienda_id)
 
@@ -48,11 +82,10 @@ class PosGenerator(BaseDocumentGenerator):
         for idx, p in enumerate(pos_rows, 1):
             page_break(doc)
             add_heading(doc, f"{idx}. Cantiere: {p.cantiere_indirizzo}", level=2)
+
+            # Anagrafica + dati cantiere (header)
             add_kv_table(doc, [
                 ("Impresa esecutrice", azienda.ragione_sociale or ""),
-                ("Committente", p.committente or ""),
-                ("Direttore dei lavori", p.direttore_lavori or ""),
-                ("Coordinatore sicurezza", p.coordinatore_sicurezza or ""),
                 ("Indirizzo cantiere", p.cantiere_indirizzo or ""),
                 ("Descrizione", p.cantiere_descrizione or ""),
                 ("Data inizio", p.data_inizio.strftime("%d/%m/%Y") if p.data_inizio else "—"),
@@ -61,10 +94,34 @@ class PosGenerator(BaseDocumentGenerator):
                 ("Numero massimo lavoratori", str(p.numero_massimo_lavoratori) if p.numero_massimo_lavoratori else "—"),
             ])
 
+            # Soggetti di riferimento (All. XV punto 3.2.1 b)
+            add_heading(doc, "Soggetti di riferimento", level=3)
+            add_kv_table(doc, [
+                ("Committente", p.committente or "—"),
+                ("Progettista responsabile", p.progettista_responsabile or "—"),
+                ("Direttore dei lavori", p.direttore_lavori or "—"),
+                ("Direttore operativo edilizia / strutture", p.direttore_operativo_edilizia or "—"),
+                ("Direttore operativo impianti", p.direttore_operativo_impianti or "—"),
+                ("Responsabile dei lavori", p.responsabile_lavori or "—"),
+                ("Coordinatore per la sicurezza in fase di progettazione (CSP)", p.coordinatore_progettazione or "—"),
+                ("Coordinatore per la sicurezza in fase di esecuzione (CSE)", p.coordinatore_sicurezza or "—"),
+            ])
+
+            # Dipendenti dell'azienda — tabella ruoli operativi
+            _render_dipendenti_table(doc, persone)
+
+            # Modalità organizzative (All. XV punto 3.2.1 c)
+            _render_modalita_organizzative(doc, p)
+
+            # Organizzazione logistica
+            _render_organizzazione_logistica(doc, p)
+
             add_heading(doc, "Fasi lavorative", level=3)
             fasi = p.fasi_lavorative or []
             if fasi:
                 _render_phase_sections(doc, fasi)
+            else:
+                _render_default_phase_skeleton(doc)
 
             add_heading(doc, "Valutazioni specifiche", level=3)
             rum = p.valutazione_rumore or {}
@@ -116,6 +173,81 @@ class PosGenerator(BaseDocumentGenerator):
 
 
 # ---------------------------------------------------------------------------
+# Dipendenti / modalità organizzative / organizzazione logistica
+# ---------------------------------------------------------------------------
+
+
+def _render_dipendenti_table(doc, persone: list) -> None:
+    """Render the "Dipendenti dell'azienda" table required by Luca's
+    2026-05-25 annotated template — Nominativo / Mansione / Primo Soccorso /
+    Antincendio / Preposto. Pulled live from the azienda's Persona rows.
+    """
+    add_heading(doc, "Dipendenti dell'azienda", level=3)
+    if not persone:
+        add_paragraph(doc, "Nessun dipendente registrato.", italic=True)
+        return
+    rows = []
+    for pe in persone:
+        rows.append([
+            pe.nominativo or "—",
+            pe.mansione or "—",
+            "SI" if getattr(pe, "ruolo_primo_soccorso", False) else "NO",
+            "SI" if getattr(pe, "ruolo_antincendio", False) else "NO",
+            "SI" if getattr(pe, "ruolo_preposto", False) else "NO",
+        ])
+    add_data_table(
+        doc,
+        ["Nominativo", "Mansione", "Addetto Primo Soccorso", "Addetto Antincendio", "Preposto"],
+        rows,
+    )
+
+
+def _render_modalita_organizzative(doc, pos) -> None:
+    """Render the "Modalità organizzative" section (All. XV punto 3.2.1 c).
+
+    All three fields are free-text. Skip the section entirely if none of
+    them is populated, to avoid printing an empty section on small POS.
+    """
+    items = [
+        ("Orario di lavoro", pos.orario_lavoro_cantiere),
+        ("Turni", pos.turni_descrizione),
+        ("Riunioni di coordinamento", pos.riunioni_coordinamento),
+    ]
+    if not any(v for _, v in items):
+        return
+    add_heading(doc, "Modalità organizzative", level=3)
+    for label, value in items:
+        if not value:
+            continue
+        add_paragraph(doc, label + ":", bold=True)
+        add_paragraph(doc, value)
+
+
+def _render_organizzazione_logistica(doc, pos) -> None:
+    """Render the "Organizzazione logistica" section.
+
+    `monoblocchi_installati` drives the boilerplate line ("Non saranno
+    installati monoblocchi" vs the dettagli text). `modalita_pasti` is a
+    free-text paragraph.
+    """
+    if not (
+        pos.monoblocchi_installati
+        or pos.monoblocchi_dettagli
+        or pos.modalita_pasti
+    ):
+        return
+    add_heading(doc, "Organizzazione logistica", level=3)
+    if pos.monoblocchi_installati:
+        add_paragraph(doc, "Monoblocchi installati in cantiere:", bold=True)
+        add_paragraph(doc, pos.monoblocchi_dettagli or "Sì — dettagli da specificare.")
+    else:
+        add_paragraph(doc, "Non saranno installati monoblocchi in cantiere.")
+    if pos.modalita_pasti:
+        add_paragraph(doc, "Modalità consumazione pasti:", bold=True)
+        add_paragraph(doc, pos.modalita_pasti)
+
+
+# ---------------------------------------------------------------------------
 # DPI matrix (US-4.8)
 # ---------------------------------------------------------------------------
 
@@ -151,6 +283,32 @@ def _parse_phases(fasi_raw: list) -> list[PosPhase]:
         except ValidationError:
             continue
     return out
+
+
+def _render_default_phase_skeleton(doc) -> None:
+    """Emit the 8 standard construction phases as a review-and-customize
+    skeleton when the operator hasn't created custom fasi yet.
+
+    Per D.Lgs. 81/2008 All. XV punto 3.2.1 d the POS must list le fasi
+    lavorative previste in cantiere. The 8 default phases are the most
+    common phases for an Italian cantiere edile; the operator is expected
+    to remove/modify in fase di audit so the matrix matches the actual
+    project. The Italian heading explains this so an inspector reading
+    the doc understands why the rows look generic.
+    """
+    add_paragraph(
+        doc,
+        "Le fasi lavorative non sono ancora state personalizzate per "
+        "questo cantiere. Di seguito le 8 fasi standard per un cantiere "
+        "edile da rivedere con il Coordinatore CSE prima dell'inizio "
+        "dei lavori.",
+        italic=True,
+        size=9,
+    )
+    rows = []
+    for i, phase_key in enumerate(PHASES_CONSTRUCTION, 1):
+        rows.append([str(i), _PHASE_LABELS_IT.get(phase_key, phase_key)])
+    add_data_table(doc, ["#", "Fase standard"], rows)
 
 
 def _render_phase_sections(doc, fasi_raw: list) -> None:
@@ -289,18 +447,36 @@ def _render_dpi_matrix(doc, pos) -> None:
     matrix = pos.dpi_matrix or {}
     roles = pos.dpi_matrix_roles or []
     phases = pos.dpi_matrix_phases or []
+
+    # If the operator hasn't configured a matrix yet, fall back to the
+    # standard 10 roles × 8 phases default produced by build_default_matrix.
+    # Mark the whole table as "default" so the reviewer knows it's a
+    # rules-engine suggestion, not a per-client choice.
+    using_default = False
     if not matrix or not roles or not phases:
-        return
+        roles = ROLES_CONSTRUCTION
+        phases = PHASES_CONSTRUCTION
+        matrix = build_default_matrix(roles, phases)
+        using_default = True
 
     add_heading(doc, "Matrice DPI per ruolo e fase", level=3)
+    if using_default:
+        add_paragraph(
+            doc,
+            "La matrice seguente e generata automaticamente dalle regole "
+            "predefinite (D.Lgs. 81/2008 art. 77 e Tit. III). Il Datore di "
+            "Lavoro verifica e personalizza ogni cella in fase di audit.",
+            italic=True,
+            size=9,
+        )
 
     # Pre-compute defaults once so we can detect operator overrides.
     defaults = build_default_matrix(roles, phases)
 
-    header = ["Ruolo"] + list(phases)
+    header = ["Ruolo"] + [_PHASE_LABELS_IT.get(p, p) for p in phases]
     data_rows: list[list[str]] = []
     for role in roles:
-        row: list[str] = [role]
+        row: list[str] = [_ROLE_LABELS_IT.get(role, role)]
         for phase in phases:
             cell_codes = (matrix.get(phase, {}) or {}).get(role, []) or []
             default_codes = (defaults.get(phase, {}) or {}).get(role, []) or []

@@ -1,6 +1,7 @@
 """Allegato Gestanti - D.Lgs. 151/2001."""
 
 import os
+from datetime import timedelta
 
 from docx import Document
 from sqlalchemy import func, select
@@ -19,6 +20,16 @@ from app.services.document_generator.docx_utils import (
     slugify,
 )
 
+
+def _role_nominativo(persone: list, attr: str) -> str | None:
+    """Return the first persona's nominativo whose role flag ``attr`` is True."""
+    for p in persone:
+        if getattr(p, attr, False):
+            nome = (getattr(p, "nominativo", None) or "").strip()
+            if nome:
+                return nome
+    return None
+
 TEMPLATE = TEMPLATES_DIR / "ALLEGATO GESTANTI.docx"
 TIPO_DOC = "allegato_gestanti"
 
@@ -27,8 +38,16 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
     async def generate(self) -> str:
         data = await self.load_data()
         azienda = data["azienda"]
+        persone = data["persone"]
         generated_at = data["generated_at"]
         gestanti = await load_gestanti(self.db, self.azienda_id)
+
+        # Resolve org-sicurezza nominatives once so each scheda's firma
+        # table pre-fills the names; the operator only needs to add the
+        # ink signature at the audit.
+        nome_ddl = _role_nominativo(persone, "ruolo_datore_lavoro") or (azienda.ragione_sociale or "")
+        nome_rspp = _role_nominativo(persone, "ruolo_rspp") or "Da nominare"
+        nome_mc = _role_nominativo(persone, "ruolo_medico_competente") or "Da nominare"
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
@@ -54,13 +73,25 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
             page_break(doc)
             nome = g.persona.nominativo if getattr(g, "persona", None) else "—"
             add_heading(doc, f"{idx}. Scheda lavoratrice", level=2)
+
+            # Astensione obbligatoria: 2 mesi pre-parto + 3 mesi post-parto
+            # (art. 16 D.Lgs. 151/2001). Compute the window so the operator
+            # has a concrete date range, not just a yes/no flag.
+            astensione_window = "—"
+            if g.data_presunto_parto:
+                inizio = g.data_presunto_parto - timedelta(days=60)
+                fine = g.data_presunto_parto + timedelta(days=90)
+                astensione_window = f"{inizio.strftime('%d/%m/%Y')} → {fine.strftime('%d/%m/%Y')}"
+
             add_kv_table(doc, [
                 ("Lavoratrice", nome),
+                ("Mansione", getattr(g.persona, "mansione", None) if getattr(g, "persona", None) else "—"),
                 ("Stato", (g.stato or "").capitalize()),
                 ("Data notifica", g.data_notifica.strftime("%d/%m/%Y") if g.data_notifica else "—"),
                 ("Data presunto parto", g.data_presunto_parto.strftime("%d/%m/%Y") if g.data_presunto_parto else "—"),
+                ("Astensione obbligatoria (art. 16)", astensione_window),
                 ("Mansione alternativa", g.mansione_alternativa or "—"),
-                ("Astensione anticipata richiesta", "SI" if g.richiesta_astensione_anticipata else "NO"),
+                ("Astensione anticipata richiesta (art. 17)", "SI - richiesta ispettorato del lavoro" if g.richiesta_astensione_anticipata else "NO"),
             ])
             add_heading(doc, "Rischi identificati e misure di adeguamento", level=3)
             rischi = g.rischi_vietati or []
@@ -96,11 +127,12 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
                 add_paragraph(doc, g.misure_adeguamento)
 
             add_heading(doc, "Firme", level=3)
-            add_data_table(doc, ["Ruolo", "Firmatario"], [
-                ["Lavoratrice", g.firma_lavoratrice or "________________________"],
-                ["Datore di lavoro", g.firma_datore_lavoro or "________________________"],
-                ["RSPP", g.firma_rspp or "________________________"],
-                ["Medico competente", g.firma_medico_competente or "________________________"],
+            add_data_table(doc, ["Ruolo", "Nominativo", "Firma"], [
+                ["Lavoratrice", g.firma_lavoratrice or nome, "________________________"],
+                ["Datore di lavoro", g.firma_datore_lavoro or nome_ddl, "________________________"],
+                ["RSPP", g.firma_rspp or nome_rspp, "________________________"],
+                ["Medico competente", g.firma_medico_competente or nome_mc, "________________________"],
+                ["Data", generated_at.strftime("%d/%m/%Y"), ""],
             ])
 
         version = await self._next_version()

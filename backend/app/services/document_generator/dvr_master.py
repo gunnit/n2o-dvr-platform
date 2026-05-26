@@ -2042,17 +2042,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             ])
         self._add_data_table(doc, headers, rows)
 
-        # Phase 8.5 — emit per-sostanza H/P detail only when SDS data is
-        # present. We don't add a heading when nothing has SDS data, so the
-        # absence is invisible (operator-friendly).
-        sostanze_with_sds = [
-            s for s in sostanze
-            if (getattr(s, "frasi_h", None) or [])
-            or (getattr(s, "frasi_p", None) or [])
-        ]
-        if not sostanze_with_sds:
-            return
-
+        # Per-sostanza H/P detail block. Every substance in the inventory
+        # gets an entry — those with SDS-extracted H/P phrases render the
+        # full hazard breakdown, those without get an explicit
+        # "SDS non disponibile" line so an inspector sees no apparent gap
+        # between the inventory count (T014) and the detail block.
         doc.add_paragraph("")
         p = doc.add_paragraph()
         run = p.add_run("Dettaglio frasi di pericolo (H) e consigli di prudenza (P)")
@@ -2060,7 +2054,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         run.font.size = Pt(10)
         run.font.color.rgb = _HEADER_BG
 
-        for s in sostanze_with_sds:
+        for s in sostanze:
             frasi_h = getattr(s, "frasi_h", None) or []
             frasi_p = getattr(s, "frasi_p", None) or []
 
@@ -2069,21 +2063,31 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             run.bold = True
             run.font.size = Pt(9)
 
-            if frasi_h:
-                p = doc.add_paragraph()
-                run = p.add_run("Frasi H: ")
-                run.bold = True
-                run.font.size = Pt(9)
-                run = p.add_run("; ".join(frasi_h))
-                run.font.size = Pt(9)
+            if frasi_h or frasi_p:
+                if frasi_h:
+                    p = doc.add_paragraph()
+                    run = p.add_run("Frasi H: ")
+                    run.bold = True
+                    run.font.size = Pt(9)
+                    run = p.add_run("; ".join(frasi_h))
+                    run.font.size = Pt(9)
 
-            if frasi_p:
+                if frasi_p:
+                    p = doc.add_paragraph()
+                    run = p.add_run("Frasi P: ")
+                    run.bold = True
+                    run.font.size = Pt(9)
+                    run = p.add_run("; ".join(frasi_p))
+                    run.font.size = Pt(9)
+            else:
                 p = doc.add_paragraph()
-                run = p.add_run("Frasi P: ")
-                run.bold = True
+                run = p.add_run(
+                    "SDS non disponibile — richiedere al fornitore "
+                    "scheda di sicurezza aggiornata ex Reg. CE 1907/2006 "
+                    "(REACH) e Reg. CE 1272/2008 (CLP) prima dell'uso."
+                )
                 run.font.size = Pt(9)
-                run = p.add_run("; ".join(frasi_p))
-                run.font.size = Pt(9)
+                run.font.italic = True
 
             doc.add_paragraph("")
 
@@ -2656,16 +2660,22 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         a "varia per lavoratore" note is appended so the operator and
         the Medico del Lavoro know to consult the per-persona detail.
 
-        Mansioni without any persona-level DPI flags are omitted — they
-        roll up into the generic Gestione DPI procedure (§4.8).
+        Every mansione listed in T109 gets its own DPI sub-section. For
+        mansioni without explicit DPI selections (typically VDT/office
+        roles), an explicit "Nessun DPI specifico" row is emitted instead
+        of silent omission — required by art. 12 D.Lgs. 151/2001 for
+        gestante workers and preferred by inspectors for traceability.
         """
         from app.services.reference_data import DPI_CATALOG
 
         doc.add_heading("DPI in dotazione per Mansione", level=2)
 
-        # Aggregate per-persona DPI codes up to mansione (union).
+        # Aggregate per-persona DPI codes up to mansione (union). Track
+        # every mansione that appears on a persona — even those without
+        # any DPI flags — so the rendered table mirrors T109.
         mansione_codes: dict[str, set[str]] = {}
         mansione_persona_codes: dict[str, list[frozenset[str]]] = {}
+        mansione_is_gestante: dict[str, bool] = {}
         for p in persone:
             nome = (p.mansione or "").strip()
             if not nome:
@@ -2673,12 +2683,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             codes = list(getattr(p, "dpi_codes", None) or [])
             mansione_codes.setdefault(nome, set()).update(codes)
             mansione_persona_codes.setdefault(nome, []).append(frozenset(codes))
+            if getattr(p, "gestante", False) or "GESTANTE" in nome.upper():
+                mansione_is_gestante[nome] = True
 
-        # Drop mansioni whose persone all have empty selections.
         mansioni: dict[str, list[str]] = {
-            nome: sorted(codes)
-            for nome, codes in mansione_codes.items()
-            if codes
+            nome: sorted(codes) for nome, codes in mansione_codes.items()
         }
 
         if not mansioni:
@@ -2729,6 +2738,27 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                     "Da definire al primo audit DPI",
                     "Conforme a Reg. UE 2016/425; verifica annuale",
                 ])
+            if not rows:
+                # No DPI codes selected for any persona under this mansione
+                # (typically VDT/office roles). Emit an explicit "no DPI"
+                # row rather than dropping the section silently. For gestante
+                # workers art. 12 D.Lgs. 151/2001 requires documented
+                # protective measures even when no PPE is prescribed.
+                is_gestante = mansione_is_gestante.get(mansione, False)
+                descrizione = (
+                    "Nessun DPI specifico richiesto — esposizione "
+                    "limitata; tutela attraverso ergonomia della "
+                    "postazione, sorveglianza sanitaria periodica "
+                    "(allegato VDT) e formazione."
+                )
+                note = (
+                    "Misure di tutela art. 12 D.Lgs. 151/2001 — "
+                    "rimozione dei rischi ex Allegati A/B/C; "
+                    "se non rimovibili, modifica orario o mansione."
+                    if is_gestante
+                    else "Sorveglianza sanitaria e formazione ex art. 36-37 D.Lgs. 81/2008."
+                )
+                rows.append([descrizione, "—", note])
             self._add_data_table(
                 doc,
                 headers=["Descrizione DPI", "Marca / Modello", "Note"],
