@@ -166,7 +166,7 @@ export function PosAnagraficaSummary({
             Modifica azienda <ExternalLink className="h-3 w-3" />
           </Link>
           <Link
-            href={`/aziende/${aziendaId}/persone`}
+            href={`/aziende/${aziendaId}?tab=persone`}
             className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
           >
             Modifica persone <ExternalLink className="h-3 w-3" />
