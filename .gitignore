@@ -42,6 +42,7 @@ out/
 # Local audit / scratch dirs (working notes, never deploy)
 .audit/
 .scratch/
+tmp_*/
 
 # GSD planning artefacts (local only)
 .planning/
