@@ -22,6 +22,7 @@ from app.services.document_generator.docx_utils import (
     add_heading,
     add_kv_table,
     add_paragraph,
+    format_sede,
     page_break,
     replace_placeholders,
     slugify,
@@ -79,7 +80,7 @@ class HaccpManualeGenerator(BaseDocumentGenerator):
         add_heading(doc, f"MANUALE HACCP - {azienda.ragione_sociale}", level=1)
         add_kv_table(doc, [
             ("Azienda", azienda.ragione_sociale or ""),
-            ("Sede operativa", f"{azienda.sede_legale_via or ''}, {azienda.sede_legale_citta or ''}"),
+            ("Sede operativa", format_sede(azienda, "legale")),
             ("P.IVA", azienda.partita_iva or "—"),
             ("Tipologia attivita", (config.tipologia_attivita if config else "—") or "—"),
             ("Numero pasti/giorno", str(config.numero_pasti_giorno) if (config and config.numero_pasti_giorno) else "—"),

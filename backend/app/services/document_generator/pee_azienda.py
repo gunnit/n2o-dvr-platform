@@ -20,6 +20,7 @@ from app.services.document_generator.docx_utils import (
     add_heading,
     add_kv_table,
     add_paragraph,
+    format_sede,
     page_break,
     replace_placeholders,
     slugify,
@@ -85,7 +86,7 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
         add_heading(doc, f"PIANO DI EMERGENZA - {azienda.ragione_sociale}", level=1)
         add_kv_table(doc, [
             ("Azienda", azienda.ragione_sociale or ""),
-            ("Sede", f"{azienda.sede_legale_via or ''}, {azienda.sede_legale_citta or ''}"),
+            ("Sede", format_sede(azienda, "legale")),
             ("Data emissione", generated_at.strftime("%d/%m/%Y")),
             ("Coordinatore emergenza", (pee.coordinatore_emergenza if pee else "—") or "—"),
             ("Punto di raccolta", (pee.punto_raccolta if pee else "—") or "—"),

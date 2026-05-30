@@ -38,6 +38,47 @@ RISK_COLORS = {
     "ROSSO": RGBColor(0xF4, 0x43, 0x36),
 }
 
+
+# ---------------------------------------------------------------------------
+# Address formatting (shared across all generators)
+# ---------------------------------------------------------------------------
+
+def format_comune(cap, citta, provincia) -> str:
+    """Build the Italian comune segment ``CAP Comune (PROV)``.
+
+    Any component may be missing; a blank comune never yields an orphan
+    ``(PROV)``. Returns ``"—"`` when nothing is available.
+    """
+    seg = (citta or "").strip()
+    cap = (cap or "").strip()
+    provincia = (provincia or "").strip()
+    if cap and seg:
+        seg = f"{cap} {seg}"
+    elif cap:
+        seg = cap
+    if provincia and seg:
+        seg = f"{seg} ({provincia})"
+    return seg or "—"
+
+
+def format_sede(azienda, which: str = "legale") -> str:
+    """Format a full Italian seat address as ``Via, CAP Comune (PROV)``.
+
+    ``which`` selects the field family: ``"legale"`` reads
+    ``sede_legale_via`` / ``sede_legale_citta`` / ``cap_legale`` /
+    ``provincia_legale``; ``"operativa"`` the operative equivalents.
+    Audit F-301 (2026-05-31): generators previously emitted only
+    ``via, comune``, silently dropping the CAP and province held on the row.
+    """
+    via = (getattr(azienda, f"sede_{which}_via", None) or "").strip()
+    seg = format_comune(
+        getattr(azienda, f"cap_{which}", None),
+        getattr(azienda, f"sede_{which}_citta", None),
+        getattr(azienda, f"provincia_{which}", None),
+    )
+    parts = [p for p in [via, seg if seg != "—" else ""] if p]
+    return ", ".join(parts) if parts else "—"
+
 HEADER_BG = RGBColor(0x1A, 0x23, 0x7E)
 HEADER_TEXT = RGBColor(0xFF, 0xFF, 0xFF)
 LIGHT_GRAY = RGBColor(0xF5, 0xF5, 0xF5)

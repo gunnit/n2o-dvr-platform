@@ -14,6 +14,7 @@ from app.services.document_generator.docx_utils import (
     add_heading,
     add_kv_table,
     add_paragraph,
+    format_sede,
     page_break,
     replace_placeholders,
     slugify,
@@ -40,7 +41,7 @@ class DuvriGenerator(BaseDocumentGenerator):
         add_heading(doc, f"DUVRI - {azienda.ragione_sociale}", level=1)
         add_kv_table(doc, [
             ("Committente", azienda.ragione_sociale or ""),
-            ("Sede", f"{azienda.sede_legale_via or ''}, {azienda.sede_legale_citta or ''}"),
+            ("Sede", format_sede(azienda, "legale")),
             ("P.IVA committente", azienda.partita_iva or ""),
             ("Data emissione", generated_at.strftime("%d/%m/%Y")),
             ("Riferimento normativo", "Art. 26 D.Lgs. 81/2008"),

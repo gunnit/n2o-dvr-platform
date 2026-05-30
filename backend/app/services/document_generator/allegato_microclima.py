@@ -13,6 +13,7 @@ from app.services.document_generator.docx_utils import (
     add_heading,
     add_kv_table,
     add_paragraph,
+    format_sede,
     page_break,
     slugify,
 )
@@ -66,7 +67,7 @@ class AllegatoMicroclimaGenerator(BaseDocumentGenerator):
         add_heading(doc, "ALLEGATO RISCHIO MICROCLIMA - AMBIENTI MODERATI", level=1)
         add_kv_table(doc, [
             ("Azienda", azienda.ragione_sociale or ""),
-            ("Sede", f"{azienda.sede_legale_via or ''}, {azienda.sede_legale_citta or ''}"),
+            ("Sede", format_sede(azienda, "legale")),
             ("Data valutazione", generated_at.strftime("%d/%m/%Y")),
             ("Riferimento normativo", "UNI EN ISO 7730:2006 - Ergonomia ambienti termici moderati"),
         ])

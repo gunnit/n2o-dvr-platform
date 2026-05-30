@@ -55,6 +55,8 @@ from app.services.document_generator.docx_utils import (
     add_heading,
     add_kv_table,
     add_paragraph,
+    format_comune,
+    format_sede,
     page_break,
     shade_cell,
     slugify,
@@ -217,15 +219,11 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         run.bold = True
         run.font.size = Pt(18)
 
-        addr_bits = []
-        if azienda.sede_legale_via:
-            addr_bits.append(azienda.sede_legale_via)
-        if azienda.sede_legale_citta:
-            addr_bits.append(azienda.sede_legale_citta)
-        if addr_bits:
+        sede_legale = format_sede(azienda, "legale")
+        if sede_legale and sede_legale != "—":
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run(" - ".join(addr_bits))
+            run = p.add_run(sede_legale)
             run.font.size = Pt(12)
             run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
 
@@ -335,9 +333,15 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
             ("Partita IVA", getattr(azienda, "partita_iva", "") or "—"),
             ("Codice Fiscale", getattr(azienda, "codice_fiscale", "") or "—"),
             ("Sede Legale - Via", azienda.sede_legale_via or "—"),
-            ("Sede Legale - Citta", azienda.sede_legale_citta or "—"),
+            ("Sede Legale - Citta", format_comune(
+                getattr(azienda, "cap_legale", None),
+                azienda.sede_legale_citta,
+                getattr(azienda, "provincia_legale", None))),
             ("Sede Operativa - Via", getattr(azienda, "sede_operativa_via", "") or "—"),
-            ("Sede Operativa - Citta", getattr(azienda, "sede_operativa_citta", "") or "—"),
+            ("Sede Operativa - Citta", format_comune(
+                getattr(azienda, "cap_operativa", None),
+                getattr(azienda, "sede_operativa_citta", None),
+                getattr(azienda, "provincia_operativa", None))),
             ("Telefono", getattr(azienda, "telefono", "") or "—"),
             ("Email PEC", getattr(azienda, "email_pec", "") or "—"),
         ]

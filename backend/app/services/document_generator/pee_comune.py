@@ -19,6 +19,7 @@ from app.services.document_generator.docx_utils import (
     add_heading,
     add_kv_table,
     add_paragraph,
+    format_sede,
     page_break,
     replace_placeholders,
     slugify,
@@ -70,7 +71,7 @@ class PeeComuneGenerator(BaseDocumentGenerator):
         add_heading(doc, f"PIANO DI EMERGENZA EDIFICIO - {azienda.ragione_sociale}", level=1)
         add_kv_table(doc, [
             ("Azienda riferimento", azienda.ragione_sociale or ""),
-            ("Sede", f"{azienda.sede_legale_via or ''}, {azienda.sede_legale_citta or ''}"),
+            ("Sede", format_sede(azienda, "legale")),
             ("Data emissione", generated_at.strftime("%d/%m/%Y")),
             ("Tipo", "Edificio multi-tenant"),
         ])

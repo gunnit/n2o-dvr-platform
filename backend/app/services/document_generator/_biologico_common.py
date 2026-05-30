@@ -13,6 +13,7 @@ from app.services.document_generator.docx_utils import (
     add_heading,
     add_kv_table,
     add_paragraph,
+    format_sede,
     slugify,
 )
 
@@ -39,7 +40,7 @@ async def build_biologico_document(
     add_heading(doc, titolo, level=1)
     add_kv_table(doc, [
         ("Azienda", azienda.ragione_sociale or ""),
-        ("Sede", f"{azienda.sede_legale_via or ''}, {azienda.sede_legale_citta or ''}"),
+        ("Sede", format_sede(azienda, "legale")),
         ("Data valutazione", generated_at.strftime("%d/%m/%Y")),
         ("Settore di riferimento", settore_key.capitalize()),
         ("Riferimento normativo", "D.Lgs. 81/2008 Titolo X - Esposizione ad agenti biologici"),
