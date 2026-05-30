@@ -1,0 +1,1562 @@
+{
+  "_meta": {
+    "model": "MoVaRisCh (Regioni Toscana, Emilia-Romagna, Lombardia) - art. 223 D.Lgs. 81/08 Titolo IX Capo I",
+    "source": "templates/allegato_chimico_luca_2026-05-19/ (Luca 2026-05-19)",
+    "note": "P score = highest among substance H/R phrases. CANCEROGENO/mutageno => Titolo IX Capo II, not scored here."
+  },
+  "p_scores_h": {
+    "H200": {
+      "text": "Esplosivo instabile",
+      "score": 1.0
+    },
+    "H201": {
+      "text": "Esplosivo; pericolo di esplosione di massa",
+      "score": 1.0
+    },
+    "H202": {
+      "text": "Esplosivo; grave pericolo di proiezione.",
+      "score": 1.0
+    },
+    "H203": {
+      "text": "Esplosivo; pericolo di incendio, di spostamento d'aria o di proiezione.",
+      "score": 1.0
+    },
+    "H204": {
+      "text": "Pericolo di incendio o di proiezione.",
+      "score": 1.0
+    },
+    "H205": {
+      "text": "Pericolo di esplosione di massa in caso d'incendio.",
+      "score": 1.0
+    },
+    "H220": {
+      "text": "Gas altamente infiammabile.",
+      "score": 1.0
+    },
+    "H221": {
+      "text": "Gas infiammabile.",
+      "score": 1.0
+    },
+    "H222": {
+      "text": "Aerosol altamente infiammabile.",
+      "score": 1.0
+    },
+    "H223": {
+      "text": "Aerosol infiammabile.",
+      "score": 1.0
+    },
+    "H224": {
+      "text": "Liquido e vapori altamente infiammabili.",
+      "score": 1.0
+    },
+    "H225": {
+      "text": "Liquido e vapori facilmente infiammabili.",
+      "score": 1.0
+    },
+    "H226": {
+      "text": "Liquido e vapori infiammabili.",
+      "score": 1.0
+    },
+    "H228": {
+      "text": "Solido infiammabile.",
+      "score": 1.0
+    },
+    "H240": {
+      "text": "Rischio di esplosione per riscaldamento.",
+      "score": 1.0
+    },
+    "H241": {
+      "text": "Rischio d'incendio o di esplosione per riscaldamento.",
+      "score": 1.0
+    },
+    "H242": {
+      "text": "Rischio d’incendio per riscaldamento.",
+      "score": 1.0
+    },
+    "H250": {
+      "text": "Spontaneamente infiammabile all'aria.",
+      "score": 1.0
+    },
+    "H251": {
+      "text": "Autoriscaldante; può infiammarsi.",
+      "score": 1.0
+    },
+    "H252": {
+      "text": "Autoriscaldante in grandi quantità; può infiammarsi.",
+      "score": 1.0
+    },
+    "H260": {
+      "text": "A contatto con l'acqua libera gas infiammabili che possono infiammarsi spontaneamente.",
+      "score": 1.0
+    },
+    "H261": {
+      "text": "A contatto con l'acqua libera gas infiammabili.",
+      "score": 1.0
+    },
+    "H270": {
+      "text": "Può provocare o aggravare un incendio; comburente.",
+      "score": 1.0
+    },
+    "H271": {
+      "text": "Può provocare un incendio o un'esplosione; molto comburente.",
+      "score": 1.0
+    },
+    "H272": {
+      "text": "Può aggravare un incendio; comburente.",
+      "score": 1.0
+    },
+    "H280": {
+      "text": "Contiene gas sotto pressione; può esplodere se riscaldato.",
+      "score": 1.0
+    },
+    "H281": {
+      "text": "Contiene gas refrigerato; può provocare ustioni o lesioni criogeniche.",
+      "score": 1.0
+    },
+    "H290": {
+      "text": "Può essere corrosivo per i metalli.",
+      "score": 1.0
+    },
+    "H300 cat.1": {
+      "text": "Letale se ingerito",
+      "score": 3.0
+    },
+    "H300 cat.2": {
+      "text": "Letale se ingerito",
+      "score": 2.5
+    },
+    "H301": {
+      "text": "Tossico se ingerito",
+      "score": 2.25
+    },
+    "H302": {
+      "text": "Nocivo se ingerito",
+      "score": 2.0
+    },
+    "H304": {
+      "text": "Può essere letale in caso di ingestione e di penetrazione nelle vie respiratorie",
+      "score": 5.0
+    },
+    "H310 cat.1": {
+      "text": "Letale a contatto con la pelle",
+      "score": 6.5
+    },
+    "H310 cat.2": {
+      "text": "Letale a contatto con la pelle",
+      "score": 5.5
+    },
+    "H311": {
+      "text": "Tossico a contatto con la pelle",
+      "score": 4.5
+    },
+    "H312": {
+      "text": "Nocivo a contatto con la pelle",
+      "score": 3.0
+    },
+    "H314 cat.1A": {
+      "text": "Provoca gravi ustioni cutanee e gravi lesioni oculari",
+      "score": 6.25
+    },
+    "H314 cat.1B": {
+      "text": "Provoca gravi ustioni cutanee e gravi lesioni oculari",
+      "score": 5.75
+    },
+    "H314 cat.1C": {
+      "text": "Provoca gravi ustioni cutanee e gravi lesioni oculari",
+      "score": 5.5
+    },
+    "H315": {
+      "text": "Provoca irritazione cutanea",
+      "score": 2.5
+    },
+    "H317 cat.1A": {
+      "text": "Può provocare una reazione allergica della pelle",
+      "score": 6.0
+    },
+    "H317 cat.1B": {
+      "text": "Può provocare una reazione allergica della pelle",
+      "score": 4.5
+    },
+    "H318": {
+      "text": "Provoca gravi lesioni oculari",
+      "score": 4.5
+    },
+    "H319": {
+      "text": "Provoca grave irritazione oculare",
+      "score": 3.0
+    },
+    "H330 cat.1": {
+      "text": "Letale se inalato",
+      "score": 8.5
+    },
+    "H330 cat.2": {
+      "text": "Letale se inalato",
+      "score": 7.5
+    },
+    "H331": {
+      "text": "Tossico se inalato",
+      "score": 6.0
+    },
+    "H332": {
+      "text": "Nocivo se inalato",
+      "score": 4.5
+    },
+    "H334 cat.1A": {
+      "text": "Può provocare sintomi allergici o asmatici o difficoltà respiratorie se inalato",
+      "score": 9.0
+    },
+    "H334 cat.1B": {
+      "text": "Può provocare sintomi allergici o asmatici o difficoltà respiratorie se inalato",
+      "score": 8.0
+    },
+    "H335": {
+      "text": "Può irritare le vie respiratorie",
+      "score": 3.25
+    },
+    "H336": {
+      "text": "Può provocare sonnolenza o vertigini",
+      "score": 3.5
+    },
+    "H340": {
+      "text": "Può provocare il cancro",
+      "score": "CANCEROGENO"
+    },
+    "H341": {
+      "text": "Sospettato di provocare alterazioni genetiche",
+      "score": 8.0
+    },
+    "H350": {
+      "text": "Può provocare il cancro",
+      "score": "CANCEROGENO"
+    },
+    "H350i": {
+      "text": "Può provocare il cancro se inalato",
+      "score": "CANCEROGENO"
+    },
+    "H351": {
+      "text": "Sospettato di provocare il cancro",
+      "score": "CANCEROGENO"
+    },
+    "H360": {
+      "text": "Può nuocere alla fertilità o al feto",
+      "score": 10.0
+    },
+    "H360D": {
+      "text": "Può nuocere al feto.",
+      "score": 9.5
+    },
+    "H360Df": {
+      "text": "Può nuocere al feto. Sospettato di nuocere alla fertilità",
+      "score": 9.75
+    },
+    "H360F": {
+      "text": "Può nuocere alla fertilità",
+      "score": 9.5
+    },
+    "H360FD": {
+      "text": "Può nuocere alla fertilità. Può nuocere al feto",
+      "score": 10.0
+    },
+    "H360Fd": {
+      "text": "Può nuocere alla fertilità. Sospettato di nuocere al feto",
+      "score": 10.0
+    },
+    "H361": {
+      "text": "Sospettato di nuocere alla fertilità o al feto",
+      "score": 8.0
+    },
+    "H361d": {
+      "text": "Sospettato di nuocere al feto",
+      "score": 7.5
+    },
+    "H361f": {
+      "text": "Sospettato di nuocere alla fertilità",
+      "score": 7.5
+    },
+    "H361fd": {
+      "text": "Sospettato di nuocere alla fertilità. Sospettato di nuocere al feto",
+      "score": 8.0
+    },
+    "H362": {
+      "text": "Può essere nocivo per i lattanti allattati al seno",
+      "score": 6.0
+    },
+    "H370": {
+      "text": "Provoca danni agli organi",
+      "score": 9.5
+    },
+    "H371": {
+      "text": "Può provocare danni agli organi",
+      "score": 8.0
+    },
+    "H372": {
+      "text": "Provoca danni agli organi",
+      "score": 8.0
+    },
+    "H373": {
+      "text": "Può provocare danni agli organi",
+      "score": 7.0
+    },
+    "H400": {
+      "text": "Altamente tossico per gli organismi acquatici.",
+      "score": 1.0
+    },
+    "H411": {
+      "text": "Tossico per gli organismi acquatici con effetti di lunga durata.",
+      "score": 1.0
+    },
+    "H412": {
+      "text": "Nocivo per gli organismi acquatici con effetti di lunga durata.",
+      "score": 1.0
+    },
+    "H413": {
+      "text": "Può essere nocivo per gli organismi acquatici con effetti di lunga durata.",
+      "score": 1.0
+    },
+    "EUH001": {
+      "text": "Esplosivo allo stato secco.",
+      "score": 1.0
+    },
+    "EUH006": {
+      "text": "Esplosivo a contatto o senza contatto con l’aria.",
+      "score": 1.0
+    },
+    "EUH014": {
+      "text": "Reagisce violentemente con l'acqua.",
+      "score": 1.0
+    },
+    "EUH018": {
+      "text": "Durante l'uso può formarsi una miscela vapore-aria esplosiva/infiammabile.",
+      "score": 1.0
+    },
+    "EUH019": {
+      "text": "Può formare perossidi esplosivi.",
+      "score": 1.0
+    },
+    "EUH029": {
+      "text": "A contatto con l’acqua libera un gas tossico",
+      "score": 3.0
+    },
+    "EUH031": {
+      "text": "A contatto con acidi libera gas tossico",
+      "score": 3.0
+    },
+    "EUH032": {
+      "text": "A contatto con acidi libera gas molto tossico",
+      "score": 3.5
+    },
+    "EUH044": {
+      "text": "Rischio di esplosione per riscaldamento in ambiente confinato.",
+      "score": 1.0
+    },
+    "EUH059": {
+      "text": "Pericoloso per lo strato di ozono.",
+      "score": 1.0
+    },
+    "EUH066": {
+      "text": "L’esposizione ripetuta può provocare secchezza e screpolature della pelle",
+      "score": 2.5
+    },
+    "EUH070": {
+      "text": "Tossico per contatto oculare",
+      "score": 6.0
+    },
+    "EUH071": {
+      "text": "Corrosivo per le vie respiratorie",
+      "score": 6.5
+    },
+    "EUH201": {
+      "text": "Contiene Piombo. Non utilizzare su oggetti che possono essere masticati o succhiati dai bambini",
+      "score": 6.0
+    },
+    "EUH201A": {
+      "text": "Attenzione! Contiene Piombo",
+      "score": 6.0
+    },
+    "EUH202": {
+      "text": "Cianoacrilato. Pericolo. Incolla la pelle e gli occhi in pochi secondi. Tenere fuori dalla portata dei bambini.",
+      "score": 4.5
+    },
+    "EUH203": {
+      "text": "Contiene Cromo (VI). Può provocare una reazione allergica.",
+      "score": 4.5
+    },
+    "EUH204": {
+      "text": "Contiene Isocianati. Può provocare una reazione allergica",
+      "score": 7.0
+    },
+    "EUH205": {
+      "text": "Contiene Composti Epossidici. Può provocare una reazione allergica.",
+      "score": 4.5
+    },
+    "EUH206": {
+      "text": "Attenzione! Non utilizzare in combinazione con altri prodotti. Possono formarsi gas pericolosi (cloro)",
+      "score": 3.0
+    },
+    "EUH207": {
+      "text": "Attenzione! Contiene Cadmio. Durante l’uso si sviluppano fumi pericolosi. Leggere le informazioni fornite dal fabbricante. Rispettare le disposizioni di sicurezza.",
+      "score": 8.0
+    },
+    "EUH208": {
+      "text": "Contiene Nome sostanza sensibilizzante. Può provocare una reazione allergica.",
+      "score": 5.0
+    },
+    "EUH209": {
+      "text": "Può diventare facilmente infiammabile durante l'uso.",
+      "score": 1.0
+    },
+    "EUH209A": {
+      "text": "Può diventare infiammabile durante l'uso.",
+      "score": 1.0
+    },
+    "EUH210": {
+      "text": "Scheda dati di sicurezza disponibile su richiesta.",
+      "score": 1.0
+    },
+    "EUH401": {
+      "text": "Per evitare rischi per la salute umana e per l'ambiente, seguire le istruzioni per l'uso.",
+      "score": 1.0
+    }
+  },
+  "p_scores_h_mixture_rules": [
+    {
+      "rule": "Miscele non classificabili come pericolose ma contenenti almeno una sostanza pericolosa appartenente ad una qualsiasi classe di pericolo con score ³ 8",
+      "score": 5.5
+    },
+    {
+      "rule": "Miscele non classificabili come pericolose ma contenenti almeno una sostanza pericolosa esclusivamente per via inalatoria appartenente ad una qualsiasi classe di pericolo diversa dalla tossicità di categoria 4 e dalle categorie relative all’irritazione con score < 8",
+      "score": 4.0
+    },
+    {
+      "rule": "Miscele non classificabili come pericolose ma contenenti almeno una sostanza pericolosa esclusivamente per via inalatoria appartenente alla classe di pericolo della tossicità di categoria 4 e alle categorie dell’irritazione",
+      "score": 2.5
+    },
+    {
+      "rule": "Miscele non classificabili come pericolose ma contenenti almeno una sostanza pericolosa solo per via cutanea e/o solo per ingestione appartenente ad una qualsiasi classe di pericolo relativa ai soli effetti acuti",
+      "score": 2.25
+    },
+    {
+      "rule": "Miscele non classificabili come pericolose ma contenenti almeno una sostanza non pericolosa alla quale è stato assegnato un valore limite d’esposizione professionale",
+      "score": 3.0
+    },
+    {
+      "rule": "Sostanza non autoclassificata come pericolosa, ma alla quale è  stato assegnato un valore limite d’esposizione professionale",
+      "score": 4.0
+    },
+    {
+      "rule": "Sostanza non classificabile come pericolosa, ma alla quale è stato assegnato un valore limite d’esposizione professionale",
+      "score": 2.25
+    },
+    {
+      "rule": "Sostanze e miscele non classificate pericolose il cui impiego e tecnologia comporta un’elevata emissione di almeno un agente chimico pericoloso per via inalatoria con score > a 6,50",
+      "score": 5.0
+    },
+    {
+      "rule": "Sostanze e miscele non classificate pericolose il cui impiego e tecnologia comporta un’elevata emissione di almeno un agente chimico pericoloso per via inalatoria con score < a 6,50 e > a 4,50",
+      "score": 3.0
+    },
+    {
+      "rule": "Sostanze e miscele non classificate pericolose il cui impiego e tecnologia comporta un’elevata emissione di almeno un agente chimico pericoloso per via inalatoria con score < a 4,50 e > a 3,00",
+      "score": 2.25
+    },
+    {
+      "rule": "Sostanze e miscele non classificate pericolose il cui impiego e tecnologia comporta un’elevata emissione di almeno un agente chimico pericoloso per via cutanea e/o per ingestione con score > a 6,50",
+      "score": 3.0
+    },
+    {
+      "rule": "Sostanze e miscele non classificate pericolose il cui impiego e tecnologia comporta un’elevata emissione di almeno un agente chimico pericoloso per via cutanea e/o per ingestione con score < a 6,50 e > a 4,50",
+      "score": 2.25
+    },
+    {
+      "rule": "Sostanze e miscele non classificate pericolose il cui impiego e tecnologia comporta un’elevata emissione di almeno un agente chimico pericoloso per via cutanea e/o per ingestione con score < a 4,50 e > a 3,00",
+      "score": 2.0
+    },
+    {
+      "rule": "Sostanze e miscele non classificate pericolose il cui impiego e tecnologia comporta un’elevata emissione di almeno un agente chimico pericoloso per via cutanea e/o per ingestione con score < a 3,00 e > a 2,00",
+      "score": 1.75
+    },
+    {
+      "rule": "Sostanze e miscele non classificate pericolose il cui impiego e tecnologia comporta una bassa emissione di almeno un agente chimico pericoloso per via inalatoria con score > a 6,50",
+      "score": 2.5
+    },
+    {
+      "rule": "Sostanze e miscele non classificate pericolose il cui impiego e tecnologia comporta una bassa emissione di almeno un agente chimico pericoloso per via inalatoria con score < a 6,50 e > a 4,50",
+      "score": 2.0
+    },
+    {
+      "rule": "Sostanze e miscele non classificate pericolose il cui impiego e tecnologia comporta una bassa emissione di almeno un agente chimico pericoloso per via inalatoria con score < a 4,50 e > a 3,00",
+      "score": 1.75
+    },
+    {
+      "rule": "Sostanze e miscele non classificate pericolose il cui impiego e tecnologia comporta una bassa emissione di almeno un agente chimico pericoloso per via cutanea e/o per ingestione appartenente ad una qualsiasi categoria di pericolo",
+      "score": 1.25
+    },
+    {
+      "rule": "Sostanze e miscele non classificate pericolose e non contenenti nessuna sostanza pericolosa",
+      "score": 1.0
+    }
+  ],
+  "p_scores_r": {
+    "1": {
+      "text": "Esplosivo allo stato secco",
+      "score": 1.0
+    },
+    "2": {
+      "text": "Rischio di esplosione per urto, sfregamento, fuoco o altre sorgenti d'ignizione",
+      "score": 1.0
+    },
+    "3": {
+      "text": "Grande rischio d'esplosione per urto, attrito, in presenza di fuoco o altre fonti d'infiammazione",
+      "score": 1.0
+    },
+    "4": {
+      "text": "Forma dei composti metallici esplosivi molto sensibili",
+      "score": 1.0
+    },
+    "5": {
+      "text": "Rischio d'esplosione in presenza di calore",
+      "score": 1.0
+    },
+    "6": {
+      "text": "Rischio d'esplosione a contatto o meno con l'aria",
+      "score": 1.0
+    },
+    "7": {
+      "text": "Può provocare incendio",
+      "score": 1.0
+    },
+    "8": {
+      "text": "Favorisce l'infiammazione di sostanze combustibili",
+      "score": 1.0
+    },
+    "9": {
+      "text": "Può esplodere componendosi con sostanze combustibili",
+      "score": 1.0
+    },
+    "10": {
+      "text": "Infiammabile",
+      "score": 1.0
+    },
+    "11": {
+      "text": "Facilmente infiammabile",
+      "score": 1.0
+    },
+    "12": {
+      "text": "Estremamente infiammabile",
+      "score": 1.0
+    },
+    "13": {
+      "text": "Gas liquefatto estremamente infiammabile",
+      "score": 1.0
+    },
+    "14": {
+      "text": "Reagisce violentemente a contatto con l'acqua",
+      "score": 1.0
+    },
+    "15": {
+      "text": "A contatto con l'acqua sviluppa gas molto infiammabili",
+      "score": 1.0
+    },
+    "14/15": {
+      "text": "Reagisce violentemente con l'acqua liberando gas estremamente infiammabili",
+      "score": 1.0
+    },
+    "15/29": {
+      "text": "A contatto con l'acqua libera gas tossici estremamente infiammabili",
+      "score": 3.0
+    },
+    "16": {
+      "text": "Può esplodere componendosi con sostanze comburenti",
+      "score": 1.0
+    },
+    "17": {
+      "text": "Infiammabile spontaneamente in presenza di aria",
+      "score": 1.0
+    },
+    "18": {
+      "text": "Con l'uso, formazione possibile di miscela vapore / aria infiammabile / esplosivi",
+      "score": 1.0
+    },
+    "19": {
+      "text": "Può formare perossidi esplosivi",
+      "score": 1.0
+    },
+    "20": {
+      "text": "Nocivo per inalazione",
+      "score": 4.0
+    },
+    "20/21": {
+      "text": "Nocivo per inalazione e contatto con la pelle",
+      "score": 4.35
+    },
+    "20/21/22": {
+      "text": "Nocivo per inalazione, contatto con la pelle e per ingestione",
+      "score": 4.5
+    },
+    "20/22": {
+      "text": "Nocivo per inalazione e ingestione",
+      "score": 4.15
+    },
+    "21": {
+      "text": "Nocivo a contatto con la pelle",
+      "score": 3.25
+    },
+    "21/22": {
+      "text": "Nocivo a contatto con la pelle e per ingestione",
+      "score": 3.4
+    },
+    "22": {
+      "text": "Nocivo per ingestione",
+      "score": 1.75
+    },
+    "23": {
+      "text": "Tossico per inalazione",
+      "score": 7.0
+    },
+    "23/24": {
+      "text": "Tossico per inalazione e contatto con la pelle",
+      "score": 7.75
+    },
+    "23/24/25": {
+      "text": "Tossico per inalazione, contatto con la pelle e per ingestione",
+      "score": 8.0
+    },
+    "23/25": {
+      "text": "Tossico per inalazione e ingestione",
+      "score": 7.25
+    },
+    "24": {
+      "text": "Tossico a contatto con la pelle",
+      "score": 6.0
+    },
+    "24/25": {
+      "text": "Tossico a contatto con la pelle e per ingestione",
+      "score": 6.25
+    },
+    "25": {
+      "text": "Tossico per ingestione",
+      "score": 2.5
+    },
+    "26": {
+      "text": "Molto tossico per inalazione",
+      "score": 8.5
+    },
+    "26/27": {
+      "text": "Molto tossico per inalazione e contatto con la pelle",
+      "score": 9.25
+    },
+    "26/27/28": {
+      "text": "Molto tossico per inalazione, contatto con la pelle e per ingestione",
+      "score": 9.5
+    },
+    "26/28": {
+      "text": "Molto tossico per inalazione e per ingestione",
+      "score": 8.75
+    },
+    "27": {
+      "text": "Molto tossico a contatto con la pelle",
+      "score": 7.0
+    },
+    "27/28": {
+      "text": "Molto tossico a contatto con la pelle e per ingestione",
+      "score": 7.25
+    },
+    "28": {
+      "text": "Molto tossico per ingestione",
+      "score": 3.0
+    },
+    "29": {
+      "text": "A contatto con l'acqua libera gas tossici",
+      "score": 3.0
+    },
+    "30": {
+      "text": "Può diventare molto infiammabile in esercizio",
+      "score": 1.0
+    },
+    "31": {
+      "text": "A contatto con acidi libera gas tossico",
+      "score": 3.0
+    },
+    "32": {
+      "text": "A contatto con acidi libera gas molto tossico",
+      "score": 3.5
+    },
+    "33": {
+      "text": "Pericolo di effetti cumulativi",
+      "score": 4.75
+    },
+    "34": {
+      "text": "Provoca ustioni",
+      "score": 4.85
+    },
+    "35": {
+      "text": "Provoca gravi ustioni",
+      "score": 5.85
+    },
+    "36": {
+      "text": "Irritante per gli occhi",
+      "score": 2.5
+    },
+    "36/37": {
+      "text": "Irritante per gli occhi e le vie respiratorie",
+      "score": 3.3
+    },
+    "36/37/38": {
+      "text": "Irritante per gli occhi, le vie respiratorie e la pelle",
+      "score": 3.4
+    },
+    "36/38": {
+      "text": "Irritante per gli occhi e la pelle",
+      "score": 2.75
+    },
+    "37": {
+      "text": "Irritante per le vie respiratorie",
+      "score": 3.0
+    },
+    "37/38": {
+      "text": "Irritante per le vie respiratorie e la pelle",
+      "score": 3.2
+    },
+    "38": {
+      "text": "Irritante per la pelle",
+      "score": 2.25
+    },
+    "39": {
+      "text": "Pericolo di effetti irreversibili molto gravi",
+      "score": 8.0
+    },
+    "39/23": {
+      "text": "Tossico: pericolo di effetti irreversibili molto gravi per inalazione",
+      "score": 7.35
+    },
+    "39/23/24": {
+      "text": "Tossico: pericolo di effetti irreversibili molto gravi per inalazione e a conta contatto con la pelle",
+      "score": 8.0
+    },
+    "39/23/24/25": {
+      "text": "Tossico: pericolo di effetti irreversibili molto gravi per inalazione, a contatto con la pelle e per ingestione",
+      "score": 8.25
+    },
+    "39/23/25": {
+      "text": "Tossico: pericolo di effetti irreversibili molto gravi per inalazione ed ingestione",
+      "score": 7.5
+    },
+    "39/24": {
+      "text": "Tossico: pericolo di effetti irreversibili molto gravi a contatto con la pelle",
+      "score": 6.25
+    },
+    "39/24/25": {
+      "text": "Tossico: pericolo di effetti irreversibili molto gravi a contatto con la pelle e per ingestione",
+      "score": 6.5
+    },
+    "39/25": {
+      "text": "Tossico: pericolo di effetti irreversibili molto gravi per ingestione",
+      "score": 2.75
+    },
+    "39/26": {
+      "text": "Molto tossico: pericolo di effetti irreversibili molto gravi per inalazione",
+      "score": 9.35
+    },
+    "39/26/27": {
+      "text": "Molto tossico: pericolo di effetti irreversibili molto gravi per inalazione e a conta contatto con la pelle",
+      "score": 9.5
+    },
+    "39/26/27/28": {
+      "text": "Molto tossico: pericolo di effetti irreversibili molto gravi per inalazione, a contatto con la pelle e per ingestione",
+      "score": 9.75
+    },
+    "39/26/28": {
+      "text": "Molto tossico: pericolo di effetti irreversibili molto gravi per inalazione ed ingestione",
+      "score": 9.0
+    },
+    "39/27": {
+      "text": "Molto tossico: pericolo di effetti irreversibili molto gravi a contatto con la pelle",
+      "score": 7.25
+    },
+    "39/27/28": {
+      "text": "Molto tossico: pericolo di effetti irreversibili molto gravi a contatto con la pelle e per ingestione",
+      "score": 7.5
+    },
+    "39/28": {
+      "text": "Molto tossico: pericolo di effetti irreversibili molto gravi per ingestione",
+      "score": 3.25
+    },
+    "40": {
+      "text": "Possibilità di effetti cancerogeni -prove insufficienti",
+      "score": 7.0
+    },
+    "41": {
+      "text": "Rischio di gravi lesioni oculari",
+      "score": 3.4
+    },
+    "42": {
+      "text": "Può provocare sensibilizzazione per inalazione",
+      "score": 6.5
+    },
+    "42/43": {
+      "text": "Può provocare sensibilizzazione per inalazione e contatto con la pelle",
+      "score": 6.9
+    },
+    "43": {
+      "text": "Può provocare sensibilizzazione per contatto con la pelle",
+      "score": 4.0
+    },
+    "44": {
+      "text": "Rischio d'esplosione se riscaldato in ambiente chiuso.",
+      "score": 1.0
+    },
+    "45": {
+      "text": "Può provocare il cancro.",
+      "score": "CANCEROGENO"
+    },
+    "46": {
+      "text": "Può provocare alterazioni genetiche ereditarie.",
+      "score": "CANCEROGENO"
+    },
+    "47": {
+      "text": "Può procurare malformazioni congenite.",
+      "score": "CANCEROGENO"
+    },
+    "48": {
+      "text": "Pericolo di gravi danni per la salute in caso di esposizione prolungata",
+      "score": 6.5
+    },
+    "48/20": {
+      "text": "Nocivo: pericolo di gravi danni per la salute in caso di esposizione prolungata per inalazione",
+      "score": 4.35
+    },
+    "48/20/21": {
+      "text": "Nocivo: pericolo di gravi danni alla salute in caso di esposizione prolungata per inalazione e a contatto con la pelle",
+      "score": 4.6
+    },
+    "48/20/21/22": {
+      "text": "Nocivo: pericolo di gravi danni alla salute in caso di esposizione prolungata per inalazione, a contatto con la pelle e per ingestione",
+      "score": 4.75
+    },
+    "48/20/22": {
+      "text": "Nocivo: pericolo di gravi danni alla salute in caso di esposizione prolungata per inalazione e ingestione",
+      "score": 4.4
+    },
+    "48/21": {
+      "text": "Nocivo: pericolo di gravi danni alla salute in caso di esposizione prolungata a contatto con la pelle",
+      "score": 3.5
+    },
+    "48/21/22": {
+      "text": "Nocivo: pericolo di gravi danni alla salute in caso di esposizione prolungata a contatto con la pelle e per ingestione",
+      "score": 3.6
+    },
+    "48/22": {
+      "text": "Nocivo: pericolo di gravi danni alla salute in caso di esposizione prolungata per ingestione",
+      "score": 2.0
+    },
+    "48/23": {
+      "text": "Tossico: pericolo di gravi danni alla salute in caso di esposizione prolungata per inalazione",
+      "score": 7.35
+    },
+    "48/23/24": {
+      "text": "Tossico: pericolo di gravi danni alla salute in caso di esposizione prolungata per inalazione e a contatto con la pelle",
+      "score": 8.0
+    },
+    "48/23/24/25": {
+      "text": "Tossico: pericolo di gravi danni alla salute in caso di esposizione prolungata per inalazione, a contatto con la pelle e per ingestione",
+      "score": 8.25
+    },
+    "48/23/25": {
+      "text": "Tossico: pericolo di gravi danni alla salute in caso di esposizione prolungata per inalazione ed ingestione",
+      "score": 7.5
+    },
+    "48/24": {
+      "text": "Tossico: pericolo di gravi danni alla salute in caso di esposizione prolungata a contatto con la pelle",
+      "score": 6.25
+    },
+    "48/24/25": {
+      "text": "Tossico: pericolo di gravi danni alla salute in caso di esposizione prolungata a contatto con la pelle e per ingestione",
+      "score": 6.5
+    },
+    "48/25": {
+      "text": "Tossico: pericolo di gravi danni alla salute in caso di esposizione prolungata per ingestione",
+      "score": 2.75
+    },
+    "49": {
+      "text": "Può provocare il cancro per inalazione",
+      "score": 1.0
+    },
+    "50": {
+      "text": "Altamente tossico per gli organismi acquatici",
+      "score": 1.0
+    },
+    "50/53": {
+      "text": "Altamente tossico per gli organismi acquatici, può provocare a lungo termine effetti negativi per l'ambiente acquatico",
+      "score": 1.0
+    },
+    "51": {
+      "text": "Tossico per gli organismi acquatici",
+      "score": 1.0
+    },
+    "51/53": {
+      "text": "Tossico per gli organismi acquatici, può provocare a lungo termine effetti negativi per l'ambiente acquatico",
+      "score": 1.0
+    },
+    "52": {
+      "text": "Nocivo per gli organismi acquatici",
+      "score": 1.0
+    },
+    "52/53": {
+      "text": "Nocivo per gli organismi acquatici, può provocare a lungo termine effetti negativi per l'ambiente acquatico",
+      "score": 1.0
+    },
+    "53": {
+      "text": "Può provocare a lungo termine effetti negativi per l'ambiente acquatico",
+      "score": 1.0
+    },
+    "54": {
+      "text": "Tossico per la flora",
+      "score": 1.0
+    },
+    "55": {
+      "text": "Tossico per la fauna",
+      "score": 1.0
+    },
+    "56": {
+      "text": "Tossico per gli organismi del terreno",
+      "score": 1.0
+    },
+    "57": {
+      "text": "Tossico per le api",
+      "score": 1.0
+    },
+    "58": {
+      "text": "Può provocare a lungo termine effetti negativi per l'ambiente",
+      "score": 1.0
+    },
+    "59": {
+      "text": "Pericoloso per lo strato di ozono",
+      "score": 1.0
+    },
+    "60": {
+      "text": "Può ridurre la fertilità",
+      "score": 10.0
+    },
+    "61": {
+      "text": "Può danneggiare i bambini non ancora nati",
+      "score": 10.0
+    },
+    "62": {
+      "text": "Possibile rischio di ridotta fertilità",
+      "score": 6.9
+    },
+    "63": {
+      "text": "Possibile rischio di danni ai bambini non ancora nati",
+      "score": 6.9
+    },
+    "64": {
+      "text": "Possibile rischio per i bambini allattati al seno",
+      "score": 5.0
+    },
+    "65": {
+      "text": "Nocivo: può causare danni ai polmoni in caso di ingestione",
+      "score": 3.5
+    },
+    "66": {
+      "text": "L'esposizione ripetuta può provocare secchezza e screpolature della pelle",
+      "score": 2.1
+    },
+    "67": {
+      "text": "L'inalazione dei vapori può provocare sonnolenza e vertigini",
+      "score": 3.5
+    },
+    "68": {
+      "text": "Possibilità di effetti irreversibili",
+      "score": 7.0
+    },
+    "68/20": {
+      "text": "Nocivo: possibilità di effetti irreversibili per inalazione",
+      "score": 4.35
+    },
+    "68/20/21": {
+      "text": "Nocivo: possibilità di effetti irreversibili per inalazione e a contatto con la pelle",
+      "score": 4.6
+    },
+    "68/20/21/22": {
+      "text": "Nocivo: possibilità di effetti irreversibili per inalazione, a contatto con la pelle e per ingestione",
+      "score": 4.75
+    },
+    "68/20/22": {
+      "text": "Nocivo: possibilità di effetti irreversibili per inalazione e ingestione",
+      "score": 4.4
+    },
+    "68/21": {
+      "text": "Nocivo: possibilità di effetti irreversibili a contatto con la pelle",
+      "score": 3.5
+    },
+    "68/21/22": {
+      "text": "Nocivo: possibilità di effetti irreversibili a contatto con la pelle e per ingestione",
+      "score": 3.6
+    },
+    "68/22": {
+      "text": "Nocivo: possibilità di effetti irreversibili per ingestione",
+      "score": 2.0
+    }
+  },
+  "p_scores_r_mixture_rules": [
+    {
+      "rule": "Preparati non classificabili come pericolosi ma contenenti almeno una sostanza pericolosa per via inalatoria appartenente ad una qualsiasi categoria di pericolo diversa dall’irritante",
+      "score": 3.0
+    },
+    {
+      "rule": "Preparati non classificabili come pericolosi ma contenenti almeno una sostanza pericolosa solo per via cutanea e/o solo per ingestione appartenente ad una qualsiasi categoria di pericolo e/o contenenti almeno una sostanza classificata irritante",
+      "score": 2.1
+    },
+    {
+      "rule": "Preparati non classificabili come pericolosi ma contenenti almeno una sostanza non pericolosa alla quale è stato assegnato un valore limite d’esposizione professionale",
+      "score": 3.0
+    },
+    {
+      "rule": "Sostanza non classificata ufficialmente come pericolosa per via inalatoria e/o per contatto con la pelle/mucose e/o per ingestione appartenente ad una qualsiasi categoria di pericolo, ma alla quale è stato assegnato un valore limite d’esposizione professionale",
+      "score": 4.0
+    },
+    {
+      "rule": "Sostanza non classificabile come pericolosa per via inalatoria e/o per contatto con la pelle/mucose e/o per ingestione appartenente ad una qualsiasi categoria di pericolo, ma alla quale è stato assegnato un valore limite d’esposizione professionale",
+      "score": 2.1
+    },
+    {
+      "rule": "Sostanze e preparati non classificati pericolosi il cui impiego e tecnologia comporta un’elevata emissione di almeno un agente chimico pericoloso per via inalatoria con score > a 6,50.",
+      "score": 5.0
+    },
+    {
+      "rule": "Sostanze e preparati non classificati pericolosi il cui impiego e tecnologia comporta un’elevata emissione di almeno un agente chimico pericoloso per via inalatoria con score < a 6,50 e > a 4,50.",
+      "score": 3.0
+    },
+    {
+      "rule": "Sostanze e preparati non classificati pericolosi il cui impiego e tecnologia comporta un’elevata emissione di almeno un agente chimico pericoloso per via inalatoria con score < a 4,50 e > a 3,00.",
+      "score": 2.1
+    },
+    {
+      "rule": "Sostanze e preparati non classificati pericolosi il cui impiego e tecnologia comporta un’elevata emissione di almeno un agente chimico pericoloso per via inalatoria con score < a 3,00 e > a 2,10.",
+      "score": 1.5
+    },
+    {
+      "rule": "Sostanze e preparati non classificati pericolosi il cui impiego e tecnologia comporta un’elevata emissione di almeno un agente chimico pericoloso per via cutanea e/o per ingestione con score > a 6,50.",
+      "score": 3.0
+    },
+    {
+      "rule": "Sostanze e preparati non classificati pericolosi il cui impiego e tecnologia comporta un’elevata emissione di almeno un agente chimico pericoloso per via cutanea e/o per ingestione con score < a 6,50 e > a 4,50.",
+      "score": 2.1
+    },
+    {
+      "rule": "Sostanze e preparati non classificati pericolosi il cui impiego e tecnologia comporta un’elevata emissione di almeno un agente chimico pericoloso per via cutanea e/o per ingestione con score < a 4,50 e > a 3,00.",
+      "score": 1.75
+    },
+    {
+      "rule": "Sostanze e preparati non classificati pericolosi il cui impiego e tecnologia comporta un’elevata emissione di almeno un agente chimico pericoloso per via cutanea e/o per ingestione con score < a 3,00 e > a 2,10.",
+      "score": 1.5
+    },
+    {
+      "rule": "Sostanze e preparati non classificati pericolosi il cui impiego e tecnologia comporta una bassa emissione di almeno un agente chimico pericoloso per via inalatoria con score > a 6,50.",
+      "score": 2.1
+    },
+    {
+      "rule": "Sostanze e preparati non classificati pericolosi il cui impiego e tecnologia comporta una bassa emissione di almeno un agente chimico pericoloso per via inalatoria con score < a 6,50 e > a 4,50.",
+      "score": 1.75
+    },
+    {
+      "rule": "Sostanze e preparati non classificati pericolosi il cui impiego e tecnologia comporta una bassa emissione di almeno un agente chimico pericoloso per via inalatoria con score < a 4,50 e > a 3,00.",
+      "score": 1.5
+    },
+    {
+      "rule": "Sostanze e preparati non classificati pericolosi il cui impiego e tecnologia comporta una bassa emissione di almeno un agente chimico pericoloso per via inalatoria con score < a 3,00 e > a 2,10.",
+      "score": 1.25
+    },
+    {
+      "rule": "Sostanze e preparati non classificati pericolosi il cui impiego e tecnologia comporta una bassa emissione di almeno un agente chimico pericoloso per via cutanea e/o per ingestione appartenente ad una qualsiasi categoria di pericolo",
+      "score": 1.25
+    },
+    {
+      "rule": "Sostanze e preparati non classificati pericolosi e non contenenti nessuna sostanza pericolosa",
+      "score": 1.0
+    }
+  ],
+  "safety_level_by_code": {
+    "H200": "Non Basso",
+    "H201": "Non Basso",
+    "H202": "Non Basso",
+    "H203": "Non Basso",
+    "H204": "Non Basso",
+    "H205": "Non Basso",
+    "H220": "Non Basso",
+    "H221": "Non Basso",
+    "H222": "Non Basso",
+    "H223": "Non Basso",
+    "H224": "Non Basso",
+    "H225": "Non Basso",
+    "H226": "Non Basso",
+    "H228": "Non Basso",
+    "H240": "Non Basso",
+    "H241": "Non Basso",
+    "H242": "Non Basso",
+    "H250": "Non Basso",
+    "H251": "Non Basso",
+    "H252": "Non Basso",
+    "H260": "Non Basso",
+    "H261": "Non Basso",
+    "H270": "Non Basso",
+    "H271": "Non Basso",
+    "H272": "Non Basso",
+    "H280": "Non Basso",
+    "H281": "Non Basso",
+    "H290": "Non Basso",
+    "H300 cat.1": "Non Basso",
+    "H300 cat.2": "Non Basso",
+    "H301": "Basso",
+    "H302": "Basso",
+    "H304": "Basso",
+    "H310 cat.1": "Non Basso",
+    "H310 cat.2": "Non Basso",
+    "H311": "Basso",
+    "H312": "Basso",
+    "H314 cat.1A": "Non Basso",
+    "H314 cat.1B": "Non Basso",
+    "H314 cat.1C": "Non Basso",
+    "H315": "Basso",
+    "H317 cat.1A": "Basso",
+    "H317 cat.1B": "Basso",
+    "H318": "Non Basso",
+    "H319": "Non Basso",
+    "H330 cat.1": "Non Basso",
+    "H330 cat.2": "Non Basso",
+    "H331": "Basso",
+    "H332": "Basso",
+    "H334 cat.1A": "Basso",
+    "H334 cat.1B": "Basso",
+    "H335": "Basso",
+    "H336": "Basso",
+    "H340": "CANCEROGENO",
+    "H341": "Basso",
+    "H350": "CANCEROGENO",
+    "H350i": "CANCEROGENO",
+    "H351": "CANCEROGENO",
+    "H360": "Basso",
+    "H360D": "Basso",
+    "H360Df": "Basso",
+    "H360F": "Basso",
+    "H360FD": "Basso",
+    "H360Fd": "Basso",
+    "H361": "Basso",
+    "H361d": "Basso",
+    "H361f": "Basso",
+    "H361fd": "Basso",
+    "H362": "Basso",
+    "H370": "Basso",
+    "H371": "Basso",
+    "H372": "Basso",
+    "H373": "Basso",
+    "H400": "Basso",
+    "H411": "Basso",
+    "H412": "Basso",
+    "H413": "Basso",
+    "EUH001": "Non Basso",
+    "EUH006": "Non Basso",
+    "EUH014": "Non Basso",
+    "EUH018": "Non Basso",
+    "EUH019": "Non Basso",
+    "EUH029": "Non Basso",
+    "EUH031": "Non Basso",
+    "EUH032": "Non Basso",
+    "EUH044": "Non Basso",
+    "EUH059": "Basso",
+    "EUH066": "Basso",
+    "EUH070": "Basso",
+    "EUH071": "Basso",
+    "EUH201": "Basso",
+    "EUH201A": "Basso",
+    "EUH202": "Non Basso",
+    "EUH203": "Basso",
+    "EUH204": "Basso",
+    "EUH205": "Basso",
+    "EUH206": "Non Basso",
+    "EUH207": "Non Basso",
+    "EUH208": "Basso",
+    "EUH209": "Non Basso",
+    "EUH209A": "Non Basso",
+    "EUH210": "Basso",
+    "EUH401": "Basso",
+    "FRASI R": "TESTO",
+    "1": "Esplosivo allo stato secco",
+    "2": "Rischio di esplosione per urto, sfregamento, fuoco o altre sorgenti d'ignizione",
+    "3": "Grande rischio d'esplosione per urto, attrito, in presenza di fuoco o altre fonti d'infiammazione",
+    "4": "Forma dei composti metallici esplosivi molto sensibili",
+    "5": "Rischio d'esplosione in presenza di calore",
+    "6": "Rischio d'esplosione a contatto o meno con l'aria",
+    "7": "Può provocare incendio",
+    "8": "Favorisce l'infiammazione di sostanze combustibili",
+    "9": "Può esplodere componendosi con sostanze combustibili",
+    "10": "Infiammabile",
+    "11": "Facilmente infiammabile",
+    "12": "Estremamente infiammabile",
+    "13": "Gas liquefatto estremamente infiammabile",
+    "14": "Reagisce violentemente a contatto con l'acqua",
+    "15": "A contatto con l'acqua sviluppa gas molto infiammabili",
+    "14/15": "Reagisce violentemente con l'acqua liberando gas estremamente infiammabili",
+    "15/29": "A contatto con l'acqua libera gas tossici estremamente infiammabili",
+    "16": "Può esplodere componendosi con sostanze comburenti",
+    "17": "Infiammabile spontaneamente in presenza di aria",
+    "18": "Con l'uso, formazione possibile di miscela vapore / aria infiammabile / esplosivi",
+    "19": "Può formare perossidi esplosivi",
+    "20": "Nocivo per inalazione",
+    "20/21": "Nocivo per inalazione e contatto con la pelle",
+    "20/21/22": "Nocivo per inalazione, contatto con la pelle e per ingestione",
+    "20/22": "Nocivo per inalazione e ingestione",
+    "21": "Nocivo a contatto con la pelle",
+    "21/22": "Nocivo a contatto con la pelle e per ingestione",
+    "22": "Nocivo per ingestione",
+    "23": "Tossico per inalazione",
+    "23/24": "Tossico per inalazione e contatto con la pelle",
+    "23/24/25": "Tossico per inalazione, contatto con la pelle e per ingestione",
+    "23/25": "Tossico per inalazione e ingestione",
+    "24": "Tossico a contatto con la pelle",
+    "24/25": "Tossico a contatto con la pelle e per ingestione",
+    "25": "Tossico per ingestione",
+    "26": "Molto tossico per inalazione",
+    "26/27": "Molto tossico per inalazione e contatto con la pelle",
+    "26/27/28": "Molto tossico per inalazione, contatto con la pelle e per ingestione",
+    "26/28": "Molto tossico per inalazione e per ingestione",
+    "27": "Molto tossico a contatto con la pelle",
+    "27/28": "Molto tossico a contatto con la pelle e per ingestione",
+    "28": "Molto tossico per ingestione",
+    "29": "A contatto con l'acqua libera gas tossici",
+    "30": "Può diventare molto infiammabile in esercizio",
+    "31": "A contatto con acidi libera gas tossico",
+    "32": "A contatto con acidi libera gas molto tossico",
+    "33": "Pericolo di effetti cumulativi",
+    "34": "Provoca ustioni",
+    "35": "Provoca gravi ustioni",
+    "36": "Irritante per gli occhi",
+    "36/37": "Irritante per gli occhi e le vie respiratorie",
+    "36/37/38": "Irritante per gli occhi, le vie respiratorie e la pelle",
+    "36/38": "Irritante per gli occhi e la pelle",
+    "37": "Irritante per le vie respiratorie",
+    "37/38": "Irritante per le vie respiratorie e la pelle",
+    "38": "Irritante per la pelle",
+    "39": "Pericolo di effetti irreversibili molto gravi",
+    "39/23": "Tossico: pericolo di effetti irreversibili molto gravi per inalazione",
+    "39/23/24": "Tossico: pericolo di effetti irreversibili molto gravi per inalazione e a conta contatto con la pelle",
+    "39/23/24/25": "Tossico: pericolo di effetti irreversibili molto gravi per inalazione, a contatto con la pelle e per ingestione",
+    "39/23/25": "Tossico: pericolo di effetti irreversibili molto gravi per inalazione ed ingestione",
+    "39/24": "Tossico: pericolo di effetti irreversibili molto gravi a contatto con la pelle",
+    "39/24/25": "Tossico: pericolo di effetti irreversibili molto gravi a contatto con la pelle e per ingestione",
+    "39/25": "Tossico: pericolo di effetti irreversibili molto gravi per ingestione",
+    "39/26": "Molto tossico: pericolo di effetti irreversibili molto gravi per inalazione",
+    "39/26/27": "Molto tossico: pericolo di effetti irreversibili molto gravi per inalazione e a conta contatto con la pelle",
+    "39/26/27/28": "Molto tossico: pericolo di effetti irreversibili molto gravi per inalazione, a contatto con la pelle e per ingestione",
+    "39/26/28": "Molto tossico: pericolo di effetti irreversibili molto gravi per inalazione ed ingestione",
+    "39/27": "Molto tossico: pericolo di effetti irreversibili molto gravi a contatto con la pelle",
+    "39/27/28": "Molto tossico: pericolo di effetti irreversibili molto gravi a contatto con la pelle e per ingestione",
+    "39/28": "Molto tossico: pericolo di effetti irreversibili molto gravi per ingestione",
+    "40": "Possibilità di effetti cancerogeni -prove insufficienti",
+    "41": "Rischio di gravi lesioni oculari",
+    "42": "Può provocare sensibilizzazione per inalazione",
+    "42/43": "Può provocare sensibilizzazione per inalazione e contatto con la pelle",
+    "43": "Può provocare sensibilizzazione per contatto con la pelle",
+    "44": "Rischio d'esplosione se riscaldato in ambiente chiuso.",
+    "45": "Può provocare il cancro.",
+    "46": "Può provocare alterazioni genetiche ereditarie.",
+    "47": "Può procurare malformazioni congenite.",
+    "48": "Pericolo di gravi danni per la salute in caso di esposizione prolungata",
+    "48/20": "Nocivo: pericolo di gravi danni per la salute in caso di esposizione prolungata per inalazione",
+    "48/20/21": "Nocivo: pericolo di gravi danni alla salute in caso di esposizione prolungata per inalazione e a contatto con la pelle",
+    "48/20/21/22": "Nocivo: pericolo di gravi danni alla salute in caso di esposizione prolungata per inalazione, a contatto con la pelle e per ingestione",
+    "48/20/22": "Nocivo: pericolo di gravi danni alla salute in caso di esposizione prolungata per inalazione e ingestione",
+    "48/21": "Nocivo: pericolo di gravi danni alla salute in caso di esposizione prolungata a contatto con la pelle",
+    "48/21/22": "Nocivo: pericolo di gravi danni alla salute in caso di esposizione prolungata a contatto con la pelle e per ingestione",
+    "48/22": "Nocivo: pericolo di gravi danni alla salute in caso di esposizione prolungata per ingestione",
+    "48/23": "Tossico: pericolo di gravi danni alla salute in caso di esposizione prolungata per inalazione",
+    "48/23/24": "Tossico: pericolo di gravi danni alla salute in caso di esposizione prolungata per inalazione e a contatto con la pelle",
+    "48/23/24/25": "Tossico: pericolo di gravi danni alla salute in caso di esposizione prolungata per inalazione, a contatto con la pelle e per ingestione",
+    "48/23/25": "Tossico: pericolo di gravi danni alla salute in caso di esposizione prolungata per inalazione ed ingestione",
+    "48/24": "Tossico: pericolo di gravi danni alla salute in caso di esposizione prolungata a contatto con la pelle",
+    "48/24/25": "Tossico: pericolo di gravi danni alla salute in caso di esposizione prolungata a contatto con la pelle e per ingestione",
+    "48/25": "Tossico: pericolo di gravi danni alla salute in caso di esposizione prolungata per ingestione",
+    "49": "Può provocare il cancro per inalazione",
+    "50": "Altamente tossico per gli organismi acquatici",
+    "50/53": "Altamente tossico per gli organismi acquatici, può provocare a lungo termine effetti negativi per l'ambiente acquatico",
+    "51": "Tossico per gli organismi acquatici",
+    "51/53": "Tossico per gli organismi acquatici, può provocare a lungo termine effetti negativi per l'ambiente acquatico",
+    "52": "Nocivo per gli organismi acquatici",
+    "52/53": "Nocivo per gli organismi acquatici, può provocare a lungo termine effetti negativi per l'ambiente acquatico",
+    "53": "Può provocare a lungo termine effetti negativi per l'ambiente acquatico",
+    "54": "Tossico per la flora",
+    "55": "Tossico per la fauna",
+    "56": "Tossico per gli organismi del terreno",
+    "57": "Tossico per le api",
+    "58": "Può provocare a lungo termine effetti negativi per l'ambiente",
+    "59": "Pericoloso per lo strato di ozono",
+    "60": "Può ridurre la fertilità",
+    "61": "Può danneggiare i bambini non ancora nati",
+    "62": "Possibile rischio di ridotta fertilità",
+    "63": "Possibile rischio di danni ai bambini non ancora nati",
+    "64": "Possibile rischio per i bambini allattati al seno",
+    "65": "Nocivo: può causare danni ai polmoni in caso di ingestione",
+    "66": "L'esposizione ripetuta può provocare secchezza e screpolature della pelle",
+    "67": "L'inalazione dei vapori può provocare sonnolenza e vertigini",
+    "68": "Possibilità di effetti irreversibili",
+    "68/20": "Nocivo: possibilità di effetti irreversibili per inalazione",
+    "68/20/21": "Nocivo: possibilità di effetti irreversibili per inalazione e a contatto con la pelle",
+    "68/20/21/22": "Nocivo: possibilità di effetti irreversibili per inalazione, a contatto con la pelle e per ingestione",
+    "68/20/22": "Nocivo: possibilità di effetti irreversibili per inalazione e ingestione",
+    "68/21": "Nocivo: possibilità di effetti irreversibili a contatto con la pelle",
+    "68/21/22": "Nocivo: possibilità di effetti irreversibili a contatto con la pelle e per ingestione",
+    "68/22": "Nocivo: possibilità di effetti irreversibili per ingestione"
+  },
+  "matrices": {
+    "chemphys_tiers": [
+      "Solido - Nebbia",
+      "Bassa Volatilità",
+      "Media / Alta volatilità e Polveri fini",
+      "Stato gassoso"
+    ],
+    "quantita_classi": [
+      "< 0,1 Kg",
+      "0,1 - 1 Kg",
+      "1 - 10 Kg",
+      "10 - 100 Kg",
+      ">= 100 Kg"
+    ],
+    "tipologia_uso": [
+      "Sistema chiuso",
+      "Inclusione in matrice",
+      "Uso controllato",
+      "Uso dispersivo"
+    ],
+    "tipologia_controllo": [
+      "Contenimento completo",
+      "Aspirazione localizzata",
+      "Segregazione / Separazione",
+      "Ventilazione generale",
+      "Manipolazione diretta"
+    ],
+    "tempo_esposizione": [
+      "< 15 minuti",
+      "15 min - 2 ore",
+      "2 - 4 ore",
+      "4 - 6 ore",
+      ">= 6 ore"
+    ],
+    "contatto_cutaneo": [
+      "Nessun contatto",
+      "Contatto accidentale",
+      "Contatto discontinuo",
+      "Contatto esteso"
+    ],
+    "M1_to_D": [
+      [
+        "Bassa",
+        "Bassa",
+        "Bassa",
+        "Medio/Bassa",
+        "Medio/Bassa"
+      ],
+      [
+        "Bassa",
+        "Medio/Bassa",
+        "Medio/Alta",
+        "Medio/Alta",
+        "Alta"
+      ],
+      [
+        "Bassa",
+        "Medio/Alta",
+        "Medio/Alta",
+        "Alta",
+        "Alta"
+      ],
+      [
+        "Medio/Bassa",
+        "Medio/Alta",
+        "Alta",
+        "Alta",
+        "Alta"
+      ]
+    ],
+    "D_values": {
+      "Bassa": 1,
+      "Medio/Bassa": 2,
+      "Medio/Alta": 3,
+      "Alta": 4
+    },
+    "M2_to_U": [
+      [
+        "Basso",
+        "Basso",
+        "Basso",
+        "Medio"
+      ],
+      [
+        "Basso",
+        "Medio",
+        "Medio",
+        "Alto"
+      ],
+      [
+        "Basso",
+        "Medio",
+        "Alto",
+        "Alto"
+      ],
+      [
+        "Medio",
+        "Alto",
+        "Alto",
+        "Alto"
+      ]
+    ],
+    "U_values": {
+      "Basso": 1,
+      "Medio": 2,
+      "Alto": 3
+    },
+    "M3_to_C": [
+      [
+        "Basso",
+        "Basso",
+        "Basso",
+        "Medio",
+        "Medio"
+      ],
+      [
+        "Basso",
+        "Medio",
+        "Medio",
+        "Alto",
+        "Alto"
+      ],
+      [
+        "Basso",
+        "Medio",
+        "Alto",
+        "Alto",
+        "Alto"
+      ]
+    ],
+    "C_values": {
+      "Basso": 1,
+      "Medio": 2,
+      "Alto": 3
+    },
+    "M4_to_I": [
+      [
+        "Bassa",
+        "Bassa",
+        "Medio/Bassa",
+        "Medio/Bassa",
+        "Medio/Alta"
+      ],
+      [
+        "Bassa",
+        "Medio/Bassa",
+        "Medio/Alta",
+        "Medio/Alta",
+        "Alta"
+      ],
+      [
+        "Medio/Bassa",
+        "Medio/Alta",
+        "Alta",
+        "Alta",
+        "Alta"
+      ]
+    ],
+    "I_values": {
+      "Bassa": 1,
+      "Medio/Bassa": 3,
+      "Medio/Alta": 7,
+      "Alta": 10
+    },
+    "distanza_to_d": [
+      [
+        "< 1 m",
+        1.0
+      ],
+      [
+        "1 - 3 m",
+        0.75
+      ],
+      [
+        "3 - 5 m",
+        0.5
+      ],
+      [
+        "5 - 10 m",
+        0.25
+      ],
+      [
+        ">= 10 m",
+        0.1
+      ]
+    ],
+    "ECUTE_matrix": [
+      [
+        "Basso",
+        "Basso",
+        "Medio",
+        "Alto"
+      ],
+      [
+        "Basso",
+        "Medio",
+        "Medio",
+        "Alto"
+      ],
+      [
+        "Basso",
+        "Medio",
+        "Alto",
+        "Molto Alto"
+      ],
+      [
+        "Basso",
+        "Alto",
+        "Alto",
+        "Molto Alto"
+      ]
+    ],
+    "Ecute_values": {
+      "Basso": 1,
+      "Medio": 3,
+      "Alto": 7,
+      "Molto Alto": 10
+    }
+  },
+  "health_zones": [
+    {
+      "max_exclusive": 15,
+      "min_inclusive": 0.1,
+      "zona": "VERDE",
+      "classificazione": "Rischio irrilevante per la salute"
+    },
+    {
+      "range": "15 < R < 21",
+      "zona": "ARANCIO",
+      "classificazione": "Rischio irrilevante per la salute (zona di incertezza)"
+    },
+    {
+      "range": "21 <= R <= 40",
+      "zona": "GIALLO",
+      "classificazione": "Rischio superiore al rischio chimico irrilevante per la salute"
+    },
+    {
+      "range": "40 < R <= 80",
+      "zona": "ROSSA",
+      "classificazione": "Rischio superiore (zona di rischio elevato)"
+    },
+    {
+      "range": "R > 80",
+      "zona": "NERA",
+      "classificazione": "Rischio superiore (zona di grave rischio)"
+    }
+  ],
+  "ranges": {
+    "Rinal": "0.1 - 100",
+    "Rcute": "1 - 100",
+    "Rcum": "1 - 141"
+  }
+}
