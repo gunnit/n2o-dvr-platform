@@ -62,6 +62,7 @@ export default function VdtAssessmentPage() {
   const [persone, setPersone] = useState<PersonaOption[]>([]);
   const [existingValutazioni, setExistingValutazioni] = useState<VdtValutazioneRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [summary, setSummary] = useState<VdtSummary>(EMPTY_SUMMARY);
   const [finalizing, setFinalizing] = useState(false);
   const [finalizeMessage, setFinalizeMessage] = useState<string | null>(null);
@@ -88,32 +89,37 @@ export default function VdtAssessmentPage() {
   }, [aziendaId]);
 
   const deleteValutazione = useCallback(
-    async (valutazioneId: string, nominativo: string) => {
+    async (valutazioneId: string, label: string) => {
       if (
         !window.confirm(
-          `Eliminare la valutazione VDT più recente di ${nominativo}? L'operazione è irreversibile.`,
+          `Eliminare la valutazione VDT di ${label}? L'operazione è irreversibile.`,
         )
       ) {
         return;
       }
+      setActionError(null);
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         const headers = await authHeaders();
-        const res = await fetch(`${apiUrl}/api/v1/vdt/${valutazioneId}`, {
-          method: "DELETE",
-          headers,
-        });
+        // The VDT router is mounted under the azienda (mirrors MMC):
+        // DELETE /api/v1/aziende/{aziendaId}/vdt/{id}. The old URL
+        // (/api/v1/vdt/{id}) matched no route and 404'd, so every delete
+        // failed silently.
+        const res = await fetch(
+          `${apiUrl}/api/v1/aziende/${aziendaId}/vdt/${valutazioneId}`,
+          { method: "DELETE", headers },
+        );
         if (!res.ok && res.status !== 204) {
           throw new Error(`Errore ${res.status}`);
         }
         await refetchValutazioni();
       } catch (err) {
-        setLoadError(
+        setActionError(
           err instanceof Error ? err.message : "Eliminazione fallita",
         );
       }
     },
-    [refetchValutazioni],
+    [aziendaId, refetchValutazioni],
   );
 
   useEffect(() => {
@@ -154,22 +160,24 @@ export default function VdtAssessmentPage() {
     };
   }, [aziendaId]);
 
-  // Most-recent valutazione per persona_id, for "Già valutati" surfacing.
-  const valutatePerPersona = useMemo(() => {
-    const map = new Map<string, VdtValutazioneRow>();
-    for (const row of existingValutazioni) {
-      if (!row.persona_id) continue;
-      const prev = map.get(row.persona_id);
-      if (!prev || new Date(row.created_at) > new Date(prev.created_at)) {
-        map.set(row.persona_id, row);
-      }
-    }
-    return map;
-  }, [existingValutazioni]);
+  // Name to show next to a saved row. Generic workstations (persona_id =
+  // null) are valid VDT rows too — they must still be listed and deletable,
+  // which the old per-persona "Già valutati" card silently skipped.
+  const personaLabel = useCallback(
+    (personaId: string | null): string => {
+      if (!personaId) return "Generica";
+      return (
+        persone.find((p) => p.id === personaId)?.nominativo ??
+        "(lavoratore rimosso)"
+      );
+    },
+    [persone],
+  );
 
-  const personeGiaValutate = useMemo(() => {
-    return persone.filter((p) => valutatePerPersona.has(p.id));
-  }, [persone, valutatePerPersona]);
+  const savedEsposti = useMemo(
+    () => existingValutazioni.filter((v) => v.esposto).length,
+    [existingValutazioni],
+  );
 
   const allClassified = summary.total > 0 && summary.incompleti === 0;
 
@@ -265,52 +273,91 @@ export default function VdtAssessmentPage() {
         </div>
       </div>
 
-      {personeGiaValutate.length > 0 && (
-        <Card className="border-emerald-300/60 bg-emerald-50/60">
-          <CardContent className="space-y-2 py-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">
-                Già valutati: {personeGiaValutate.length}
+      {actionError && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {actionError}
+        </div>
+      )}
+
+      {/* Persistent view of everything archived for this azienda — generic
+          workstations included. Operators reported the page "didn't save /
+          didn't show / couldn't delete" because the only saved-data surface
+          was a per-persona badge that skipped generic rows, and its delete
+          button hit a 404 (wrong URL, now fixed). */}
+      <Card>
+        <CardContent className="space-y-3 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">
+                Valutazioni salvate: {existingValutazioni.length}
               </Badge>
-              <span className="text-xs text-muted-foreground">
-                Lavoratori con almeno una valutazione VDT in archivio.
-              </span>
+              {savedEsposti > 0 && (
+                <span className="text-xs font-medium text-rose-700">
+                  {savedEsposti} esposti
+                </span>
+              )}
             </div>
-            <ul className="flex flex-wrap gap-2 text-xs">
-              {personeGiaValutate.map((p) => {
-                const v = valutatePerPersona.get(p.id);
+            <span className="text-xs text-muted-foreground">
+              Archiviate nel fascicolo cliente.
+            </span>
+          </div>
+
+          {existingValutazioni.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nessuna valutazione VDT salvata. Compila il form e premi
+              «Conferma valutazione».
+            </p>
+          ) : (
+            <ul className="divide-y rounded-md border">
+              {existingValutazioni.map((v) => {
+                const nominativo = personaLabel(v.persona_id);
                 return (
                   <li
-                    key={p.id}
-                    className="flex items-center gap-1 rounded-md border border-emerald-300/70 bg-white px-2 py-1 text-emerald-900"
+                    key={v.id}
+                    className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
                   >
-                    <span aria-hidden className="text-emerald-600">
-                      ✓
-                    </span>
-                    <span className="font-medium">{p.nominativo}</span>
-                    {v ? (
-                      <span className="text-emerald-700/80">
-                        — Valutato il {formatDateIt(v.created_at)}
+                    <div className="min-w-0 flex-1">
+                      <span className="font-medium">{v.postazione}</span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        · {nominativo}
                       </span>
-                    ) : null}
-                    {v ? (
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {v.ore_settimanali} h/sett
+                      </span>
+                      {v.esposto ? (
+                        <span className="inline-flex items-center rounded-md bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-rose-500/30">
+                          ESPOSTO
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-md bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-500/30">
+                          NON ESPOSTO
+                        </span>
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        {formatDateIt(v.created_at)}
+                      </span>
                       <button
                         type="button"
-                        aria-label={`Elimina ultima valutazione di ${p.nominativo}`}
-                        title="Elimina valutazione più recente"
-                        onClick={() => deleteValutazione(v.id, p.nominativo)}
-                        className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-emerald-600/70 hover:bg-rose-100 hover:text-rose-700"
+                        aria-label={`Elimina valutazione ${v.postazione}`}
+                        title="Elimina questa valutazione"
+                        onClick={() =>
+                          deleteValutazione(v.id, `${v.postazione} — ${nominativo}`)
+                        }
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-rose-100 hover:text-rose-700"
                       >
                         ×
                       </button>
-                    ) : null}
+                    </div>
                   </li>
                 );
               })}
             </ul>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
 
       <VdtForm
         aziendaId={aziendaId}

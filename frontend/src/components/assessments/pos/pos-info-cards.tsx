@@ -369,6 +369,7 @@ export function PosInfoEditor({
                 <Input
                   id={`pos-${String(f.key)}`}
                   value={(values[f.key] as string | null) ?? ""}
+                  maxLength={255}
                   onChange={(e) =>
                     update(
                       f.key,

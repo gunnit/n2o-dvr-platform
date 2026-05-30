@@ -33,6 +33,7 @@ import { Label } from "@/components/ui/label";
 import { MatchesPanel } from "@/components/assessments/gestanti/matches-panel";
 import { RelocationDialog } from "@/components/assessments/gestanti/relocation-dialog";
 import { WorkerSelector } from "@/components/assessments/gestanti/worker-selector";
+import { parseApiError } from "@/lib/api-errors";
 import type {
   CrossReferenceResponse,
   FemaleWorker,
@@ -375,8 +376,8 @@ export default function GestantiAssessmentPage() {
             }),
           });
       if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(`API ${res.status}: ${txt}`);
+        const parsed = await parseApiError(res);
+        throw new Error(parsed.message);
       }
       setDirty(false);
       setSaveMessage("Valutazione salvata.");

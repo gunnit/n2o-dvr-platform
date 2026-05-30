@@ -209,6 +209,7 @@ export function IncendioAreaCard({
                 <Input
                   id={`areas.${index}.nome`}
                   placeholder="Es. Magazzino materie prime"
+                  maxLength={255}
                   aria-invalid={areaErrors?.nome ? true : undefined}
                   {...register(`areas.${index}.nome`)}
                 />

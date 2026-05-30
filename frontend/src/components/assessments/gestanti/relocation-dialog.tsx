@@ -108,6 +108,7 @@ export function RelocationDialog({
           <textarea
             id="relocation-text"
             rows={5}
+            minLength={10}
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder={
@@ -117,6 +118,7 @@ export function RelocationDialog({
             }
             className="w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           />
+          <p className="text-[11px] text-muted-foreground">Minimo 10 caratteri.</p>
           <p className="text-xs text-muted-foreground">{fieldHint}</p>
           {isAccept && match.suggested_alternative_mansione && (
             <p className="text-xs text-muted-foreground">

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
+import { parseApiError } from "@/lib/api-errors";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -63,8 +64,16 @@ export function useApi() {
       }
 
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail || `API error: ${res.status}`);
+        // Pydantic 422 returns a detail array, not a string — the old code
+        // turned that into "[object Object]" for the user. `parseApiError`
+        // produces a readable Italian message and attaches the per-field
+        // breakdown on the thrown Error for inline display.
+        const parsed = await parseApiError(res);
+        const error = new Error(parsed.message) as Error & {
+          parsed: typeof parsed;
+        };
+        error.parsed = parsed;
+        throw error;
       }
 
       if (res.status === 204) return undefined as T;

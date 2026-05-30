@@ -18,6 +18,7 @@ import {
   extractSex,
   fasciaEtaFromAge,
 } from "@/lib/codice-fiscale";
+import { parseApiError } from "@/lib/api-errors";
 import type { Azienda } from "@/types";
 
 interface PersonaOption {
@@ -212,31 +213,21 @@ export default function MmcAssessmentPage() {
     [aziendaId, existingValutazioni, editingIds, selectedPersonaId, refetchValutazioni],
   );
 
-  /** Load all assessments for a persona into the form for editing. */
+  /** Jump to a persona's existing assessment — selecting them is enough,
+   * the auto-sync effect below pulls their saved data into the form. */
   const startEditing = useCallback(
     (personaId: string) => {
-      // Gather all rows for this persona (may be multiple lifts).
-      const rows = existingValutazioni
-        .filter((r) => r.persona_id === personaId)
-        .sort(
-          (a, b) =>
-            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-        );
-      if (!rows.length) return;
-
-      setEditingIds(rows.map((r) => r.id));
       setSelectedPersonaId(personaId);
       setFinalizeMessage(null);
-      // Bump the edit key so the form remounts with editFormValues.
-      setEditFormKey((k) => k + 1);
     },
-    [existingValutazioni],
+    [],
   );
 
+  /** Discard any unsaved changes by remounting the form. editingIds stays
+   * set so the next save still PATCHes the same rows. */
   const cancelEditing = useCallback(() => {
-    setEditingIds(null);
-    setFinalizeMessage(null);
     setEditFormKey((k) => k + 1);
+    setFinalizeMessage(null);
   }, []);
 
   useEffect(() => {
@@ -283,6 +274,42 @@ export default function MmcAssessmentPage() {
     // selectedPersonaId intentionally excluded — we only seed it on first load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aziendaId]);
+
+  // Auto-sync edit mode with the selected persona's existing assessments.
+  // When a persona with saved data is picked (from the dropdown OR auto-
+  // selected on first load), pre-fill the form with what's already in the
+  // DVR. Before this, the form opened blank for already-evaluated workers,
+  // making operators think their data hadn't been saved (Luca, 2026-05-28).
+  useEffect(() => {
+    const rowsForPersona = selectedPersonaId
+      ? existingValutazioni
+          .filter((r) => r.persona_id === selectedPersonaId)
+          .sort(
+            (a, b) =>
+              new Date(a.created_at).getTime() -
+              new Date(b.created_at).getTime(),
+          )
+      : [];
+
+    if (rowsForPersona.length > 0) {
+      const newIds = rowsForPersona.map((r) => r.id);
+      const sameAsCurrent =
+        editingIds !== null &&
+        editingIds.length === newIds.length &&
+        editingIds.every((id, i) => id === newIds[i]);
+      if (!sameAsCurrent) {
+        setEditingIds(newIds);
+        setEditFormKey((k) => k + 1);
+      }
+    } else if (editingIds !== null) {
+      setEditingIds(null);
+      setEditFormKey((k) => k + 1);
+    }
+    // editingIds intentionally excluded — it's read as a guard but only
+    // re-assigned when (selectedPersonaId, existingValutazioni) imply a
+    // different value, so listing it would create a feedback loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPersonaId, existingValutazioni]);
 
   // Most-recent valutazione per persona_id, for "Già valutati" surfacing.
   const valutatePerPersona = useMemo(() => {
@@ -405,8 +432,8 @@ export default function MmcAssessmentPage() {
               { method: "PATCH", headers, body: JSON.stringify(body) },
             );
             if (!res.ok) {
-              const detail = await res.text().catch(() => "");
-              throw new Error(`API error ${res.status}: ${detail.slice(0, 200)}`);
+              const parsed = await parseApiError(res);
+              throw new Error(parsed.message);
             }
             saved.push(await res.json());
           } else {
@@ -416,8 +443,8 @@ export default function MmcAssessmentPage() {
               { method: "POST", headers, body: JSON.stringify(body) },
             );
             if (!res.ok) {
-              const detail = await res.text().catch(() => "");
-              throw new Error(`API error ${res.status}: ${detail.slice(0, 200)}`);
+              const parsed = await parseApiError(res);
+              throw new Error(parsed.message);
             }
             saved.push(await res.json());
           }
@@ -429,7 +456,7 @@ export default function MmcAssessmentPage() {
             { method: "DELETE", headers },
           );
         }
-        setEditingIds(null);
+        // editingIds gets re-synced by the auto-sync effect after refetch.
       } else {
         // ---- CREATE MODE: POST each lift as a new row ----
         for (let i = 0; i < values.lifts.length; i++) {
@@ -439,8 +466,8 @@ export default function MmcAssessmentPage() {
             { method: "POST", headers, body: JSON.stringify(body) },
           );
           if (!res.ok) {
-            const detail = await res.text().catch(() => "");
-            throw new Error(`API error ${res.status}: ${detail.slice(0, 200)}`);
+            const parsed = await parseApiError(res);
+            throw new Error(parsed.message);
           }
           saved.push(await res.json());
         }
@@ -571,11 +598,7 @@ export default function MmcAssessmentPage() {
             value={selectedPersonaId}
             onChange={(e) => {
               setSelectedPersonaId(e.target.value);
-              // Switching persona exits edit mode.
-              if (editingIds) {
-                setEditingIds(null);
-                setEditFormKey((k) => k + 1);
-              }
+              setFinalizeMessage(null);
             }}
             className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
           >
@@ -616,8 +639,8 @@ export default function MmcAssessmentPage() {
       {editingIds !== null && (
         <div className="flex items-center justify-between rounded-md border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-900">
           <span>
-            Stai modificando una valutazione esistente. Le modifiche
-            sovrascriveranno i dati precedenti.
+            Valutazione esistente caricata: il form mostra i dati già salvati
+            nel DVR. Le modifiche sovrascriveranno i dati precedenti.
           </span>
           <Button
             type="button"
@@ -627,7 +650,7 @@ export default function MmcAssessmentPage() {
             className="text-blue-700 hover:text-blue-900"
           >
             <X className="mr-1 h-4 w-4" />
-            Annulla modifica
+            Annulla modifiche
           </Button>
         </div>
       )}

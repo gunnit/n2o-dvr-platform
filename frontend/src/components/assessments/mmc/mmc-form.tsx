@@ -172,7 +172,8 @@ const liftSchema = z.object({
   durata: z.enum(["breve", "media", "lunga"]),
   peso_reale: z
     .number({ message: "Il peso deve essere > 0 kg" })
-    .positive("Il peso deve essere > 0 kg"),
+    .positive("Il peso deve essere > 0 kg")
+    .max(200, "Valore consentito: 0-200 kg"),
 });
 
 export const mmcFormSchema = z.object({

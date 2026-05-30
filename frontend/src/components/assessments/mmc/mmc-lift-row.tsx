@@ -25,6 +25,57 @@ function FieldError({ message }: { message?: string }) {
   return <p className="text-[11px] text-rose-600">{message}</p>;
 }
 
+interface PesoFieldProps {
+  index: number;
+  control: Control<MmcFormValues>;
+  register: UseFormRegister<MmcFormValues>;
+  hasError: boolean;
+  errorMessage?: string;
+}
+
+// Lifted out so we can subscribe to the live peso value (useWatch) and show a
+// "did you really mean this?" warning. The cap is 200kg to catch typos like
+// 1010 while still allowing legitimate heavy lifts (drums, motors). The legal
+// reference points (15kg women / 25kg adult men under D.Lgs. 81/2008) inform
+// the warning thresholds — these are *advisory*, the IR badge does the real
+// risk classification.
+function PesoField({ index, control, register, hasError, errorMessage }: PesoFieldProps) {
+  const peso = useWatch({ control, name: `lifts.${index}.peso_reale` });
+  const numericPeso = typeof peso === "number" && isFinite(peso) ? peso : 0;
+  const warning =
+    numericPeso > 100
+      ? "Peso molto elevato: verifica di non aver digitato uno zero in più."
+      : numericPeso > 50
+      ? "Peso elevato: doppio controllo del valore inserito."
+      : numericPeso > 25
+      ? "Sopra il limite di legge per uomini adulti (25 kg)."
+      : null;
+
+  return (
+    <div className="grid gap-1.5">
+      <Label htmlFor={`lift-${index}-peso_reale`} className="text-xs">
+        Peso sollevato (kg)
+      </Label>
+      <Input
+        id={`lift-${index}-peso_reale`}
+        type="number"
+        inputMode="decimal"
+        step="0.1"
+        min={0}
+        max={200}
+        className={cn(hasError && "border-rose-500")}
+        {...register(`lifts.${index}.peso_reale` as const, { valueAsNumber: true })}
+      />
+      <FieldError message={errorMessage} />
+      {!errorMessage && warning && (
+        <p className="text-[11px] text-amber-700" role="alert">
+          ⚠ {warning}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function MmcLiftRow({
   index,
   control,
@@ -79,21 +130,14 @@ export function MmcLiftRow({
           />
         </div>
 
-        <div className="grid gap-1.5">
-          <Label htmlFor={`lift-${index}-peso_reale`} className="text-xs">
-            Peso sollevato (kg)
-          </Label>
-          <Input
-            id={`lift-${index}-peso_reale`}
-            type="number"
-            inputMode="decimal"
-            step="0.1"
-            min={0}
-            className={cn(liftErrors?.peso_reale && "border-rose-500")}
-            {...register(`lifts.${index}.peso_reale` as const, { valueAsNumber: true })}
-          />
-          <FieldError message={liftErrors?.peso_reale?.message} />
-        </div>
+        <PesoField
+          index={index}
+          control={control}
+          register={register}
+          hasError={!!liftErrors?.peso_reale}
+          errorMessage={liftErrors?.peso_reale?.message}
+        />
+
 
         <div className="grid gap-1.5">
           <Label htmlFor={`lift-${index}-altezza`} className="text-xs">

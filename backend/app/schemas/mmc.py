@@ -23,7 +23,10 @@ class MmcValutazioneBase(BaseModel):
     ambiente_id: uuid.UUID | None = None
 
     compito: str = Field(..., min_length=1, max_length=500)
-    peso_kg: float = Field(..., gt=0, le=100)
+    # Cap raised from 100 to 200 — operators do record extreme lifts (drums,
+    # motors) precisely so the resulting IR can flag them as ROSSA. 200 still
+    # catches typos like "1010".
+    peso_kg: float = Field(..., gt=0, le=200)
     sesso: Literal["M", "F"] = "M"
     fascia_eta: str = ">18"
 
@@ -36,8 +39,9 @@ class MmcValutazioneBase(BaseModel):
     frequenza_atti_min: float | None = Field(None, ge=0, le=30)
     durata_min: int | None = Field(None, ge=0, le=480)
 
-    # Optional pre-computed multipliers (used as fallback when inputs absent)
-    cp: float | None = Field(None, gt=0, le=30)
+    # Optional pre-computed multipliers (used as fallback when inputs absent).
+    # CP cap aligned with POS (le=40) to cover NIOSH overrides without surprising 422s.
+    cp: float | None = Field(None, gt=0, le=40)
     fattore_a: float | None = Field(None, ge=0, le=1)
     fattore_b: float | None = Field(None, ge=0, le=1)
     fattore_c: float | None = Field(None, ge=0, le=1)
@@ -56,8 +60,8 @@ class MmcValutazioneCreate(MmcValutazioneBase):
 class MmcValutazioneUpdate(BaseModel):
     persona_id: uuid.UUID | None = None
     ambiente_id: uuid.UUID | None = None
-    compito: str | None = None
-    peso_kg: float | None = Field(None, gt=0, le=100)
+    compito: str | None = Field(None, min_length=1, max_length=500)
+    peso_kg: float | None = Field(None, gt=0, le=200)
     sesso: Literal["M", "F"] | None = None
     fascia_eta: str | None = None
     altezza_cm: int | None = Field(None, ge=0, le=200)

@@ -159,6 +159,8 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
                 <Input
                   type="number"
                   step="0.1"
+                  min={0}
+                  max={200}
                   {...register(`${base}.niosh.peso_sollevato` as const, {
                     valueAsNumber: true,
                   })}
@@ -169,6 +171,8 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
                 <Input
                   type="number"
                   step="0.1"
+                  min={0}
+                  max={40}
                   {...register(`${base}.niosh.cp` as const, {
                     valueAsNumber: true,
                   })}
@@ -179,6 +183,8 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
                 <Input
                   type="number"
                   step="0.01"
+                  min={0}
+                  max={1}
                   {...register(`${base}.niosh.fattore_a` as const, {
                     valueAsNumber: true,
                   })}
@@ -189,6 +195,8 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
                 <Input
                   type="number"
                   step="0.01"
+                  min={0}
+                  max={1}
                   {...register(`${base}.niosh.fattore_b` as const, {
                     valueAsNumber: true,
                   })}
@@ -199,6 +207,8 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
                 <Input
                   type="number"
                   step="0.01"
+                  min={0}
+                  max={1}
                   {...register(`${base}.niosh.fattore_c` as const, {
                     valueAsNumber: true,
                   })}
@@ -209,6 +219,8 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
                 <Input
                   type="number"
                   step="0.01"
+                  min={0}
+                  max={1}
                   {...register(`${base}.niosh.fattore_d` as const, {
                     valueAsNumber: true,
                   })}
@@ -219,6 +231,8 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
                 <Input
                   type="number"
                   step="0.01"
+                  min={0}
+                  max={1}
                   {...register(`${base}.niosh.fattore_e` as const, {
                     valueAsNumber: true,
                   })}
@@ -229,6 +243,8 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
                 <Input
                   type="number"
                   step="0.01"
+                  min={0}
+                  max={1}
                   {...register(`${base}.niosh.fattore_f` as const, {
                     valueAsNumber: true,
                   })}
@@ -313,6 +329,8 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
                 <Input
                   type="number"
                   step="0.1"
+                  min={0}
+                  max={140}
                   {...register(`${base}.rumore.lex_8h_dba` as const, {
                     valueAsNumber: true,
                   })}
@@ -354,6 +372,7 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
               <Label className="text-xs">Note</Label>
               <Textarea
                 rows={2}
+                maxLength={500}
                 {...register(`${base}.rumore.note` as const)}
               />
             </div>
@@ -390,6 +409,8 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
                 <Input
                   type="number"
                   step="0.01"
+                  min={0}
+                  max={30}
                   {...register(`${base}.vibrazioni.a8_mano_braccio` as const, {
                     valueAsNumber: true,
                   })}
@@ -400,6 +421,8 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
                 <Input
                   type="number"
                   step="0.01"
+                  min={0}
+                  max={30}
                   {...register(`${base}.vibrazioni.a8_corpo_intero` as const, {
                     valueAsNumber: true,
                   })}
@@ -418,6 +441,7 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
               <Label className="text-xs">Note</Label>
               <Textarea
                 rows={2}
+                maxLength={500}
                 {...register(`${base}.vibrazioni.note` as const)}
               />
             </div>

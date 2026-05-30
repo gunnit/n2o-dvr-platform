@@ -1,6 +1,6 @@
 import uuid
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RischioBase(BaseModel):
@@ -10,8 +10,8 @@ class RischioBase(BaseModel):
     condizioni_esposizione: str | None = None
     rischio: str | None = None
     misure_prevenzione: str | None = None
-    probabilita_p: int | None = None
-    danno_d: int | None = None
+    probabilita_p: int | None = Field(None, ge=1, le=4)
+    danno_d: int | None = Field(None, ge=1, le=4)
 
 
 class RischioCreate(RischioBase):
@@ -24,8 +24,8 @@ class RischioUpdate(BaseModel):
     condizioni_esposizione: str | None = None
     rischio: str | None = None
     misure_prevenzione: str | None = None
-    probabilita_p: int | None = None
-    danno_d: int | None = None
+    probabilita_p: int | None = Field(None, ge=1, le=4)
+    danno_d: int | None = Field(None, ge=1, le=4)
 
 
 class RischioResponse(RischioBase):

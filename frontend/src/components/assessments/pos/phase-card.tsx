@@ -144,6 +144,7 @@ export function PhaseCard({
         <Input
           {...form.register(`${base}.nome` as const)}
           placeholder="Nome fase (es. Scavo, Getto calcestruzzo…)"
+          maxLength={200}
           className="flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0"
         />
         <Button
@@ -193,6 +194,7 @@ export function PhaseCard({
             <Textarea
               {...form.register(`${base}.descrizione` as const)}
               rows={2}
+              maxLength={4000}
               placeholder="Dettaglio della lavorazione svolta in questa fase…"
             />
           </div>

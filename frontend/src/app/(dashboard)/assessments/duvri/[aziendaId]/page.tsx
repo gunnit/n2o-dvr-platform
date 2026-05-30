@@ -628,6 +628,7 @@ export default function DuvriListPage() {
                       appaltatore_ragione_sociale: e.target.value,
                     })
                   }
+                  maxLength={255}
                 />
               </div>
               <div className="space-y-1.5">
@@ -641,6 +642,7 @@ export default function DuvriListPage() {
                       appaltatore_partita_iva: e.target.value,
                     })
                   }
+                  maxLength={32}
                 />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
@@ -654,6 +656,7 @@ export default function DuvriListPage() {
                       appaltatore_referente: e.target.value,
                     })
                   }
+                  maxLength={255}
                 />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
@@ -665,6 +668,7 @@ export default function DuvriListPage() {
                     setForm({ ...form, oggetto_appalto: e.target.value })
                   }
                   rows={3}
+                  maxLength={4000}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 />
               </div>
@@ -777,6 +781,7 @@ export default function DuvriListPage() {
                     onChange={(e) =>
                       updateInterferenza(idx, { rischio: e.target.value })
                     }
+                    maxLength={500}
                   />
                   <textarea
                     placeholder="Misure di prevenzione e protezione"
@@ -785,6 +790,7 @@ export default function DuvriListPage() {
                       updateInterferenza(idx, { misure: e.target.value })
                     }
                     rows={2}
+                    maxLength={2000}
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                   />
                   <Input

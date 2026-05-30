@@ -86,7 +86,10 @@ export function computeArea(values: {
 const RANGE_MSG = "Valore consentito: 1-3";
 
 export const areaSchema = z.object({
-  nome: z.string().min(1, "Nome area richiesto"),
+  nome: z
+    .string()
+    .min(1, "Nome area richiesto")
+    .max(255, "Nome area: massimo 255 caratteri"),
   inf: z
     .number({ message: RANGE_MSG })
     .int(RANGE_MSG)

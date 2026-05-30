@@ -374,6 +374,8 @@ export function VdtForm({
                         id={`${w.id}-post`}
                         type="text"
                         placeholder="es. PC ufficio amministrazione"
+                        maxLength={200}
+                        required
                         value={w.postazione}
                         onChange={(e) =>
                           updateWorker(w.id, "postazione", e.target.value)
