@@ -1161,16 +1161,18 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         run.bold = True
         run.font.size = Pt(18)
 
-        # Address
-        address_parts = []
-        if azienda.sede_legale_via:
-            address_parts.append(azienda.sede_legale_via)
-        if azienda.sede_legale_citta:
-            address_parts.append(azienda.sede_legale_citta)
-        if address_parts:
+        # Address (registered seat) — include CAP + provincia so the cover
+        # carries the full legal address, not just via + comune (audit F-301).
+        cover_address = self._format_address(
+            azienda.sede_legale_via,
+            azienda.sede_legale_citta,
+            getattr(azienda, "cap_legale", None),
+            getattr(azienda, "provincia_legale", None),
+        )
+        if cover_address and cover_address != "—":
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run(" — ".join(address_parts))
+            run = p.add_run(cover_address)
             run.font.size = Pt(12)
             run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
 
@@ -1571,10 +1573,14 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             ("Ragione Sociale", azienda.ragione_sociale or "—"),
             ("Datore di Lavoro", ddl_label),
             ("Sede Legale", self._format_address(
-                azienda.sede_legale_via, azienda.sede_legale_citta
+                azienda.sede_legale_via, azienda.sede_legale_citta,
+                getattr(azienda, "cap_legale", None),
+                getattr(azienda, "provincia_legale", None),
             )),
             ("Sede Operativa", self._format_address(
-                azienda.sede_operativa_via, azienda.sede_operativa_citta
+                azienda.sede_operativa_via, azienda.sede_operativa_citta,
+                getattr(azienda, "cap_operativa", None),
+                getattr(azienda, "provincia_operativa", None),
             )),
         ]
 
@@ -1592,6 +1598,9 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         _add_optional("Codice ATECO", getattr(azienda, "codice_ateco", None))
         _add_optional("Partita IVA", getattr(azienda, "partita_iva", None))
         _add_optional("Codice Fiscale", getattr(azienda, "codice_fiscale", None))
+        # REA (Repertorio Economico Amministrativo) — registry id present on
+        # the azienda row but previously never rendered (audit F-302).
+        _add_optional("REA", getattr(azienda, "rea", None))
         _add_optional("Telefono", getattr(azienda, "telefono", None))
         _add_optional("Email", getattr(azienda, "email", None))
         _add_optional("PEC", getattr(azienda, "pec", None))
@@ -2399,12 +2408,19 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         rows = [
             ("Azienda", (azienda.ragione_sociale or "—").upper()),
             ("Sede Legale", azienda.sede_legale_via or "—"),
-            ("Sede Legale", azienda.sede_legale_citta or "—"),
+            # CAP + provincia folded into the comune line (audit F-301).
+            ("Sede Legale", self._format_address(
+                None, azienda.sede_legale_citta,
+                getattr(azienda, "cap_legale", None),
+                getattr(azienda, "provincia_legale", None),
+            )),
         ]
         if azienda.sede_operativa_via or azienda.sede_operativa_citta:
             rows.append(
                 ("Sede Operativa", self._format_address(
-                    azienda.sede_operativa_via, azienda.sede_operativa_citta
+                    azienda.sede_operativa_via, azienda.sede_operativa_citta,
+                    getattr(azienda, "cap_operativa", None),
+                    getattr(azienda, "provincia_operativa", None),
                 ))
             )
         # Issue #11 (2026-05-14): when the client has more than one
@@ -2420,6 +2436,8 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             line = self._format_address(
                 sede.get("via"),
                 sede.get("citta") or sede.get("comune"),
+                sede.get("cap"),
+                sede.get("provincia"),
             )
             if line and line != "—":
                 rows.append(("Altre sedi operative", line))
@@ -3719,9 +3737,33 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             chunks.append(" ".join(buf).strip())
         return chunks or [text]
 
-    def _format_address(self, via: str | None, citta: str | None) -> str:
-        """Format an address from its components."""
-        parts = [p for p in [via, citta] if p]
+    def _format_address(
+        self,
+        via: str | None,
+        citta: str | None,
+        cap: str | None = None,
+        provincia: str | None = None,
+    ) -> str:
+        """Format an Italian postal address as ``Via, CAP Comune (PROV)``.
+
+        CAP and provincia are folded into the comune segment so the rendered
+        address matches the conventional Italian layout an inspector expects
+        (e.g. ``Via Verona 1/A, 20063 Cernusco sul Naviglio (MI)``). Every
+        component is optional — missing parts are skipped without leaving
+        stray separators or an orphan ``(PROV)``. Audit F-301 (2026-05-31):
+        previously only ``via`` + ``citta`` were emitted, silently dropping
+        the CAP and province that are present on the azienda row.
+        """
+        citta_seg = (citta or "").strip()
+        cap = (cap or "").strip()
+        provincia = (provincia or "").strip()
+        if cap and citta_seg:
+            citta_seg = f"{cap} {citta_seg}"
+        elif cap:
+            citta_seg = cap
+        if provincia and citta_seg:
+            citta_seg = f"{citta_seg} ({provincia})"
+        parts = [p for p in [(via or "").strip(), citta_seg] if p]
         return ", ".join(parts) if parts else "—"
 
     def _add_key_value_table(
