@@ -90,13 +90,46 @@ _SOFT_MARKER_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Critical anagrafica fields — these identify the company and MUST appear in
-# essentially every document (cover page / header).
-_CRITICAL_AZIENDA_KEYS = {
-    "ragione_sociale", "partita_iva", "codice_fiscale", "codice_ateco",
+# Only the company NAME must appear in *every* document. Italian safety
+# annexes are bound to the DVR dossier and are not required to repeat the full
+# registry block — they only need to identify the company. The fuller block is
+# upgraded to critical per-document (see _is_critical_for) for the master and
+# the annexes that actually carry a full anagrafica table.
+_CRITICAL_AZIENDA_KEYS = {"ragione_sociale"}
+
+# Registry fields expected on documents that carry a full company-identity table.
+_REGISTRY_KEYS = {
+    "partita_iva", "codice_fiscale", "codice_ateco",
     "sede_legale_via", "sede_legale_citta", "provincia_legale",
     "sede_operativa_via", "sede_operativa_citta",
 }
+# Documents that render a full anagrafica table (registry block critical for
+# them). Every other annex only needs the company name + its own assessment.
+_FULL_ANAGRAFICA_DOCS = {"dvr_master", "allegato_mmc", "allegato_vdt"}
+
+
+def _is_critical_for(e: "Expected", tipo: str) -> bool:
+    """Per-document criticality.
+
+    ``ragione_sociale`` (weight ``critical``) is critical everywhere. The DVR
+    master additionally must carry the full registry block + the persone roster
+    + the ambienti; the MMC/VDT annexes must carry the registry block. All other
+    fields are non-failing ``normal`` misses.
+    """
+    if e.weight == "critical":
+        return True
+    key = e.path.split(".")[-1]
+    if tipo == "dvr_master":
+        if e.kind == "anagrafica" and key in _REGISTRY_KEYS:
+            return True
+        if e.kind == "persona" and key == "nominativo":
+            return True
+        if e.kind == "ambiente" and key == "nome":
+            return True
+    elif tipo in _FULL_ANAGRAFICA_DOCS:
+        if e.kind == "anagrafica" and key in _REGISTRY_KEYS:
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -230,15 +263,16 @@ def build_inventory(client: APIClient, azienda_id: str) -> Inventory:
     inv = Inventory(azienda=az)
     harvest(az, "anagrafica", "azienda", inv.expected, _CRITICAL_AZIENDA_KEYS)
 
-    # Persone — nominativo is critical (must render on the organigramma)
+    # Persone — nominativo is critical for the DVR organigramma (upgraded
+    # per-doc in _is_critical_for); a normal-weight expectation elsewhere.
     _, persone = client.get(f"/aziende/{azienda_id}/persone")
     persone = persone if isinstance(persone, list) else []
-    harvest(persone, "persona", "persone", inv.expected, {"nominativo"})
+    harvest(persone, "persona", "persone", inv.expected)
 
-    # Ambienti — nome is critical
+    # Ambienti — nome is critical for the DVR (upgraded per-doc).
     _, ambienti = client.get(f"/aziende/{azienda_id}/ambienti")
     ambienti = ambienti if isinstance(ambienti, list) else []
-    harvest(ambienti, "ambiente", "ambienti", inv.expected, {"nome"})
+    harvest(ambienti, "ambiente", "ambienti", inv.expected)
 
     _, attrezzature = client.get(f"/aziende/{azienda_id}/attrezzature")
     attrezzature = attrezzature if isinstance(attrezzature, list) else []
@@ -501,9 +535,9 @@ def audit_document(client, azienda_id, tipo, inv: Inventory,
         if matches(e, corpus_norm):
             res.matched += 1
         else:
-            if e.weight == "critical":
+            if _is_critical_for(e, tipo):
                 res.critical_misses.append(e)
-            elif e.weight == "normal":
+            elif e.weight in ("critical", "normal"):
                 res.normal_misses.append(e)
             # info-weight misses are tolerated (small ints/floats)
 
