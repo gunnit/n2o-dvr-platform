@@ -20,6 +20,7 @@ from app.models.incendio_valutazione import IncendioValutazione
 from app.models.microclima_valutazione import MicroclimaValutazione
 from app.models.gestanti_valutazione import GestantiValutazione
 from app.models.biologico_valutazione import BiologicoValutazione
+from app.models.rischio_chimico_esposizione import RischioChimicoEsposizione
 from app.models.stress_misura_libreria import StressMisuraLibreria
 from app.models.rischio_misura_libreria import RischioMisuraLibreria
 from app.models.misura_miglioramento import MisuraMiglioramento
@@ -57,6 +58,7 @@ __all__ = [
     "MicroclimaValutazione",
     "GestantiValutazione",
     "BiologicoValutazione",
+    "RischioChimicoEsposizione",
     "StressMisuraLibreria",
     "RischioMisuraLibreria",
     "MisuraMiglioramento",
