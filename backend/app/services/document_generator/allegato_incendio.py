@@ -15,7 +15,7 @@ from app.services.document_generator.docx_utils import (
     add_kv_table,
     add_paragraph,
     page_break,
-    replace_placeholders,
+    scrub_body,
     slugify,
 )
 
@@ -72,7 +72,14 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
-            replace_placeholders(doc, {"RAGIONE SOCIALE": azienda.ragione_sociale or "", "[AZIENDA]": azienda.ragione_sociale or ""})
+            # Template normativa corrections (body only; the header/footer is
+            # the consultancy letterhead). The title page cited only the
+            # emergency-management decree and the body referenced the repealed
+            # D.M. 16.02.1982 activity list.
+            scrub_body(doc, {
+                "e D.M. 02.09.2021": "e D.M. 03/09/2021 e D.M. 02.09.2021",
+                "D.M. 16.02.1982": "D.P.R. 151/2011",
+            })
         else:
             doc = Document()
 
@@ -81,7 +88,7 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
         add_kv_table(doc, [
             ("Azienda", azienda.ragione_sociale or ""),
             ("Data valutazione", generated_at.strftime("%d/%m/%Y")),
-            ("Riferimento normativo", "D.M. 03/09/2021 (Gestione della sicurezza antincendio nei luoghi di lavoro)"),
+            ("Riferimento normativo", "D.M. 03/09/2021 (criteri di valutazione del rischio incendio) e D.M. 02/09/2021 (gestione emergenze e formazione); attivita soggette ex D.P.R. 151/2011"),
         ])
 
         add_heading(doc, "Metodologia di valutazione", level=2)

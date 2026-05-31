@@ -32,7 +32,7 @@ ALIMENTARE_DPI = [
     "Calzature antiscivolo chiuse",
 ]
 ALIMENTARE_PROTOCOLLO = (
-    "Sorveglianza sanitaria ai sensi del Reg. CE 852/2004: visita medica pre-assunzione, "
+    "Sorveglianza sanitaria ai sensi dell'art. 41 del D.Lgs. 81/2008 (Titolo X): visita medica pre-assunzione, "
     "esami coprocolturali se sintomi gastroenterici, vaccinazione antiepatite A raccomandata "
     "per gli addetti alla preparazione/somministrazione. Sospensione dal servizio alimentare "
     "in caso di sintomatologia gastroenterica fino a guarigione certificata."

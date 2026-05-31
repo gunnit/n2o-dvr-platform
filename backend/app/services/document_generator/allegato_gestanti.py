@@ -16,7 +16,7 @@ from app.services.document_generator.docx_utils import (
     add_kv_table,
     add_paragraph,
     page_break,
-    replace_placeholders,
+    scrub_n2o_legacy_donor,
     slugify,
 )
 
@@ -51,7 +51,11 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
-            replace_placeholders(doc, {"RAGIONE SOCIALE": azienda.ragione_sociale or "", "[AZIENDA]": azienda.ragione_sociale or ""})
+            # The template carries N2O's own anagrafica in the body as the
+            # assessed company (the placeholder tokens it was meant to use were
+            # never present). Scrub the donor identity to the client; the
+            # header/footer letterhead is preserved.
+            scrub_n2o_legacy_donor(doc, azienda)
         else:
             doc = Document()
 
@@ -61,11 +65,12 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
             ("Azienda", azienda.ragione_sociale or ""),
             ("Data valutazione", generated_at.strftime("%d/%m/%Y")),
             ("Lavoratrici in stato di gravidanza/allattamento notificate", str(len(gestanti))),
-            ("Riferimento normativo", "D.Lgs. 26 marzo 2001 n. 151 (Testo Unico maternita)"),
+            ("Riferimento normativo", "D.Lgs. 151/2001 (artt. 7, 11, 12; Allegati A-B-C), mod. D.Lgs. 105/2022 - Testo Unico maternita e paternita"),
         ])
 
         add_heading(doc, "Inquadramento normativo", level=2)
-        add_paragraph(doc, "Il D.Lgs. 151/2001 tutela la salute delle lavoratrici in stato di gravidanza, puerperio (fino a 7 mesi dal parto) e durante l'allattamento. Gli Allegati A, B e C individuano rispettivamente i lavori vietati, quelli vietati salvo deroga e gli agenti nocivi cui non possono essere esposte.")
+        add_paragraph(doc, "Il D.Lgs. 151/2001 (come modificato dal D.Lgs. 105/2022) tutela la salute delle lavoratrici in stato di gravidanza, puerperio (fino a 7 mesi dal parto) e durante l'allattamento. Gli Allegati A, B e C individuano rispettivamente i lavori vietati, quelli vietati salvo deroga e gli agenti nocivi cui non possono essere esposte.")
+        add_paragraph(doc, "La presente valutazione e condotta ai sensi degli artt. 7 (lavori vietati), 11 (valutazione dei rischi) e 12 (conseguenze della valutazione) del D.Lgs. 151/2001, in connessione con gli artt. 28 e 17 del D.Lgs. 81/2008.")
 
         if not gestanti:
             add_paragraph(doc, "Non sono presenti lavoratrici in stato di gravidanza o allattamento al momento della valutazione.", italic=True)

@@ -60,14 +60,18 @@ class AllegatoMicroclimaSeveroGenerator(BaseDocumentGenerator):
         micro = await load_microclima(self.db, self.azienda_id)
         ambienti_map = {a.id: a for a in data["ambienti"]}
 
-        severe_rows = [m for m in micro if (m.tipo_ambiente or "") in ("severo_caldo", "severo_freddo")]
+        # PHS (UNI EN ISO 7933) models heat strain only — cold-severe rows must
+        # NOT be scored with it. Render heat here; flag cold for a separate
+        # ISO 11079 (IREQ/WCI) assessment.
+        severe_rows = [m for m in micro if (m.tipo_ambiente or "") == "severo_caldo"]
+        cold_rows = [m for m in micro if (m.tipo_ambiente or "") == "severo_freddo"]
 
         doc = Document()
         add_heading(doc, "ALLEGATO RISCHIO MICROCLIMA - AMBIENTI SEVERI (CALDO)", level=1)
         add_kv_table(doc, [
             ("Azienda", azienda.ragione_sociale or ""),
             ("Data valutazione", generated_at.strftime("%d/%m/%Y")),
-            ("Riferimento normativo", "UNI EN ISO 7933:2004 - Determinazione dello stress termico - Indice PHS"),
+            ("Riferimento normativo", "UNI EN ISO 7933:2005 - Determinazione dello stress termico - Indice PHS"),
         ])
 
         add_heading(doc, "Metodologia", level=2)
@@ -82,7 +86,7 @@ class AllegatoMicroclimaSeveroGenerator(BaseDocumentGenerator):
 
         add_heading(doc, "Valutazione per ambiente severo", level=2)
         if not severe_rows:
-            add_paragraph(doc, "Nessun ambiente severo (caldo/freddo) registrato.", italic=True)
+            add_paragraph(doc, "Nessun ambiente a rischio da caldo severo registrato.", italic=True)
         else:
             rows = []
             for m in severe_rows:
@@ -103,6 +107,10 @@ class AllegatoMicroclimaSeveroGenerator(BaseDocumentGenerator):
 
         add_heading(doc, "Misure organizzative e di protezione", level=2)
         add_paragraph(doc, "Per ambienti con stress termico severo: idratazione frequente (>= 250 ml/h), pause in zona rinfrescata ogni 45 minuti, rotazione personale, monitoraggio sintomi, formazione sul riconoscimento del colpo di calore, sorveglianza sanitaria specifica.")
+
+        if cold_rows:
+            add_heading(doc, "Ambienti a rischio da freddo severo", level=2)
+            add_paragraph(doc, f"Sono stati rilevati {len(cold_rows)} ambiente/i classificati a freddo severo. La valutazione del freddo severo richiede gli indici IREQ (isolamento termico richiesto) e WCI (wind chill index) secondo la norma UNI EN ISO 11079 e non e riconducibile al modello PHS, specifico per lo stress da caldo, adottato nel presente allegato; tali ambienti sono pertanto oggetto di valutazione separata.")
 
         version = await self._next_version()
         output_dir = self._get_output_dir()

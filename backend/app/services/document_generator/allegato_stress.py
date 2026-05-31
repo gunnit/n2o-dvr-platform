@@ -15,7 +15,7 @@ from app.services.document_generator.docx_utils import (
     add_kv_table,
     add_paragraph,
     page_break,
-    replace_placeholders,
+    scrub_n2o_legacy_donor,
     slugify,
 )
 from app.services.stress_calculator import (
@@ -41,7 +41,22 @@ class AllegatoStressGenerator(BaseDocumentGenerator):
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
-            replace_placeholders(doc, {"RAGIONE SOCIALE": azienda.ragione_sociale or "", "[AZIENDA]": azienda.ragione_sociale or ""})
+            # The template was authored from a real N2O self-assessment: its
+            # body carries N2O's anagrafica, DdL declaration and a consultancy
+            # self-description as the *assessed* company. Scrub the donor
+            # identity to the client and drop the donor-only prose (the generator
+            # appends the client's own anagrafica + assessment + sottoscrizione
+            # below). Header/footer letterhead is intentionally preserved.
+            scrub_n2o_legacy_donor(
+                doc,
+                azienda,
+                drop_paragraph_markers=[
+                    "offre un servizio di consulenza",
+                    "La sede operativa di",
+                    "svolge la sua attività",
+                    "L'immobile è inserito",
+                ],
+            )
         else:
             doc = Document()
 

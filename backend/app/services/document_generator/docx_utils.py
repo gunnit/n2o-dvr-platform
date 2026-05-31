@@ -186,6 +186,110 @@ def replace_placeholders(doc: Document, replacements: dict[str, str]) -> None:
                 replace_in_paragraph(p, replacements)
 
 
+def scrub_body(
+    doc: Document,
+    replacements: dict[str, str],
+    *,
+    drop_paragraph_markers: Iterable[str] = (),
+) -> int:
+    """Body-only scrub for legacy templates built from a real completed client
+    document that still carry that *origin* company's identity in the body.
+
+    Several attachment templates (Stress, Gestanti, …) were authored by filling
+    a real assessment, so the donor company's name/address/declaration print as
+    the *assessed* subject. The page header/footer carries the consultancy's own
+    letterhead (intentional branding) — this scrub therefore touches ONLY the
+    body (``doc.paragraphs`` + table cells), never ``section.header/footer``.
+
+    - ``drop_paragraph_markers``: body paragraphs whose text contains any of
+      these substrings (case-insensitive) are removed entirely — use for donor
+      free-prose (e.g. a company self-description) that can't be safely
+      string-substituted to the client.
+    - ``replacements``: case-insensitive literal swaps applied to surviving body
+      paragraphs + table cells — use for structured donor identity → client data.
+
+    Returns the number of paragraphs dropped (for logging/verification).
+    """
+    dropped = 0
+    if drop_paragraph_markers:
+        markers = [m.lower() for m in drop_paragraph_markers]
+        for p in list(doc.paragraphs):
+            low = (p.text or "").lower()
+            if any(m in low for m in markers):
+                p._p.getparent().remove(p._p)
+                dropped += 1
+
+    compiled = [
+        (re.compile(re.escape(k), re.IGNORECASE), str(v)) for k, v in replacements.items()
+    ]
+
+    def _scrub(paragraph) -> None:
+        text = paragraph.text
+        if not text:
+            return
+        new = text
+        for rx, val in compiled:
+            new = rx.sub(lambda _m, _v=val: _v, new)
+        if new != text:
+            if paragraph.runs:
+                paragraph.runs[0].text = new
+                for run in paragraph.runs[1:]:
+                    run.text = ""
+            else:
+                paragraph.add_run(new)
+
+    for p in doc.paragraphs:
+        _scrub(p)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    _scrub(p)
+    return dropped
+
+
+def scrub_n2o_legacy_donor(
+    doc: Document, azienda, *, drop_paragraph_markers: Iterable[str] = ()
+) -> int:
+    """Body-only scrub of the N2O origin-company identity baked into the legacy
+    attachment templates (Stress, Gestanti) that were authored from a real N2O
+    self-assessment. Swaps the donor's name / declarant / seat addresses for the
+    client's, leaving the consultancy letterhead (header/footer) intact.
+
+    The donor constants below are the literal strings found in those two
+    templates (verified 2026-05-31). ``drop_paragraph_markers`` is forwarded to
+    :func:`scrub_body` for donor free-prose that can't be string-substituted.
+    """
+    rs = azienda.ragione_sociale or ""
+    legale = format_comune(
+        getattr(azienda, "cap_legale", None),
+        getattr(azienda, "sede_legale_citta", None),
+        getattr(azienda, "provincia_legale", None),
+    )
+    oper = format_comune(
+        getattr(azienda, "cap_operativa", None),
+        getattr(azienda, "sede_operativa_citta", None),
+        getattr(azienda, "provincia_operativa", None),
+    )
+    legale = "" if legale == "—" else legale
+    oper = "" if oper == "—" else oper
+    via_legale = getattr(azienda, "sede_legale_via", None) or ""
+    via_oper = getattr(azienda, "sede_operativa_via", None) or via_legale
+    return scrub_body(
+        doc,
+        {
+            "N2O SRL": rs,
+            "N2O S.R.L.": rs,
+            "CIARAMITARO AMALIA": "",
+            "VIA DEI CHIOSI 4": via_legale,
+            "VIA MONZA 107/30": via_oper,
+            "GORGONZOLA (MI)": legale,
+            "GESSATE (MI)": oper,
+        },
+        drop_paragraph_markers=drop_paragraph_markers,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Simple heading/paragraph helpers
 # ---------------------------------------------------------------------------

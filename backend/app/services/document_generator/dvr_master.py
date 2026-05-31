@@ -405,7 +405,7 @@ _FORMAZIONE_BY_FAMILY: dict[str, tuple[str, str]] = {
     ),
     "ufficio_vdt": (
         "8 ore (rischio medio)",
-        "Esposizione a videoterminali (VDT) ai sensi dell'art. 173, "
+        "Esposizione a videoterminali (VDT) ai sensi degli artt. 173-176, "
         "ergonomia della postazione (Allegato XXXIV), illuminazione, "
         "stress correlato all'uso del PC, microclima.",
     ),
@@ -678,7 +678,8 @@ _METODOLOGIA_INTRO_2 = (
     "Probabilita di accadimento dell'evento dannoso (scala 1-4) e D il Danno "
     "atteso per il lavoratore esposto (scala 1-4). L'indice risultante, "
     "compreso nell'intervallo 3-12, e associato a un livello di rischio e a "
-    "una relativa priorita di intervento."
+    "una relativa priorita di intervento. L'impianto metodologico e coerente "
+    "con i principi di valutazione del rischio della norma UNI EN ISO 14121-1."
 )
 
 _RISK_LEVEL_TABLE_ROWS = [
@@ -2925,7 +2926,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 "Formazione aggiuntiva",
                 "8 ore",
                 "Soggetti del SPP, vigilanza sull'applicazione delle misure",
-                "Aggiornamento biennale (DL 146/2021)",
+                "Aggiornamento periodico (Accordo Stato-Regioni; obblighi del preposto rafforzati dal D.L. 146/2021 conv. L. 215/2021)",
             ])
         if any(p.ruolo_primo_soccorso for p in persone):
             rows.append([

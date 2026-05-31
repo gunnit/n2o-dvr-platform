@@ -17,6 +17,7 @@ from app.services.document_generator.docx_utils import (
     format_sede,
     page_break,
     replace_placeholders,
+    scrub_body,
     slugify,
 )
 
@@ -34,6 +35,9 @@ class DuvriGenerator(BaseDocumentGenerator):
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
             replace_placeholders(doc, {"RAGIONE SOCIALE": azienda.ragione_sociale or "", "[AZIENDA]": azienda.ragione_sociale or ""})
+            # Blank the sample dates left in the template body; the generator
+            # supplies the real appalto/sottoscrizione dates below.
+            scrub_body(doc, {"01.11.2025": "__/__/____", "15/01/2026": "__/__/____"})
         else:
             doc = Document()
 
@@ -44,11 +48,12 @@ class DuvriGenerator(BaseDocumentGenerator):
             ("Sede", format_sede(azienda, "legale")),
             ("P.IVA committente", azienda.partita_iva or ""),
             ("Data emissione", generated_at.strftime("%d/%m/%Y")),
-            ("Riferimento normativo", "Art. 26 D.Lgs. 81/2008"),
+            ("Riferimento normativo", "Art. 26 D.Lgs. 81/2008 e D.Lgs. 106/2009"),
         ])
 
         add_heading(doc, "Oggetto del documento", level=2)
         add_paragraph(doc, "Il presente DUVRI individua le misure di prevenzione e protezione necessarie ad eliminare o ridurre al minimo i rischi derivanti dalle interferenze tra le attivita del committente e quelle dell'impresa appaltatrice.")
+        add_paragraph(doc, "Ai sensi dell'art. 26 comma 3-bis del D.Lgs. 81/2008 (introdotto dal D.Lgs. 106/2009), l'obbligo di redazione del DUVRI non si applica ai servizi di natura intellettuale, alle mere forniture di materiali o attrezzature, nonche ai lavori o servizi la cui durata non superi i cinque uomini-giorno, salvo che comportino rischi derivanti da agenti cancerogeni, biologici, atmosfere esplosive o dai rischi particolari di cui all'Allegato XI.")
 
         if not duvri_rows:
             add_paragraph(doc, "Non risultano appalti attivi al momento della valutazione.", italic=True)

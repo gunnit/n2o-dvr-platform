@@ -43,11 +43,11 @@ async def build_biologico_document(
         ("Sede", format_sede(azienda, "legale")),
         ("Data valutazione", generated_at.strftime("%d/%m/%Y")),
         ("Settore di riferimento", settore_key.capitalize()),
-        ("Riferimento normativo", "D.Lgs. 81/2008 Titolo X - Esposizione ad agenti biologici"),
+        ("Riferimento normativo", "D.Lgs. 81/2008 Titolo X (artt. 266-286) e Allegati XLIV-XLVI - Esposizione ad agenti biologici"),
     ])
 
     add_heading(doc, "Inquadramento", level=2)
-    add_paragraph(doc, "La valutazione segue il Titolo X del D.Lgs. 81/2008 e classifica gli agenti biologici nei gruppi da 1 a 4 dell'Allegato XLVI in base a patogenicita, contagiosita e disponibilita di terapia/profilassi.")
+    add_paragraph(doc, "La valutazione segue il Titolo X (artt. 266-286) del D.Lgs. 81/2008 e classifica gli agenti biologici nei gruppi da 1 a 4 dell'Allegato XLVI in base a patogenicita, contagiosita e disponibilita di terapia/profilassi; le misure di contenimento e la segnaletica di rischio biologico sono definite agli Allegati XLIV e XLV.")
 
     add_heading(doc, "Agenti biologici identificati", level=2)
     agenti = (row.agenti_identificati if row and row.agenti_identificati else None) or agenti_default
