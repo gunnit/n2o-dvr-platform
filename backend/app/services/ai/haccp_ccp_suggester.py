@@ -138,5 +138,5 @@ async def suggest_ccp_details(
         prompt,
         schema=HaccpCcpAiSuggestion,
         system=SYSTEM_PROMPT,
-        reasoning_effort="minimal",
+        reasoning_effort="low",
     )

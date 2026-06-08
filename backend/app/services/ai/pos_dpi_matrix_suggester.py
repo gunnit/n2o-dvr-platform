@@ -172,7 +172,7 @@ async def suggest_dpi_matrix(
         prompt=prompt,
         schema=DpiMatrixAiSuggestion,
         system=SYSTEM_PROMPT,
-        reasoning_effort="minimal",
+        reasoning_effort="low",
     )
 
     matrix: dict[str, dict[str, list[str]]] = {}

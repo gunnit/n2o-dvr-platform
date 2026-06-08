@@ -229,11 +229,11 @@ obj: MySchema = resp.output_parsed
 
 ### Reasoning effort — the silent budget killer
 
-`reasoning.effort` valid values vary by model — confirmed against the live API on 2026-04-28:
-- `gpt-5`, `gpt-5.4-mini`: `minimal | low | medium | high`
-- `gpt-5.4-nano`, `gpt-5.5`: `none | low | medium | high | xhigh` (no `minimal`; passing it returns 400 invalid_request_error)
+`reasoning.effort` valid values vary by model — re-confirmed against the live API on 2026-06-08:
+- `gpt-5`: `minimal | low | medium | high`
+- `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.5`: `none | low | medium | high | xhigh` (no `minimal`; passing it returns 400 invalid_request_error)
 
-The "lightest tier" is `minimal` on the older/full-size models and `none` on nano + 5.5. The helpers in `backend/app/services/ai/client.py` accept the `minimal` vocabulary at the call site and translate to `none` automatically for nano + 5.5 via `_normalize_effort` — keep that translation in sync if you add new models.
+⚠️ `gpt-5.4-mini` **used to** accept `minimal` but no longer does — it moved to the `none` vocab. Don't pass `reasoning_effort="minimal"` with `gpt-5.4-mini` (= `OPENAI_MODEL_MEASURES`); use `"low"` for the lightest practical tier (what `pos_phase_suggester.py` does), or `"none"` if you truly want zero reasoning. The "lightest tier" is `minimal` only on full-size `gpt-5`, and `none` on 5.4-mini / nano / 5.5. The helpers in `backend/app/services/ai/client.py` accept the `minimal` vocabulary at the call site and `_normalize_effort` translates it to `none` for all none-vocab models (5.4-mini, nano, 5.5) — keep that translation in sync if you add new models.
 
 Reasoning tokens count against `max_output_tokens` **before** any visible output is produced. With a tight budget and default effort, `output_text` will come back empty. For boilerplate generation always pass the lightest tier. For SDS extraction `medium` is the right default; bump to `high` only for ambiguous documents.
 

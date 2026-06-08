@@ -50,17 +50,21 @@ def get_client() -> AsyncOpenAI:
 def _normalize_effort(model_name: str, effort: str) -> str:
     """Map reasoning-effort values across gpt-5.x generations.
 
-    Supported `reasoning.effort` values vary by model. As of April 2026:
-      - gpt-5, gpt-5.4-mini: `minimal | low | medium | high`
-      - gpt-5.4-nano, gpt-5.5: `none | low | medium | high | xhigh`
-        (the lowest level is named `none`, and `minimal` is rejected with
-        a 400 invalid_request_error)
+    Supported `reasoning.effort` values vary by model. Confirmed against the
+    live API on 2026-06-08:
+      - gpt-5: `minimal | low | medium | high`
+      - gpt-5.4-mini, gpt-5.4-nano, gpt-5.5: `none | low | medium | high | xhigh`
+        (the lowest level is named `none`; `minimal` is rejected with a 400
+        invalid_request_error — gpt-5.4-mini moved to this vocab, it used to
+        accept `minimal`).
 
     Callers pass the `minimal` vocabulary by default and we translate at
     call time so env-driven model bumps don't break.
     """
     uses_none_vocab = (
-        model_name.startswith("gpt-5.5") or "nano" in model_name
+        model_name.startswith("gpt-5.5")
+        or "nano" in model_name
+        or "5.4-mini" in model_name
     )
     if effort == "minimal" and uses_none_vocab:
         return "none"
