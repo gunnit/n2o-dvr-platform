@@ -157,12 +157,31 @@ export function PericoliPanel({
   const loadInitial = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+    // Retry the reads a few times before surfacing an error. The API runs on
+    // a basic-256mb Render instance that cold-starts after idle, so the first
+    // GET when the operator opens a risk detail intermittently fails and a
+    // manual collapse/re-expand "magically fixes it". Auto-retry with backoff
+    // removes that manual workaround. Feedback #68 (2026-06-08).
+    const fetchWithRetry = async <T,>(url: string, attempts = 3): Promise<T> => {
+      let lastErr: unknown;
+      for (let i = 0; i < attempts; i++) {
+        try {
+          return await apiFetch<T>(url);
+        } catch (err) {
+          lastErr = err;
+          if (i < attempts - 1) {
+            await new Promise((r) => setTimeout(r, 400 * 2 ** i));
+          }
+        }
+      }
+      throw lastErr;
+    };
     try {
       const [sugg, existing] = await Promise.all([
-        apiFetch<PericoloSuggestionResponse>(
+        fetchWithRetry<PericoloSuggestionResponse>(
           `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/pericoli-suggeriti?categoria=${encodeURIComponent(categoriaLong)}`,
         ),
-        apiFetch<PericoloValutazione[]>(
+        fetchWithRetry<PericoloValutazione[]>(
           `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/rischi/${rischioId}/pericoli`,
         ),
       ]);
