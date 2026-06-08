@@ -67,8 +67,6 @@ class DuvriGenerator(BaseDocumentGenerator):
                 ("Oggetto appalto", d.oggetto_appalto or ""),
                 ("Data inizio", d.data_inizio.strftime("%d/%m/%Y") if d.data_inizio else "—"),
                 ("Data fine", d.data_fine.strftime("%d/%m/%Y") if d.data_fine else "—"),
-                ("Importo appalto (EUR)", f"{float(d.importo_appalto):,.2f}" if d.importo_appalto else "—"),
-                ("Costi della sicurezza (EUR)", f"{float(d.costi_sicurezza):,.2f}" if d.costi_sicurezza else "—"),
             ])
 
             attrezz = d.attrezzature_appaltatore or []

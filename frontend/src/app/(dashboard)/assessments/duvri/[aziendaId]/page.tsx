@@ -101,11 +101,9 @@ interface DuvriResponse {
   oggetto_appalto: string;
   data_inizio: string | null;
   data_fine: string | null;
-  importo_appalto: number | null;
   interferenze: InterferenzaItem[];
   attrezzature_appaltatore: AppaltatoreAttrezzatura[];
   interferenze_decisioni: InterferenzaDecisione[];
-  costi_sicurezza: number | null;
   note: string | null;
   created_at: string;
   updated_at: string;

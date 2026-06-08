@@ -493,7 +493,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                   return (
                     <TableRow key={row.id} className="align-top">
                       {/* Priorità */}
-                      <TableCell className="py-3">
+                      <TableCell className="py-3 whitespace-normal">
                         {isEditing ? (
                           <select
                             value={editDraft.priorita}
@@ -518,7 +518,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                       </TableCell>
 
                       {/* Rischio */}
-                      <TableCell className="py-3">
+                      <TableCell className="py-3 whitespace-normal">
                         {isEditing ? (
                           <Textarea
                             value={editDraft.misura}
@@ -533,14 +533,14 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                             placeholder="Descrivi il rischio identificato"
                           />
                         ) : (
-                          <p className="whitespace-pre-wrap text-[13px] leading-[1.5] text-[#061b31] line-clamp-3">
+                          <p className="whitespace-pre-wrap break-words text-[13px] leading-[1.5] text-[#061b31] line-clamp-3">
                             {row.misura}
                           </p>
                         )}
                       </TableCell>
 
                       {/* Misura di Miglioramento */}
-                      <TableCell className="py-3">
+                      <TableCell className="py-3 whitespace-normal">
                         {isEditing ? (
                           <Textarea
                             value={editDraft.misura_miglioramento}
@@ -555,7 +555,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                             placeholder="Misura di prevenzione/protezione"
                           />
                         ) : row.misura_miglioramento ? (
-                          <p className="whitespace-pre-wrap text-[13px] leading-[1.5] text-[#061b31] line-clamp-3">
+                          <p className="whitespace-pre-wrap break-words text-[13px] leading-[1.5] text-[#061b31] line-clamp-3">
                             {row.misura_miglioramento}
                           </p>
                         ) : (
@@ -564,7 +564,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                       </TableCell>
 
                       {/* Attività */}
-                      <TableCell className="py-3">
+                      <TableCell className="py-3 whitespace-normal">
                         {isEditing ? (
                           <Textarea
                             value={editDraft.procedura}
@@ -579,7 +579,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                             placeholder="Attività correlata"
                           />
                         ) : row.procedura ? (
-                          <p className="whitespace-pre-wrap text-[13px] leading-[1.5] text-[#273951] line-clamp-3">
+                          <p className="whitespace-pre-wrap break-words text-[13px] leading-[1.5] text-[#273951] line-clamp-3">
                             {row.procedura}
                           </p>
                         ) : (
@@ -588,7 +588,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                       </TableCell>
 
                       {/* Risorse */}
-                      <TableCell className="py-3">
+                      <TableCell className="py-3 whitespace-normal">
                         {isEditing ? (
                           <Input
                             value={editDraft.risorse}
@@ -602,7 +602,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                             placeholder="Risorse necessarie"
                           />
                         ) : row.risorse ? (
-                          <span className="block truncate text-[13px] text-[#273951]" title={row.risorse}>
+                          <span className="block break-words text-[13px] text-[#273951]" title={row.risorse}>
                             {row.risorse}
                           </span>
                         ) : (
@@ -611,7 +611,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                       </TableCell>
 
                       {/* Responsabile */}
-                      <TableCell className="py-3">
+                      <TableCell className="py-3 whitespace-normal">
                         {isEditing ? (
                           <Input
                             value={editDraft.responsabile}
@@ -625,7 +625,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                             placeholder="Es. RSPP"
                           />
                         ) : row.responsabile ? (
-                          <span className="block truncate text-[13px] text-[#273951]" title={row.responsabile}>
+                          <span className="block break-words text-[13px] text-[#273951]" title={row.responsabile}>
                             {row.responsabile}
                           </span>
                         ) : (
@@ -634,7 +634,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                       </TableCell>
 
                       {/* Scadenza */}
-                      <TableCell className="py-3">
+                      <TableCell className="py-3 whitespace-normal">
                         {isEditing ? (
                           <Input
                             value={editDraft.scadenza}
@@ -648,7 +648,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                             placeholder="Es. Entro 6 mesi"
                           />
                         ) : row.scadenza ? (
-                          <span className="block truncate text-[13px] text-[#273951]" title={row.scadenza}>
+                          <span className="block break-words text-[13px] text-[#273951]" title={row.scadenza}>
                             {row.scadenza}
                           </span>
                         ) : (

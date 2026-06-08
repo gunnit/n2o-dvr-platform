@@ -549,7 +549,7 @@ export function StepPersone({
           if (!open) closeModal();
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl lg:max-w-5xl">
+        <DialogContent className="max-h-[90vh] overflow-x-hidden overflow-y-auto sm:max-w-4xl lg:max-w-5xl">
           <DialogHeader>
             <DialogTitle>
               {editingIndex === null ? "Aggiungi persona" : "Modifica persona"}
@@ -562,7 +562,7 @@ export function StepPersone({
           {editing && (
             <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="space-y-2">
+                <div className="min-w-0 space-y-2">
                   <Label htmlFor="persona-nome">
                     Nominativo <span className="text-destructive">*</span>
                   </Label>
@@ -576,7 +576,7 @@ export function StepPersone({
                   />
                 </div>
 
-                <div className="space-y-2">
+                <div className="min-w-0 space-y-2">
                   <Label htmlFor="persona-cf">Codice Fiscale</Label>
                   <Input
                     id="persona-cf"
@@ -610,7 +610,7 @@ export function StepPersone({
                   )}
                 </div>
 
-                <div className="space-y-2">
+                <div className="min-w-0 space-y-2">
                   <Label htmlFor="persona-mansione">Mansione</Label>
                   <Input
                     id="persona-mansione"
@@ -622,7 +622,7 @@ export function StepPersone({
                   />
                 </div>
 
-                <div className="space-y-2">
+                <div className="min-w-0 space-y-2">
                   <Label htmlFor="persona-contratto">
                     Tipologia Contrattuale
                   </Label>
@@ -645,7 +645,7 @@ export function StepPersone({
                   </select>
                 </div>
 
-                <div className="space-y-2">
+                <div className="min-w-0 space-y-2">
                   <Label htmlFor="persona-sesso">Sesso</Label>
                   <select
                     id="persona-sesso"
@@ -663,7 +663,7 @@ export function StepPersone({
                   </select>
                 </div>
 
-                <div className="space-y-2">
+                <div className="min-w-0 space-y-2">
                   <Label htmlFor="persona-eta">Fascia Eta</Label>
                   <select
                     id="persona-eta"

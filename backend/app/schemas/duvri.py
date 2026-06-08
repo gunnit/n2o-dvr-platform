@@ -61,13 +61,11 @@ class DuvriBase(BaseModel):
     oggetto_appalto: str = Field(..., min_length=1, max_length=4000)
     data_inizio: date | None = None
     data_fine: date | None = None
-    importo_appalto: float | None = None
     interferenze: list[InterferenzaItem] = Field(default_factory=list)
     attrezzature_appaltatore: list[AppaltatoreAttrezzatura] = Field(
         default_factory=list
     )
     interferenze_decisioni: list[InterferenzaDecisione] = Field(default_factory=list)
-    costi_sicurezza: float | None = None
     note: str | None = None
 
 
@@ -82,11 +80,9 @@ class DuvriUpdate(BaseModel):
     oggetto_appalto: str | None = Field(None, min_length=1, max_length=4000)
     data_inizio: date | None = None
     data_fine: date | None = None
-    importo_appalto: float | None = None
     interferenze: list[InterferenzaItem] | None = None
     attrezzature_appaltatore: list[AppaltatoreAttrezzatura] | None = None
     interferenze_decisioni: list[InterferenzaDecisione] | None = None
-    costi_sicurezza: float | None = None
     note: str | None = None
 
 

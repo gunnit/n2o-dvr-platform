@@ -87,15 +87,9 @@ def _serialize(duvri: Duvri, azienda: Azienda) -> dict[str, Any]:
         "oggetto_appalto": duvri.oggetto_appalto,
         "data_inizio": duvri.data_inizio,
         "data_fine": duvri.data_fine,
-        "importo_appalto": float(duvri.importo_appalto)
-        if duvri.importo_appalto is not None
-        else None,
         "interferenze": duvri.interferenze or [],
         "attrezzature_appaltatore": duvri.attrezzature_appaltatore or [],
         "interferenze_decisioni": duvri.interferenze_decisioni or [],
-        "costi_sicurezza": float(duvri.costi_sicurezza)
-        if duvri.costi_sicurezza is not None
-        else None,
         "note": duvri.note,
         "created_at": duvri.created_at,
         "updated_at": duvri.updated_at,
