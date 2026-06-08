@@ -308,3 +308,76 @@ async def suggest_phase_details(
         rischi=result.rischi,
         dpi=result.dpi,
     )
+
+
+# --- AI DPI matrix suggestion endpoint (feedback #64/#50) ------------------
+
+
+class DpiMatrixSuggestRequest(PydanticBaseModel):
+    """Request body for AI-powered DPI matrix auto-fill.
+
+    The frontend sends the current role/phase keys (``dpi_matrix_roles`` /
+    ``dpi_matrix_phases``) so the AI suggests DPI for exactly the cells the
+    operator sees. No personal data — roles/phases only.
+    """
+
+    roles: list[str]
+    phases: list[str]
+
+
+class DpiMatrixSuggestResponse(PydanticBaseModel):
+    """AI-suggested DPI matrix, same ``{phase: {role: [codes]}}`` shape as
+    ``Pos.dpi_matrix``. The frontend merges this into empty cells only."""
+
+    matrix: dict[str, dict[str, list[str]]]
+
+
+@router.post("/meta/suggest-dpi-matrix", response_model=DpiMatrixSuggestResponse)
+async def suggest_dpi_matrix(
+    azienda_id: uuid.UUID,
+    body: DpiMatrixSuggestRequest,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+) -> DpiMatrixSuggestResponse:
+    """AI auto-fill for the POS DPI matrix (feedback #64/#50).
+
+    Given the current roles + phases, returns a suggested
+    ``{phase: {role: [dpi_codes]}}`` map. Codes are validated against
+    ``DPI_CATALOG`` server-side; the operator reviews and the frontend only
+    writes suggestions into cells that are still empty (never overwriting an
+    operator's choice, including the "non effettua" sentinel).
+    """
+    azienda = await _get_azienda(azienda_id, org_id, db)
+
+    roles = [r for r in body.roles if r and r.strip()]
+    phases = [p for p in body.phases if p and p.strip()]
+    if not roles or not phases:
+        raise HTTPException(
+            status_code=400,
+            detail="Seleziona almeno un ruolo e una fase per la compilazione AI.",
+        )
+
+    # Non-PII grounding context: ATECO + activity description only.
+    context_parts: list[str] = []
+    if azienda.codice_ateco:
+        context_parts.append(f"Codice ATECO: {azienda.codice_ateco}")
+    if azienda.attivita:
+        context_parts.append(f"Attivita': {azienda.attivita}")
+    if azienda.descrizione_attivita:
+        context_parts.append(f"Descrizione: {azienda.descrizione_attivita}")
+    azienda_context = "\n".join(context_parts) or None
+
+    from app.services.ai.pos_dpi_matrix_suggester import (
+        suggest_dpi_matrix as _suggest,
+    )
+
+    try:
+        matrix = await _suggest(
+            ruoli=roles,
+            fasi=phases,
+            azienda_context=azienda_context,
+        )
+    except AIError as exc:
+        raise HTTPException(status_code=502, detail=exc.detail) from exc
+
+    return DpiMatrixSuggestResponse(matrix=matrix)

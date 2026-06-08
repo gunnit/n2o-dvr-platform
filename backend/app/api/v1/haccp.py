@@ -19,13 +19,14 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.audit import log_audit
-from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.exceptions import AIError, BadRequestError, NotFoundError
 from app.data.haccp_activity_types import (
     get_activity_type,
     get_default_ccps,
@@ -249,4 +250,84 @@ async def regenerate_ccps(
         preserved_codici=preserved,
         strategy=body.strategy,
         tipologia_attivita=config.tipologia_attivita,
+    )
+
+
+# ---------------------------------------------------------------------------
+# AI CCP detail suggestion (feedback #66)
+# ---------------------------------------------------------------------------
+
+
+class HaccpSuggestCcpRequest(BaseModel):
+    """Body for ``POST /aziende/{id}/haccp/suggest-ccp``.
+
+    Only the CCP name is required; ``settore`` and ``attivita`` are optional
+    free-text context to sharpen the suggestion. No personal data is sent to
+    the model.
+    """
+
+    nome: str
+    settore: str | None = None
+    attivita: str | None = None
+
+
+class HaccpSuggestCcpResponse(BaseModel):
+    """AI-generated CCP detail fields — mirrors ``CcpEntry`` minus identity."""
+
+    fase: str
+    pericolo: str
+    limite_critico: str
+    monitoraggio: str
+    azione_correttiva: str
+    frequenza: str
+
+
+@router.post(
+    "/aziende/{azienda_id}/haccp/suggest-ccp",
+    response_model=HaccpSuggestCcpResponse,
+)
+async def suggest_ccp(
+    azienda_id: uuid.UUID,
+    body: HaccpSuggestCcpRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate AI suggestions for a CCP's detail fields from its name.
+
+    Given a CCP name (e.g. "Cottura"), returns the suggested fase, pericolo,
+    limite_critico, monitoraggio, azione_correttiva and frequenza. The
+    operator reviews and edits before saving — the endpoint never persists.
+    """
+    await _get_azienda_or_404(azienda_id, user, db)
+
+    nome = (body.nome or "").strip()
+    if not nome:
+        raise BadRequestError("Nome del CCP richiesto per la generazione AI")
+
+    # Fall back to the config's activity type for context if the caller
+    # didn't pass an explicit settore.
+    settore = body.settore
+    if not settore:
+        config = await _load_config(azienda_id, db)
+        if config is not None:
+            settore = config.tipologia_attivita
+
+    from app.services.ai.haccp_ccp_suggester import suggest_ccp_details
+
+    try:
+        result = await suggest_ccp_details(
+            nome,
+            settore=settore,
+            attivita=body.attivita,
+        )
+    except AIError as exc:
+        raise HTTPException(status_code=502, detail=exc.detail) from exc
+
+    return HaccpSuggestCcpResponse(
+        fase=result.fase,
+        pericolo=result.pericolo,
+        limite_critico=result.limite_critico,
+        monitoraggio=result.monitoraggio,
+        azione_correttiva=result.azione_correttiva,
+        frequenza=result.frequenza,
     )

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { Loader2, Plus, RotateCcw, Save, X } from "lucide-react";
+import { Loader2, Plus, RotateCcw, Save, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Input } from "@/components/ui/input";
@@ -158,6 +158,7 @@ export default function PosDpiMatrixPage() {
   const [error, setError] = useState<string | null>(null);
   const [regenOpen, setRegenOpen] = useState(false);
   const [regenRunning, setRegenRunning] = useState(false);
+  const [aiRunning, setAiRunning] = useState(false);
   const [openCell, setOpenCell] = useState<{ phase: string; role: string } | null>(null);
   // Feedback #59/#60: free-text inputs for adding custom roles/phases
   // that are not in the backend catalog. Persisted into dpi_matrix_roles
@@ -397,6 +398,65 @@ export default function PosDpiMatrixPage() {
     }
   };
 
+  // Feedback #64/#50: AI auto-fill for the DPI matrix. The endpoint returns
+  // a {phase: {role: [codes]}} suggestion; we merge it into EMPTY cells only
+  // — never overwriting a cell the operator already set, including the
+  // "__non_effettua__" sentinel. After merging we persist() so it saves.
+  const suggestWithAI = async () => {
+    if (!pos) return;
+    setAiRunning(true);
+    try {
+      const { matrix: suggestion } = await apiFetch<{ matrix: DpiMatrix }>(
+        `/api/v1/aziende/${aziendaId}/pos/meta/suggest-dpi-matrix`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            roles: pos.dpi_matrix_roles,
+            phases: pos.dpi_matrix_phases,
+          }),
+        }
+      );
+
+      const nextMatrix: DpiMatrix = {};
+      let filled = 0;
+      for (const phase of pos.dpi_matrix_phases) {
+        nextMatrix[phase] = { ...(pos.dpi_matrix?.[phase] ?? {}) };
+        for (const role of pos.dpi_matrix_roles) {
+          const existing = pos.dpi_matrix?.[phase]?.[role] ?? [];
+          // An empty array is the only "untouched" state. A populated cell
+          // — DPI codes OR the non-effettua sentinel — is an operator
+          // choice and must be preserved.
+          if (existing.length > 0) continue;
+          const proposed = suggestion?.[phase]?.[role];
+          if (proposed && proposed.length > 0) {
+            nextMatrix[phase][role] = proposed;
+            filled += 1;
+          }
+        }
+      }
+
+      if (filled === 0) {
+        toast.info("Nessuna cella vuota da compilare.");
+        return;
+      }
+
+      const next: Pos = { ...pos, dpi_matrix: nextMatrix };
+      setPos(next);
+      await persist(next, nextMatrix);
+      toast.success(
+        `${filled} cell${filled === 1 ? "a" : "e"} compilat${
+          filled === 1 ? "a" : "e"
+        } con AI.`
+      );
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Compilazione AI non riuscita.";
+      toast.error(msg);
+    } finally {
+      setAiRunning(false);
+    }
+  };
+
   // --- Render ------------------------------------------------------------
   const dpiKeys = useMemo(() => (catalog ? Object.keys(catalog.dpi_catalog) : []), [catalog]);
   const hasMatrix = !!pos && pos.dpi_matrix_roles.length > 0 && pos.dpi_matrix_phases.length > 0;
@@ -620,15 +680,35 @@ export default function PosDpiMatrixPage() {
               la fase selezionata.
             </CardDescription>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setRegenOpen(true)}
-            disabled={!hasMatrix || regenRunning}
-          >
-            <RotateCcw className="mr-2 h-4 w-4" />
-            Rigenera dai default
-          </Button>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              size="sm"
+              onClick={suggestWithAI}
+              disabled={!hasMatrix || aiRunning || regenRunning}
+              title="Compila i DPI delle celle vuote con AI (gpt-5.4-mini) in base a ruolo e lavorazione. Non sovrascrive le celle gia' impostate."
+            >
+              {aiRunning ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Compilazione...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Compila con AI
+                </>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRegenOpen(true)}
+              disabled={!hasMatrix || regenRunning || aiRunning}
+            >
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Rigenera dai default
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {!hasMatrix ? (

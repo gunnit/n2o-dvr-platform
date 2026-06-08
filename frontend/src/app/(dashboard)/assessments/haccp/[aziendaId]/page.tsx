@@ -9,6 +9,7 @@ import {
   Plus,
   RefreshCcw,
   Save,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 
@@ -121,6 +122,8 @@ export default function HaccpAssessmentPage() {
   const [tipiAlimenti, setTipiAlimenti] = useState<string>(""); // comma-separated in UI
   const [ccps, setCcps] = useState<Ccp[]>([]);
   const [expandedCodice, setExpandedCodice] = useState<string | null>(null);
+  // Codice of the CCP currently being filled by the AI (drives the spinner).
+  const [aiCcpCodice, setAiCcpCodice] = useState<string | null>(null);
 
   const [dirty, setDirty] = useState(false);
   const [regenDialog, setRegenDialog] = useState<{
@@ -310,6 +313,75 @@ export default function HaccpAssessmentPage() {
   const deleteCcp = (index: number) => {
     setCcps((prev) => prev.filter((_, i) => i !== index));
     markDirty();
+  };
+
+  // Detail fields the AI fills (codice + nome stay operator-owned).
+  const AI_DETAIL_FIELDS = [
+    "fase",
+    "pericolo",
+    "limite_critico",
+    "monitoraggio",
+    "azione_correttiva",
+    "frequenza",
+  ] as const;
+
+  const generateCcpDetails = async (index: number) => {
+    const ccp = ccps[index];
+    if (!ccp) return;
+    const nome = ccp.nome.trim();
+    if (!nome) {
+      setError("Inserisci il nome del CCP prima di generare con AI.");
+      return;
+    }
+
+    setAiCcpCodice(ccp.codice);
+    setError(null);
+    setToast(null);
+    try {
+      const resp = await apiFetch<
+        Record<(typeof AI_DETAIL_FIELDS)[number], string>
+      >(`/api/v1/aziende/${aziendaId}/haccp/suggest-ccp`, {
+        method: "POST",
+        body: JSON.stringify({ nome, settore: tipologia || null }),
+      });
+
+      // Don't silently clobber operator edits: fill empty fields, and only
+      // overwrite non-empty ones after an explicit confirm.
+      const nonEmpty = AI_DETAIL_FIELDS.filter(
+        (f) => (ccp[f] ?? "").trim() !== "",
+      );
+      let overwrite = false;
+      if (nonEmpty.length > 0) {
+        overwrite = window.confirm(
+          `Alcuni campi di "${nome}" sono gia compilati. ` +
+            `Vuoi sovrascriverli con i valori generati dall'AI? ` +
+            `Annulla per riempire solo i campi vuoti.`,
+        );
+      }
+
+      const patch: Partial<Ccp> = {};
+      for (const f of AI_DETAIL_FIELDS) {
+        const isEmpty = (ccp[f] ?? "").trim() === "";
+        if (isEmpty || overwrite) {
+          patch[f] = resp[f];
+        }
+      }
+      updateCcp(index, patch);
+      setExpandedCodice(ccp.codice);
+      setToast(
+        overwrite
+          ? `Dettagli CCP "${nome}" generati dall'AI. Rivedi prima di salvare.`
+          : `Campi vuoti di "${nome}" compilati dall'AI. Rivedi prima di salvare.`,
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Errore durante la generazione AI",
+      );
+    } finally {
+      setAiCcpCodice(null);
+    }
   };
 
   const addCustomCcp = () => {
@@ -558,6 +630,23 @@ export default function HaccpAssessmentPage() {
                         className="hidden h-8 flex-1 text-sm md:block"
                         placeholder="Limite critico"
                       />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => generateCcpDetails(idx)}
+                        disabled={
+                          aiCcpCodice !== null || ccp.nome.trim() === ""
+                        }
+                        className="flex-shrink-0"
+                        title="Genera i dettagli del CCP dal nome con l'AI"
+                      >
+                        {aiCcpCodice === ccp.codice ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin md:mr-1" />
+                        ) : (
+                          <Sparkles className="h-3.5 w-3.5 md:mr-1" />
+                        )}
+                        <span className="hidden md:inline">Genera con AI</span>
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"
