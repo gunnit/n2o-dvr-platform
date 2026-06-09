@@ -502,12 +502,25 @@ export default function DocumentsPage() {
               className="w-full max-w-md rounded-xl border-none bg-surface-low px-4 py-3 text-sm outline-none transition-all focus:ring-2 focus:ring-primary-container"
             >
               <option value="">-- Seleziona un&apos;azienda --</option>
-              {aziende.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.ragione_sociale}
-                  {a.sede_operativa_citta ? ` - ${a.sede_operativa_citta}` : ""}
-                </option>
-              ))}
+              {aziende.map((a) => {
+                // #73 — show the full ragione sociale plus the sede (street +
+                // city), preferring the sede operativa and falling back to the
+                // sede legale, so two companies with the same name stay
+                // distinguishable in the picker.
+                const sede =
+                  [a.sede_operativa_via, a.sede_operativa_citta]
+                    .filter(Boolean)
+                    .join(", ") ||
+                  [a.sede_legale_via, a.sede_legale_citta]
+                    .filter(Boolean)
+                    .join(", ");
+                return (
+                  <option key={a.id} value={a.id}>
+                    {a.ragione_sociale}
+                    {sede ? ` — ${sede}` : ""}
+                  </option>
+                );
+              })}
             </select>
           )}
         </div>

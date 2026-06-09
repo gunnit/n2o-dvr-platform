@@ -116,6 +116,19 @@ class HaccpManualeGenerator(BaseDocumentGenerator):
             else:
                 add_paragraph(doc, "CCP da definire — il piano di base prevede CCP su Ricevimento, Stoccaggio, Cottura, Raffreddamento, Conservazione. Confermare al primo audit.", italic=True)
 
+            # Feedback #65 — equipment list, highlighting which items are
+            # subject to HACCP control (cleaning/maintenance/temperature plan).
+            add_heading(doc, "Attrezzature e controllo HACCP", level=2)
+            attrezzature = config.attrezzature or []
+            if attrezzature:
+                rows = [[
+                    a.get("nome", ""),
+                    "Sì" if a.get("sotto_controllo_haccp") else "No",
+                ] for a in attrezzature]
+                add_data_table(doc, ["Attrezzatura", "Sottoposta a controllo HACCP"], rows)
+            else:
+                add_paragraph(doc, "Elenco attrezzature da definire — censire le attrezzature e indicare quelle sottoposte a controllo HACCP al primo audit.", italic=True)
+
         add_heading(doc, "Indice delle Procedure Operative Standard (SOP)", level=2)
         add_paragraph(doc, "Le seguenti SOP sono documentate per esteso nel corpo del manuale (D.Lgs. 193/2007, Reg. CE 852/2004 Allegato II). Il responsabile HACCP verifica che ciascuna SOP applicabile sia stata trasmessa al personale.", italic=True, size=9)
         add_data_table(doc, ["Codice", "Titolo"], [[code, title] for code, title in SOP_INDEX])

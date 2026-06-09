@@ -25,6 +25,9 @@ class HaccpConfig(Base):
     tipi_alimenti_trattati: Mapped[list] = mapped_column(JSONB, default=list)
     # CCPs (Critical Control Points) configurati per questa azienda
     ccps: Mapped[list] = mapped_column(JSONB, default=list)
+    # Feedback #65: elenco attrezzature, con flag su quelle sottoposte a
+    # controllo HACCP. Shape: [{nome: str, sotto_controllo_haccp: bool}].
+    attrezzature: Mapped[list] = mapped_column(JSONB, default=list)
     responsabile_haccp: Mapped[str | None] = mapped_column(String)
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

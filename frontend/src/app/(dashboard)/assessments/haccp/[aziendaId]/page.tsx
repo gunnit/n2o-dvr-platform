@@ -64,6 +64,11 @@ interface Ccp {
   frequenza: string;
 }
 
+interface AttrezzaturaHaccp {
+  nome: string;
+  sotto_controllo_haccp: boolean;
+}
+
 interface HaccpConfig {
   id: string;
   azienda_id: string;
@@ -73,9 +78,26 @@ interface HaccpConfig {
   responsabile_haccp: string | null;
   note: string | null;
   ccps: Ccp[];
+  attrezzature: AttrezzaturaHaccp[];
   created_at: string;
   updated_at: string;
 }
+
+// #65 — common food-service equipment offered as one-click adds. The
+// operator can still type a custom name. Defaults marked sotto controllo are
+// the ones typically on a cleaning/temperature monitoring plan.
+const ATTREZZATURE_SUGGERITE: AttrezzaturaHaccp[] = [
+  { nome: "Frigorifero", sotto_controllo_haccp: true },
+  { nome: "Congelatore / abbattitore", sotto_controllo_haccp: true },
+  { nome: "Cella frigorifera", sotto_controllo_haccp: true },
+  { nome: "Forno", sotto_controllo_haccp: true },
+  { nome: "Piano cottura / fornelli", sotto_controllo_haccp: false },
+  { nome: "Affettatrice", sotto_controllo_haccp: true },
+  { nome: "Lavastoviglie", sotto_controllo_haccp: false },
+  { nome: "Friggitrice", sotto_controllo_haccp: false },
+  { nome: "Tritacarne", sotto_controllo_haccp: true },
+  { nome: "Bagnomaria / mantenimento caldo", sotto_controllo_haccp: true },
+];
 
 interface ActivityTypeCatalogItem {
   slug: string;
@@ -121,6 +143,7 @@ export default function HaccpAssessmentPage() {
   const [responsabile, setResponsabile] = useState<string>("");
   const [tipiAlimenti, setTipiAlimenti] = useState<string>(""); // comma-separated in UI
   const [ccps, setCcps] = useState<Ccp[]>([]);
+  const [attrezzature, setAttrezzature] = useState<AttrezzaturaHaccp[]>([]);
   const [expandedCodice, setExpandedCodice] = useState<string | null>(null);
   // Codice of the CCP currently being filled by the AI (drives the spinner).
   const [aiCcpCodice, setAiCcpCodice] = useState<string | null>(null);
@@ -160,6 +183,7 @@ export default function HaccpAssessmentPage() {
         setResponsabile(cfg.responsabile_haccp ?? "");
         setTipiAlimenti((cfg.tipi_alimenti_trattati ?? []).join(", "));
         setCcps(cfg.ccps ?? []);
+        setAttrezzature(cfg.attrezzature ?? []);
         setDirty(false);
       } catch {
         // 404 = config not yet created; start blank.
@@ -168,6 +192,7 @@ export default function HaccpAssessmentPage() {
         setResponsabile("");
         setTipiAlimenti("");
         setCcps([]);
+        setAttrezzature([]);
         setDirty(false);
       }
     } catch (err) {
@@ -214,6 +239,7 @@ export default function HaccpAssessmentPage() {
           .filter(Boolean),
         note: null,
         ccps,
+        attrezzature,
       };
       const saved = await apiFetch<HaccpConfig>(
         `/api/v1/aziende/${aziendaId}/haccp/config`,
@@ -223,6 +249,7 @@ export default function HaccpAssessmentPage() {
         },
       );
       setCcps(saved.ccps ?? []);
+      setAttrezzature(saved.attrezzature ?? []);
       setTipologia(saved.tipologia_attivita ?? "");
       setDirty(false);
       setToast("Configurazione salvata");
@@ -261,6 +288,7 @@ export default function HaccpAssessmentPage() {
               // Keep the existing CCPs so the merge call can diff against
               // them — backend doesn't overwrite when we send non-empty.
               ccps,
+              attrezzature,
             }),
           },
         );
@@ -393,6 +421,40 @@ export default function HaccpAssessmentPage() {
       { ...EMPTY_CCP, codice: `CUSTOM${n}`, nome: "Nuovo CCP personalizzato" },
     ]);
     setExpandedCodice(`CUSTOM${n}`);
+    markDirty();
+  };
+
+  // -------------------------------------------------------------------------
+  // Attrezzature handlers (#65)
+  // -------------------------------------------------------------------------
+
+  const addAttrezzatura = (preset?: AttrezzaturaHaccp) => {
+    const candidate = preset ?? { nome: "", sotto_controllo_haccp: false };
+    // Skip duplicates when adding from the suggested catalog.
+    if (
+      preset &&
+      attrezzature.some(
+        (a) => a.nome.trim().toLowerCase() === preset.nome.trim().toLowerCase(),
+      )
+    ) {
+      return;
+    }
+    setAttrezzature((prev) => [...prev, candidate]);
+    markDirty();
+  };
+
+  const updateAttrezzatura = (
+    index: number,
+    patch: Partial<AttrezzaturaHaccp>,
+  ) => {
+    setAttrezzature((prev) =>
+      prev.map((a, i) => (i === index ? { ...a, ...patch } : a)),
+    );
+    markDirty();
+  };
+
+  const deleteAttrezzatura = (index: number) => {
+    setAttrezzature((prev) => prev.filter((_, i) => i !== index));
     markDirty();
   };
 
@@ -743,6 +805,128 @@ export default function HaccpAssessmentPage() {
               })}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Attrezzature card (#65) */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <CardTitle className="text-base">
+                Attrezzature e controllo HACCP
+              </CardTitle>
+              <CardDescription>
+                Censisci le attrezzature presenti e indica quali sono
+                sottoposte a controllo HACCP (pulizia, manutenzione,
+                monitoraggio temperature).
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => addAttrezzatura()}
+              className="flex-shrink-0"
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              Aggiungi attrezzatura
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Quick-add catalog */}
+          <div className="flex flex-wrap gap-1.5">
+            {ATTREZZATURE_SUGGERITE.map((sugg) => {
+              const already = attrezzature.some(
+                (a) =>
+                  a.nome.trim().toLowerCase() ===
+                  sugg.nome.trim().toLowerCase(),
+              );
+              return (
+                <button
+                  key={sugg.nome}
+                  type="button"
+                  onClick={() => addAttrezzatura(sugg)}
+                  disabled={already}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors",
+                    already
+                      ? "cursor-not-allowed border-input bg-muted text-muted-foreground"
+                      : "border-input hover:bg-muted",
+                  )}
+                >
+                  <Plus className="h-3 w-3" />
+                  {sugg.nome}
+                </button>
+              );
+            })}
+          </div>
+
+          {attrezzature.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nessuna attrezzatura. Aggiungine una dall&apos;elenco rapido
+              oppure manualmente.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {attrezzature.map((a, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-3 rounded-md border border-input p-2.5"
+                >
+                  <Input
+                    value={a.nome}
+                    onChange={(e) =>
+                      updateAttrezzatura(idx, { nome: e.target.value })
+                    }
+                    className="h-8 flex-1 text-sm"
+                    placeholder="Nome attrezzatura"
+                  />
+                  <label className="flex flex-shrink-0 cursor-pointer items-center gap-2 text-xs text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={a.sotto_controllo_haccp}
+                      onChange={(e) =>
+                        updateAttrezzatura(idx, {
+                          sotto_controllo_haccp: e.target.checked,
+                        })
+                      }
+                      className="h-4 w-4 rounded border-input accent-primary"
+                    />
+                    Sottoposta a controllo HACCP
+                  </label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => deleteAttrezzatura(idx)}
+                    aria-label={`Elimina ${a.nome || "attrezzatura"}`}
+                    className="flex-shrink-0"
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2 border-t pt-3">
+            <span
+              className={cn(
+                "text-xs",
+                dirty ? "text-amber-700" : "text-muted-foreground",
+              )}
+            >
+              {dirty ? "Modifiche non salvate" : "Tutto salvato"}
+            </span>
+            <Button onClick={handleSave} disabled={saving || !dirty} size="sm">
+              {saving ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="mr-1 h-4 w-4" />
+              )}
+              Salva
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

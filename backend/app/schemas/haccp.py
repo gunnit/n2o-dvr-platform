@@ -22,6 +22,13 @@ class CcpEntry(BaseModel):
     frequenza: str = ""
 
 
+class AttrezzaturaHaccp(BaseModel):
+    """One piece of equipment, flagged if subject to HACCP control (#65)."""
+
+    nome: str = Field(..., min_length=1)
+    sotto_controllo_haccp: bool = False
+
+
 class HaccpConfigBase(BaseModel):
     tipologia_attivita: str | None = Field(
         default=None,
@@ -35,6 +42,7 @@ class HaccpConfigBase(BaseModel):
     responsabile_haccp: str | None = None
     note: str | None = None
     ccps: list[CcpEntry] = Field(default_factory=list)
+    attrezzature: list[AttrezzaturaHaccp] = Field(default_factory=list)
 
 
 class HaccpConfigUpsert(HaccpConfigBase):

@@ -1,7 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Save, Sparkles, Target, Trash2, X } from "lucide-react";
+import {
+  Check,
+  ListPlus,
+  Pencil,
+  Plus,
+  Save,
+  Sparkles,
+  Target,
+  Trash2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -81,6 +91,87 @@ const LIVELLO_OPTIONS: { value: LivelloRischio; label: string }[] = [
   { value: "MODESTO", label: "Modesto" },
   { value: "GRAVE", label: "Grave" },
   { value: "GRAVISSIMO", label: "Gravissimo" },
+];
+
+// #72 — the "responsabile" of a misura is one of three roles in the N2O
+// workflow. Kept as a plain list so the same options drive both the inline
+// editor and the create dialog. Free-text legacy/AI values are preserved by
+// appending the current value as an extra option when it isn't one of these.
+const RESPONSABILE_OPTIONS = ["Datore di Lavoro", "RSPP", "Preposto"];
+
+// #71 — a small library of standard organisational measures N2O adds to most
+// piani di miglioramento. One click drops the row in pre-filled; the operator
+// can still edit it afterwards. `misura` is the risk/finding, the rest mirror
+// the MisuraDraft fields.
+const PREDEFINED_MISURE: {
+  label: string;
+  draft: MisuraDraft;
+}[] = [
+  {
+    label: "Nomina telematica RLS (portale INAIL)",
+    draft: {
+      misura: "Comunicazione del nominativo del RLS all'INAIL",
+      misura_miglioramento:
+        "Inviare la nomina telematica del RLS presso il portale INAIL.",
+      procedura: "",
+      risorse: "",
+      responsabile: "Datore di Lavoro",
+      scadenza: "",
+      priorita: "MODESTO",
+    },
+  },
+  {
+    label: "Formazione lavoratori (Accordo Stato-Regioni)",
+    draft: {
+      misura: "Formazione/aggiornamento dei lavoratori non completa",
+      misura_miglioramento:
+        "Erogare la formazione obbligatoria dei lavoratori ai sensi dell'Accordo Stato-Regioni 21/12/2011 e s.m.i.",
+      procedura: "",
+      risorse: "",
+      responsabile: "Datore di Lavoro",
+      scadenza: "",
+      priorita: "GRAVE",
+    },
+  },
+  {
+    label: "Nomina Medico Competente / sorveglianza sanitaria",
+    draft: {
+      misura: "Sorveglianza sanitaria non attivata",
+      misura_miglioramento:
+        "Nominare il Medico Competente e attivare la sorveglianza sanitaria (artt. 18 e 41 D.Lgs. 81/2008).",
+      procedura: "",
+      risorse: "",
+      responsabile: "Datore di Lavoro",
+      scadenza: "",
+      priorita: "GRAVE",
+    },
+  },
+  {
+    label: "Designazione addetti emergenze",
+    draft: {
+      misura: "Addetti antincendio e primo soccorso non designati/formati",
+      misura_miglioramento:
+        "Designare e formare gli addetti alla gestione delle emergenze (antincendio e primo soccorso).",
+      procedura: "",
+      risorse: "",
+      responsabile: "Datore di Lavoro",
+      scadenza: "",
+      priorita: "GRAVE",
+    },
+  },
+  {
+    label: "Riunione periodica (art. 35)",
+    draft: {
+      misura: "Riunione periodica di sicurezza non effettuata",
+      misura_miglioramento:
+        "Convocare la riunione periodica annuale ex art. 35 D.Lgs. 81/2008.",
+      procedura: "",
+      risorse: "",
+      responsabile: "Datore di Lavoro",
+      scadenza: "",
+      priorita: "MODESTO",
+    },
+  },
 ];
 
 // Color rail for the priorita cell. Mirrors LIVELLO_BAR in rischi-tab.
@@ -172,6 +263,16 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
   // disabled and surface a spinner the whole time rather than firing the
   // request twice.
   const [generatingAi, setGeneratingAi] = useState(false);
+
+  // #70 — after an inline save succeeds we flash a green "Salvato" badge on
+  // that row for ~1.8s so the operator gets a clear visual confirmation
+  // beyond the toast.
+  const [savedFlashId, setSavedFlashId] = useState<string | null>(null);
+
+  // #71 — predefined-measures picker state.
+  const [predefOpen, setPredefOpen] = useState(false);
+  const [addedPredef, setAddedPredef] = useState<Set<number>>(new Set());
+  const [addingPredef, setAddingPredef] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -287,6 +388,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
       toast.error("La misura è obbligatoria.");
       return;
     }
+    const savedId = editingId;
     setSavingEdit(true);
     const prev = rows;
     const payload = draftToPayload(editDraft);
@@ -309,6 +411,11 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
       setEditingId(null);
       setEditDraft(EMPTY_DRAFT);
       await load();
+      // #70 — green confirmation flash on the just-saved row.
+      setSavedFlashId(savedId);
+      window.setTimeout(() => {
+        setSavedFlashId((cur) => (cur === savedId ? null : cur));
+      }, 1800);
       toast.success("Misura salvata");
     } catch (err) {
       setRows(prev);
@@ -319,6 +426,33 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
       );
     } finally {
       setSavingEdit(false);
+    }
+  }
+
+  async function addPredefined(index: number) {
+    const item = PREDEFINED_MISURE[index];
+    if (!item) return;
+    setAddingPredef(index);
+    try {
+      const payload = draftToPayload(item.draft);
+      const nextOrdine =
+        rows.length === 0 ? 0 : Math.max(...rows.map((r) => r.ordine)) + 1;
+      await apiFetch<MisuraMiglioramento>(
+        `/api/v1/aziende/${aziendaId}/misure-miglioramento`,
+        {
+          method: "POST",
+          body: JSON.stringify({ ...payload, ordine: nextOrdine }),
+        },
+      );
+      await load();
+      setAddedPredef((curr) => new Set(curr).add(index));
+      toast.success("Misura predefinita aggiunta");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Errore durante il salvataggio",
+      );
+    } finally {
+      setAddingPredef(null);
     }
   }
 
@@ -402,6 +536,19 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
               type="button"
               size="sm"
               variant="outline"
+              onClick={() => {
+                setAddedPredef(new Set());
+                setPredefOpen(true);
+              }}
+              title="Aggiungi una misura organizzativa standard"
+            >
+              <ListPlus className="h-3.5 w-3.5" strokeWidth={2} />
+              Predefinite
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
               onClick={handleGenerateAi}
               disabled={generatingAi}
               title="Genera misure di miglioramento per ogni pericolo con indice ≥ 5"
@@ -474,7 +621,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                   <TableHead className="w-[10%]">Risorse</TableHead>
                   <TableHead className="w-[10%]">Responsabile</TableHead>
                   <TableHead className="w-[10%]">Scadenza</TableHead>
-                  <TableHead className="w-[80px] text-right">Azioni</TableHead>
+                  <TableHead className="w-[120px] text-right">Azioni</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -613,7 +760,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                       {/* Responsabile */}
                       <TableCell className="py-3 whitespace-normal">
                         {isEditing ? (
-                          <Input
+                          <select
                             value={editDraft.responsabile}
                             onChange={(e) =>
                               setEditDraft((d) => ({
@@ -621,9 +768,23 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                                 responsabile: e.target.value,
                               }))
                             }
-                            className="h-9"
-                            placeholder="Es. RSPP"
-                          />
+                            className="h-9 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-2 text-[13px] text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                          >
+                            <option value="">—</option>
+                            {RESPONSABILE_OPTIONS.map((o) => (
+                              <option key={o} value={o}>
+                                {o}
+                              </option>
+                            ))}
+                            {editDraft.responsabile &&
+                              !RESPONSABILE_OPTIONS.includes(
+                                editDraft.responsabile,
+                              ) && (
+                                <option value={editDraft.responsabile}>
+                                  {editDraft.responsabile}
+                                </option>
+                              )}
+                          </select>
                         ) : row.responsabile ? (
                           <span className="block break-words text-[13px] text-[#273951]" title={row.responsabile}>
                             {row.responsabile}
@@ -659,7 +820,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                       {/* Actions */}
                       <TableCell className="py-3 text-right">
                         {isEditing ? (
-                          <div className="flex justify-end gap-1">
+                          <div className="flex items-center justify-end gap-1">
                             <Button
                               type="button"
                               variant="ghost"
@@ -672,13 +833,21 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                             </Button>
                             <Button
                               type="button"
-                              size="icon-sm"
+                              size="sm"
                               onClick={handleSaveEdit}
                               disabled={savingEdit}
-                              title="Salva"
+                              title="Salva misura"
                             >
                               <Save className="h-3.5 w-3.5" strokeWidth={2} />
+                              {savingEdit ? "Salvo..." : "Salva"}
                             </Button>
+                          </div>
+                        ) : savedFlashId === row.id ? (
+                          <div className="flex justify-end">
+                            <span className="inline-flex h-7 items-center gap-1 rounded-md bg-[rgba(21,190,83,0.12)] px-2 text-[12px] font-medium text-[#108c3d]">
+                              <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+                              Salvato
+                            </span>
                           </div>
                         ) : (
                           <div className="flex justify-end gap-1">
@@ -794,7 +963,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="misura-responsabile">Responsabile</Label>
-                <Input
+                <select
                   id="misura-responsabile"
                   value={createDraft.responsabile}
                   onChange={(e) =>
@@ -803,8 +972,21 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                       responsabile: e.target.value,
                     }))
                   }
-                  placeholder="Es. RSPP"
-                />
+                  className="h-10 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-3 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                >
+                  <option value="">—</option>
+                  {RESPONSABILE_OPTIONS.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                  {createDraft.responsabile &&
+                    !RESPONSABILE_OPTIONS.includes(createDraft.responsabile) && (
+                      <option value={createDraft.responsabile}>
+                        {createDraft.responsabile}
+                      </option>
+                    )}
+                </select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="misura-scadenza">Scadenza</Label>
@@ -859,6 +1041,72 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
               disabled={creating || !createDraft.misura.trim()}
             >
               {creating ? "Salvataggio..." : "Salva misura"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* #71 — Predefined measures picker */}
+      <Dialog open={predefOpen} onOpenChange={setPredefOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Misure predefinite</DialogTitle>
+            <DialogDescription>
+              Aggiungi al piano una misura organizzativa standard. Potrai
+              modificarla dopo l&apos;inserimento.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            {PREDEFINED_MISURE.map((item, index) => {
+              const added = addedPredef.has(index);
+              return (
+                <div
+                  key={item.label}
+                  className="flex items-start justify-between gap-3 rounded-md border border-[#e5edf5] bg-[#f9fbfd] px-3 py-2.5"
+                >
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="text-[13px] font-medium text-[#061b31]">
+                      {item.label}
+                    </p>
+                    <p className="text-[12px] leading-[1.5] text-[#64748d] break-words">
+                      {item.draft.misura_miglioramento}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={added ? "outline" : undefined}
+                    onClick={() => addPredefined(index)}
+                    disabled={added || addingPredef !== null}
+                    className="flex-shrink-0"
+                  >
+                    {added ? (
+                      <>
+                        <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+                        Aggiunta
+                      </>
+                    ) : addingPredef === index ? (
+                      "Aggiungo..."
+                    ) : (
+                      <>
+                        <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+                        Aggiungi
+                      </>
+                    )}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPredefOpen(false)}
+            >
+              Chiudi
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -153,6 +153,7 @@ async def upsert_haccp_config(
             responsabile_haccp=body.responsabile_haccp,
             note=body.note,
             ccps=ccps_payload,
+            attrezzature=[a.model_dump() for a in body.attrezzature],
         )
         db.add(existing)
         audit_action = "haccp_config_created"
@@ -168,6 +169,8 @@ async def upsert_haccp_config(
         if ccps_payload:
             existing.ccps = ccps_payload
             flag_modified(existing, "ccps")
+        existing.attrezzature = [a.model_dump() for a in body.attrezzature]
+        flag_modified(existing, "attrezzature")
         flag_modified(existing, "tipi_alimenti_trattati")
         audit_action = "haccp_config_updated"
 
