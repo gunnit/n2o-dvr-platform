@@ -170,6 +170,9 @@ export default function PosDpiMatrixPage() {
   // Debounce matrix saves so clicking multiple DPI chips in a row batches
   // into one POST instead of hammering the backend.
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track mount so a debounced save that lands after unmount still completes
+  // the network write (no data loss) but skips the setState (no React warning).
+  const mountedRef = useRef(true);
 
   const persist = useCallback(
     async (next: Pos, matrixOverride: DpiMatrix | null) => {
@@ -185,7 +188,7 @@ export default function PosDpiMatrixPage() {
             }),
           }
         );
-        setPos(updated);
+        if (mountedRef.current) setPos(updated);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Salvataggio non riuscito.";
         toast.error(msg);
@@ -234,6 +237,16 @@ export default function PosDpiMatrixPage() {
     void load();
   }, [isAuthenticated, load]);
 
+  // On unmount, mark unmounted so a pending debounced save still writes to the
+  // server but skips its setState. We deliberately do NOT clearTimeout here —
+  // that would drop the last edit (the very data we're trying to persist).
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
+
   // --- Card 1 / 2: role + phase selection --------------------------------
   const toggleRole = (role: string) => {
     if (!pos) return;
@@ -245,6 +258,9 @@ export default function PosDpiMatrixPage() {
         : [...pos.dpi_matrix_roles, role],
     };
     setPos(next);
+    // Persist on toggle (debounced), not only on blur — selections were lost
+    // if the operator saved/navigated before a chip lost focus.
+    scheduleSave(next);
   };
 
   const togglePhase = (phase: string) => {
@@ -257,6 +273,7 @@ export default function PosDpiMatrixPage() {
         : [...pos.dpi_matrix_phases, phase],
     };
     setPos(next);
+    scheduleSave(next);
   };
 
   const persistSelection = () => {

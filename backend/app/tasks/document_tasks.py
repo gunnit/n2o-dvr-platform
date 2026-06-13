@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime, timezone
 
 from celery.exceptions import SoftTimeLimitExceeded
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.celery_app import celery_app
 from app.db.session import async_session_factory
@@ -145,13 +145,51 @@ async def _run_generation(document_id: uuid.UUID) -> None:
                 except OSError as rm_err:
                     logger.warning("Failed to remove partial %s: %s", output_path, rm_err)
 
+            friendly = _friendly_error_for(e)
             doc.status = "bozza"
             doc.file_path = None
             doc.file_content = None
             doc.file_name = None
-            doc.error_message = _friendly_error_for(e)
+            doc.error_message = friendly
             doc.generation_completed_at = datetime.utcnow()
-            await db.commit()
+            try:
+                await db.commit()
+            except Exception as commit_err:
+                # If the original failure broke the connection (or a
+                # SoftTimeLimit fired mid-commit), this commit re-raises and
+                # the row would be stranded in_progress forever. Retry the
+                # status reset on a fresh session so the documents page can
+                # recover (operator clicks "Genera" again).
+                logger.error(
+                    "Rollback commit failed for %s (%s) — retrying on a fresh session",
+                    document_id,
+                    commit_err,
+                )
+                try:
+                    await db.rollback()
+                except Exception:  # pragma: no cover — best effort
+                    pass
+                try:
+                    async with async_session_factory() as db2:
+                        await db2.execute(
+                            update(DocumentoGenerato)
+                            .where(DocumentoGenerato.id == document_id)
+                            .values(
+                                status="bozza",
+                                file_path=None,
+                                file_content=None,
+                                file_name=None,
+                                error_message=friendly,
+                                generation_completed_at=datetime.utcnow(),
+                            )
+                        )
+                        await db2.commit()
+                except Exception:
+                    logger.exception(
+                        "Fresh-session status recovery also failed for %s — "
+                        "row may remain in_progress",
+                        document_id,
+                    )
 
 
 # B2 fix: large docs (POS ~110 pages, HACCP ~90 pages) can take a while.

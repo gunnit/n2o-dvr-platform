@@ -590,7 +590,22 @@ export default function StressAssessmentPage() {
       const token = await getAuthToken();
 
       const raw = window.localStorage.getItem(draftKey(aziendaId, activeMansione));
-      const answers: AnswersMap = raw ? JSON.parse(raw) : {};
+      let answers: AnswersMap = {};
+      try {
+        answers = raw ? JSON.parse(raw) : {};
+      } catch {
+        answers = {};
+      }
+      // F5: never archive an empty assessment over a real one. An empty map
+      // means the checklist wasn't filled, or localStorage was blocked/
+      // corrupted (incognito, storage-full, key mismatch) — block instead of
+      // PUTting `{}` and wiping a previously-saved valutazione.
+      if (Object.keys(answers).length === 0) {
+        setFinalizeMessage(
+          "Nessuna risposta da archiviare. Compila la checklist; se i dati risultavano già inseriti, ricarica la pagina prima di confermare.",
+        );
+        return;
+      }
 
       const res = await fetch(
         `${apiUrl}/api/v1/aziende/${aziendaId}/stress/valutazione`,
@@ -701,7 +716,7 @@ export default function StressAssessmentPage() {
           </div>
           <CardDescription className="text-xs">
             Compila una checklist separata per ogni mansione. La valutazione
-            &laquo;Generale&raquo; copre l'azienda intera.
+            &laquo;Generale&raquo; copre l&apos;azienda intera.
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-4">
