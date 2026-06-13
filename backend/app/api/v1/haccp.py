@@ -2,7 +2,7 @@
 
 Endpoints:
 
-  GET  /aziende/{id}/haccp/config              — read (404 if not set up yet)
+  GET  /aziende/{id}/haccp/config              — read (200 null if not set up yet)
   PUT  /aziende/{id}/haccp/config              — upsert the config shape
   POST /aziende/{id}/haccp/config/regenerate-ccps
                                                — pre-load or merge CCPs from
@@ -97,7 +97,7 @@ async def _load_config(
 
 @router.get(
     "/aziende/{azienda_id}/haccp/config",
-    response_model=HaccpConfigResponse,
+    response_model=HaccpConfigResponse | None,
 )
 async def get_haccp_config(
     azienda_id: uuid.UUID,
@@ -106,8 +106,10 @@ async def get_haccp_config(
 ):
     await _get_azienda_or_404(azienda_id, user, db)
     config = await _load_config(azienda_id, db)
-    if config is None:
-        raise NotFoundError("Configurazione HACCP non ancora creata")
+    # No config yet → 200 with a null body, NOT 404. The wizard's first visit is
+    # an expected empty state, not an error: a 404 here both pollutes the browser
+    # console and is indistinguishable on the client from a transient cold-start
+    # 5xx — which previously let a blanked form be saved over a real config.
     return config
 
 

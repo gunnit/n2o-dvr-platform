@@ -47,20 +47,27 @@ export default function MicroclimaAssessmentPage() {
     } catch {
       /* noop */
     }
-    const res = await fetch(
-      `${apiUrl}/api/v1/aziende/${aziendaId}/microclima-valutazioni`,
-      {
-        headers: token
-          ? {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            }
-          : { "Content-Type": "application/json" },
-      },
-    );
-    if (res.ok) {
-      const rows = (await res.json()) as ServerRow[];
-      setSavedRows(rows);
+    // Wrap the fetch: callers fire this without awaiting (onSaved), so a
+    // transient network/cold-start failure here would otherwise surface as an
+    // unhandled promise rejection. On failure we keep the existing rows.
+    try {
+      const res = await fetch(
+        `${apiUrl}/api/v1/aziende/${aziendaId}/microclima-valutazioni`,
+        {
+          headers: token
+            ? {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              }
+            : { "Content-Type": "application/json" },
+        },
+      );
+      if (res.ok) {
+        const rows = (await res.json()) as ServerRow[];
+        setSavedRows(rows);
+      }
+    } catch {
+      /* keep stale rows; transient failure */
     }
   }, [aziendaId]);
 
@@ -184,8 +191,8 @@ export default function MicroclimaAssessmentPage() {
       </Tabs>
 
       <p className="text-[11px] text-muted-foreground">
-        Le bozze sono salvate in locale; premi "Salva nel fascicolo" per
-        archiviare la valutazione di un'area sul server.
+        Le bozze sono salvate in locale; premi &quot;Salva nel fascicolo&quot;
+        per archiviare la valutazione di un&apos;area sul server.
       </p>
     </div>
   );

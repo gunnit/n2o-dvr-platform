@@ -660,7 +660,10 @@ async def open_document_for_editing(
 
     # Resolve the azienda name for the Drive folder
     azienda_result = await db.execute(select(Azienda).where(Azienda.id == doc.azienda_id))
-    azienda = azienda_result.scalar_one()
+    azienda = azienda_result.scalar_one_or_none()
+    if azienda is None:
+        # Orphaned document (parent azienda deleted) — 404, not an unhandled 500.
+        raise NotFoundError("Azienda not found")
 
     from app.services.gdrive_service import (
         create_gdoc_from_docx_bytes,

@@ -168,9 +168,12 @@ export default function IncendioAssessmentPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aziendaId, apiUrl]);
 
-  // Save: delete existing rows for this azienda, then POST one row per area.
-  // Simpler than diffing — for a small list (typically 1-5 areas) the cost is
-  // negligible and the resulting state is always consistent with the form.
+  // Save: POST one row per area FIRST, then delete the previously-saved rows.
+  // The old order (delete-then-recreate) lost data if a POST failed mid-save —
+  // e.g. a cold-start/deploy 5xx after the deletes ran left zero rows. By
+  // creating all new rows before deleting any old one, a failed POST aborts
+  // before anything is destroyed. Worst case on a failed DELETE is a duplicate
+  // (recoverable), which we surface rather than silently swallow.
   const save = useCallback(async () => {
     if (!result.allComplete || result.areas.length === 0) return;
     setSaving(true);
@@ -178,15 +181,8 @@ export default function IncendioAssessmentPage() {
     try {
       const headers = await authHeaders();
 
-      // 1. Delete any previously-saved rows.
-      for (const old of existing) {
-        await fetch(
-          `${apiUrl}/api/v1/aziende/${aziendaId}/incendio-valutazioni/${old.id}`,
-          { method: "DELETE", headers },
-        );
-      }
-
-      // 2. POST one row per area from the form.
+      // 1. POST one row per area from the form. If any fails we throw before
+      //    touching the existing rows — no data loss.
       for (const area of result.areas) {
         if (
           area.inf === undefined ||
@@ -210,9 +206,23 @@ export default function IncendioAssessmentPage() {
         }
       }
 
+      // 2. New rows are safely persisted — now delete the old ones. A delete
+      //    failure can't lose data (the new rows exist); it can only leave a
+      //    stale duplicate, so we count failures and warn instead of throwing.
+      let staleLeft = 0;
+      for (const old of existing) {
+        const del = await fetch(
+          `${apiUrl}/api/v1/aziende/${aziendaId}/incendio-valutazioni/${old.id}`,
+          { method: "DELETE", headers },
+        );
+        if (!del.ok && del.status !== 204 && del.status !== 404) staleLeft += 1;
+      }
+
       const fresh = await refetchExisting();
       setSaveMessage(
-        `Valutazione salvata: ${fresh.length} area/e archiviata/e.`,
+        staleLeft > 0
+          ? `Valutazione salvata (${fresh.length} aree), ma ${staleLeft} riga/he precedente/i non è stata rimossa — ricarica e verifica eventuali duplicati.`
+          : `Valutazione salvata: ${fresh.length} area/e archiviata/e.`,
       );
       form.reset(form.getValues()); // marks RHF as pristine
       setDirty(false);
@@ -265,8 +275,8 @@ export default function IncendioAssessmentPage() {
               Valutazioni archiviate ({existing.length})
             </CardTitle>
             <CardDescription className="text-xs">
-              Modifica i valori qui sotto e premi "Salva valutazione" per
-              aggiornare il fascicolo.
+              Modifica i valori qui sotto e premi &quot;Salva valutazione&quot;
+              per aggiornare il fascicolo.
             </CardDescription>
           </CardHeader>
           <CardContent>

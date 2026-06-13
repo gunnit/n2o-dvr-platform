@@ -449,12 +449,18 @@ export default function MmcAssessmentPage() {
             saved.push(await res.json());
           }
         }
-        // If fewer lifts than before, delete the surplus rows.
+        // If fewer lifts than before, delete the surplus rows. Check the
+        // response — an unchecked DELETE that 5xx'd (cold start) left orphan
+        // rows while the UI reported success.
         for (let i = values.lifts.length; i < editingIds.length; i++) {
-          await fetch(
+          const del = await fetch(
             `${apiUrl}/api/v1/aziende/${aziendaId}/mmc/${editingIds[i]}`,
             { method: "DELETE", headers },
           );
+          if (!del.ok && del.status !== 204 && del.status !== 404) {
+            const parsed = await parseApiError(del);
+            throw new Error(parsed.message);
+          }
         }
         // editingIds gets re-synced by the auto-sync effect after refetch.
       } else {

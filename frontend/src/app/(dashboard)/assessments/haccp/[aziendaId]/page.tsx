@@ -149,6 +149,9 @@ export default function HaccpAssessmentPage() {
   const [aiCcpCodice, setAiCcpCodice] = useState<string | null>(null);
 
   const [dirty, setDirty] = useState(false);
+  // True when the initial config load failed (not "no config" — a real error).
+  // Blocks Save so a blank form can't overwrite an existing config.
+  const [loadFailed, setLoadFailed] = useState(false);
   const [regenDialog, setRegenDialog] = useState<{
     open: boolean;
     // Pending activity slug the operator picked in the dropdown — held
@@ -164,16 +167,22 @@ export default function HaccpAssessmentPage() {
     if (!aziendaId || !isAuthenticated) return;
     setLoading(true);
     setError(null);
+    setLoadFailed(false);
     try {
       const catalog = await apiFetch<{ items: ActivityTypeCatalogItem[] }>(
         "/api/v1/haccp/_meta/activity-types",
       );
       setActivityTypes(catalog.items);
 
-      try {
-        const cfg = await apiFetch<HaccpConfig>(
-          `/api/v1/aziende/${aziendaId}/haccp/config`,
-        );
+      // The endpoint now returns 200 with a null body when no config exists
+      // yet (expected first-visit empty state), and only throws on a real
+      // error (5xx/network/cold-start). We must NOT blank-and-allow-save on a
+      // real error — that previously let an empty form be PUT over a real
+      // config when the API was briefly unreachable during a deploy/cold-start.
+      const cfg = await apiFetch<HaccpConfig | null>(
+        `/api/v1/aziende/${aziendaId}/haccp/config`,
+      );
+      if (cfg) {
         setTipologia(cfg.tipologia_attivita ?? "");
         setNumeroPasti(
           cfg.numero_pasti_giorno != null
@@ -184,19 +193,21 @@ export default function HaccpAssessmentPage() {
         setTipiAlimenti((cfg.tipi_alimenti_trattati ?? []).join(", "));
         setCcps(cfg.ccps ?? []);
         setAttrezzature(cfg.attrezzature ?? []);
-        setDirty(false);
-      } catch {
-        // 404 = config not yet created; start blank.
+      } else {
+        // No config yet — start blank.
         setTipologia("");
         setNumeroPasti("");
         setResponsabile("");
         setTipiAlimenti("");
         setCcps([]);
         setAttrezzature([]);
-        setDirty(false);
       }
+      setDirty(false);
     } catch (err) {
+      // Real load failure: surface it and block Save so we can't overwrite an
+      // existing (but unread) config with a blank form.
       setError(err instanceof Error ? err.message : "Errore caricamento");
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -590,7 +601,7 @@ export default function HaccpAssessmentPage() {
             </span>
             <Button
               onClick={handleSave}
-              disabled={saving || !dirty}
+              disabled={saving || !dirty || loadFailed}
               size="sm"
             >
               {saving ? (
@@ -918,7 +929,7 @@ export default function HaccpAssessmentPage() {
             >
               {dirty ? "Modifiche non salvate" : "Tutto salvato"}
             </span>
-            <Button onClick={handleSave} disabled={saving || !dirty} size="sm">
+            <Button onClick={handleSave} disabled={saving || !dirty || loadFailed} size="sm">
               {saving ? (
                 <Loader2 className="mr-1 h-4 w-4 animate-spin" />
               ) : (
