@@ -144,7 +144,10 @@ export default function HaccpAssessmentPage() {
   const [tipiAlimenti, setTipiAlimenti] = useState<string>(""); // comma-separated in UI
   const [ccps, setCcps] = useState<Ccp[]>([]);
   const [attrezzature, setAttrezzature] = useState<AttrezzaturaHaccp[]>([]);
-  const [expandedCodice, setExpandedCodice] = useState<string | null>(null);
+  // Track the expanded CCP by row index, not by codice — the codice field is
+  // editable, so keying off it remounts the row (focus loss) and collapses it
+  // mid-edit.
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   // Codice of the CCP currently being filled by the AI (drives the spinner).
   const [aiCcpCodice, setAiCcpCodice] = useState<string | null>(null);
 
@@ -351,6 +354,8 @@ export default function HaccpAssessmentPage() {
 
   const deleteCcp = (index: number) => {
     setCcps((prev) => prev.filter((_, i) => i !== index));
+    // Indices shift after a delete — collapse rather than point at a stale row.
+    setExpandedIdx(null);
     markDirty();
   };
 
@@ -406,7 +411,7 @@ export default function HaccpAssessmentPage() {
         }
       }
       updateCcp(index, patch);
-      setExpandedCodice(ccp.codice);
+      setExpandedIdx(index);
       setToast(
         overwrite
           ? `Dettagli CCP "${nome}" generati dall'AI. Rivedi prima di salvare.`
@@ -427,11 +432,11 @@ export default function HaccpAssessmentPage() {
     const used = new Set(ccps.map((c) => c.codice));
     let n = 1;
     while (used.has(`CUSTOM${n}`)) n += 1;
+    setExpandedIdx(ccps.length); // new row is appended at the current length
     setCcps((prev) => [
       ...prev,
       { ...EMPTY_CCP, codice: `CUSTOM${n}`, nome: "Nuovo CCP personalizzato" },
     ]);
-    setExpandedCodice(`CUSTOM${n}`);
     markDirty();
   };
 
@@ -657,19 +662,17 @@ export default function HaccpAssessmentPage() {
           ) : (
             <div className="space-y-2">
               {ccps.map((ccp, idx) => {
-                const expanded = expandedCodice === ccp.codice;
+                const expanded = expandedIdx === idx;
                 const isCustom = ccp.codice.startsWith("CUSTOM");
                 return (
                   <div
-                    key={`${ccp.codice}-${idx}`}
+                    key={idx}
                     className="rounded-md border border-input"
                   >
                     <div className="flex items-center gap-3 p-3">
                       <button
                         type="button"
-                        onClick={() =>
-                          setExpandedCodice(expanded ? null : ccp.codice)
-                        }
+                        onClick={() => setExpandedIdx(expanded ? null : idx)}
                         className="flex-shrink-0 text-muted-foreground hover:text-foreground"
                         aria-label={
                           expanded ? "Chiudi dettaglio" : "Apri dettaglio"
