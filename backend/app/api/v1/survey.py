@@ -53,9 +53,20 @@ async def get_survey(
         .where(Persona.azienda_id == azienda_id)
         # US-1.4: eager-load ambienti so PersonaResponse.ambiente_ids serializes.
         .options(selectinload(Persona.ambienti))
+        # Feedback #75: the wizard loads persone from this aggregate endpoint,
+        # not the /persone list endpoint — without an explicit ORDER BY,
+        # Postgres returned heap order, which reshuffles after any UPDATE so
+        # "le persone non rimangono nell'ordine di inserimento". Mirror the
+        # list endpoint ordering (ordine assigned incrementally on create,
+        # created_at as the tiebreaker).
+        .order_by(Persona.ordine, Persona.created_at)
     )
     ambienti_result = await db.execute(
-        select(Ambiente).where(Ambiente.azienda_id == azienda_id)
+        select(Ambiente)
+        .where(Ambiente.azienda_id == azienda_id)
+        # Feedback #74: same heap-order bug for ambienti. Mirror the
+        # /ambienti list endpoint ordering for a stable insertion order.
+        .order_by(Ambiente.ordine, Ambiente.created_at)
     )
     attrezzature_result = await db.execute(
         select(Attrezzatura).where(Attrezzatura.azienda_id == azienda_id)
