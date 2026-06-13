@@ -15,11 +15,28 @@ import { apiCall } from "@/lib/api-client";
 import {
   validatePartitaIva,
   validateCodiceAteco,
+  validateCodiceFiscaleDitta,
   type AziendaFieldErrors,
 } from "@/lib/validators/azienda";
 import type { Azienda } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// Mirror aziende/new so the edit form can change forma giuridica too.
+const FORMA_GIURIDICA_OPTIONS = [
+  "SRL",
+  "SRLS",
+  "SPA",
+  "SAPA",
+  "SNC",
+  "SAS",
+  "SCARL",
+  "SCRL",
+  "Ditta Individuale",
+  "Società Semplice",
+  "Cooperativa",
+  "Consorzio",
+];
 
 interface SeismicLookupResult {
   comune_query: string;
@@ -170,13 +187,22 @@ export default function EditAziendaPage() {
 
     const pivaRaw = (formData.get("partita_iva") as string) || "";
     const atecoRaw = (formData.get("codice_ateco") as string) || "";
+    const cfRaw = (formData.get("codice_fiscale") as string) || "";
+    const formaGiuridica = (formData.get("forma_giuridica") as string) || "";
     const pivaErr = validatePartitaIva(pivaRaw);
     const atecoErr = validateCodiceAteco(atecoRaw);
+    // CF strict-validates only for ditta individuale (mirrors aziende/new).
+    const cfErr =
+      formaGiuridica === "Ditta Individuale"
+        ? validateCodiceFiscaleDitta(cfRaw)
+        : undefined;
     const nextErrors: AziendaFieldErrors = { ...fieldErrors };
     if (pivaErr) nextErrors.partita_iva = pivaErr;
     else delete nextErrors.partita_iva;
     if (atecoErr) nextErrors.codice_ateco = atecoErr;
     else delete nextErrors.codice_ateco;
+    if (cfErr) nextErrors.codice_fiscale = cfErr;
+    else delete nextErrors.codice_fiscale;
     setFieldErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) {
@@ -198,6 +224,11 @@ export default function EditAziendaPage() {
 
       const metratura = formData.get("metratura_totale") as string;
       const zonaSismica = formData.get("zona_sismica") as string;
+      const str = (k: string) => {
+        const v = ((formData.get(k) as string) || "").trim();
+        return v === "" ? null : v;
+      };
+      const upper = (k: string) => str(k)?.toUpperCase() ?? null;
 
       const res = await fetch(`${API_URL}/api/v1/aziende/${id}`, {
         method: "PUT",
@@ -207,14 +238,24 @@ export default function EditAziendaPage() {
         },
         body: JSON.stringify({
           ragione_sociale: formData.get("ragione_sociale"),
-          partita_iva: formData.get("partita_iva") || null,
-          attivita: formData.get("attivita") || null,
-          codice_ateco: formData.get("codice_ateco") || null,
-          sede_legale_via: formData.get("sede_legale_via") || null,
-          sede_legale_citta: formData.get("sede_legale_citta") || null,
-          sede_operativa_via: formData.get("sede_operativa_via") || null,
-          sede_operativa_citta: formData.get("sede_operativa_citta") || null,
-          orario_lavoro: formData.get("orario_lavoro") || null,
+          partita_iva: str("partita_iva"),
+          codice_fiscale: upper("codice_fiscale"),
+          forma_giuridica: str("forma_giuridica"),
+          attivita: str("attivita"),
+          codice_ateco: str("codice_ateco"),
+          sede_legale_via: str("sede_legale_via"),
+          sede_legale_citta: str("sede_legale_citta"),
+          cap_legale: str("cap_legale"),
+          provincia_legale: upper("provincia_legale"),
+          sede_operativa_via: str("sede_operativa_via"),
+          sede_operativa_citta: str("sede_operativa_citta"),
+          cap_operativa: str("cap_operativa"),
+          provincia_operativa: upper("provincia_operativa"),
+          pec: str("pec"),
+          email: str("email"),
+          telefono: str("telefono"),
+          sito_web: str("sito_web"),
+          orario_lavoro: str("orario_lavoro"),
           metratura_totale: metratura ? Number(metratura) : null,
           zona_sismica: zonaSismica ? Number(zonaSismica) : null,
         }),
@@ -301,6 +342,46 @@ export default function EditAziendaPage() {
                 )}
               </div>
               <div className="space-y-2">
+                <Label htmlFor="codice_fiscale">Codice Fiscale</Label>
+                <Input
+                  id="codice_fiscale"
+                  name="codice_fiscale"
+                  defaultValue={azienda.codice_fiscale ?? ""}
+                  className={
+                    fieldErrors.codice_fiscale ? "border-destructive" : ""
+                  }
+                />
+                {fieldErrors.codice_fiscale && (
+                  <p className="text-xs text-destructive">
+                    {fieldErrors.codice_fiscale}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="forma_giuridica">Forma Giuridica</Label>
+                <select
+                  id="forma_giuridica"
+                  name="forma_giuridica"
+                  defaultValue={azienda.forma_giuridica ?? ""}
+                  className="h-10 w-full rounded-md border border-[#e5edf5] bg-white px-3 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                >
+                  <option value="">Seleziona...</option>
+                  {azienda.forma_giuridica &&
+                    !FORMA_GIURIDICA_OPTIONS.includes(
+                      azienda.forma_giuridica,
+                    ) && (
+                      <option value={azienda.forma_giuridica}>
+                        {azienda.forma_giuridica}
+                      </option>
+                    )}
+                  {FORMA_GIURIDICA_OPTIONS.map((fg) => (
+                    <option key={fg} value={fg}>
+                      {fg}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="codice_ateco">Codice ATECO</Label>
                 <Input
                   id="codice_ateco"
@@ -345,6 +426,25 @@ export default function EditAziendaPage() {
                     defaultValue={azienda.sede_legale_citta ?? ""}
                   />
                 </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="provincia_legale">Prov.</Label>
+                  <Input
+                    id="provincia_legale"
+                    name="provincia_legale"
+                    defaultValue={azienda.provincia_legale ?? ""}
+                    maxLength={2}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="cap_legale">CAP</Label>
+                  <Input
+                    id="cap_legale"
+                    name="cap_legale"
+                    defaultValue={azienda.cap_legale ?? ""}
+                    inputMode="numeric"
+                    maxLength={5}
+                  />
+                </div>
               </div>
             </div>
 
@@ -366,6 +466,66 @@ export default function EditAziendaPage() {
                     id="sede_operativa_citta"
                     name="sede_operativa_citta"
                     defaultValue={azienda.sede_operativa_citta ?? ""}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="provincia_operativa">Prov.</Label>
+                  <Input
+                    id="provincia_operativa"
+                    name="provincia_operativa"
+                    defaultValue={azienda.provincia_operativa ?? ""}
+                    maxLength={2}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="cap_operativa">CAP</Label>
+                  <Input
+                    id="cap_operativa"
+                    name="cap_operativa"
+                    defaultValue={azienda.cap_operativa ?? ""}
+                    inputMode="numeric"
+                    maxLength={5}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 border-t border-[#e5edf5] pt-6">
+              <h3 className="type-eyebrow">Contatti</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="pec">PEC</Label>
+                  <Input
+                    id="pec"
+                    name="pec"
+                    type="email"
+                    defaultValue={azienda.pec ?? ""}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    defaultValue={azienda.email ?? ""}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="telefono">Telefono</Label>
+                  <Input
+                    id="telefono"
+                    name="telefono"
+                    defaultValue={azienda.telefono ?? ""}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sito_web">Sito Web</Label>
+                  <Input
+                    id="sito_web"
+                    name="sito_web"
+                    type="url"
+                    defaultValue={azienda.sito_web ?? ""}
                   />
                 </div>
               </div>

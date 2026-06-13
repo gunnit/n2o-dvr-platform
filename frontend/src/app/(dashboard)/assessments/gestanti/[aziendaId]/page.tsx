@@ -342,6 +342,12 @@ export default function GestantiAssessmentPage() {
       setSaveMessage("Seleziona prima una lavoratrice.");
       return;
     }
+    if (matchLoading) {
+      // The cross-reference decides PATCH-vs-POST; saving before it resolves
+      // would miss an existing valutazione_id and POST a duplicate row.
+      setSaveMessage("Attendi il completamento del controllo mansione…");
+      return;
+    }
     setSaving(true);
     setSaveMessage(null);
     try {
@@ -396,6 +402,7 @@ export default function GestantiAssessmentPage() {
     aziendaId,
     selectedId,
     matchData,
+    matchLoading,
     stato,
     dataNotifica,
     dataPresuntoParto,
@@ -627,7 +634,7 @@ export default function GestantiAssessmentPage() {
             <Button variant="outline" disabled={saving} onClick={() => setDirty(false)}>
               Annulla modifiche
             </Button>
-            <Button disabled={saving} onClick={handleSave}>
+            <Button disabled={saving || matchLoading} onClick={handleSave}>
               {saving ? "Salvataggio…" : "Salva valutazione"}
             </Button>
           </div>
