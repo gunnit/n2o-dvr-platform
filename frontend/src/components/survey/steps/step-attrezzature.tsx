@@ -212,6 +212,16 @@ export function StepAttrezzature({
   // creating duplicate rows on the server. One promise chain per id.
   const inFlightRef = useRef<Map<string, Promise<unknown>>>(new Map());
 
+  // Feedback #76 ("mi duplica i nomi delle attrezzature nel riepilogo"):
+  // double-clicking a suggested / AI chip fired two POSTs. The add guards
+  // below read `selectedDescriptions` (memoized derived state) which only
+  // refreshes on the *next* render, so both click events passed the stale
+  // "already selected?" check and each created a server row. This is a
+  // synchronous in-flight set keyed by `${ambienteId}::${descrizione}` — a
+  // second add for the same item is a no-op while the first create is still
+  // pending, regardless of React's render timing.
+  const addingKeysRef = useRef<Set<string>>(new Set());
+
   // Mirror current attrezzature in a ref so commit reads always see the latest
   // state. Fixes the "marcatura CE flag scompare" bug (feedback 2026-04-28 #6):
   // event handlers called updateLocal then commitAttrezzatura on the same tick,
@@ -266,6 +276,11 @@ export function StepAttrezzature({
           onChange(attrezzature);
         }
       } else {
+        // #76: collapse a double-click into a single create. The key is
+        // added synchronously so a same-tick second click bails here.
+        const addKey = `${ambienteId}::${descrizione}`;
+        if (addingKeysRef.current.has(addKey)) return;
+        addingKeysRef.current.add(addKey);
         const optimistic: Attrezzatura = {
           id: crypto.randomUUID(),
           azienda_id: aziendaId,
@@ -282,7 +297,15 @@ export function StepAttrezzature({
             marcatura_ce: false,
             verifiche_periodiche: false,
           });
-          onChange([...attrezzature, created]);
+          // Swap the optimistic row for the server row in the *latest*
+          // array (attrezzatureRef), not the captured closure — otherwise a
+          // concurrent add gets clobbered and its temp row is left orphaned,
+          // which a later edit re-POSTs as a duplicate.
+          onChange(
+            attrezzatureRef.current.map((a) =>
+              a.id === optimistic.id ? created : a,
+            ),
+          );
           setPersistedIds((prev) => {
             const next = new Set(prev);
             next.add(created.id);
@@ -292,7 +315,11 @@ export function StepAttrezzature({
           toast.error(
             e instanceof Error ? e.message : "Errore nel salvataggio"
           );
-          onChange(attrezzature);
+          onChange(
+            attrezzatureRef.current.filter((a) => a.id !== optimistic.id),
+          );
+        } finally {
+          addingKeysRef.current.delete(addKey);
         }
       }
     },
@@ -636,6 +663,11 @@ export function StepAttrezzature({
     async (suggestion: AISuggestion) => {
       if (!selectedAmbiente) return;
       const ambienteId = selectedAmbiente.id;
+      // #76: same double-click guard as toggleSuggested. AI/photo chips
+      // produced the duplicates seen in production (uppercase names).
+      const addKey = `${ambienteId}::${suggestion.descrizione}`;
+      if (addingKeysRef.current.has(addKey)) return;
+      addingKeysRef.current.add(addKey);
       const optimistic: Attrezzatura = {
         id: crypto.randomUUID(),
         azienda_id: aziendaId,
@@ -660,7 +692,12 @@ export function StepAttrezzature({
           marcatura_ce: false,
           verifiche_periodiche: false,
         });
-        onChange([...attrezzature, created]);
+        // Replace the optimistic row in the latest array (see toggleSuggested).
+        onChange(
+          attrezzatureRef.current.map((a) =>
+            a.id === optimistic.id ? created : a,
+          ),
+        );
         setPersistedIds((prev) => {
           const next = new Set(prev);
           next.add(created.id);
@@ -670,7 +707,11 @@ export function StepAttrezzature({
         toast.error(
           e instanceof Error ? e.message : "Errore nel salvataggio",
         );
-        onChange(attrezzature);
+        onChange(
+          attrezzatureRef.current.filter((a) => a.id !== optimistic.id),
+        );
+      } finally {
+        addingKeysRef.current.delete(addKey);
       }
     },
     [
