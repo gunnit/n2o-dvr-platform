@@ -44,8 +44,10 @@ export interface PmvInputs {
 }
 
 export interface PmvResult {
-  pmv: number;
-  ppd: number;
+  // Numeric fields are nullable: the backend returns `null` (livello/category
+  // "FUORI_SOGLIA") when inputs fall outside the ISO 7730 applicability limits.
+  pmv: number | null;
+  ppd: number | null;
   sensation: string;
   category: string; // "A" | "B" | "C" | "FUORI_SOGLIA"
   compliant: boolean;
@@ -109,6 +111,21 @@ export const DEFAULT_PMV_INPUTS: PmvInputs = PRESETS[0].inputs;
 // ---------------------------------------------------------------------------
 // UI helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Format a numeric metric for display. The PMV/PHS endpoints legitimately
+ * return `null` for inputs outside the ISO 7730 / 7933 applicability limits
+ * (livello "FUORI_SOGLIA"). Rendering must degrade to an em-dash rather than
+ * calling `.toFixed()` on a null and crashing the page.
+ */
+function fmtNum(
+  value: number | null | undefined,
+  digits: number,
+  suffix = "",
+): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  return value.toFixed(digits) + suffix;
+}
 
 function CategoryBadge({
   category,
@@ -263,7 +280,7 @@ export function MicroclimaPmvForm({
         throw new Error(`API ${res.status}: ${txt}`);
       }
       setSaveMessage(
-        `Salvata: ${nomeArea || "(area senza nome)"} — PMV ${result.pmv.toFixed(2)}, PPD ${result.ppd.toFixed(1)}%.`,
+        `Salvata: ${nomeArea || "(area senza nome)"} — PMV ${fmtNum(result.pmv, 2)}, PPD ${fmtNum(result.ppd, 1, "%")}.`,
       );
       onSaved?.();
     } catch (err) {
@@ -376,7 +393,7 @@ export function MicroclimaPmvForm({
 
   // PMV bar position (−3..+3 → 0..100 %)
   const pmvPct = useMemo(() => {
-    if (!result) return 50;
+    if (!result || result.pmv === null) return 50;
     const clamped = Math.max(-3, Math.min(3, result.pmv));
     return ((clamped + 3) / 6) * 100;
   }, [result]);
@@ -396,7 +413,7 @@ export function MicroclimaPmvForm({
             <div className="flex items-center gap-3">
               <div className="text-right">
                 <div className="text-2xl font-semibold tabular-nums">
-                  {result ? result.pmv.toFixed(2) : "—"}
+                  {result ? fmtNum(result.pmv, 2) : "—"}
                 </div>
                 <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
                   PMV
@@ -404,7 +421,7 @@ export function MicroclimaPmvForm({
               </div>
               <div className="text-right">
                 <div className="text-2xl font-semibold tabular-nums">
-                  {result ? `${result.ppd.toFixed(1)}%` : "—"}
+                  {result ? fmtNum(result.ppd, 1, "%") : "—"}
                 </div>
                 <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
                   PPD
@@ -578,7 +595,7 @@ export function MicroclimaPmvForm({
             </div>
             <div className="flex items-end">
               <Button
-                disabled={!result || saving}
+                disabled={!result || result.pmv === null || saving}
                 onClick={handleSave}
               >
                 {saving ? "Salvataggio…" : "Salva nel fascicolo"}
@@ -635,13 +652,16 @@ export interface PhsInputs {
 }
 
 export interface PhsResult {
-  t_re: number;
-  t_sk: number;
-  d_lim_t_re: number;
-  d_lim_loss_50: number;
-  d_lim_loss_95: number;
-  sweat_loss_g: number;
-  d_lim: number;
+  // Numeric fields are nullable: the backend returns `null` (livello
+  // "FUORI_SOGLIA") when inputs fall outside the ISO 7933 applicability limits
+  // — e.g. severe heat combined with very high relative humidity.
+  t_re: number | null;
+  t_sk: number | null;
+  d_lim_t_re: number | null;
+  d_lim_loss_50: number | null;
+  d_lim_loss_95: number | null;
+  sweat_loss_g: number | null;
+  d_lim: number | null;
   livello: string;
 }
 
@@ -769,7 +789,7 @@ export function MicroclimaPhsForm({
         throw new Error(`API ${res.status}: ${txt}`);
       }
       setSaveMessage(
-        `Salvata: ${nomeArea || "(area senza nome)"} — d_lim ${result.d_lim?.toFixed(0)} min.`,
+        `Salvata: ${nomeArea || "(area senza nome)"} — d_lim ${fmtNum(result.d_lim, 0)} min.`,
       );
       onSaved?.();
     } catch (err) {
@@ -883,8 +903,10 @@ export function MicroclimaPhsForm({
         </p>
       </div>
 
-      {/* Critical-exposure banner (US-3.14 AC3): Dlim < 30 min */}
-      {result && result.d_lim < PHS_CRITICAL_DLIM_MIN && (
+      {/* Critical-exposure banner (US-3.14 AC3): Dlim < 30 min.
+          Guard against null d_lim — the API returns null for inputs outside
+          the ISO 7933 applicability limits, and `null < 30` is truthy in JS. */}
+      {result && result.d_lim !== null && result.d_lim < PHS_CRITICAL_DLIM_MIN && (
         <div
           role="alert"
           className="flex items-start gap-3 rounded-md border border-rose-400/60 bg-rose-50 p-3 text-rose-900 shadow-sm"
@@ -893,7 +915,7 @@ export function MicroclimaPhsForm({
           <div>
             <p className="font-medium">Esposizione critica – misure obbligatorie</p>
             <p className="text-sm">
-              Dlim = {result.d_lim.toFixed(0)}&prime; (&lt; {PHS_CRITICAL_DLIM_MIN}&prime;).
+              Dlim = {fmtNum(result.d_lim, 0)}&prime; (&lt; {PHS_CRITICAL_DLIM_MIN}&prime;).
               Interrompere l&apos;esposizione, predisporre rotazione/cicli di
               recupero in area climatizzata e attivare la sorveglianza sanitaria
               rinforzata ai sensi dell&apos;art. 181 D.Lgs. 81/2008.
@@ -915,7 +937,7 @@ export function MicroclimaPhsForm({
             <div className="flex items-center gap-3">
               <div className="text-right">
                 <div className="text-2xl font-semibold tabular-nums">
-                  {result ? `${result.d_lim.toFixed(0)}′` : "—"}
+                  {result ? fmtNum(result.d_lim, 0, "′") : "—"}
                 </div>
                 <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
                   Dlim
@@ -935,25 +957,25 @@ export function MicroclimaPhsForm({
           <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
             <span className="text-muted-foreground">T rettale</span>
             <span className="font-medium tabular-nums">
-              {result ? `${result.t_re.toFixed(1)} °C` : "—"}
+              {result ? fmtNum(result.t_re, 1, " °C") : "—"}
             </span>
           </div>
           <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
             <span className="text-muted-foreground">T cute</span>
             <span className="font-medium tabular-nums">
-              {result ? `${result.t_sk.toFixed(1)} °C` : "—"}
+              {result ? fmtNum(result.t_sk, 1, " °C") : "—"}
             </span>
           </div>
           <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
             <span className="text-muted-foreground">Dlim T_re</span>
             <span className="font-medium tabular-nums">
-              {result ? `${result.d_lim_t_re.toFixed(0)}′` : "—"}
+              {result ? fmtNum(result.d_lim_t_re, 0, "′") : "—"}
             </span>
           </div>
           <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
             <span className="text-muted-foreground">Sudore</span>
             <span className="font-medium tabular-nums">
-              {result ? `${result.sweat_loss_g.toFixed(0)} g` : "—"}
+              {result ? fmtNum(result.sweat_loss_g, 0, " g") : "—"}
             </span>
           </div>
         </CardContent>
@@ -1095,7 +1117,10 @@ export function MicroclimaPhsForm({
               />
             </div>
             <div className="flex items-end">
-              <Button disabled={!result || saving} onClick={handleSavePhs}>
+              <Button
+                disabled={!result || result.d_lim === null || saving}
+                onClick={handleSavePhs}
+              >
                 {saving ? "Salvataggio…" : "Salva nel fascicolo"}
               </Button>
             </div>
