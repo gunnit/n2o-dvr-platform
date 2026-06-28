@@ -315,6 +315,49 @@ def add_paragraph(doc: Document, text: str, *, bold: bool = False, italic: bool 
     return p
 
 
+def add_consultancy_letterhead(doc: Document, branding, *, center: bool = True) -> None:
+    """Render the consultancy's letterhead text block from ``branding``.
+
+    Prints the firm name plus whatever optional letterhead detail is present
+    (address, P.IVA / C.F., contacts, RSPP). Renders nothing beyond the firm
+    name when the org hasn't filled the rest in. ``branding`` is a
+    :class:`~app.services.document_generator.branding.Branding`.
+    """
+    align = WD_ALIGN_PARAGRAPH.CENTER if center else WD_ALIGN_PARAGRAPH.LEFT
+    gray = RGBColor(0x66, 0x66, 0x66)
+
+    name_p = doc.add_paragraph()
+    name_p.alignment = align
+    name_run = name_p.add_run((branding.firm_name or "").upper())
+    name_run.bold = True
+    name_run.font.size = Pt(11)
+    name_run.font.color.rgb = HEADER_BG
+
+    lines: list[str] = []
+    addr = branding.address_line()
+    if addr:
+        lines.append(addr)
+    tax_bits = []
+    if branding.partita_iva:
+        tax_bits.append(f"P.IVA {branding.partita_iva}")
+    if branding.codice_fiscale and branding.codice_fiscale != branding.partita_iva:
+        tax_bits.append(f"C.F. {branding.codice_fiscale}")
+    if tax_bits:
+        lines.append(" · ".join(tax_bits))
+    contact = branding.contact_line()
+    if contact:
+        lines.append(contact)
+    if branding.rspp_nome:
+        lines.append(f"RSPP: {branding.rspp_nome}")
+
+    for text in lines:
+        p = doc.add_paragraph()
+        p.alignment = align
+        run = p.add_run(text)
+        run.font.size = Pt(8)
+        run.font.color.rgb = gray
+
+
 def _safe_table_style(table) -> None:
     """Apply Table Grid if available, otherwise apply manual cell borders."""
     try:

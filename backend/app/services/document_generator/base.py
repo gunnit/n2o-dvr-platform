@@ -17,9 +17,11 @@ from sqlalchemy.orm import selectinload
 from app.models.ambiente import Ambiente
 from app.models.attrezzatura import Attrezzatura
 from app.models.azienda import Azienda
+from app.models.organization import Organization
 from app.models.persona import Persona
 from app.models.sostanza_chimica import SostanzaChimica
 from app.models.valutazione_rischio import ValutazioneRischio
+from app.services.document_generator.branding import Branding
 from app.config import settings
 
 
@@ -50,6 +52,11 @@ class BaseDocumentGenerator(ABC):
         # DocumentoGenerato.options JSONB column. Generators that don't need
         # per-run config can simply ignore this attribute.
         self.options: dict = options or {}
+        # Consultancy branding (logo + letterhead). Defaults to the N2O
+        # fallback so generators have a usable value even before load_data()
+        # runs — and so the DB-free test harness (which patches load_data)
+        # produces unchanged output. Populated per-org in load_data().
+        self.branding: Branding = Branding.default()
 
     @abstractmethod
     async def generate(self) -> str:
@@ -133,14 +140,36 @@ class BaseDocumentGenerator(ABC):
         result = await self.db.execute(stmt)
         sostanze_chimiche = list(result.scalars().all())
 
+        # Resolve the consultancy branding for this azienda's organization.
+        self.branding = await self._load_branding(azienda)
+
         return {
             "azienda": azienda,
             "persone": persone,
             "ambienti": ambienti,
             "attrezzature": attrezzature,
             "sostanze_chimiche": sostanze_chimiche,
+            "branding": self.branding,
             "generated_at": datetime.now(),
         }
+
+    async def _load_branding(self, azienda) -> Branding:
+        """Load per-organization branding for ``azienda``, defensively.
+
+        Any problem (no org_id, missing row, query error) degrades to the N2O
+        default so document generation never crashes on branding.
+        """
+        try:
+            org_id = getattr(azienda, "organization_id", None)
+            if org_id is None:
+                return Branding.default()
+            result = await self.db.execute(
+                select(Organization).where(Organization.id == org_id)
+            )
+            org = result.scalar_one_or_none()
+            return Branding.from_organization(org)
+        except Exception:
+            return Branding.default()
 
     def _get_output_dir(self) -> str:
         """Get the output directory for this azienda, creating it if needed.

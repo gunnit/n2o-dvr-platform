@@ -37,6 +37,7 @@ from sqlalchemy import func, select
 
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
+from app.services.document_generator.branding import resolve_logo_path
 from app.services.document_generator.data_loader import load_vdt
 from app.services.document_generator.docx_utils import (
     HEADER_BG,
@@ -150,11 +151,12 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         for _ in range(2):
             doc.add_paragraph("")
 
-        if LOGO_PATH.exists():
+        logo_path = resolve_logo_path(self.branding)
+        if logo_path.exists():
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             try:
-                p.add_run().add_picture(str(LOGO_PATH), width=Inches(2.0))
+                p.add_run().add_picture(str(logo_path), width=Inches(2.0))
             except Exception:
                 p.add_run("[LOGO AZIENDALE]").italic = True
 

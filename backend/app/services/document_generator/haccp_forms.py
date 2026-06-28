@@ -23,6 +23,7 @@ from sqlalchemy import func, select
 
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
+from app.services.document_generator.branding import Branding, resolve_logo_path
 from app.services.document_generator.data_loader import load_haccp
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
@@ -50,20 +51,22 @@ def _normalize_code(code: str) -> str:
     return (code or "").upper().replace("-", "").replace(" ", "").strip()
 
 
-def _add_branding_header(doc, azienda) -> None:
+def _add_branding_header(doc, azienda, branding: Branding | None = None) -> None:
     """Stamp the consultancy logo + client ragione sociale at the top.
 
     Used both for the bundled INDEX doc and every individual SA-* form so the
     operator gets a uniformly branded packet (US-4.4 AC1). When the logo file
     is missing the header degrades to a plain client-name line — matching the
-    DVR Master generator's degrade-gracefully behaviour.
+    DVR Master generator's degrade-gracefully behaviour. ``branding`` carries
+    the per-organization logo (falls back to the committed default).
     """
-    if _LOGO_PATH.exists():
+    logo_path = resolve_logo_path(branding or Branding.default())
+    if logo_path.exists():
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = p.add_run()
         try:
-            run.add_picture(str(_LOGO_PATH), width=Inches(1.6))
+            run.add_picture(str(logo_path), width=Inches(1.6))
         except Exception:
             # Corrupt or unreadable image — drop the picture and let the
             # client-name line below act as the brand mark.
@@ -107,7 +110,7 @@ class HaccpFormsGenerator(BaseDocumentGenerator):
         # Build index document — also branded so the zip header sheet
         # carries the same letterhead as the forms inside it.
         index_doc = Document()
-        _add_branding_header(index_doc, azienda)
+        _add_branding_header(index_doc, azienda, self.branding)
         add_heading(index_doc, f"SCHEDE DI AUTOCONTROLLO HACCP - {azienda.ragione_sociale}", level=1)
         add_kv_table(index_doc, [
             ("Azienda", azienda.ragione_sociale or ""),
@@ -162,7 +165,7 @@ class HaccpFormsGenerator(BaseDocumentGenerator):
         # US-4.4 AC1: consultancy letterhead + client ragione sociale on
         # every form, regardless of whether the source template provided
         # its own placeholders.
-        _add_branding_header(doc, azienda)
+        _add_branding_header(doc, azienda, self.branding)
         page_break(doc)
         add_heading(doc, f"{code} - {form.form_title}", level=1)
         add_kv_table(doc, [

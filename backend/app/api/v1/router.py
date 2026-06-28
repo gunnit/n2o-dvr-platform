@@ -19,6 +19,7 @@ from app.api.v1.lookups import router as lookups_router
 from app.api.v1.microclima_valutazioni import router as microclima_router
 from app.api.v1.misure_miglioramento import router as misure_miglioramento_router
 from app.api.v1.mmc import router as mmc_router
+from app.api.v1.organizations import router as organizations_router
 from app.api.v1.pee_procedures import router as pee_procedures_router
 from app.api.v1.pericoli import router as pericoli_router
 from app.api.v1.persone import router as persone_router
@@ -68,3 +69,4 @@ api_router.include_router(stress_valutazione_router)
 api_router.include_router(vdt_router)
 api_router.include_router(admin_backups_router)
 api_router.include_router(users_router)
+api_router.include_router(organizations_router)

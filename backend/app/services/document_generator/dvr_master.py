@@ -28,6 +28,8 @@ from docx.shared import Cm, Inches, Mm, Pt, RGBColor
 
 from app.data.regional_regulations import get_regulations_for_comune
 from app.services.document_generator.base import BaseDocumentGenerator
+from app.services.document_generator.branding import resolve_logo_path
+from app.services.document_generator.docx_utils import add_consultancy_letterhead
 from app.services.reference_data import (
     HAZARD_LIBRARY,
     RISK_CATEGORIES,
@@ -1110,14 +1112,16 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         for _ in range(3):
             doc.add_paragraph("")
 
-        # Logo: embed from assets/logo.png if available, otherwise fall back
-        # to an italic gray text placeholder so generation never breaks.
-        if _LOGO_PATH.exists():
+        # Logo: embed the consultancy's configured logo (or the committed
+        # default) if available, otherwise fall back to an italic gray text
+        # placeholder so generation never breaks.
+        logo_path = resolve_logo_path(self.branding)
+        if logo_path.exists():
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = p.add_run()
             try:
-                run.add_picture(str(_LOGO_PATH), width=Inches(2.0))
+                run.add_picture(str(logo_path), width=Inches(2.0))
             except Exception:
                 # Any image-loading issue degrades gracefully to the text
                 # placeholder below (e.g. corrupt file).
@@ -1206,6 +1210,16 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         )
         run.font.size = Pt(12)
         run.bold = True
+
+        # Consultancy letterhead — the firm that produced the document.
+        # Driven by per-organization branding (falls back to N2O).
+        doc.add_paragraph("")
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.add_run("Documento elaborato da:")
+        run.font.size = Pt(9)
+        run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+        add_consultancy_letterhead(doc, self.branding, center=True)
 
         # Page break
         doc.add_page_break()
