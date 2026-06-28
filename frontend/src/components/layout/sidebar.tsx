@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -14,12 +14,14 @@ import {
   LogOut,
   MessageSquarePlus,
   MessagesSquare,
+  Palette,
   Settings,
   Shield,
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FeedbackDialog } from "@/components/feedback/feedback-dialog";
+import { apiCall, fetchImageBlobUrl } from "@/lib/api-client";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -33,6 +35,7 @@ const navigation = [
 
 const adminNavigation = [
   { name: "Utenti", href: "/admin/users", icon: Users },
+  { name: "Personalizzazione", href: "/admin/branding", icon: Palette },
   { name: "Feedback", href: "/admin/feedback", icon: MessagesSquare },
 ];
 
@@ -45,6 +48,40 @@ type SidebarUser = {
 export function Sidebar({ user }: { user: SidebarUser }) {
   const pathname = usePathname();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [brandName, setBrandName] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+
+  // Load the organization branding (name + custom logo) for the app chrome.
+  // Falls back silently to the default Shield mark + "N2O DVR" on any failure.
+  useEffect(() => {
+    let cancelled = false;
+    let createdUrl: string | null = null;
+    (async () => {
+      try {
+        const b = await apiCall<{ name: string; has_logo: boolean }>(
+          "/api/v1/organizations/me/branding",
+        );
+        if (cancelled) return;
+        setBrandName(b.name || null);
+        if (b.has_logo) {
+          const url = await fetchImageBlobUrl("/api/v1/organizations/me/branding/logo");
+          if (cancelled) {
+            if (url) URL.revokeObjectURL(url);
+            return;
+          }
+          createdUrl = url;
+          setLogoUrl(url);
+        }
+      } catch {
+        /* keep defaults */
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
+    };
+  }, []);
+
   const initials = (user.name ?? user.email ?? "U")
     .split(/[\s@.]+/)
     .slice(0, 2)
@@ -54,11 +91,20 @@ export function Sidebar({ user }: { user: SidebarUser }) {
   return (
     <aside className="fixed left-0 top-0 z-50 flex h-screen w-64 flex-col bg-sidebar py-6 font-body text-[13px]">
       <div className="mb-8 flex items-center gap-3 px-6">
-        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-white/10 ring-1 ring-white/10">
-          <Shield className="h-4 w-4 text-white" strokeWidth={1.75} />
-        </div>
+        {logoUrl ? (
+          <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-md bg-white p-1 ring-1 ring-white/10">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={logoUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
+          </div>
+        ) : (
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-white/10 ring-1 ring-white/10">
+            <Shield className="h-4 w-4 text-white" strokeWidth={1.75} />
+          </div>
+        )}
         <div>
-          <h1 className="font-heading text-[15px] font-medium tracking-tight text-white">N2O DVR</h1>
+          <h1 className="font-heading text-[15px] font-medium tracking-tight text-white">
+            {brandName ?? "N2O DVR"}
+          </h1>
           <p className="text-[11px] text-white/50">Sicurezza sul lavoro</p>
         </div>
       </div>

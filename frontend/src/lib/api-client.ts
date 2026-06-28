@@ -6,6 +6,22 @@ async function getToken(): Promise<string | undefined> {
   return session?.accessToken as string | undefined;
 }
 
+/**
+ * Fetch an authenticated image endpoint and return an object URL for an
+ * <img src>. Returns null when the endpoint 404s (e.g. no custom logo set),
+ * so callers can fall back to a bundled default mark. The caller owns the
+ * returned URL and should URL.revokeObjectURL() it on cleanup.
+ */
+export async function fetchImageBlobUrl(path: string): Promise<string | null> {
+  const token = await getToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  if (!res.ok) return null;
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
 export async function apiCall<T>(
   path: string,
   options?: RequestInit
