@@ -169,6 +169,15 @@ class BaseDocumentGenerator(ABC):
             org = result.scalar_one_or_none()
             return Branding.from_organization(org)
         except Exception:
+            # A failed branding query (e.g. code live before the migration, or
+            # a transient error) leaves the AsyncSession in a failed-transaction
+            # state. Roll back so the generator's subsequent self.db calls don't
+            # all raise PendingRollbackError — the whole point here is that
+            # branding must never break generation.
+            try:
+                await self.db.rollback()
+            except Exception:
+                pass
             return Branding.default()
 
     def _get_output_dir(self) -> str:

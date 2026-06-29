@@ -4,15 +4,19 @@ Turns the consultancy identity that used to be hardcoded (the committed
 ``assets/logo.png`` and N2O letterhead) into data resolved from the
 ``Organization`` row. Everything degrades gracefully to the N2O default so a
 sparse org — or the DB-free test harness — never breaks document generation.
+
+The logo is stored as bytes on the Organization (see the model) rather than a
+disk path, because document generation runs on the Celery worker, which mounts
+a different Render disk from the API that receives the upload.
 """
 
 from __future__ import annotations
 
+import io
 from dataclasses import dataclass
-from pathlib import Path
 
-# backend/app/services/document_generator/branding.py -> parents[3] == backend/
-DEFAULT_LOGO_PATH: Path = Path(__file__).resolve().parents[3] / "assets" / "logo.png"
+# Single source of truth for the committed fallback logo (review finding #9).
+from app.services.document_generator.docx_utils import LOGO_PATH as DEFAULT_LOGO_PATH
 
 # Fallback firm name (N2O is the consultancy that owns this install today).
 DEFAULT_FIRM_NAME = "N2O SRL"
@@ -32,12 +36,14 @@ class Branding:
 
     ``firm_name`` always has a value (defaults to N2O). All other fields are
     optional; generators render the letterhead block only from what's present.
-    ``logo_path`` is the org's uploaded logo path (may be missing on disk);
-    use :func:`resolve_logo_path` to get the actual file to embed.
+    ``logo_bytes`` is the org's uploaded logo image; use
+    :func:`resolve_logo_source` to get the thing to embed (the bytes, or the
+    committed default).
     """
 
     firm_name: str = DEFAULT_FIRM_NAME
-    logo_path: str | None = None
+    logo_bytes: bytes | None = None
+    logo_content_type: str | None = None
     indirizzo: str | None = None
     cap: str | None = None
     citta: str | None = None
@@ -65,7 +71,8 @@ class Branding:
             return cls.default()
         return cls(
             firm_name=_clean(getattr(org, "name", None)) or DEFAULT_FIRM_NAME,
-            logo_path=_clean(getattr(org, "logo_path", None)),
+            logo_bytes=getattr(org, "logo_bytes", None) or None,
+            logo_content_type=_clean(getattr(org, "logo_content_type", None)),
             indirizzo=_clean(getattr(org, "indirizzo", None)),
             cap=_clean(getattr(org, "cap", None)),
             citta=_clean(getattr(org, "citta", None)),
@@ -79,11 +86,18 @@ class Branding:
         )
 
     def address_line(self) -> str | None:
-        """`Via Roma 1, 20100 Milano (MI)` from the parts present, or None."""
+        """`Via Roma 1, 20100 Milano (MI)` from the parts present, or None.
+
+        The province is only ever appended in parentheses when there's a city
+        to attach it to — otherwise a province-only org would print a stray
+        `(MI)` fragment (review finding #6).
+        """
         city_bits = " ".join(p for p in (self.cap, self.citta) if p)
-        if self.provincia:
-            city_bits = f"{city_bits} ({self.provincia})".strip()
-        parts = [p for p in (self.indirizzo, city_bits.strip()) if p]
+        if city_bits and self.provincia:
+            city_bits = f"{city_bits} ({self.provincia})"
+        elif not city_bits and self.provincia:
+            city_bits = self.provincia
+        parts = [p for p in (self.indirizzo, city_bits) if p]
         return ", ".join(parts) or None
 
     def contact_line(self) -> str | None:
@@ -114,12 +128,23 @@ class Branding:
             )
         )
 
+    def is_configured(self) -> bool:
+        """True if the org has actually customised its branding (vs the bare
+        N2O default). Used to gate additive document elements so un-configured
+        orgs see no output change."""
+        return (
+            self.has_letterhead_detail()
+            or self.firm_name != DEFAULT_FIRM_NAME
+            or bool(self.logo_bytes)
+        )
 
-def resolve_logo_path(branding: Branding) -> Path:
-    """Return the logo file to embed: the org's uploaded logo if it exists on
-    disk, otherwise the committed default asset."""
-    if branding.logo_path:
-        candidate = Path(branding.logo_path)
-        if candidate.exists():
-            return candidate
-    return DEFAULT_LOGO_PATH
+
+def resolve_logo_source(branding: Branding):
+    """Return something ``python-docx`` ``add_picture`` can embed: the org's
+    uploaded logo bytes (as a fresh ``BytesIO``) if present, else the committed
+    default logo path, else ``None`` when even the default is missing."""
+    if branding.logo_bytes:
+        return io.BytesIO(branding.logo_bytes)
+    if DEFAULT_LOGO_PATH.exists():
+        return str(DEFAULT_LOGO_PATH)
+    return None
