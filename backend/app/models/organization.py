@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, func
+from sqlalchemy import LargeBinary, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,9 +17,13 @@ class Organization(Base):
 
     # --- Branding / letterhead (per-organization, all optional) ---------------
     # `name` doubles as the firm name printed on document letterhead.
-    # `logo_path` points at an uploaded logo on Render Disk; when null/missing
-    # the document generators fall back to the committed default asset.
-    logo_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The logo is stored as bytes in the DB (not on disk): document generation
+    # runs on the Celery worker, which mounts a *different* Render disk from the
+    # API that receives the upload, so a file path would never be reachable
+    # there. Bytes in Postgres are shared by both services. Logos are capped at
+    # 5 MB on upload, so this stays small.
+    logo_bytes: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    logo_content_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     indirizzo: Mapped[str | None] = mapped_column(String, nullable=True)
     cap: Mapped[str | None] = mapped_column(String(16), nullable=True)
     citta: Mapped[str | None] = mapped_column(String, nullable=True)

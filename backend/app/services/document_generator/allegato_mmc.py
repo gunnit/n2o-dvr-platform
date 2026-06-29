@@ -46,11 +46,10 @@ from app.data.niosh_factors import (
 )
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
-from app.services.document_generator.branding import resolve_logo_path
+from app.services.document_generator.branding import resolve_logo_source
 from app.services.document_generator.data_loader import load_mmc
 from app.services.document_generator.docx_utils import (
     HEADER_BG,
-    LOGO_PATH,
     RISK_COLORS,
     add_data_table,
     add_heading,
@@ -178,12 +177,12 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         for _ in range(2):
             doc.add_paragraph("")
 
-        logo_path = resolve_logo_path(self.branding)
-        if logo_path.exists():
+        logo_src = resolve_logo_source(self.branding)
+        if logo_src is not None:
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             try:
-                p.add_run().add_picture(str(logo_path), width=Inches(2.0))
+                p.add_run().add_picture(logo_src, width=Inches(2.0))
             except Exception:
                 p.add_run("[LOGO AZIENDALE]").italic = True
 

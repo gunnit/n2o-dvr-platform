@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FeedbackDialog } from "@/components/feedback/feedback-dialog";
-import { apiCall, fetchImageBlobUrl } from "@/lib/api-client";
+import { fetchImageBlobUrl } from "@/lib/api-client";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -48,32 +48,25 @@ type SidebarUser = {
 export function Sidebar({ user }: { user: SidebarUser }) {
   const pathname = usePathname();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [brandName, setBrandName] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
-  // Load the organization branding (name + custom logo) for the app chrome.
-  // Falls back silently to the default Shield mark + "N2O DVR" on any failure.
+  // Load the organization's custom logo for the app chrome. Falls back
+  // silently to the default Shield mark on 404 / any failure. The product
+  // name ("N2O DVR") is fixed — only the logo is per-organization here.
   useEffect(() => {
     let cancelled = false;
     let createdUrl: string | null = null;
     (async () => {
       try {
-        const b = await apiCall<{ name: string; has_logo: boolean }>(
-          "/api/v1/organizations/me/branding",
-        );
-        if (cancelled) return;
-        setBrandName(b.name || null);
-        if (b.has_logo) {
-          const url = await fetchImageBlobUrl("/api/v1/organizations/me/branding/logo");
-          if (cancelled) {
-            if (url) URL.revokeObjectURL(url);
-            return;
-          }
-          createdUrl = url;
-          setLogoUrl(url);
+        const url = await fetchImageBlobUrl("/api/v1/organizations/me/branding/logo");
+        if (cancelled) {
+          if (url) URL.revokeObjectURL(url);
+          return;
         }
+        createdUrl = url;
+        setLogoUrl(url);
       } catch {
-        /* keep defaults */
+        /* keep the default mark */
       }
     })();
     return () => {
@@ -103,7 +96,7 @@ export function Sidebar({ user }: { user: SidebarUser }) {
         )}
         <div>
           <h1 className="font-heading text-[15px] font-medium tracking-tight text-white">
-            {brandName ?? "N2O DVR"}
+            N2O DVR
           </h1>
           <p className="text-[11px] text-white/50">Sicurezza sul lavoro</p>
         </div>

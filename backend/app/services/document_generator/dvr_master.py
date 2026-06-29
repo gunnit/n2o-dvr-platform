@@ -28,7 +28,7 @@ from docx.shared import Cm, Inches, Mm, Pt, RGBColor
 
 from app.data.regional_regulations import get_regulations_for_comune
 from app.services.document_generator.base import BaseDocumentGenerator
-from app.services.document_generator.branding import resolve_logo_path
+from app.services.document_generator.branding import resolve_logo_source
 from app.services.document_generator.docx_utils import add_consultancy_letterhead
 from app.services.reference_data import (
     HAZARD_LIBRARY,
@@ -656,13 +656,6 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
 
 
 # ---------------------------------------------------------------------------
-# Logo asset path (embedded on cover page when present)
-# ---------------------------------------------------------------------------
-
-_LOGO_PATH = Path(__file__).resolve().parents[3] / "assets" / "logo.png"
-
-
-# ---------------------------------------------------------------------------
 # Part II static boilerplate content (extracted to keep the file lean)
 # ---------------------------------------------------------------------------
 
@@ -1115,13 +1108,13 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         # Logo: embed the consultancy's configured logo (or the committed
         # default) if available, otherwise fall back to an italic gray text
         # placeholder so generation never breaks.
-        logo_path = resolve_logo_path(self.branding)
-        if logo_path.exists():
+        logo_src = resolve_logo_source(self.branding)
+        if logo_src is not None:
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = p.add_run()
             try:
-                run.add_picture(str(logo_path), width=Inches(2.0))
+                run.add_picture(logo_src, width=Inches(2.0))
             except Exception:
                 # Any image-loading issue degrades gracefully to the text
                 # placeholder below (e.g. corrupt file).
@@ -1212,14 +1205,17 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         run.bold = True
 
         # Consultancy letterhead — the firm that produced the document.
-        # Driven by per-organization branding (falls back to N2O).
-        doc.add_paragraph("")
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run("Documento elaborato da:")
-        run.font.size = Pt(9)
-        run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-        add_consultancy_letterhead(doc, self.branding, center=True)
+        # Only rendered when the org has actually configured its branding, so
+        # un-configured orgs see no new cover element vs. previously delivered
+        # documents (review finding #7).
+        if self.branding.is_configured():
+            doc.add_paragraph("")
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = p.add_run("Documento elaborato da:")
+            run.font.size = Pt(9)
+            run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+            add_consultancy_letterhead(doc, self.branding, center=True)
 
         # Page break
         doc.add_page_break()

@@ -23,7 +23,7 @@ from sqlalchemy import func, select
 
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
-from app.services.document_generator.branding import Branding, resolve_logo_path
+from app.services.document_generator.branding import Branding, resolve_logo_source
 from app.services.document_generator.data_loader import load_haccp
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
@@ -40,10 +40,6 @@ logger = logging.getLogger(__name__)
 
 TIPO_DOC = "haccp_forms"
 HACCP_TEMPLATES_DIR = TEMPLATES_DIR / "haccp"
-# Reused convention from dvr_master.py — backend/app/assets/logo.png. When
-# the file is missing the form simply renders without a logo, matching the
-# DVR generator's degrade-gracefully behaviour.
-_LOGO_PATH = Path(__file__).resolve().parents[3] / "assets" / "logo.png"
 
 
 def _normalize_code(code: str) -> str:
@@ -60,13 +56,13 @@ def _add_branding_header(doc, azienda, branding: Branding | None = None) -> None
     DVR Master generator's degrade-gracefully behaviour. ``branding`` carries
     the per-organization logo (falls back to the committed default).
     """
-    logo_path = resolve_logo_path(branding or Branding.default())
-    if logo_path.exists():
+    logo_src = resolve_logo_source(branding or Branding.default())
+    if logo_src is not None:
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = p.add_run()
         try:
-            run.add_picture(str(logo_path), width=Inches(1.6))
+            run.add_picture(logo_src, width=Inches(1.6))
         except Exception:
             # Corrupt or unreadable image — drop the picture and let the
             # client-name line below act as the brand mark.
