@@ -432,20 +432,23 @@ export function VersionHistory({
                         )}
 
                         <div className="flex flex-wrap gap-2 pt-1">
+                          {/* Status-only gating: the download endpoint
+                              serves the DB file_content, and rows minted by
+                              save-edited-version (or legacy gdoc syncs) can
+                              have file_path NULL. */}
                           {(version.status === "ready" ||
-                            version.status === "completed") &&
-                            version.file_path && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  void triggerDownload(version.id);
-                                }}
-                              >
-                                <Download className="mr-1.5 h-3 w-3" />
-                                Scarica
-                              </Button>
-                            )}
+                            version.status === "completed") && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                void triggerDownload(version.id);
+                              }}
+                            >
+                              <Download className="mr-1.5 h-3 w-3" />
+                              Scarica
+                            </Button>
+                          )}
                           {canCompare && previous && (
                             <Button
                               size="sm"

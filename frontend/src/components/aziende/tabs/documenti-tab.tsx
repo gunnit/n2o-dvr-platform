@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Download,
   ExternalLink,
@@ -8,6 +9,7 @@ import {
   Files,
   Filter,
   Paperclip,
+  Pencil,
   RotateCw,
   ShieldAlert,
 } from "lucide-react";
@@ -23,6 +25,7 @@ import {
   docStatusLabels,
   docStatusStyles,
 } from "@/components/aziende/tabs/_shared";
+import { isEditedInline } from "@/components/documents/document-types";
 import {
   Table,
   TableBody,
@@ -126,13 +129,17 @@ export default function DocumentiTab({
   documenti,
   onRefresh,
 }: DocumentiTabProps) {
+  const router = useRouter();
   const [downloading, setDownloading] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
 
   const total = documenti.length;
-  const readyCount = documenti.filter(
-    (d) => DOWNLOADABLE_DOC_STATUSES.has(d.status) && d.file_path,
+  // Status-only gating (here and on the row actions below): the download
+  // endpoint serves the DB file_content, and rows minted by
+  // save-edited-version (or legacy gdoc syncs) can have file_path NULL.
+  const readyCount = documenti.filter((d) =>
+    DOWNLOADABLE_DOC_STATUSES.has(d.status),
   ).length;
   const inProgressDocs = documenti.filter((d) =>
     IN_PROGRESS_STATUSES.has(d.status),
@@ -345,9 +352,14 @@ export default function DocumentiTab({
                             const label =
                               DOC_TYPE_LABELS[doc.tipo_documento] ??
                               doc.tipo_documento;
-                            const canDownload =
-                              DOWNLOADABLE_DOC_STATUSES.has(doc.status) &&
-                              !!doc.file_path;
+                            const canDownload = DOWNLOADABLE_DOC_STATUSES.has(
+                              doc.status,
+                            );
+                            // HACCP schede are a .zip payload — no docx to
+                            // open in the in-browser editor.
+                            const canEdit =
+                              canDownload &&
+                              doc.tipo_documento !== "haccp_forms";
                             const isDownloading = downloading === doc.id;
                             const isRegenerating = regenerating === doc.id;
                             const statusLabel =
@@ -377,6 +389,14 @@ export default function DocumentiTab({
                                             strokeWidth={1.75}
                                           />
                                           Modificato in Google Docs
+                                        </span>
+                                      ) : isEditedInline(doc) ? (
+                                        <span className="inline-flex items-center gap-1">
+                                          <Pencil
+                                            className="h-3 w-3"
+                                            strokeWidth={1.75}
+                                          />
+                                          Modificato nell&apos;editor
                                         </span>
                                       ) : (
                                         "—"
@@ -419,6 +439,22 @@ export default function DocumentiTab({
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex items-center justify-end gap-1">
+                                    {canEdit && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          router.push(`/documents/${doc.id}`)
+                                        }
+                                        title="Apri nell'editor del browser"
+                                        className="inline-flex items-center gap-1 rounded-md border border-[#e5edf5] bg-white px-2 py-1 text-[12px] font-medium text-[#273951] hover:bg-[#f6f9fc]"
+                                      >
+                                        <Pencil
+                                          className="h-3.5 w-3.5"
+                                          strokeWidth={1.75}
+                                        />
+                                        Apri
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
                                       onClick={() => handleDownload(doc)}

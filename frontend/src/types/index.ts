@@ -216,10 +216,10 @@ export interface DocumentoGenerato {
     | "error";
   file_path: string | null;
   gdrive_file_id: string | null;
-  // Editable Google Doc ID + derived edit URL, populated after the user
-  // has opened this document for in-browser editing. Both null on a fresh
-  // generation; the documents page toggles the "Modifica in Google Docs"
-  // button state on gdoc_file_id presence.
+  // Editable Google Doc ID + derived edit URL from the legacy Google Docs
+  // round-trip flow. Both null on a fresh generation; kept for historical
+  // rows — in-browser editing now happens on /documents/{id} via content
+  // overrides instead.
   gdoc_file_id?: string | null;
   gdoc_edit_url?: string | null;
   // True when this row was produced by syncing edits back from Google Docs
@@ -227,6 +227,16 @@ export interface DocumentoGenerato {
   // the version-history drawer as a "Modificato in Google Docs" badge so
   // reviewers can distinguish AI-generated versions from human-edited ones.
   edited_in_gdocs?: boolean;
+  // True when this row was minted by "Salva come nuova versione" in the
+  // in-app inline editor (options.edited_inline). The backend may surface
+  // it as a derived boolean (like edited_in_gdocs) or only inside the raw
+  // options JSON — isEditedInline() in components/documents/document-types
+  // checks both, so both fields stay optional here.
+  edited_inline?: boolean;
+  options?: {
+    edited_inline?: boolean;
+    source_version_id?: string;
+  } | null;
   // User-facing explanation when status === "bozza" (US-2.8 AC3).
   error_message?: string | null;
   created_at: string;
@@ -240,6 +250,95 @@ export interface DocumentoGenerato {
   // Optional so legacy clients still type-check; backend defaults to
   // false on every emission.
   stale_snapshot?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// In-browser document preview + inline editing.
+// Shapes mirror the backend contract 1:1 (GET /documenti/{id}/preview,
+// PATCH /documenti/{id}/overrides). Block addresses: top-level blocks use
+// the filtered body index ("12"); cell paragraphs use
+// "{table}:{row}:{cell}:{para}".
+// ---------------------------------------------------------------------------
+
+export interface PreviewRun {
+  text: string;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  /** Hex "RRGGBB" without "#"; null when inherited from the style. */
+  color: string | null;
+  /** Font size in points; null when inherited. */
+  size: number | null;
+}
+
+export interface PreviewInlineImage {
+  /** Relationship id (rId) on the main document part. */
+  image_id: string;
+  width_px: number | null;
+  height_px: number | null;
+}
+
+export type PreviewAlignment = "left" | "center" | "right" | "justify";
+
+// Shared paragraph shape. Top-level paragraph blocks extend it with
+// kind + page_break_before; table-cell paragraphs use it as-is.
+export interface PreviewParagraph {
+  addr: string;
+  style: string | null;
+  /** 1-4 when the style is "Heading N", else null. */
+  heading_level: number | null;
+  alignment: PreviewAlignment | null;
+  /**
+   * False for paragraphs the backend refuses to override: runs with
+   * drawings/pictures, TOC field codes, or paragraphs in nested tables.
+   */
+  editable: boolean;
+  runs: PreviewRun[];
+  images: PreviewInlineImage[];
+}
+
+export interface PreviewParagraphBlock extends PreviewParagraph {
+  kind: "paragraph";
+  page_break_before: boolean;
+}
+
+export interface PreviewTableCell {
+  /** "{table}:{row}:{cell}" */
+  addr: string;
+  paragraphs: PreviewParagraph[];
+  /** tcPr/shd fill as "RRGGBB"; null when "auto"/absent. */
+  shading: string | null;
+  /** gridSpan, default 1. */
+  col_span: number;
+  v_merge: "restart" | "continue" | null;
+}
+
+export interface PreviewTableBlock {
+  kind: "table";
+  addr: string;
+  rows: PreviewTableCell[][];
+}
+
+export type PreviewBlock = PreviewParagraphBlock | PreviewTableBlock;
+
+export interface DocumentPreviewResponse {
+  id: string;
+  azienda_id: string;
+  azienda_nome: string;
+  tipo_documento: string;
+  versione: number;
+  file_name: string | null;
+  stale_snapshot: boolean;
+  /** generation_completed_at as ISO string. */
+  generated_at: string | null;
+  blocks: PreviewBlock[];
+  /** Currently saved overrides, keyed by block address. {} when none. */
+  overrides: Record<string, string>;
+}
+
+/** Response of PATCH /documenti/{id}/overrides — the full current map. */
+export interface DocumentOverridesResponse {
+  overrides: Record<string, string>;
 }
 
 export interface Attrezzatura {

@@ -16,7 +16,7 @@ La piattaforma permette di:
 - Raccogliere i dati del sopralluogo attraverso un questionario digitale in 7 passaggi.
 - Generare automaticamente il **DVR Master** (~187 pagine) e i suoi allegati (MMC, VDT, Stress, Incendio, Microclima, Biologico, Gestanti).
 - Produrre i documenti complementari (PEE, HACCP, DUVRI, POS).
-- Revisionare il DVR direttamente in **Google Docs** e riportare le modifiche come nuova versione.
+- Revisionare e modificare i documenti generati **direttamente nel browser**, su un'anteprima fedele all'impaginazione finale, e salvare le modifiche come nuova versione.
 - Scaricare tutti i documenti in formato `.docx`.
 
 Tutto l'output è in italiano e conforme al **D.Lgs. 81/2008** e alle norme tecniche collegate.
@@ -63,19 +63,15 @@ La generazione della maggior parte dei documenti richiede tra i 30 e i 90 second
 
 ![Documenti completati](./images/36-documenti-completati.png)
 
-### 5. Revisiona in Google Docs
+### 5. Revisiona nel browser
 
-Sulla tessera del DVR Master (quando in stato **Pronto**), clicca **Modifica in Google Docs**. La piattaforma converte il documento e lo apre in una nuova scheda del browser.
+Sulla tessera di un documento in stato **Pronto**, clicca **Modifica nel browser** (icona matita). Il documento si apre in un editor integrato che lo mostra impaginato come il file finale: titoli, tabelle, colori di rischio e immagini.
 
-![DVR aperto in Google Docs](./images/40-gdoc-aperto.png)
-
-Modifica liberamente. Al termine, torna sulla piattaforma: vedrai comparire i pulsanti **Scarica modifiche** e **Scarta**.
+Clicca su un paragrafo o su una cella di tabella per correggerne il testo direttamente. Le modifiche si salvano automaticamente (in alto vedi l'indicatore *"Modifiche salvate"*); i blocchi modificati sono evidenziati e ognuno ha un pulsante **Ripristina** per tornare al testo originale.
 
 ### 6. Scarica la versione definitiva
 
-Una volta completata la revisione, clicca **Scarica modifiche**: la piattaforma sincronizza il Google Doc e crea una **nuova versione** del DVR. Clicca poi **Scarica** per ottenere il file `.docx` finale.
-
-![Nuova versione creata dopo il sync](./images/44-after-sync.png)
+Quando la revisione è completa, dall'editor clicca **Scarica .docx**: il file scaricato include tutte le tue modifiche, con la formattazione originale intatta. Se vuoi fissare la revisione nello storico, clicca prima **Salva come nuova versione** (crea v2, v3, ...).
 
 ---
 
@@ -355,7 +351,7 @@ La maggior parte dei documenti completa in 30–60 secondi. Documenti più compl
 
 **Stato finale**
 
-Quando la generazione completa, la tessera passa a **Pronto** (verde) e mostra versione (es. v1), data, "Generato da [nome]" e i pulsanti **Rigenera**, **Scarica**, **Modifica in Google Docs** (solo DVR Master), **Storia**.
+Quando la generazione completa, la tessera passa a **Pronto** (verde) e mostra versione (es. v1), data, "Generato da [nome]" e i pulsanti **Rigenera**, **Scarica**, **Modifica nel browser** (tutti i documenti `.docx`), **Storia**.
 
 ![Documenti completati](./images/36-documenti-completati.png)
 
@@ -391,30 +387,19 @@ La vista completa con tutte le categorie è ottima per avere un colpo d'occhio s
 
 ![Vista completa documenti](./images/38-documenti-lista-completa.png)
 
-**Modifica in Google Docs (solo DVR Master)**
+**Modifica nel browser (tutti i documenti `.docx`)**
 
-Quando il DVR Master è **Pronto**, sulla tessera compare **Modifica in Google Docs**. Il flusso è questo:
+Quando un documento è **Pronto**, sulla tessera compare l'icona matita **Modifica nel browser** (non disponibile per *HACCP Schede*, che è un archivio `.zip`). Cliccandola si apre l'editor integrato:
 
-1. Clic su **Modifica in Google Docs** → toast *"Conversione in Google Docs in corso..."* (2–5 secondi).
-2. Si apre una nuova scheda con il documento modificabile in Google Docs.
+- Il documento è mostrato **impaginato come il file finale**: copertina, titoli, tabelle con i colori di rischio, immagini. A sinistra trovi l'**indice** delle sezioni, cliccabile per navigare.
+- **Clicca su un paragrafo o su una cella** per modificarne il testo direttamente. Invio va a capo all'interno del blocco, Esc annulla la modifica in corso. Alcuni blocchi (indice, immagini) sono bloccati e non modificabili.
+- Le modifiche si **salvano automaticamente**: in alto vedi *"Salvataggio..."* e poi *"Modifiche salvate"*. Ogni blocco modificato è evidenziato con la dicitura **Modificato** e ha un pulsante **Ripristina** per tornare al testo originale.
+- **Scarica .docx** → scarica il documento **con le modifiche applicate**, mantenendo intatta la formattazione originale.
+- **Salva come nuova versione** → crea la versione successiva (v2, v3...) con le modifiche incorporate; la tessera del documento mostra il badge **Modificato**. Le versioni precedenti restano accessibili da **Storia**.
 
-   ![DVR aperto in Google Docs](./images/40-gdoc-aperto.png)
+Per il DVR Master (~187 pagine) il caricamento dell'anteprima può richiedere qualche secondo.
 
-3. Tornando sulla piattaforma, la tessera ora mostra i pulsanti **Scarica modifiche** e **Scarta**.
-
-   ![Dirty-check con modifiche aperte](./images/41-dirty-check.png)
-
-- **Scarica modifiche** → sincronizza il Google Doc, crea la versione successiva (v2, v3...) e mostra toast *"Nuova versione v[N] creata"*. La tessera si aggiorna con la nuova versione.
-
-  ![Dopo il sync — v2 creata](./images/44-after-sync.png)
-
-- **Scarta** → apre un dialogo di conferma:
-
-  ![Dialogo Scarta](./images/42-discard-dialog.png)
-
-  > *"Scartare le modifiche? Le modifiche nel Google Doc verranno eliminate definitivamente. Questa azione non può essere annullata."*
-
-  Dopo **Scarta**, il Google Doc viene rimosso e i pulsanti spariscono: potrai eventualmente riaprirne uno nuovo con **Modifica in Google Docs**.
+> L'editor serve per **ritocchi al testo** (correzioni, riformulazioni). Per modifiche strutturali — aggiungere ambienti, rischi, persone — correggi il sopralluogo e clicca **Rigenera**: attenzione, la rigenerazione riparte dai dati e non conserva le modifiche manuali fatte nell'editor.
 
 **HACCP Schede (16)**
 
@@ -510,14 +495,17 @@ La generazione può richiedere fino a 2 minuti per documenti di alta complessit�
 **Voglio rigenerare un documento da zero**
 Clicca **Rigenera** sulla tessera. Verrà creata una nuova versione; le versioni precedenti restano accessibili dal pulsante **Storia**.
 
-**Google Docs non si apre / restituisce errore**
-Assicurati che l'account Google utilizzato dalla piattaforma abbia accesso alla cartella Drive di progetto. Se il problema persiste, segnala all'amministratore: potrebbe essere scaduto il token di autorizzazione.
+**Nell'editor non riesco a modificare un blocco**
+Alcuni blocchi sono volutamente bloccati: l'indice (si rigenera da solo), i blocchi che contengono immagini e le tabelle annidate. Tutto il resto è modificabile con un click.
 
-**Ho modificato il Google Doc ma non vedo "Scarica modifiche"**
-Ricarica la pagina Documenti. Se la tessera non mostra i pulsanti di sync, verifica che il Google Doc sia stato effettivamente aperto dalla piattaforma (non da un link incollato).
+**Ho modificato un documento nell'editor ma il file scaricato non ha le modifiche**
+Verifica che in alto nell'editor compaia *"Modifiche salvate"* prima di scaricare. Se avevi scaricato dalla tessera Documenti, riprova: il download include sempre le modifiche salvate.
 
-**Ho cliccato "Scarta" per errore**
-Le modifiche nel Google Doc sono perdute in modo irreversibile. Le versioni precedentemente sincronizzate sul server sono ancora disponibili dal pulsante **Storia**; puoi ripartire da una di quelle con **Modifica in Google Docs**.
+**Ho modificato un testo per errore nell'editor**
+Passa il mouse sul blocco evidenziato come **Modificato** e clicca **Ripristina**: il testo torna a quello generato. Se invece hai già salvato una nuova versione, recupera quella precedente dal pulsante **Storia**.
+
+**Ho rigenerato un documento e le modifiche manuali sono sparite**
+È il comportamento previsto: **Rigenera** riparte dai dati del sopralluogo. Le versioni salvate con **Salva come nuova versione** restano nello storico: aprile da **Storia** e ripristinale se necessario.
 
 **Il PEE non si può generare**
 È una dipendenza voluta: il PEE usa i dati del DVR Master. Genera prima il DVR Master (deve essere in stato **Pronto**) e poi il PEE.

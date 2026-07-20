@@ -38,6 +38,12 @@ class DocumentoGenerato(Base):
     # `{"selected_codes": [...]}`. Nullable/JSONB so other generators that
     # don't need it stay unaffected.
     options: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # Inline-preview text overrides keyed by block address ("12" for a
+    # top-level paragraph, "table:row:cell:para" for a cell paragraph).
+    # Applied to the .docx bytes at download time and folded into a new
+    # version row by POST /documenti/{id}/save-edited-version (which then
+    # clears this column). NULL when the document has no pending edits.
+    content_overrides: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     generation_started_at: Mapped[datetime | None] = mapped_column()
     generation_completed_at: Mapped[datetime | None] = mapped_column()
     generated_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 import {
   FileText,
   RefreshCw,
@@ -13,20 +13,11 @@ import {
   History,
   User as UserIcon,
   Pencil,
-  CloudDownload,
-  Trash2,
-  ShieldAlert,
-  Paperclip,
-  Siren,
-  Utensils,
-  Handshake,
-  Construction,
-  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Monogram, type AccentKey } from "@/components/cards/Monogram";
+import { Monogram } from "@/components/cards/Monogram";
 import { formatRelative } from "@/lib/ui/relative-time";
 import {
   Dialog,
@@ -36,51 +27,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  CATEGORY_META,
+  CATEGORY_ORDER,
+  documentTypes,
+  isEditedInline,
+} from "@/components/documents/document-types";
 import { VersionHistory } from "@/components/documents/version-history";
 import type { Azienda, DocumentoGenerato } from "@/types";
 import { apiCall, downloadFile } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
-
-type DocCategory = "dvr" | "allegati" | "emergenza" | "haccp" | "contratti";
-
-type DocType = {
-  key: string;
-  name: string;
-  pages: string;
-  complexity: "Bassa" | "Media" | "Alta";
-  category: DocCategory;
-  icon: LucideIcon;
-};
-
-const CATEGORY_META: Record<DocCategory, { label: string; accent: AccentKey; rail: string }> = {
-  dvr: { label: "Documento principale", accent: "navy", rail: "bg-[#003d74]" },
-  allegati: { label: "Allegati DVR", accent: "sky", rail: "bg-[#0ea5e9]" },
-  emergenza: { label: "Piani di emergenza", accent: "amber", rail: "bg-[#d97706]" },
-  haccp: { label: "HACCP — alimentare", accent: "emerald", rail: "bg-[#059669]" },
-  contratti: { label: "Appalti e cantieri", accent: "violet", rail: "bg-[#7c3aed]" },
-};
-
-const documentTypes: DocType[] = [
-  { key: "dvr_master", name: "DVR Master", pages: "~187", complexity: "Alta", category: "dvr", icon: ShieldAlert },
-  { key: "allegato_mmc", name: "Allegato MMC", pages: "~30", complexity: "Media", category: "allegati", icon: Paperclip },
-  { key: "allegato_vdt", name: "Allegato VDT", pages: "~25", complexity: "Media", category: "allegati", icon: Paperclip },
-  { key: "allegato_stress", name: "Allegato Stress", pages: "~20", complexity: "Media", category: "allegati", icon: Paperclip },
-  { key: "allegato_gestanti", name: "Allegato Gestanti", pages: "~10", complexity: "Bassa", category: "allegati", icon: Paperclip },
-  { key: "allegato_incendio", name: "Allegato Incendio", pages: "~15", complexity: "Media", category: "allegati", icon: Paperclip },
-  { key: "allegato_microclima", name: "Microclima Moderato", pages: "~15", complexity: "Alta", category: "allegati", icon: Paperclip },
-  { key: "allegato_microclima_severo", name: "Microclima Caldo Severo", pages: "~12", complexity: "Alta", category: "allegati", icon: Paperclip },
-  { key: "allegato_biologico_alimentare", name: "Biologico Alimentare", pages: "~25", complexity: "Media", category: "allegati", icon: Paperclip },
-  { key: "allegato_biologico_asilo", name: "Biologico Asilo", pages: "~20", complexity: "Media", category: "allegati", icon: Paperclip },
-  { key: "allegato_biologico_dentisti", name: "Biologico Dentisti", pages: "~30", complexity: "Alta", category: "allegati", icon: Paperclip },
-  { key: "pee_azienda", name: "PEE Aziendale", pages: "~25", complexity: "Media", category: "emergenza", icon: Siren },
-  { key: "pee_comune", name: "PEE Edificio/Comune", pages: "~40", complexity: "Media", category: "emergenza", icon: Siren },
-  { key: "haccp", name: "HACCP Manuale", pages: "~90", complexity: "Media", category: "haccp", icon: Utensils },
-  { key: "haccp_forms", name: "HACCP Schede (16)", pages: "~25", complexity: "Bassa", category: "haccp", icon: Utensils },
-  { key: "duvri", name: "DUVRI", pages: "~45", complexity: "Media", category: "contratti", icon: Handshake },
-  { key: "pos", name: "POS", pages: "~110", complexity: "Alta", category: "contratti", icon: Construction },
-];
-
-const CATEGORY_ORDER: DocCategory[] = ["dvr", "allegati", "emergenza", "haccp", "contratti"];
 
 const complexityColors: Record<string, string> = {
   Alta: "bg-[rgba(186,26,26,0.1)] text-[#ba1a1a] border border-[rgba(186,26,26,0.3)]",
@@ -154,17 +110,8 @@ export default function DocumentsPage() {
   const [generatingAll, setGeneratingAll] = useState(false);
   const [generatingTypes, setGeneratingTypes] = useState<Set<string>>(new Set());
   const [historyTipo, setHistoryTipo] = useState<string | null>(null);
-  // Per-document pending states for the Google Docs round-trip flow
-  // (keyed by documento_generato.id). `openingGdoc` = creating/opening the
-  // editable Doc; `syncingGdoc` = pulling the edited version back;
-  // `discardingGdoc` = deleting the Doc without syncing.
-  const [openingGdoc, setOpeningGdoc] = useState<Set<string>>(new Set());
-  const [syncingGdoc, setSyncingGdoc] = useState<Set<string>>(new Set());
-  const [discardingGdoc, setDiscardingGdoc] = useState<Set<string>>(new Set());
-  // Confirm dialog for "Scarta modifiche" — stores the doc whose edits
-  // will be discarded, cleared on confirm/cancel.
-  const [discardTarget, setDiscardTarget] = useState<DocumentoGenerato | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const router = useRouter();
 
   // Fetch aziende list
   useEffect(() => {
@@ -325,117 +272,6 @@ export default function DocumentsPage() {
       return;
     }
     await postGenerate("haccp_forms", { selected_codes: codes });
-  }
-
-  // Open a DVR document in Google Docs for in-browser editing. First call
-  // creates the Google Doc (DOCX -> GDoc conversion ~2-5s); subsequent calls
-  // return the cached edit URL immediately. Retries once on network failure
-  // since Render's API service can return a transient 502 on cold-start
-  // right after a redeploy.
-  async function handleOpenInGoogleDocs(doc: DocumentoGenerato) {
-    setOpeningGdoc((prev) => new Set(prev).add(doc.id));
-    const isFirstOpen = !doc.gdoc_file_id;
-    const convertingToast = isFirstOpen
-      ? toast.loading("Conversione in Google Docs in corso...")
-      : null;
-
-    const openOnce = () =>
-      apiCall<{ gdoc_file_id: string; edit_url: string }>(
-        `/api/v1/documenti/${doc.id}/open-for-editing`,
-        { method: "POST" },
-      );
-
-    try {
-      let result: { gdoc_file_id: string; edit_url: string };
-      try {
-        result = await openOnce();
-      } catch (first) {
-        // Retry once after 2s for transient network / cold-start errors
-        // (502/504 preflight). Surface anything that fails twice.
-        const msg = first instanceof Error ? first.message : "";
-        const looksTransient = /fetch|502|503|504|network/i.test(msg);
-        if (!looksTransient) throw first;
-        await new Promise((r) => setTimeout(r, 2000));
-        result = await openOnce();
-      }
-      window.open(result.edit_url, "_blank", "noopener,noreferrer");
-      if (convertingToast) toast.dismiss(convertingToast);
-      if (isFirstOpen) toast.success("Documento aperto in Google Docs");
-      await fetchDocumenti();
-    } catch (err) {
-      if (convertingToast) toast.dismiss(convertingToast);
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : "Impossibile aprire il documento in Google Docs",
-      );
-    } finally {
-      setOpeningGdoc((prev) => {
-        const next = new Set(prev);
-        next.delete(doc.id);
-        return next;
-      });
-    }
-  }
-
-  // Pull the latest Google Doc content back into the app as a new version.
-  // Backend inserts a new DocumentoGenerato row with incremented `versione`
-  // and `options.edited_in_gdocs = true`. Backend rejects with 409 when no
-  // edits are detected in the Google Doc — we surface the Italian message
-  // from the server as a toast instead of a generic error.
-  async function handleSyncFromGoogleDocs(doc: DocumentoGenerato) {
-    setSyncingGdoc((prev) => new Set(prev).add(doc.id));
-    const syncingToast = toast.loading("Sincronizzazione in corso...");
-    try {
-      const synced = await apiCall<DocumentoGenerato>(
-        `/api/v1/documenti/${doc.id}/sync-from-gdoc`,
-        { method: "POST" },
-      );
-      toast.dismiss(syncingToast);
-      toast.success(`Nuova versione v${synced.versione} creata`);
-      await fetchDocumenti();
-    } catch (err) {
-      toast.dismiss(syncingToast);
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : "Sincronizzazione da Google Docs non riuscita",
-      );
-    } finally {
-      setSyncingGdoc((prev) => {
-        const next = new Set(prev);
-        next.delete(doc.id);
-        return next;
-      });
-    }
-  }
-
-  // Delete the editable Google Doc without importing its content. Used when
-  // the user decides the in-browser edits aren't worth keeping — backend
-  // removes the Drive file and clears gdoc_file_id so the sync/discard
-  // buttons disappear.
-  async function handleDiscardGdocEdits(doc: DocumentoGenerato) {
-    setDiscardingGdoc((prev) => new Set(prev).add(doc.id));
-    try {
-      await apiCall<DocumentoGenerato>(`/api/v1/documenti/${doc.id}/gdoc`, {
-        method: "DELETE",
-      });
-      toast.success("Modifiche in Google Docs scartate");
-      await fetchDocumenti();
-    } catch (err) {
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : "Impossibile scartare le modifiche",
-      );
-    } finally {
-      setDiscardingGdoc((prev) => {
-        const next = new Set(prev);
-        next.delete(doc.id);
-        return next;
-      });
-      setDiscardTarget(null);
-    }
   }
 
   async function handleGenerateAll() {
@@ -643,7 +479,7 @@ export default function DocumentsPage() {
                                 <div className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
                                   Stato
                                 </div>
-                                <div className="mt-0.5">
+                                <div className="mt-0.5 flex flex-wrap items-center gap-1">
                                   <Badge
                                     className={config.color}
                                     title={
@@ -658,6 +494,12 @@ export default function DocumentsPage() {
                                     )}
                                     {config.label}
                                   </Badge>
+                                  {isEditedInline(existing) && (
+                                    <Badge title="Versione creata con modifiche fatte nell'editor del browser">
+                                      <Pencil className="mr-1 h-2.5 w-2.5" />
+                                      Modificato
+                                    </Badge>
+                                  )}
                                 </div>
                               </div>
                               <div className="min-w-0">
@@ -715,7 +557,12 @@ export default function DocumentsPage() {
                                   ? "Riprova"
                                   : "Genera"}
                             </Button>
-                            {isReady && existing.file_path && (
+                            {/* Download/editor actions gate on status only:
+                                the download endpoint serves the DB
+                                file_content, and rows minted by
+                                save-edited-version (or legacy gdoc syncs)
+                                can have file_path NULL. */}
+                            {isReady && (
                               <Button
                                 size="icon-sm"
                                 variant="ghost"
@@ -736,58 +583,21 @@ export default function DocumentsPage() {
                                 <Download className="h-4 w-4" />
                               </Button>
                             )}
-                            {docType.key === "dvr_master" && isReady && (
-                              <>
-                                <Button
-                                  size="icon-sm"
-                                  variant="ghost"
-                                  onClick={() => handleOpenInGoogleDocs(existing)}
-                                  disabled={openingGdoc.has(existing.id)}
-                                  title="Modifica in Google Docs"
-                                  aria-label="Modifica in Google Docs"
-                                >
-                                  {openingGdoc.has(existing.id) ? (
-                                    <Loader2 className="animate-spin" />
-                                  ) : (
-                                    <Pencil />
-                                  )}
-                                </Button>
-                                {existing.gdoc_file_id && (
-                                  <>
-                                    <Button
-                                      size="icon-sm"
-                                      variant="ghost"
-                                      onClick={() =>
-                                        handleSyncFromGoogleDocs(existing)
-                                      }
-                                      disabled={syncingGdoc.has(existing.id)}
-                                      title="Scarica modifiche da Google Docs"
-                                      aria-label="Scarica modifiche da Google Docs"
-                                    >
-                                      {syncingGdoc.has(existing.id) ? (
-                                        <Loader2 className="animate-spin" />
-                                      ) : (
-                                        <CloudDownload />
-                                      )}
-                                    </Button>
-                                    <Button
-                                      size="icon-sm"
-                                      variant="ghost"
-                                      className="text-[#ba1a1a] hover:text-[#ba1a1a]"
-                                      onClick={() => setDiscardTarget(existing)}
-                                      disabled={discardingGdoc.has(existing.id)}
-                                      title="Scarta modifiche Google Docs"
-                                      aria-label="Scarta modifiche Google Docs"
-                                    >
-                                      {discardingGdoc.has(existing.id) ? (
-                                        <Loader2 className="animate-spin" />
-                                      ) : (
-                                        <Trash2 />
-                                      )}
-                                    </Button>
-                                  </>
-                                )}
-                              </>
+                            {/* In-browser preview + inline editing. HACCP
+                                schede are a .zip payload with no docx to
+                                preview, so they stay download-only. */}
+                            {isReady && docType.key !== "haccp_forms" && (
+                              <Button
+                                size="icon-sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  router.push(`/documents/${existing.id}`)
+                                }
+                                title="Modifica nel browser"
+                                aria-label={`Modifica ${docType.name} nel browser`}
+                              >
+                                <Pencil />
+                              </Button>
                             )}
                             {versionCount > 0 && (
                               <Button
@@ -814,43 +624,6 @@ export default function DocumentsPage() {
           </div>
         </>
       )}
-
-      {/* Confirm "Scarta modifiche" — destructive action (deletes the Google
-          Doc on Drive and the user's in-browser edits) so a confirm dialog is
-          warranted rather than a silent click. */}
-      <Dialog
-        open={discardTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setDiscardTarget(null);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Scartare le modifiche?</DialogTitle>
-            <DialogDescription>
-              Le modifiche fatte in Google Docs verranno eliminate
-              definitivamente e il documento condiviso verrà rimosso da Drive.
-              Questa azione non può essere annullata.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDiscardTarget(null)}>
-              Annulla
-            </Button>
-            <Button
-              onClick={() => {
-                if (discardTarget) void handleDiscardGdocEdits(discardTarget);
-              }}
-              disabled={
-                discardTarget !== null && discardingGdoc.has(discardTarget.id)
-              }
-              className="bg-[#ba1a1a] text-white hover:bg-[#9b1515]"
-            >
-              Scarta modifiche
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* US-4.4: HACCP forms subset selection. Defaults to all 16 + index. */}
       <Dialog open={haccpDialogOpen} onOpenChange={setHaccpDialogOpen}>
