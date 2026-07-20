@@ -26,7 +26,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="it" className={`${plusJakarta.variable} ${inter.variable} h-full antialiased`}>
+    <html
+      lang="it"
+      data-scroll-behavior="smooth"
+      className={`${plusJakarta.variable} ${inter.variable} h-full antialiased`}
+    >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         {children}
         <Toaster position="top-right" richColors />

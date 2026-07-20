@@ -250,3 +250,32 @@ body {
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+/* -----------------------------------------------------------------------
+   Public landing page
+   ----------------------------------------------------------------------- */
+
+@keyframes landing-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+  .landing-rise {
+    animation: landing-rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+}
+
+/* Navy primary outline is invisible on navy surfaces; lift it to ice blue */
+.dark-section :where(a, button):focus-visible {
+  outline-color: #a5c8ff;
+}
