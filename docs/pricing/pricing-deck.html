@@ -1,0 +1,602 @@
+<meta charset="utf-8">
+<title>N2O DVR Platform — Pricing Strategy</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --cyan:#06b6d4; --teal:#14b8a6; --green:#10b981; --navy:#0f172a;
+  --blue:#2563eb; --purple:#8b5cf6; --white:#fff; --off:#f8fafc;
+  --line:#e2e8f0; --mid:#64748b; --dark:#334155; --slate:#1e293b;
+  --grad-logo:linear-gradient(180deg,#06b6d4,#10b981);
+  --grad-tech:linear-gradient(135deg,#2563eb,#06b6d4);
+  --grad-dark:linear-gradient(160deg,#0f172a 0%,#1e293b 100%);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{
+  font-family:'Inter','Segoe UI',Calibri,Arial,sans-serif;
+  font-size:9.4pt; line-height:1.5; color:var(--dark); background:#fff;
+}
+h1,h2,h3,h4,.num{font-family:'Poppins','Segoe UI Semibold',Calibri,Arial,sans-serif}
+.mono{font-family:'JetBrains Mono',Consolas,monospace}
+
+/* ---------- page scaffolding ---------- */
+/* Chrome applies one margin box to every page, so the top margin is set to 0
+   and re-created here as padding. That lets the cover bleed to the sheet edge
+   while content pages keep their breathing room. */
+.page{page-break-after:always; padding:14mm 16mm 0;}
+.page:last-child{page-break-after:auto}
+.bleed{margin:0 -16mm; padding-left:16mm; padding-right:16mm}
+
+/* Never orphan a heading or split an atomic block across a page boundary. */
+h1,h2,h3{break-after:avoid; page-break-after:avoid}
+tr{break-inside:avoid; page-break-inside:avoid}
+thead{display:table-header-group}
+.card,.kpi,.callout,.verdict,.grid,.kpi-strip,.cover-card{break-inside:avoid; page-break-inside:avoid}
+
+/* ---------- cover ---------- */
+.cover{
+  page-break-after:always; background:var(--grad-dark); color:#fff;
+  height:281mm; margin:0; padding:24mm 20mm 14mm; position:relative; overflow:hidden;
+}
+.cover::after{
+  content:""; position:absolute; right:-90mm; top:-40mm; width:200mm; height:200mm;
+  border-radius:50%; background:radial-gradient(circle,rgba(6,182,212,.18) 0%,rgba(6,182,212,0) 62%);
+}
+.cover-inner{position:relative; z-index:2; height:100%; display:flex; flex-direction:column}
+.cover h1{font-size:34pt; line-height:1.08; font-weight:800; letter-spacing:-.02em; margin:0 0 10mm}
+.cover .kicker{font-size:9pt; letter-spacing:.22em; text-transform:uppercase; color:var(--cyan); font-weight:700; margin-bottom:6mm}
+.cover .sub{font-size:12.5pt; color:#cbd5e1; line-height:1.55; max-width:135mm; font-weight:400}
+.accent-bar{height:5px; width:64mm; background:var(--grad-logo); border-radius:3px; margin:0 0 9mm}
+.cover-meta{margin-top:auto; border-top:1px solid rgba(255,255,255,.16); padding-top:6mm;
+  display:flex; justify-content:space-between; font-size:8.6pt; color:#94a3b8}
+.cover-meta b{color:#e2e8f0; font-weight:600}
+.cover-cards{display:flex; gap:6mm; margin:11mm 0 0}
+.cover-card{flex:1; background:rgba(30,41,59,.72); border:1px solid rgba(6,182,212,.22);
+  border-radius:10px; padding:7mm 6mm}
+.cover-card .lab{font-size:7.2pt; letter-spacing:.12em; text-transform:uppercase; color:#94a3b8;
+  font-weight:700; min-height:8mm}
+.cover-card .big{font-family:'Poppins',sans-serif; font-size:23pt; font-weight:800; color:var(--cyan); line-height:1.1; margin:2mm 0 1mm}
+.cover-card .fine{font-size:8.4pt; color:#cbd5e1; line-height:1.4}
+
+/* ---------- typography ---------- */
+.sec-tab{display:inline-block; font-size:7.8pt; letter-spacing:.18em; text-transform:uppercase;
+  font-weight:800; color:#fff; background:var(--navy); padding:2.2mm 4mm; border-radius:4px; margin-bottom:4mm}
+h1.doc{font-size:21pt; font-weight:800; color:var(--navy); letter-spacing:-.02em; line-height:1.15; margin-bottom:2.5mm}
+h1.doc + .lede{font-size:10.4pt; color:var(--mid); max-width:150mm; margin-bottom:3mm}
+.rule{height:4px; width:26mm; background:var(--grad-logo); border-radius:2px; margin:0 0 7mm}
+h2{font-size:13.2pt; font-weight:700; color:var(--navy); margin:6.5mm 0 2.5mm; letter-spacing:-.01em}
+h2:first-of-type{margin-top:0}
+h3{font-size:10.2pt; font-weight:700; color:var(--navy); margin:4.5mm 0 2mm}
+p{margin-bottom:2.6mm}
+p.tight{margin-bottom:1.5mm}
+strong{color:var(--navy); font-weight:600}
+em{color:var(--dark)}
+a{color:var(--blue); text-decoration:none}
+ul{margin:0 0 3mm 4.6mm}
+li{margin-bottom:1.6mm}
+.muted{color:var(--mid)}
+.small{font-size:8.4pt}
+.src{font-size:7.8pt; color:var(--mid); margin-top:1.5mm; line-height:1.45}
+
+/* ---------- tables ---------- */
+table{width:100%; border-collapse:collapse; margin:3mm 0 3mm; font-size:8.5pt}
+th{background:var(--navy); color:#fff; font-weight:600; text-align:left;
+  padding:2.4mm 3mm; font-size:8pt; letter-spacing:.01em; vertical-align:bottom}
+th.r,td.r{text-align:right}
+th.c,td.c{text-align:center}
+td{padding:2.2mm 3mm; border-bottom:1px solid var(--line); vertical-align:top}
+tbody tr:nth-child(even) td{background:var(--off)}
+tr.hl td{background:#ecfeff !important; font-weight:600; color:var(--navy)}
+td.price{font-family:'Poppins',sans-serif; font-weight:700; color:var(--navy); white-space:nowrap}
+td.good{color:var(--green); font-weight:600}
+.tbl-lead th:first-child{width:34%}
+
+/* plan comparison */
+table.plans td:first-child{font-weight:600; color:var(--navy); background:#fff}
+table.plans tbody tr:nth-child(even) td:first-child{background:var(--off)}
+table.plans th{text-align:center}
+table.plans td:not(:first-child){text-align:center}
+table.plans tr.row-price td{font-family:'Poppins',sans-serif; font-size:12pt; font-weight:800;
+  color:var(--navy); padding:3.4mm 3mm; background:#fff}
+table.plans tr.row-price td:first-child{font-size:8.5pt; font-weight:600; color:var(--mid)}
+th.star{background:linear-gradient(135deg,#0f172a,#164e63)}
+th .pt{display:block; font-size:7.4pt; font-weight:500; color:#7dd3fc; letter-spacing:.1em; text-transform:uppercase; margin-top:.8mm}
+
+/* ---------- components ---------- */
+.grid{display:flex; gap:5mm; margin:4mm 0}
+.card{flex:1; border:1px solid var(--line); border-radius:9px; padding:5mm 5mm 4.5mm;
+  background:#fff; position:relative; overflow:hidden}
+.card::before{content:""; position:absolute; inset:0 0 auto 0; height:3px; background:var(--grad-logo)}
+.card .lab{font-size:7.4pt; letter-spacing:.13em; text-transform:uppercase; color:var(--mid); font-weight:700}
+.card .big{font-family:'Poppins',sans-serif; font-size:19pt; font-weight:800; color:var(--cyan); line-height:1.15; margin:1.5mm 0 1mm}
+.card .fine{font-size:8.2pt; color:var(--dark); line-height:1.45}
+
+.callout{background:var(--off); border-left:3px solid var(--cyan); border-radius:0 7px 7px 0;
+  padding:4mm 5mm; margin:4mm 0; font-size:9pt}
+.callout .h{font-family:'Poppins',sans-serif; font-weight:700; color:var(--navy); font-size:9.4pt; display:block; margin-bottom:1.2mm}
+.callout.warn{border-left-color:#f59e0b; background:#fffbeb}
+.callout.dark{background:var(--navy); color:#cbd5e1; border-left-color:var(--cyan)}
+.callout.dark .h{color:#fff}
+.callout.dark strong{color:var(--cyan)}
+
+.verdict{background:var(--grad-tech); color:#fff; border-radius:9px; padding:5mm 6mm; margin:5mm 0 0}
+.verdict .h{font-family:'Poppins',sans-serif; font-weight:800; font-size:10.4pt; display:block; margin-bottom:1.6mm; letter-spacing:.01em}
+.verdict p{margin:0; font-size:9pt; color:#e0f2fe}
+.verdict strong{color:#fff}
+
+.kpi-strip{display:flex; gap:0; border:1px solid var(--line); border-radius:9px; overflow:hidden; margin:4mm 0}
+.kpi{flex:1; padding:4mm 4mm; border-right:1px solid var(--line); background:#fff}
+.kpi:last-child{border-right:0}
+.kpi .n{font-family:'Poppins',sans-serif; font-size:16pt; font-weight:800; color:var(--navy); line-height:1.1}
+.kpi .n span{color:var(--cyan)}
+.kpi .l{font-size:7.6pt; letter-spacing:.1em; text-transform:uppercase; color:var(--mid); font-weight:700; margin-top:1mm}
+
+.badge{display:inline-block; font-size:7.4pt; font-weight:700; letter-spacing:.08em;
+  text-transform:uppercase; padding:1mm 2.4mm; border-radius:20px; vertical-align:middle}
+.badge.rec{background:#ecfeff; color:#0e7490; border:1px solid #a5f3fc}
+.badge.no{background:#fef2f2; color:#b91c1c; border:1px solid #fecaca}
+
+.split{display:flex; gap:6mm; margin:4mm 0}
+.split>div{flex:1}
+.nowrap{white-space:nowrap}
+</style>
+
+<!-- ============================== COVER ============================== -->
+<div class="cover">
+  <div class="cover-inner">
+    <img src="data:image/png;base64,__LOGO_B64__" alt="NIUEXA" style="height:19mm;width:auto;margin-bottom:14mm">
+    <div class="kicker">Pricing Strategy &middot; Confidential</div>
+    <div class="accent-bar"></div>
+    <h1>Piattaforma DVR<br>Modello di pricing</h1>
+    <div class="sub">Two go-to-market models for the N2O safety-documentation platform: one for consultancies that resell it across many client engagements, one for the employer who needs a single compliant file. Priced against market evidence, verified unit economics, and the obligations in D.Lgs.&nbsp;81/2008.</div>
+
+    <div class="cover-cards">
+      <div class="cover-card">
+        <div class="lab">Model A &middot; Consulenti</div>
+        <div class="big">€3.900<span style="font-size:11pt;color:#94a3b8">/anno</span></div>
+        <div class="fine">Tier "Studio" — 5 seats, 60 active client companies, all 17 document types. 2–4&nbsp;% of the revenue it produces.</div>
+      </div>
+      <div class="cover-card">
+        <div class="lab">Model B &middot; Azienda diretta</div>
+        <div class="big">€990<span style="font-size:11pt;color:#94a3b8">/anno</span></div>
+        <div class="fine">Tier "Plus" — 3 sites, 5 users, DVR + all core attachments, RSPP review included.</div>
+      </div>
+      <div class="cover-card">
+        <div class="lab">Gross margin</div>
+        <div class="big">92–97<span style="font-size:11pt;color:#94a3b8">&nbsp;%</span></div>
+        <div class="fine">Variable COGS measured at €1,85 per complete engagement. Price is a value decision, not a cost decision.</div>
+      </div>
+    </div>
+
+    <div class="cover-meta">
+      <div><b>N2O SRL</b> &nbsp;·&nbsp; DVR Automation Platform &nbsp;·&nbsp; dvr-sicurezza.it</div>
+      <div>Rev. 23 July 2026 &nbsp;·&nbsp; <b>NIUEXA</b></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== 00 FOUNDATIONS ============================== -->
+<div class="page">
+  <span class="sec-tab">00 &nbsp;·&nbsp; Foundations</span>
+  <h1 class="doc">The evidence the prices are built on</h1>
+  <div class="lede">What is actually built, what it costs to run, what the market already pays, and what the law forces buyers to keep doing.</div>
+  <div class="rule"></div>
+
+  <h2>1 &nbsp;What is being sold</h2>
+  <p>Measured from the repository, not from the brochure. This inventory is what justifies pricing above every DVR-only competitor in the Italian market.</p>
+
+  <div class="kpi-strip">
+    <div class="kpi"><div class="n"><span>17</span></div><div class="l">document types</div></div>
+    <div class="kpi"><div class="n"><span>8</span></div><div class="l">risk calculators</div></div>
+    <div class="kpi"><div class="n"><span>11</span></div><div class="l">AI services</div></div>
+    <div class="kpi"><div class="n"><span>184</span></div><div class="l">API endpoints</div></div>
+    <div class="kpi"><div class="n"><span>81k</span></div><div class="l">lines of code</div></div>
+  </div>
+
+  <table class="tbl-lead">
+    <tr><th>Capability</th><th>Detail</th></tr>
+    <tr><td>Document generation</td><td>DVR Master (~187 pp) + 16 attachments and complementary documents — MMC, VDT, Stress, Gestanti, Incendio, Microclima (+severo), Biologico ×3, PEE azienda/comune, HACCP manual + 16 forms, DUVRI, POS</td></tr>
+    <tr><td>Calculations</td><td>Risk Index <span class="mono">I&nbsp;=&nbsp;2D&nbsp;+&nbsp;P</span>, NIOSH PLR/IR, VDT ≥20 h/week threshold, INAIL stress scoring (76 indicators), fire risk INF+SI+PI, PMV/PPD thermal comfort, PHS severe heat, MoVaRisCh chemical</td></tr>
+    <tr><td>AI layer</td><td>SDS PDF → structured chemical record (vision + structured outputs); site photo → equipment inventory; risk suggester across 11 categories; DPI matrix; improvement measures; HACCP CCP; POS phases; stress measures; company description</td></tr>
+    <tr><td>Data enrichment</td><td>VIES + Registro Imprese (openapi.com) + Serper + Firecrawl → company profile autofills from the P.IVA alone</td></tr>
+    <tr><td>Multi-tenancy</td><td><span class="mono">Organization</span> → users + aziende, already isolated</td></tr>
+    <tr class="hl"><td>White-label</td><td>Per-organisation logo, letterhead, P.IVA and RSPP name printed on every generated <span class="mono">.docx</span> — the platform is invisible to the end client</td></tr>
+    <tr><td>Live editing</td><td>In-browser <span class="mono">.docx</span> preview with inline editing and locked-paragraph rules (shipped 2026-07-20)</td></tr>
+  </table>
+
+  <div class="callout">
+    <span class="h">The pricing-critical fact</span>
+    The white-label + multi-tenant layer already exists. A consultancy can put its own letterhead on the output today. That single capability is the entire basis of Model A — and it is what a perpetual desktop licence cannot deliver.
+  </div>
+
+  <h2>2 &nbsp;Cost base — why this is value-priced, not cost-priced</h2>
+  <p>Variable cost of producing one complete engagement (typical PMI: 5 environments, 6 job roles, 25 risk rows, 8 chemical SDS, 15 photos, full 17-document set):</p>
+
+  <table>
+    <tr><th>Component</th><th>Model</th><th class="r">Cost</th></tr>
+    <tr><td>SDS PDF extraction ×8</td><td class="mono">gpt-5.5</td><td class="r">€0,99</td></tr>
+    <tr><td>Equipment-from-photo ×5</td><td class="mono">gpt-5.5</td><td class="r">€0,26</td></tr>
+    <tr><td>Improvement measures ×25</td><td class="mono">gpt-5.4-mini</td><td class="r">€0,12</td></tr>
+    <tr><td>Risk suggester ×5 (medium effort)</td><td class="mono">gpt-5.4-mini</td><td class="r">€0,09</td></tr>
+    <tr><td>DPI matrix ×6</td><td class="mono">gpt-5.4-mini</td><td class="r">€0,07</td></tr>
+    <tr><td>All remaining AI calls</td><td class="mono">mini / nano</td><td class="r">€0,11</td></tr>
+    <tr><td>Visura camerale + search + scrape</td><td class="mono">openapi / serper / firecrawl</td><td class="r">€0,21</td></tr>
+    <tr class="hl"><td><strong>Total variable COGS per engagement</strong></td><td></td><td class="r"><strong>€1,85</strong></td></tr>
+    <tr><td>Heavy engagement (20 SDS, 12 environments, premium toggle)</td><td></td><td class="r">€4,20</td></tr>
+  </table>
+  <p class="small muted">Infrastructure (Render, Frankfurt): €51/month for the current single stack; ≈ <strong>€33 per organisation per year</strong> at ~100 tenants, ≈ €20 at 300.</p>
+
+  <div class="callout dark">
+    <span class="h">Implication</span>
+    Gross margin sits at <strong>92–97 %</strong> at every price tested. Cost recovery is irrelevant to the decision. The only defensible anchors are <strong>(a)</strong> the buyer's own billable output and <strong>(b)</strong> what the market already pays for weaker tools. Both are documented on the next page.
+  </div>
+</div>
+
+<div class="page">
+  <span class="sec-tab">00 &nbsp;·&nbsp; Foundations</span>
+
+  <h2>3 &nbsp;Anchor A — what competing software costs</h2>
+  <table>
+    <tr><th>Product</th><th>What it is</th><th class="r">Price, excl. VAT</th></tr>
+    <tr><td>DVR Suite — Starter</td><td>cloud, 1 DVR, 50 MB</td><td class="r price">€120/yr</td></tr>
+    <tr><td>DVR Suite — Basic</td><td>10 DVR, 500 MB, "for consultants"</td><td class="r price">€420/yr</td></tr>
+    <tr><td>DVR Suite — Pro</td><td>50 DVR, 1 GB, "professional firms"</td><td class="r price">€1.200/yr</td></tr>
+    <tr><td>DVR Suite — Unlimited</td><td>120 DVR, 5 GB</td><td class="r price">€2.400/yr</td></tr>
+    <tr><td>VRC Protection DVR-C</td><td>5 users, 15 DVR, 4 h support</td><td class="r price">€950</td></tr>
+    <tr><td>Easywork "DVR Generator" Safety Box</td><td>DIY single DVR, web app + printed manual</td><td class="r price">€350–380 one-off</td></tr>
+    <tr><td>Blumatica DVR Classico</td><td>perpetual desktop licence</td><td class="r price">€490</td></tr>
+    <tr class="hl"><td>Blumatica Rischi Specifici</td><td>22 risk types — <strong>€60 per risk type</strong></td><td class="r price">€1.320 list</td></tr>
+    <tr><td>Blumatica DUVRI / POS / PSC / Lavoratrici&nbsp;Madri</td><td>perpetual, per module</td><td class="r price">€125 / €155 / €155 / €69</td></tr>
+    <tr><td>Blumatica "Bundle RSPP"</td><td>DVR + madri + rischi specifici + MOG</td><td class="r price">€950</td></tr>
+  </table>
+  <p class="src">Blumatica figures are from an archived 2014 listino — nominal prices are stale, but the <em>relative module weighting</em> (a firm pays €60–155 <em>per risk type or per document type</em>) is the durable signal and the strongest justification for our document breadth. Sources: dvrsuite.it, vrcprotection.it, giornalepartiteiva.it, ordingrc.it.</p>
+
+  <p><strong>Read-through.</strong> The market ceiling for a DVR-only cloud tool is ~€2.400/yr. Nobody in that table generates 17 document types; nobody applies AI to SDS extraction or photo-based equipment capture. We do not compete on that axis — but the €120–2.400 band sets the <em>floor of credibility</em>, not the ceiling of value.</p>
+
+  <h2>4 &nbsp;Anchor B — what the buyer bills for the same output</h2>
+  <table>
+    <tr><th>Deliverable</th><th class="r">Market fee to the end client</th></tr>
+    <tr><td>DVR — low risk, ≤5 workers</td><td class="r price">€100–250</td></tr>
+    <tr><td>DVR — up to 15 workers</td><td class="r price">€300–450</td></tr>
+    <tr><td>DVR — PMI</td><td class="r price">€600–1.500</td></tr>
+    <tr class="hl"><td>DVR — high risk / complex organisation</td><td class="r price">€2.000–3.000+</td></tr>
+    <tr><td>DVR — documented cooperative listino 2023</td><td class="r price">€400 members / €425 non-members</td></tr>
+    <tr><td>Stress lavoro-correlato (SLC)</td><td class="r price">€175 / €200</td></tr>
+    <tr><td>VDT — ≤5 / 6–9 / 10–15 workstations</td><td class="r price">€350 / €400 / €450</td></tr>
+    <tr><td>RSPP esterno, &lt;15 workers, annual mandate</td><td class="r price">€450–600/yr</td></tr>
+    <tr><td>Manuale HACCP</td><td class="r price">from €200</td></tr>
+    <tr><td>Data certa — timestamp → notarised copy</td><td class="r price">€300–1.500</td></tr>
+  </table>
+  <p class="src">Sources: coopcommercialisti.it listino 2023, scuolasicurezza.it, gms-srl.it, sicurezza.com.</p>
+
+  <div class="callout">
+    <span class="h">Read-through</span>
+    A consultant's full N2O-style engagement (DVR + 5–8 attachments) invoices at <strong>€1.500–4.000</strong>. A studio serving 60 clients a year bills <strong>€90k–240k</strong> of document work. Software at €3.900/yr is <strong>1,6–4,3 % of the revenue it produces</strong>. That is the number for the sales deck.
+  </div>
+
+  <h2>5 &nbsp;Regulatory tailwinds worth pricing against</h2>
+  <table>
+    <tr><th>Driver</th><th>Commercial consequence</th></tr>
+    <tr><td>DVR mandatory for <strong>every</strong> employer with ≥1 worker (D.Lgs. 81/2008)</td><td>~1,5 M obligated entities. Not discretionary spend.</td></tr>
+    <tr><td><strong>Art. 29 c.3</strong> — update within <strong>30 days</strong> of new equipment, an accident, or an organisational change</td><td>Recurring revision demand → justifies subscription over one-off licence</td></tr>
+    <tr class="hl"><td><strong>Art. 28 c.2 — data certa</strong>; Cass. 14579/2026. Fine <strong>€1.228,50–2.457,02</strong> without it</td><td>Sellable paid add-on with a quantified downside</td></tr>
+    <tr><td><strong>Legge PMI 2026</strong> (L. 11 marzo 2026 n. 34, in force 7 Apr 2026): simplified INAIL MOG templates; <strong>mandatory annual written smart-working risk notice, with sanctions</strong>; VR training with digital traceability</td><td>Two <em>new recurring document types</em> land inside the existing engine. Build and price them before incumbents notice.</td></tr>
+  </table>
+  <p class="small muted">Addressable base: ~5,08 M active Italian firms; ~221 k with 10–249 employees; 94,6 % micro (&lt;10). The micro tail is Model B; the 10–249 band is where Model A's buyers live.</p>
+</div>
+
+<div class="page">
+  <span class="sec-tab">00 &nbsp;·&nbsp; Foundations</span>
+
+  <h2>6 &nbsp;The metering decision</h2>
+  <p>COGS is €1,85 per engagement. Metering every AI call would create friction worth about two euros. <strong>Bundle the cheap reasoning calls generously; meter only the three genuinely expensive or externally-billed actions.</strong></p>
+
+  <table>
+    <tr><th>Action</th><th class="r">Real cost</th><th class="c">Credits</th><th class="r">Margin on the credit</th></tr>
+    <tr><td>Improvement measure · risk suggestion · DPI matrix · POS phase · HACCP CCP · company description</td><td class="r">€0,001–0,018</td><td class="c"><strong>1</strong></td><td class="r good">85–99 %</td></tr>
+    <tr><td>Equipment recognition from site photo <span class="mono small">(gpt-5.5 vision)</span></td><td class="r">€0,052</td><td class="c"><strong>2</strong></td><td class="r good">79 %</td></tr>
+    <tr><td>SDS PDF extraction <span class="mono small">(gpt-5.5, structured)</span></td><td class="r">€0,124</td><td class="c"><strong>3</strong></td><td class="r good">67 %</td></tr>
+    <tr><td>Visura camerale / Registro Imprese <span class="mono small">(billed by openapi.com)</span></td><td class="r">€0,200</td><td class="c"><strong>5</strong></td><td class="r good">68 %</td></tr>
+  </table>
+  <p>A complete engagement consumes <strong>≈ 80 credits</strong>. Plan inclusions are sized against that number. Overage packs: <strong>500 = €79 · 2.000 = €249 · 10.000 = €990</strong> (69–81 % gross margin on the pack itself).</p>
+
+  <h2>7 &nbsp;Add-on catalogue</h2>
+  <table>
+    <tr><th>Add-on</th><th class="r">Price</th><th>Why it prices this way</th></tr>
+    <tr class="hl"><td>Onboarding &amp; template migration</td><td class="r price">€1.500–4.000</td><td>The firm's own boilerplate, layout and risk library loaded into the engine. Real delivery work, and the strongest lock-in we have. <strong>Never discount to zero.</strong></td></tr>
+    <tr><td>Custom document type</td><td class="r price">from €4.500</td><td>New generator built to their template (PSC, MOG, ISO 45001 manual)</td></tr>
+    <tr><td>Extra seat</td><td class="r price">€240/yr</td><td>Well above marginal cost; keeps expansion revenue honest</td></tr>
+    <tr><td>Extra active-company block (+25)</td><td class="r price">€600/yr</td><td>Scales with their book of business</td></tr>
+    <tr><td>AI credit packs</td><td class="r price">€79 / €249 / €990</td><td>See §6</td></tr>
+    <tr><td>Data certa — qualified timestamp + PEC deposit</td><td class="r price">€19/doc · €149/yr</td><td>Anchored against a €300–1.500 notarised alternative and the €1.228–2.457 fine</td></tr>
+    <tr><td>Google Drive / gestionale delivery integration</td><td class="r price">€900/yr</td><td>Already built for Drive — sell it</td></tr>
+    <tr><td>White-label domain + full brand removal</td><td class="r price">€1.200/yr</td><td>Consultant tiers only</td></tr>
+    <tr><td>Assisted review by a certified RSPP</td><td class="r price">€390–1.200</td><td>Pure services margin — and the legal-risk answer for the direct channel</td></tr>
+    <tr><td>Priority SLA + named CSM</td><td class="r price">15 % of ACV</td><td>Standard</td></tr>
+  </table>
+
+  <h2>8 &nbsp;Channel conflict — the one thing that can break this</h2>
+  <p>Selling to consultants <em>and</em> to the companies those consultants serve is a real conflict. Resolve it structurally, before the first contract.</p>
+  <ul>
+    <li><strong>Segment by size and risk class.</strong> Direct plans sell only to firms with &lt;15 workers in low/medium risk classes. Everything above routes to a partner consultant — in writing, in the consultant contract.</li>
+    <li><strong>Give consultants the override.</strong> A partner-referred company converts into the consultant's tenant; the consultant keeps the relationship and earns a 20 % revenue share on that seat.</li>
+    <li><strong>Never publish direct pricing that undercuts a partner's engagement fee</strong> without saying why. €490/yr buys a template-driven document without professional judgement — a genuinely different product. State it explicitly in the marketing.</li>
+    <li><strong>Legal exposure.</strong> The <em>datore di lavoro</em> signs the DVR and carries liability. Position the direct product as <strong>"DVR assistito"</strong> with an optional RSPP review — never as "DVR fai-da-te".</li>
+  </ul>
+
+  <h2>9 &nbsp;Commercial hygiene</h2>
+  <div class="split">
+    <div>
+      <table>
+        <tr><td>Currency &amp; tax</td><td>EUR, all prices excl. IVA 22 %</td></tr>
+        <tr><td>Billing</td><td>Annual in advance; 12-month auto-renew, 60-day notice</td></tr>
+        <tr><td>Monthly option</td><td>+20 % (discourages it, funds churn risk)</td></tr>
+      </table>
+    </div>
+    <div>
+      <table>
+        <tr><td>3-year prepay</td><td>−15 %</td></tr>
+        <tr><td>Annual uplift</td><td>CPI + 3 %, capped at 8 %</td></tr>
+        <tr><td>Trial</td><td>30 days direct · 45-day 2-company pilot for consultants</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="callout warn">
+    <span class="h">No perpetual licences <span class="badge no">hard rule</span></span>
+    Blumatica has trained this market to expect them. Refuse. Content that tracks D.Lgs. 81/2008 amendments cannot be sold once — a perpetual sale creates an unfunded maintenance liability. The 3-year prepay at −15 % is the compromise.
+  </div>
+</div>
+
+<!-- ============================== MODEL A ============================== -->
+<div class="page">
+  <span class="sec-tab" style="background:var(--blue)">Model A &nbsp;·&nbsp; Consulenti &amp; Studi</span>
+  <h1 class="doc">Multi-client: the platform as billable capacity</h1>
+  <div class="lede">Buyer: a firm like N2O SRL. Sells safety compliance to many client companies and needs to produce billable documents at scale, under its own brand.</div>
+  <div class="rule"></div>
+
+  <table class="plans">
+    <tr>
+      <th style="text-align:left;width:26%">&nbsp;</th>
+      <th>Solo</th>
+      <th class="star">Studio<span class="pt">recommended</span></th>
+      <th>Network</th>
+      <th>Enterprise</th>
+    </tr>
+    <tr class="row-price"><td>Price per year</td><td>€1.490</td><td style="color:#0e7490">€3.900</td><td>€8.900</td><td>from €18.000</td></tr>
+    <tr><td>Target</td><td>freelance RSPP</td><td>3–8 person studio<br><span class="small muted">(N2O today)</span></td><td>multi-office network</td><td>franchise / reseller</td></tr>
+    <tr><td>Seats</td><td>1</td><td>5</td><td>15</td><td>40</td></tr>
+    <tr class="hl"><td>Active client companies</td><td>15</td><td>60</td><td>200</td><td>unlimited</td></tr>
+    <tr><td>Document types</td><td>all 17</td><td>all 17</td><td>all 17</td><td>all 17</td></tr>
+    <tr><td>AI credits / year</td><td>1.500</td><td>5.000</td><td>16.000</td><td>pooled</td></tr>
+    <tr><td>White-label letterhead</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+    <tr><td>White-label domain</td><td>—</td><td>add-on</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Template migration</td><td>add-on</td><td><strong>1 set incl.</strong></td><td>3 sets incl.</td><td>unlimited</td></tr>
+    <tr><td>Client sub-tenants</td><td>—</td><td>—</td><td>10</td><td>unlimited</td></tr>
+    <tr><td>API access</td><td>—</td><td>read-only</td><td>full</td><td>full + webhooks</td></tr>
+    <tr><td>Support</td><td>email, 3 days</td><td>email+chat, 1 day</td><td>named CSM, 4 h</td><td>SLA 99,5 %, 2 h</td></tr>
+    <tr class="row-price" style="border-top:2px solid var(--navy)"><td>Onboarding, one-off</td><td style="font-size:10pt">€0</td><td style="font-size:10pt;color:#0e7490">€1.500</td><td style="font-size:10pt">€3.500</td><td style="font-size:10pt">quoted</td></tr>
+  </table>
+
+  <p class="small"><strong>"Active client company"</strong> = an azienda with at least one document generated or revised in the subscription year. Archived clients stay readable forever and do not count. It is the fairest available metric, and it is the one the buyer already thinks in — their client book.</p>
+
+  <h2>Why these numbers</h2>
+
+  <h3>1 &nbsp;Priced as a share of the revenue it produces</h3>
+  <table>
+    <tr><th>Plan</th><th class="c">Engagements</th><th class="r">Studio's gross billings</th><th class="r">Platform cost</th><th class="r">% of billings</th></tr>
+    <tr><td>Solo</td><td class="c">15</td><td class="r">€22k–45k</td><td class="r">€1.490</td><td class="r good">3,3–6,6 %</td></tr>
+    <tr class="hl"><td>Studio</td><td class="c">60</td><td class="r">€90k–240k</td><td class="r">€3.900 + €1.500</td><td class="r good">1,6–4,3 % after yr 1</td></tr>
+    <tr><td>Network</td><td class="c">200</td><td class="r">€300k–800k</td><td class="r">€8.900 + €3.500</td><td class="r good">1,5–4,1 %</td></tr>
+  </table>
+  <p>Every tier lands in the <strong>2–6 % of produced revenue</strong> band. Professional-tools spend is defensible up to ~10 %, so the objection will not be price — it will be switching cost, which the onboarding fee and template migration are designed to convert into lock-in.</p>
+
+  <h3>2 &nbsp;Priced against the labour it replaces</h3>
+  <div class="grid">
+    <div class="card"><div class="lab">Time reduction target</div><div class="big">60–70 %</div><div class="fine">on document production — the product's stated goal</div></div>
+    <div class="card"><div class="lab">Recovered capacity, Studio tier</div><div class="big">€33.600</div><div class="fine">60 engagements × 14 h saved × €40/h fully-loaded</div></div>
+    <div class="card"><div class="lab">Return on €3.900</div><div class="big">8,6×</div><div class="fine">before counting the engagements they can now accept</div></div>
+  </div>
+  <p class="small muted">A manual full document set is 12–20 hours; a senior technician's fully-loaded cost is €35–55/hour. <strong>Lead the sales conversation with this figure, not the feature list.</strong></p>
+
+  <h3>3 &nbsp;Priced against what the market pays for less</h3>
+  <p>Studio at €3.900 is roughly 3× DVR Suite Pro (€1.200, DVR only). The premium is carried by four things a side-by-side makes obvious:</p>
+  <ul>
+    <li><strong>17 document types vs 1.</strong> Blumatica's own listino prices modules at €60–155 each; at their unit economics our attachment library alone lists above €1.300.</li>
+    <li><strong>AI that removes data entry</strong>, not just formats it — SDS PDF → structured chemical record, site photo → equipment inventory, risk library → suggested measures. No Italian competitor does this today.</li>
+    <li><strong>The digital sopralluogo app.</strong> The field technician captures once; office staff never re-key. This is the actual time saving.</li>
+    <li><strong>White-label output.</strong> The firm's logo, P.IVA and RSPP name on every document. A desktop licence cannot deliver this.</li>
+  </ul>
+
+  <h3>4 &nbsp;Why "active companies", not seats, is the primary meter</h3>
+  <p>Seats scale with headcount; revenue scales with clients. A 3-person studio serving 80 companies is a bigger account than a 10-person studio serving 20. Metering on active companies aligns our revenue with theirs, makes expansion automatic, and removes the incentive to share passwords. Seats remain a secondary meter so a 40-person firm cannot buy Solo.</p>
+</div>
+
+<div class="page">
+  <span class="sec-tab" style="background:var(--blue)">Model A &nbsp;·&nbsp; Consulenti &amp; Studi</span>
+
+  <h2>Unit economics</h2>
+  <table>
+    <tr><th>Plan</th><th class="r">Price</th><th class="c">Engagements</th><th class="r">Variable COGS</th><th class="r">Infra</th><th class="r">Gross margin</th><th class="r">Our cost / engagement</th></tr>
+    <tr><td>Solo</td><td class="r price">€1.490</td><td class="c">15</td><td class="r">€37</td><td class="r">€33</td><td class="r good">95,3 %</td><td class="r">€4,66</td></tr>
+    <tr class="hl"><td>Studio</td><td class="r price">€3.900</td><td class="c">60</td><td class="r">€146</td><td class="r">€33</td><td class="r good">95,4 %</td><td class="r">€2,98</td></tr>
+    <tr><td>Network</td><td class="r price">€8.900</td><td class="c">200</td><td class="r">€487</td><td class="r">€33</td><td class="r good">94,2 %</td><td class="r">€2,60</td></tr>
+    <tr><td>Enterprise</td><td class="r price">€18.000</td><td class="c">500</td><td class="r">€1.219</td><td class="r">€120</td><td class="r good">92,6 %</td><td class="r">€2,68</td></tr>
+  </table>
+  <p class="src">Variable COGS = AI tokens (gpt-5.5 for SDS and vision, gpt-5.4-mini for reasoning, gpt-5.4-nano for boilerplate) + Registro Imprese / search / scrape calls, at a 25 % heavy-engagement mix.</p>
+
+  <table>
+    <tr><th>Plan</th><th class="r">ACV</th><th class="r">CAC target</th><th class="r">Payback</th><th class="r">LTV (3 y, 90 % ret.)</th><th class="r">LTV / CAC</th></tr>
+    <tr><td>Solo</td><td class="r">€1.490</td><td class="r">€900</td><td class="r">7,2 mo</td><td class="r">€4.023</td><td class="r good">4,5×</td></tr>
+    <tr class="hl"><td>Studio</td><td class="r">€3.900</td><td class="r">€2.500</td><td class="r">7,7 mo</td><td class="r">€10.530</td><td class="r good">4,2×</td></tr>
+    <tr><td>Network</td><td class="r">€8.900</td><td class="r">€6.000</td><td class="r">8,1 mo</td><td class="r">€24.030</td><td class="r good">4,0×</td></tr>
+  </table>
+  <div class="callout">
+    <span class="h">All three clear 3× LTV/CAC and sub-12-month payback with room</span>
+    This segment can absorb a real sales motion — inside sales, <em>ordini professionali</em> partnerships, trade events. The direct segment cannot. That asymmetry is the reason Model A launches first.
+  </div>
+
+  <h2>Add-ons that matter most here</h2>
+  <table>
+    <tr><th>Add-on</th><th class="r">Price</th><th class="r">Expected attach</th></tr>
+    <tr class="hl"><td>Onboarding &amp; template migration</td><td class="r price">€1.500–4.000</td><td class="r">100 % on Studio+ <span class="small muted">(mandatory)</span></td></tr>
+    <tr><td>Extra 25 active companies</td><td class="r price">€600/yr</td><td class="r">~40 % by year 2</td></tr>
+    <tr><td>Extra seat</td><td class="r price">€240/yr</td><td class="r">~50 %</td></tr>
+    <tr><td>Data certa, unlimited</td><td class="r price">€149/yr</td><td class="r">~50 %</td></tr>
+    <tr><td>White-label domain + brand removal</td><td class="r price">€1.200/yr</td><td class="r">~30 % of Studio</td></tr>
+    <tr><td>AI credit pack (2.000)</td><td class="r price">€249</td><td class="r">~25 %</td></tr>
+    <tr><td>Drive / gestionale integration</td><td class="r price">€900/yr</td><td class="r">~20 %</td></tr>
+    <tr><td>Custom document type</td><td class="r price">from €4.500</td><td class="r">~15 %, high strategic value</td></tr>
+  </table>
+  <p>Modelled net revenue retention with these attach rates: <strong>112–118 %</strong>. The add-on layer, not the base plan, is what makes this segment compound.</p>
+
+  <h2>Risks</h2>
+  <table>
+    <tr><th style="width:38%">Risk</th><th>Mitigation</th></tr>
+    <tr><td>N2O is both first customer and prospective competitor to other studios</td><td>Sell N2O a founding-partner position (Studio at €0 for 3 years, or a revenue share) in exchange for reference rights and template contribution. Fix it now; do not renegotiate annually.</td></tr>
+    <tr><td>"Active company" gaming via archive/unarchive churn</td><td>Count any azienda touched in the period; archived clients readable but frozen. Enforce in code before the first external sale.</td></tr>
+    <tr><td>Studios expect perpetual licences</td><td>Refuse. Lead with regulatory maintenance. Offer 3-year prepay at −15 % as the compromise.</td></tr>
+    <tr><td>Price objection anchored on DVR Suite's €1.200</td><td>Reframe on document count (17 vs 1) and hours saved (€33,6k). Never on feature parity.</td></tr>
+    <tr><td><strong>No billing infrastructure exists in the codebase</strong></td><td>Stripe subscriptions + <span class="mono">Subscription</span>/<span class="mono">UsageCounter</span> on <span class="mono">Organization</span> are prerequisites for any external sale. Estimate before committing to a launch date.</td></tr>
+  </table>
+
+  <div class="verdict">
+    <span class="h">Recommended launch position</span>
+    <p><strong>Lead with Studio at €3.900 + €1.500 onboarding.</strong> It is the tier N2O itself occupies, so it ships with a real reference story; it prices at 2–4 % of the buyer's billings; and it clears CAC in under eight months. Solo exists to make Studio look reasonable and to catch freelancers. Network exists to give Studio somewhere to grow into.</p>
+  </div>
+</div>
+
+<!-- ============================== MODEL B ============================== -->
+<div class="page">
+  <span class="sec-tab" style="background:var(--green)">Model B &nbsp;·&nbsp; Azienda diretta</span>
+  <h1 class="doc">Single company: the compliance file that stays current</h1>
+  <div class="lede">Buyer: a <em>datore di lavoro</em> who must hold a DVR for their own company and does not want to pay a consultant to retype it every time something changes.</div>
+  <div class="rule"></div>
+
+  <div class="callout warn">
+    <span class="h">Positioning first, price second</span>
+    This tier is <strong>not</strong> "DVR fai-da-te". The <em>datore di lavoro</em> signs the DVR and carries the liability — a tool that hands them an unreviewed document and walks away is selling them exposure, and it will eventually cost N2O its reputation at an inspection. Sell it as <strong>"DVR assistito"</strong>: the platform does the structure, the calculations and the writing; a certified RSPP reviews and countersigns on request. That framing is what lets us charge above the €350 DIY box products and below the consultant — in the gap nobody currently occupies.
+  </div>
+
+  <table class="plans">
+    <tr>
+      <th style="text-align:left;width:30%">&nbsp;</th>
+      <th>Base</th>
+      <th class="star">Plus<span class="pt">recommended</span></th>
+      <th>Multi-sede</th>
+    </tr>
+    <tr class="row-price"><td>Price per year</td><td>€490</td><td style="color:#047857">€990</td><td>€2.400</td></tr>
+    <tr><td>First year, incl. guided setup</td><td>€690</td><td>€1.290</td><td>€2.900</td></tr>
+    <tr><td>Target</td><td>micro firm, ≤15 workers<br><span class="small muted">low / medium risk</span></td><td>PMI, 15–50 workers</td><td>10–249 workers<br><span class="small muted">multiple sites</span></td></tr>
+    <tr class="hl"><td>Sites (sedi / unità locali)</td><td>1</td><td>3</td><td>10</td></tr>
+    <tr><td>Users</td><td>2</td><td>5</td><td>15</td></tr>
+    <tr><td>Documents</td><td>DVR Master + MMC, VDT, Stress, Gestanti, Incendio</td><td>+ Microclima, Biologico, PEE, DUVRI, chimico (MoVaRisCh)</td><td>all 17 — incl. HACCP manual + 16 forms, POS</td></tr>
+    <tr><td>AI credits / year</td><td>150</td><td>400</td><td>1.200</td></tr>
+    <tr><td>Digital sopralluogo app</td><td>✓</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Unlimited revisions &amp; re-generation</td><td>✓</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Art. 29 c.3 revision reminders</td><td>✓</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Data certa</td><td>add-on €149/yr</td><td><strong>included</strong></td><td><strong>included</strong></td></tr>
+    <tr><td>RSPP assisted review</td><td>add-on</td><td>1 / year incl.</td><td>2 / year incl.</td></tr>
+    <tr><td>Support</td><td>email, 3 days</td><td>email + chat, 1 day</td><td>phone + named contact</td></tr>
+  </table>
+  <p class="small">30-day free trial, full features, no card. Guided setup is a 60–90 minute remote session — it is what converts trial to paid in this segment and it should never be self-service.</p>
+
+  <h2>Why these numbers</h2>
+
+  <h3>1 &nbsp;Anchored on the invoice they already pay</h3>
+  <p>A PMI buying a DVR + stress + VDT + data certa pays <strong>€1.175–2.100</strong> in year one — and pays again on every revision.</p>
+  <table>
+    <tr><th>Plan</th><th class="r">Price</th><th>Replaces</th><th>Read-through</th></tr>
+    <tr><td>Base</td><td class="r price">€490</td><td>a single low-complexity DVR (€300–450)</td><td>Sits just above one document — but includes four attachments and unlimited revisions. Over 3 years: €1.470 against €900–1.350 of consultant fees for the <em>same three documents once each</em>.</td></tr>
+    <tr class="hl"><td>Plus</td><td class="r price">€990</td><td>€1.200–2.100 of first-year consultant work</td><td>Pays for itself in year one and undercuts on every renewal.</td></tr>
+    <tr><td>Multi-sede</td><td class="r price">€2.400</td><td>€3.000–8.000 of multi-site consultant work</td><td>Deliberately the last tier — see §4.</td></tr>
+  </table>
+
+  <h3>2 &nbsp;Anchored against the DIY products already in market</h3>
+  <div class="split">
+    <div>
+      <table>
+        <tr><th>Product</th><th class="r">Price</th></tr>
+        <tr><td>Easywork "DVR Generator" Safety Box<br><span class="small muted">one DVR, DIY web app + printed manual</span></td><td class="r price">€350–380<br><span class="small muted">one-off</span></td></tr>
+        <tr><td>DVR Suite Starter<br><span class="small muted">1 DVR/yr, cloud, 50 MB</span></td><td class="r price">€120/yr</td></tr>
+        <tr class="hl"><td><strong>N2O Base</strong><br><span class="small muted">5 documents, calculations, AI, assisted review</span></td><td class="r price">€490/yr</td></tr>
+      </table>
+    </div>
+    <div>
+      <p class="tight"><strong>Base is 29 % above the Safety Box and 4× DVR Suite Starter.</strong> That premium has to be earned in the first screen of the marketing site:</p>
+      <ul class="small">
+        <li>5 documents in Base, not 1 — 17 in Multi-sede</li>
+        <li>Real calculations, not templates: NIOSH lifting index, VDT exposure threshold, INAIL stress scoring, fire risk INF+SI+PI, PMV/PPD</li>
+        <li>Autofill from the P.IVA alone — the company profile builds itself</li>
+        <li>SDS PDF → structured chemical record; site photo → equipment inventory</li>
+        <li><strong>Unlimited revisions</strong>, which is the actual recurring obligation</li>
+        <li>An RSPP who will put their name on it</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="page">
+  <span class="sec-tab" style="background:var(--green)">Model B &nbsp;·&nbsp; Azienda diretta</span>
+
+  <h3>3 &nbsp;Subscription, not one-off — and the law says so</h3>
+  <p>This is the argument that makes annual billing legitimate rather than extractive:</p>
+  <div class="grid">
+    <div class="card"><div class="lab">Art. 29 c.3</div><div class="big">30 giorni</div><div class="fine">to update the DVR after new equipment, an accident, or an organisational change. A one-off document is stale the first time they buy a machine.</div></div>
+    <div class="card"><div class="lab">Art. 28 c.2 — data certa</div><div class="big">€1.228–2.457</div><div class="fine">fine for a DVR without a certain date (Cass. 14579/2026). Every revision needs a fresh timestamp — an annually recurring act.</div></div>
+    <div class="card"><div class="lab">Legge PMI 2026</div><div class="big">ogni anno</div><div class="fine">A written annual smart-working risk notice is now mandatory and sanctioned — a document that must be reissued every year, for every company with remote workers.</div></div>
+  </div>
+  <p>The recurring value is <em>"your compliance file stays current and defensible"</em>, not <em>"we sold you a Word file"</em>. Price the subscription on that sentence.</p>
+
+  <h3>4 &nbsp;Where the price ceiling is</h3>
+  <p>Above ~€2.400/yr the buyer stops comparing us to software and starts comparing us to a full RSPP mandate with a human on site. That is a fight we should not pick — it is the consultant channel's business, and taking it triggers exactly the conflict described in <strong>Foundations §8</strong>. <strong>Multi-sede at €2.400 is deliberately the last tier.</strong> Anything larger routes to a partner studio.</p>
+
+  <h2>Unit economics</h2>
+  <table>
+    <tr><th>Plan</th><th class="r">Price</th><th class="c">Engagements / yr</th><th class="r">Variable COGS</th><th class="r">Infra</th><th class="r">Gross margin</th></tr>
+    <tr><td>Base</td><td class="r price">€490</td><td class="c">2 <span class="small muted">(initial + 1 revision)</span></td><td class="r">€4</td><td class="r">€25</td><td class="r good">94,0 %</td></tr>
+    <tr class="hl"><td>Plus</td><td class="r price">€990</td><td class="c">4</td><td class="r">€10</td><td class="r">€25</td><td class="r good">96,5 %</td></tr>
+    <tr><td>Multi-sede</td><td class="r price">€2.400</td><td class="c">12</td><td class="r">€31</td><td class="r">€40</td><td class="r good">97,1 %</td></tr>
+  </table>
+  <table>
+    <tr><th>Plan</th><th class="r">ACV</th><th class="r">CAC target</th><th class="r">Payback</th><th class="r">LTV (3 y, 90 % ret.)</th><th class="r">LTV / CAC</th></tr>
+    <tr><td>Base</td><td class="r">€490</td><td class="r">€180</td><td class="r">4,4 mo</td><td class="r">€1.323</td><td class="r good">7,3×</td></tr>
+    <tr class="hl"><td>Plus</td><td class="r">€990</td><td class="r">€320</td><td class="r">3,9 mo</td><td class="r">€2.673</td><td class="r good">8,4×</td></tr>
+  </table>
+  <div class="callout warn">
+    <span class="h">The CAC target is the whole game</span>
+    €180–320 only works through self-service acquisition: SEO on <em>"quanto costa il DVR"</em>, commercialisti and consulenti del lavoro as a referral channel, associazioni di categoria (Confartigianato, CNA, Confcommercio) bundles, marketplace listings. <strong>A field sales motion cannot be funded at €490 ACV.</strong> If go-to-market ends up requiring calls, this tier must be dropped or repriced upward.
+  </div>
+
+  <h2>Add-ons</h2>
+  <table>
+    <tr><th>Add-on</th><th class="r">Price</th><th>Note</th></tr>
+    <tr><td>Extra site (sede / unità locale)</td><td class="r price">€180/yr</td><td>Main expansion path for growing firms — ~25 % attach</td></tr>
+    <tr class="hl"><td>RSPP assisted review + countersignature</td><td class="r price">€390 / doc set</td><td>The liability answer; pure services margin for N2O — ~35 % attach in year one</td></tr>
+    <tr><td>Data certa, unlimited</td><td class="r price">€149/yr</td><td>Included from Plus up — ~60 % attach on Base</td></tr>
+    <tr><td>Additional document type on Base (POS, HACCP, DUVRI)</td><td class="r price">€190/yr each</td><td>Upsell ramp into Plus</td></tr>
+    <tr><td>AI credit pack (500)</td><td class="r price">€79</td><td>Rarely needed at this volume; exists to avoid hard stops</td></tr>
+    <tr><td>On-site sopralluogo</td><td class="r price">quoted</td><td>Protects N2O's existing service revenue</td></tr>
+    <tr><td>Formazione / corsi bundle</td><td class="r price">partner-priced</td><td>Every DVR customer also has training obligations</td></tr>
+  </table>
+  <p class="small muted">Modelled net revenue retention <strong>106–110 %</strong> — lower than the consultant tier, as expected for SMB.</p>
+
+  <div class="callout dark">
+    <span class="h">Segmentation guardrail <span class="badge no" style="background:#7f1d1d;color:#fecaca;border-color:#991b1b">non-negotiable</span></span>
+    Direct plans sell <strong>only</strong> to companies with &lt;15 workers in low/medium risk classes (Base) or &lt;50 workers (Plus). Anything above, anything in a high-risk ATECO class, and anything involving construction sites (POS/PSC) routes to a partner consultant, who keeps the client and earns a 20 % share on the seat. Without this rule enforced <strong>in the signup flow, not just the contract</strong>, the two models attack each other — and the consultant channel, with 4× the ACV and a fundable sales motion, is the one that dies.
+  </div>
+
+  <h2>Risks</h2>
+  <table>
+    <tr><th style="width:38%">Risk</th><th>Mitigation</th></tr>
+    <tr><td>Legal exposure if a self-served DVR is judged inadequate</td><td>Never market as "fai-da-te". Assisted review prominent. Terms of service state that the DdL is the responsible party and the platform is a drafting aid. <strong>Get this reviewed by counsel before launch.</strong></td></tr>
+    <tr><td>CAC exceeds €320 and the tier goes underwater</td><td>Gate launch on a measured CAC from one paid-channel test. Do not scale on assumption.</td></tr>
+    <tr><td>Support load per euro far exceeds the consultant tier</td><td>Self-service onboarding content, in-app guida (already built), 3-day SLA on Base. Watch cost-to-serve monthly; above 15 % of ACV, raise Base to €690.</td></tr>
+    <tr><td>Buyer expects a one-off purchase and resents renewal</td><td>Lead every marketing asset with art. 29 c.3 and the data-certa fine. The recurrence is legal, not commercial.</td></tr>
+    <tr><td>No billing, quota enforcement, or self-service signup in the codebase</td><td>Same prerequisite as Model A, plus dunning and plan-gating in the UI.</td></tr>
+  </table>
+
+  <div class="verdict" style="background:linear-gradient(135deg,#047857,#06b6d4)">
+    <span class="h">Recommended launch position</span>
+    <p><strong>Do not launch this tier first.</strong> Consultant plans have 4–8× the ACV, a fundable sales motion, and N2O as a live reference. Build and prove Model A, then launch <strong>Plus at €990</strong> as the single headline direct plan — Base and Multi-sede as flanking anchors — through referral partners rather than paid acquisition, with the segmentation guardrail live from day one.</p>
+  </div>
+</div>

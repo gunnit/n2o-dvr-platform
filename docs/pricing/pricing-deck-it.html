@@ -1,0 +1,583 @@
+<meta charset="utf-8">
+<title>Piattaforma DVR — Modello di Pricing</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --cyan:#06b6d4; --teal:#14b8a6; --green:#10b981; --navy:#0f172a;
+  --blue:#2563eb; --purple:#8b5cf6; --white:#fff; --off:#f8fafc;
+  --line:#e2e8f0; --mid:#64748b; --dark:#334155; --slate:#1e293b;
+  --grad-logo:linear-gradient(180deg,#06b6d4,#10b981);
+  --grad-tech:linear-gradient(135deg,#2563eb,#06b6d4);
+  --grad-dark:linear-gradient(160deg,#0f172a 0%,#1e293b 100%);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{
+  font-family:'Inter','Segoe UI',Calibri,Arial,sans-serif;
+  font-size:9.4pt; line-height:1.5; color:var(--dark); background:#fff;
+}
+h1,h2,h3,h4,.num{font-family:'Poppins','Segoe UI Semibold',Calibri,Arial,sans-serif}
+.mono{font-family:'JetBrains Mono',Consolas,monospace}
+
+/* ---------- impaginazione ---------- */
+/* Chrome applica un solo margine a tutte le pagine: il margine superiore è 0 e
+   viene ricreato qui come padding, così la copertina arriva al vivo mentre le
+   pagine di contenuto mantengono la loro aria. */
+.page{page-break-after:always; padding:14mm 16mm 0;}
+.page:last-child{page-break-after:auto}
+
+h1,h2,h3{break-after:avoid; page-break-after:avoid}
+tr{break-inside:avoid; page-break-inside:avoid}
+thead{display:table-header-group}
+.card,.kpi,.callout,.verdict,.grid,.kpi-strip,.cover-card{break-inside:avoid; page-break-inside:avoid}
+
+/* ---------- copertina ---------- */
+.cover{
+  page-break-after:always; background:var(--grad-dark); color:#fff;
+  height:281mm; margin:0; padding:22mm 20mm 14mm; position:relative; overflow:hidden;
+}
+.cover::after{
+  content:""; position:absolute; right:-90mm; top:-40mm; width:200mm; height:200mm;
+  border-radius:50%; background:radial-gradient(circle,rgba(6,182,212,.18) 0%,rgba(6,182,212,0) 62%);
+}
+.cover-inner{position:relative; z-index:2; height:100%; display:flex; flex-direction:column}
+/* Il marchio è più alto che largo (660x758). In un flex column verrebbe
+   compresso in altezza e stirato in larghezza: flex:none + align-self bloccano
+   entrambe le deformazioni, width:auto conserva le proporzioni reali. */
+.cover-logo{
+  display:block; flex:none; align-self:flex-start;
+  height:22mm; width:auto; margin:0 0 13mm;
+}
+.cover h1{font-size:34pt; line-height:1.08; font-weight:800; letter-spacing:-.02em; margin:0 0 9mm}
+.cover .kicker{font-size:9pt; letter-spacing:.2em; text-transform:uppercase; color:var(--cyan); font-weight:700; margin-bottom:5mm}
+.cover .sub{font-size:12.2pt; color:#cbd5e1; line-height:1.55; max-width:138mm; font-weight:400}
+.accent-bar{height:5px; width:64mm; background:var(--grad-logo); border-radius:3px; margin:0 0 8mm}
+.cover-meta{margin-top:auto; border-top:1px solid rgba(255,255,255,.16); padding-top:6mm;
+  display:flex; justify-content:space-between; font-size:8.6pt; color:#94a3b8}
+.cover-meta b{color:#e2e8f0; font-weight:600}
+.cover-cards{display:flex; gap:6mm; margin:10mm 0 0}
+.cover-card{flex:1; background:rgba(30,41,59,.72); border:1px solid rgba(6,182,212,.22);
+  border-radius:10px; padding:6.5mm 5.5mm}
+.cover-card .lab{font-size:7.2pt; letter-spacing:.12em; text-transform:uppercase; color:#94a3b8;
+  font-weight:700; min-height:8mm}
+.cover-card .big{font-family:'Poppins',sans-serif; font-size:23pt; font-weight:800; color:var(--cyan); line-height:1.1; margin:1mm 0 1.5mm}
+.cover-card .fine{font-size:8.2pt; color:#cbd5e1; line-height:1.42}
+
+/* ---------- tipografia ---------- */
+.sec-tab{display:inline-block; font-size:7.8pt; letter-spacing:.18em; text-transform:uppercase;
+  font-weight:800; color:#fff; background:var(--navy); padding:2.2mm 4mm; border-radius:4px; margin-bottom:4mm}
+h1.doc{font-size:21pt; font-weight:800; color:var(--navy); letter-spacing:-.02em; line-height:1.15; margin-bottom:2.5mm}
+h1.doc + .lede{font-size:10.4pt; color:var(--mid); max-width:152mm; margin-bottom:3mm}
+.rule{height:4px; width:26mm; background:var(--grad-logo); border-radius:2px; margin:0 0 7mm}
+h2{font-size:13.2pt; font-weight:700; color:var(--navy); margin:6.5mm 0 2.5mm; letter-spacing:-.01em}
+h2:first-of-type{margin-top:0}
+h3{font-size:10.2pt; font-weight:700; color:var(--navy); margin:4.5mm 0 2mm}
+p{margin-bottom:2.6mm}
+p.tight{margin-bottom:1.5mm}
+strong{color:var(--navy); font-weight:600}
+ul{margin:0 0 3mm 4.6mm}
+li{margin-bottom:1.6mm}
+.muted{color:var(--mid)}
+.small{font-size:8.4pt}
+.src{font-size:7.8pt; color:var(--mid); margin-top:1.5mm; line-height:1.45}
+
+/* ---------- tabelle ---------- */
+table{width:100%; border-collapse:collapse; margin:3mm 0; font-size:8.5pt}
+th{background:var(--navy); color:#fff; font-weight:600; text-align:left;
+  padding:2.4mm 3mm; font-size:8pt; vertical-align:bottom}
+th.r,td.r{text-align:right}
+th.c,td.c{text-align:center}
+td{padding:2.2mm 3mm; border-bottom:1px solid var(--line); vertical-align:top}
+tbody tr:nth-child(even) td{background:var(--off)}
+tr.hl td{background:#ecfeff !important; font-weight:600; color:var(--navy)}
+td.price{font-family:'Poppins',sans-serif; font-weight:700; color:var(--navy); white-space:nowrap}
+td.good{color:var(--green); font-weight:600}
+.tbl-lead th:first-child{width:34%}
+
+table.plans td:first-child{font-weight:600; color:var(--navy); background:#fff}
+table.plans tbody tr:nth-child(even) td:first-child{background:var(--off)}
+table.plans th{text-align:center}
+table.plans td:not(:first-child){text-align:center}
+table.plans tr.row-price td{font-family:'Poppins',sans-serif; font-size:12pt; font-weight:800;
+  color:var(--navy); padding:3.4mm 3mm; background:#fff}
+table.plans tr.row-price td:first-child{font-size:8.5pt; font-weight:600; color:var(--mid)}
+th.star{background:linear-gradient(135deg,#0f172a,#164e63)}
+th .pt{display:block; font-size:7.4pt; font-weight:500; color:#7dd3fc; letter-spacing:.1em; text-transform:uppercase; margin-top:.8mm}
+
+/* ---------- componenti ---------- */
+.grid{display:flex; gap:5mm; margin:4mm 0}
+.card{flex:1; border:1px solid var(--line); border-radius:9px; padding:5mm 5mm 4.5mm;
+  background:#fff; position:relative; overflow:hidden}
+.card::before{content:""; position:absolute; inset:0 0 auto 0; height:3px; background:var(--grad-logo)}
+.card .lab{font-size:7.4pt; letter-spacing:.13em; text-transform:uppercase; color:var(--mid); font-weight:700}
+.card .big{font-family:'Poppins',sans-serif; font-size:19pt; font-weight:800; color:var(--cyan); line-height:1.15; margin:1.5mm 0 1mm}
+.card .fine{font-size:8.2pt; color:var(--dark); line-height:1.45}
+
+.callout{background:var(--off); border-left:3px solid var(--cyan); border-radius:0 7px 7px 0;
+  padding:4mm 5mm; margin:4mm 0; font-size:9pt}
+.callout .h{font-family:'Poppins',sans-serif; font-weight:700; color:var(--navy); font-size:9.4pt; display:block; margin-bottom:1.2mm}
+.callout.warn{border-left-color:#f59e0b; background:#fffbeb}
+.callout.dark{background:var(--navy); color:#cbd5e1; border-left-color:var(--cyan)}
+.callout.dark .h{color:#fff}
+.callout.dark strong{color:var(--cyan)}
+
+.verdict{background:var(--grad-tech); color:#fff; border-radius:9px; padding:5mm 6mm; margin:5mm 0 0}
+.verdict .h{font-family:'Poppins',sans-serif; font-weight:800; font-size:10.4pt; display:block; margin-bottom:1.6mm}
+.verdict p{margin:0; font-size:9pt; color:#e0f2fe}
+.verdict strong{color:#fff}
+
+.kpi-strip{display:flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; margin:4mm 0}
+.kpi{flex:1; padding:4mm; border-right:1px solid var(--line); background:#fff}
+.kpi:last-child{border-right:0}
+.kpi .n{font-family:'Poppins',sans-serif; font-size:16pt; font-weight:800; color:var(--cyan); line-height:1.1}
+.kpi .l{font-size:7.6pt; letter-spacing:.1em; text-transform:uppercase; color:var(--mid); font-weight:700; margin-top:1mm}
+
+.badge{display:inline-block; font-size:7.4pt; font-weight:700; letter-spacing:.08em;
+  text-transform:uppercase; padding:1mm 2.4mm; border-radius:20px; vertical-align:middle}
+.badge.no{background:#fef2f2; color:#b91c1c; border:1px solid #fecaca}
+
+.split{display:flex; gap:6mm; margin:4mm 0}
+.split>div{flex:1}
+/* Tabella economica a 10 colonne: nessuna cella deve andare a capo,
+   altrimenti "86,0 %" si spezza fra due righe. */
+table.econ td,table.econ th{white-space:nowrap}
+</style>
+
+<!-- ============================== COPERTINA ============================== -->
+<div class="cover">
+  <div class="cover-inner">
+    <img class="cover-logo" src="data:image/png;base64,__LOGO_B64__" alt="NIUEXA">
+    <div class="kicker">Modello di pricing &middot; Riservato</div>
+    <div class="accent-bar"></div>
+    <h1>Piattaforma DVR<br>Modello di pricing</h1>
+    <div class="sub">Due modelli di commercializzazione per la piattaforma di documentazione sulla sicurezza N2O: uno per le società di consulenza che la rivendono su molte commesse, uno per il datore di lavoro che deve tenere in ordine un solo fascicolo. Prezzi ancorati alle evidenze di mercato, ai costi unitari misurati e agli obblighi del D.Lgs.&nbsp;81/2008.</div>
+
+    <div class="cover-cards">
+      <div class="cover-card">
+        <div class="lab">Modello A &middot; Consulenti</div>
+        <div class="big">€3.900<span style="font-size:11pt;color:#94a3b8">/anno</span></div>
+        <div class="fine">Piano "Studio" — 5 utenti, 60 aziende clienti attive, tutti i 17 documenti. Il 2–4 % del fatturato che genera.</div>
+      </div>
+      <div class="cover-card">
+        <div class="lab">Modello B &middot; Azienda diretta</div>
+        <div class="big">€990<span style="font-size:11pt;color:#94a3b8">/anno</span></div>
+        <div class="fine">Piano "Plus" — 3 sedi, 5 utenti, DVR e tutti gli allegati principali, revisione RSPP inclusa.</div>
+      </div>
+      <div class="cover-card">
+        <div class="lab">Margine di contribuzione</div>
+        <div class="big">78–91<span style="font-size:11pt;color:#94a3b8">&nbsp;%</span></div>
+        <div class="fine">Su costo caricato: costo diretto misurato €1,85 a pratica, maggiorato del 200 % per assorbire assistenza e manutenzione.</div>
+      </div>
+    </div>
+
+    <div class="cover-meta">
+      <div><b>N2O SRL</b> &nbsp;·&nbsp; Piattaforma DVR &nbsp;·&nbsp; dvr-sicurezza.it</div>
+      <div>Rev. 23 luglio 2026 &nbsp;·&nbsp; <b>NIUEXA</b></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== 00 FONDAMENTA ============================== -->
+<div class="page">
+  <span class="sec-tab">00 &nbsp;·&nbsp; Fondamenta</span>
+  <h1 class="doc">Le evidenze su cui poggiano i prezzi</h1>
+  <div class="lede">Che cosa è stato effettivamente costruito, quanto costa mandarlo avanti, che cifre il mercato paga già oggi e che cosa la legge obbliga gli acquirenti a rifare.</div>
+  <div class="rule"></div>
+
+  <h2>1 &nbsp;Che cosa si vende</h2>
+  <p>Rilevato dal repository, non dalla brochure. Questo inventario è ciò che giustifica un prezzo superiore a qualunque concorrente italiano limitato al solo DVR.</p>
+
+  <div class="kpi-strip">
+    <div class="kpi"><div class="n">17</div><div class="l">tipi di documento</div></div>
+    <div class="kpi"><div class="n">8</div><div class="l">calcolatori di rischio</div></div>
+    <div class="kpi"><div class="n">11</div><div class="l">servizi AI</div></div>
+    <div class="kpi"><div class="n">184</div><div class="l">endpoint API</div></div>
+    <div class="kpi"><div class="n">81k</div><div class="l">righe di codice</div></div>
+  </div>
+
+  <table class="tbl-lead">
+    <tr><th>Capacità</th><th>Dettaglio</th></tr>
+    <tr><td>Generazione documenti</td><td>DVR Master (~187 pp) + 16 allegati e documenti complementari — MMC, VDT, Stress, Gestanti, Incendio, Microclima (+severo), Biologico ×3, PEE azienda/comune, manuale HACCP + 16 schede, DUVRI, POS</td></tr>
+    <tr><td>Calcoli</td><td>Indice di rischio <span class="mono">I&nbsp;=&nbsp;2D&nbsp;+&nbsp;P</span>, NIOSH PLR/IR, soglia VDT ≥20 h/settimana, punteggio stress INAIL (76 indicatori), rischio incendio INF+SI+PI, comfort termico PMV/PPD, PHS caldo severo, chimico MoVaRisCh</td></tr>
+    <tr><td>Strato AI</td><td>SDS in PDF → scheda chimica strutturata (vision + structured output); foto di reparto → inventario attrezzature; suggeritore rischi su 11 categorie; matrice DPI; misure di miglioramento; CCP HACCP; fasi POS; misure stress; descrizione aziendale</td></tr>
+    <tr><td>Arricchimento dati</td><td>VIES + Registro Imprese (openapi.com) + Serper + Firecrawl → l'anagrafica si compila dalla sola P.IVA</td></tr>
+    <tr><td>Multi-tenancy</td><td><span class="mono">Organization</span> → utenti + aziende, già isolate</td></tr>
+    <tr class="hl"><td>White-label</td><td>Logo, carta intestata, P.IVA e nominativo RSPP dello studio stampati su ogni <span class="mono">.docx</span> generato — la piattaforma resta invisibile al cliente finale</td></tr>
+    <tr><td>Editing live</td><td>Anteprima <span class="mono">.docx</span> nel browser con modifica in linea e paragrafi bloccati (in produzione dal 20/07/2026)</td></tr>
+  </table>
+
+  <div class="callout">
+    <span class="h">Il fatto decisivo per il prezzo</span>
+    Lo strato white-label e multi-tenant esiste già. Uno studio di consulenza può mettere oggi stesso la propria carta intestata sull'output. Quella singola capacità è l'intera base del Modello A — ed è ciò che una licenza desktop perpetua non può offrire.
+  </div>
+
+  <h2>2 &nbsp;Base di costo — perché il prezzo si costruisce sul valore, non sul costo</h2>
+  <p>Costo variabile diretto per una pratica completa (PMI tipo: 5 ambienti, 6 mansioni, 25 righe di rischio, 8 schede di sicurezza, 15 foto, set completo di 17 documenti):</p>
+
+  <table>
+    <tr><th>Componente</th><th>Modello</th><th class="r">Costo diretto</th></tr>
+    <tr><td>Estrazione SDS da PDF ×8</td><td class="mono">gpt-5.5</td><td class="r">€0,99</td></tr>
+    <tr><td>Attrezzature da foto ×5</td><td class="mono">gpt-5.5</td><td class="r">€0,26</td></tr>
+    <tr><td>Misure di miglioramento ×25</td><td class="mono">gpt-5.4-mini</td><td class="r">€0,12</td></tr>
+    <tr><td>Suggeritore rischi ×5 (effort medio)</td><td class="mono">gpt-5.4-mini</td><td class="r">€0,09</td></tr>
+    <tr><td>Matrice DPI ×6</td><td class="mono">gpt-5.4-mini</td><td class="r">€0,07</td></tr>
+    <tr><td>Tutte le altre chiamate AI</td><td class="mono">mini / nano</td><td class="r">€0,11</td></tr>
+    <tr><td>Visura camerale + ricerca + scraping</td><td class="mono">openapi / serper / firecrawl</td><td class="r">€0,21</td></tr>
+    <tr><td><strong>Totale costo diretto per pratica</strong></td><td></td><td class="r"><strong>€1,85</strong></td></tr>
+    <tr class="hl"><td><strong>Costo caricato (+200 %)</strong> — assorbe assistenza, manutenzione normativa, commissioni di incasso, ridondanza</td><td></td><td class="r"><strong>€5,55</strong></td></tr>
+    <tr><td>Pratica pesante caricata (20 SDS, 12 ambienti, toggle premium)</td><td></td><td class="r">€12,60</td></tr>
+  </table>
+  <p class="small muted">Infrastruttura (Render, Francoforte): €51/mese per lo stack attuale; a ~100 tenant fa ≈ €33 per organizzazione all'anno, che caricato del 200 % diventa <strong>≈ €99</strong>. Tutte le marginalità del documento usano i valori caricati.</p>
+
+  <div class="callout dark">
+    <span class="h">Conseguenza</span>
+    Anche con i costi triplicati il margine di contribuzione resta fra il <strong>78 % e il 91 %</strong> su ogni piano. Il recupero del costo non è la leva decisionale. Gli unici ancoraggi difendibili sono <strong>(a)</strong> il fatturato che il cliente produce con lo strumento e <strong>(b)</strong> quanto il mercato già paga per prodotti più deboli. Entrambi sono documentati qui sotto.
+  </div>
+
+  <h2>3 &nbsp;Ancoraggio A — quanto costa il software concorrente</h2>
+  <table>
+    <tr><th>Prodotto</th><th>Che cos'è</th><th class="r">Prezzo, IVA esclusa</th></tr>
+    <tr><td>DVR Suite — Starter</td><td>cloud, 1 DVR, 50 MB</td><td class="r price">€120/anno</td></tr>
+    <tr><td>DVR Suite — Basic</td><td>10 DVR, 500 MB, "per consulenti"</td><td class="r price">€420/anno</td></tr>
+    <tr><td>DVR Suite — Pro</td><td>50 DVR, 1 GB, "studi professionali"</td><td class="r price">€1.200/anno</td></tr>
+    <tr><td>DVR Suite — Unlimited</td><td>120 DVR, 5 GB</td><td class="r price">€2.400/anno</td></tr>
+    <tr><td>VRC Protection DVR-C</td><td>5 utenti, 15 DVR, 4 h di assistenza</td><td class="r price">€950</td></tr>
+    <tr><td>Easywork "DVR Generator" Safety Box</td><td>DVR singolo fai-da-te, web app + manuale cartaceo</td><td class="r price">€350–380 una tantum</td></tr>
+    <tr><td>Blumatica DVR Classico</td><td>licenza desktop perpetua</td><td class="r price">€490</td></tr>
+    <tr class="hl"><td>Blumatica Rischi Specifici</td><td>22 rischi — <strong>€60 per singolo rischio</strong></td><td class="r price">€1.320 listino</td></tr>
+    <tr><td>Blumatica DUVRI / POS / PSC / Lavoratrici&nbsp;Madri</td><td>perpetue, a modulo</td><td class="r price">€125 / €155 / €155 / €69</td></tr>
+    <tr><td>Blumatica "Bundle RSPP"</td><td>DVR + madri + rischi specifici + MOG</td><td class="r price">€950</td></tr>
+  </table>
+  <p class="src">I dati Blumatica provengono da un listino 2014 archiviato: i valori nominali sono superati, ma <em>il peso relativo dei moduli</em> (uno studio paga €60–155 <em>per singolo rischio o per singolo documento</em>) è il segnale duraturo, ed è la giustificazione più forte dell'ampiezza documentale. Fonti: dvrsuite.it, vrcprotection.it, giornalepartiteiva.it, ordingrc.it.</p>
+
+  <p><strong>Lettura.</strong> Il tetto di mercato per uno strumento cloud limitato al DVR è di circa €2.400/anno. Nessuno in quella tabella genera 17 tipi di documento; nessuno applica l'AI all'estrazione delle schede di sicurezza o al riconoscimento delle attrezzature da foto. Non competiamo su quell'asse — ma la fascia €120–2.400 definisce comunque la <em>soglia di credibilità</em>, non il tetto del valore.</p>
+
+  <h2>4 &nbsp;Ancoraggio B — quanto fattura l'acquirente per lo stesso output</h2>
+  <table>
+    <tr><th>Documento</th><th class="r">Onorario di mercato al cliente finale</th></tr>
+    <tr><td>DVR — rischio basso, ≤5 lavoratori</td><td class="r price">€100–250</td></tr>
+    <tr><td>DVR — fino a 15 lavoratori</td><td class="r price">€300–450</td></tr>
+    <tr><td>DVR — PMI</td><td class="r price">€600–1.500</td></tr>
+    <tr class="hl"><td>DVR — rischio alto / organizzazione complessa</td><td class="r price">€2.000–3.000+</td></tr>
+    <tr><td>DVR — listino cooperativo 2023 documentato</td><td class="r price">€400 soci / €425 non soci</td></tr>
+    <tr><td>Stress lavoro-correlato (SLC)</td><td class="r price">€175 / €200</td></tr>
+    <tr><td>VDT — ≤5 / 6–9 / 10–15 postazioni</td><td class="r price">€350 / €400 / €450</td></tr>
+    <tr><td>RSPP esterno, &lt;15 lavoratori, incarico annuo</td><td class="r price">€450–600/anno</td></tr>
+    <tr><td>Manuale HACCP</td><td class="r price">da €200</td></tr>
+    <tr><td>Data certa — marca temporale → copia notarile</td><td class="r price">€300–1.500</td></tr>
+  </table>
+  <p class="src">Fonti: listino coopcommercialisti.it 2023, scuolasicurezza.it, gms-srl.it, sicurezza.com.</p>
+
+  <div class="callout">
+    <span class="h">Lettura</span>
+    Una pratica completa in stile N2O (DVR + 5–8 allegati) viene fatturata <strong>€1.500–4.000</strong>. Uno studio che segue 60 clienti l'anno fattura <strong>€90k–240k</strong> di sola documentazione. Un software a €3.900/anno pesa <strong>l'1,6–4,3 % del fatturato che produce</strong>. È questo il numero da portare in trattativa.
+  </div>
+
+  <h2>5 &nbsp;Spinte normative su cui costruire il prezzo</h2>
+  <table>
+    <tr><th>Driver</th><th>Conseguenza commerciale</th></tr>
+    <tr><td>DVR obbligatorio per <strong>ogni</strong> datore di lavoro con ≥1 lavoratore (D.Lgs. 81/2008)</td><td>~1,5 M di soggetti obbligati. Non è spesa discrezionale.</td></tr>
+    <tr><td><strong>Art. 29 c.3</strong> — aggiornamento entro <strong>30 giorni</strong> da nuove attrezzature, infortuni o modifiche organizzative</td><td>Domanda ricorrente di revisione → giustifica l'abbonamento contro la licenza una tantum</td></tr>
+    <tr class="hl"><td><strong>Art. 28 c.2 — data certa</strong>; Cass. 14579/2026. Sanzione <strong>€1.228,50–2.457,02</strong> in assenza</td><td>Modulo aggiuntivo vendibile con un danno quantificato alle spalle</td></tr>
+    <tr><td><strong>Legge PMI 2026</strong> (L. 11 marzo 2026 n. 34, in vigore dal 7/4/2026): MOG semplificati INAIL; <strong>informativa annuale scritta sui rischi del lavoro agile, con sanzioni</strong>; addestramento in VR con tracciabilità digitale</td><td>Due <em>nuovi documenti ricorrenti</em> ricadono dentro il motore esistente. Da costruire e mettere a listino prima che se ne accorgano gli operatori storici.</td></tr>
+  </table>
+  <p class="small muted">Bacino potenziale: ~5,08 M di imprese attive in Italia; ~221 mila con 10–249 addetti; 94,6 % micro (&lt;10). La coda delle micro è il Modello B; la fascia 10–249 è dove vivono i clienti del Modello A.</p>
+
+  <h2>6 &nbsp;La scelta su che cosa contabilizzare</h2>
+  <p>Il costo caricato è di €5,55 a pratica. Contabilizzare ogni singola chiamata AI creerebbe attrito per pochi euro. <strong>Le chiamate di ragionamento economiche si includono con generosità; si contano solo le tre azioni davvero costose o fatturate da terzi.</strong></p>
+
+  <table>
+    <tr><th>Azione</th><th class="r">Costo caricato</th><th class="c">Crediti</th><th class="r">Margine sul credito</th></tr>
+    <tr><td>Misura di miglioramento · suggerimento rischi · matrice DPI · fase POS · CCP HACCP · descrizione aziendale</td><td class="r">€0,004–0,055</td><td class="c"><strong>1</strong></td><td class="r good">56–97 %</td></tr>
+    <tr><td>Riconoscimento attrezzature da foto <span class="mono small">(gpt-5.5 vision)</span></td><td class="r">€0,155</td><td class="c"><strong>4</strong></td><td class="r good">69 %</td></tr>
+    <tr><td>Estrazione SDS da PDF <span class="mono small">(gpt-5.5, strutturata)</span></td><td class="r">€0,373</td><td class="c"><strong>8</strong></td><td class="r good">63 %</td></tr>
+    <tr><td>Visura camerale / Registro Imprese <span class="mono small">(fatturata da openapi.com)</span></td><td class="r">€0,600</td><td class="c"><strong>15</strong></td><td class="r good">68 %</td></tr>
+  </table>
+  <p>Una pratica completa consuma <strong>≈ 136 crediti</strong>. Le dotazioni dei piani sono dimensionate su quel numero. Ricariche: <strong>500 = €79 · 2.000 = €249 · 10.000 = €990</strong> (margine 59–74 % sulla ricarica stessa).</p>
+  <p class="small muted">I pesi in crediti sono stati ricalibrati sul costo caricato: con i pesi precedenti (SDS 3, visura 5) l'estrazione SDS e la visura camerale sarebbero andate sottocosto.</p>
+
+  <h2>7 &nbsp;Catalogo dei moduli aggiuntivi</h2>
+  <table>
+    <tr><th>Modulo</th><th class="r">Prezzo</th><th>Perché questo prezzo</th></tr>
+    <tr class="hl"><td>Avviamento e migrazione dei template</td><td class="r price">€1.500–4.000</td><td>Boilerplate, impaginazione e libreria rischi dello studio caricati nel motore. È lavoro reale di delivery ed è il vincolo di fidelizzazione più forte che abbiamo. <strong>Da non azzerare mai in trattativa.</strong></td></tr>
+    <tr><td>Nuovo tipo di documento su misura</td><td class="r price">da €4.500</td><td>Generatore costruito sul loro modello (PSC, MOG, manuale ISO 45001)</td></tr>
+    <tr><td>Utente aggiuntivo</td><td class="r price">€240/anno</td><td>Ampiamente sopra il costo marginale; tiene onesta la crescita del contratto</td></tr>
+    <tr><td>Blocco di 25 aziende attive in più</td><td class="r price">€600/anno</td><td>Cresce con il loro portafoglio clienti</td></tr>
+    <tr><td>Ricariche crediti AI</td><td class="r price">€79 / €249 / €990</td><td>Vedi §6</td></tr>
+    <tr><td>Data certa — marca temporale qualificata + deposito PEC</td><td class="r price">€19/doc · €149/anno</td><td>Ancorata a un'alternativa notarile da €300–1.500 e alla sanzione €1.228–2.457</td></tr>
+    <tr><td>Integrazione consegna su Google Drive / gestionale</td><td class="r price">€900/anno</td><td>Per Drive è già costruita — va messa a listino</td></tr>
+    <tr><td>Dominio white-label e rimozione totale del marchio</td><td class="r price">€1.200/anno</td><td>Solo sui piani consulenti</td></tr>
+    <tr><td>Revisione assistita da RSPP abilitato</td><td class="r price">€390–1.200</td><td>Margine di pura consulenza — ed è la risposta al rischio legale del canale diretto</td></tr>
+    <tr><td>SLA prioritario + referente dedicato</td><td class="r price">15 % del contratto</td><td>Standard di mercato</td></tr>
+  </table>
+
+  <h2>8 &nbsp;Conflitto di canale — l'unica cosa che può far saltare tutto</h2>
+  <p>Vendere ai consulenti <em>e</em> alle aziende che quei consulenti servono è un conflitto reale. Va risolto per via strutturale, prima del primo contratto.</p>
+  <ul>
+    <li><strong>Segmentare per dimensione e classe di rischio.</strong> I piani diretti si vendono solo ad aziende con &lt;15 lavoratori in classe di rischio basso/medio. Tutto ciò che sta sopra passa a un consulente partner — messo per iscritto nel contratto di partnership.</li>
+    <li><strong>Dare al consulente il diritto di prelazione.</strong> Un'azienda segnalata dal partner confluisce nel tenant del consulente; il consulente mantiene la relazione e riceve il 20 % di revenue share su quella posizione.</li>
+    <li><strong>Non pubblicare mai un prezzo diretto che scavalchi l'onorario del partner</strong> senza spiegarne il motivo. €490/anno comprano un documento guidato da template, senza giudizio professionale: è un prodotto genuinamente diverso. Va detto esplicitamente in comunicazione.</li>
+    <li><strong>Esposizione legale.</strong> Il <em>datore di lavoro</em> firma il DVR e ne risponde. Il prodotto diretto va posizionato come <strong>"DVR assistito"</strong> con revisione RSPP opzionale — mai come "DVR fai-da-te".</li>
+  </ul>
+
+  <h2>9 &nbsp;Igiene commerciale</h2>
+  <div class="split">
+    <div>
+      <table>
+        <tr><td>Valuta e imposte</td><td>EUR, tutti i prezzi IVA 22 % esclusa</td></tr>
+        <tr><td>Fatturazione</td><td>Annuale anticipata; rinnovo tacito 12 mesi, disdetta 60 gg</td></tr>
+        <tr><td>Opzione mensile</td><td>+20 % (la scoraggia e copre il rischio di abbandono)</td></tr>
+      </table>
+    </div>
+    <div>
+      <table>
+        <tr><td>Prepagato triennale</td><td>−15 %</td></tr>
+        <tr><td>Adeguamento annuo</td><td>ISTAT + 3 %, con tetto all'8 %</td></tr>
+        <tr><td>Prova</td><td>30 gg sul diretto · pilota 45 gg su 2 aziende per i consulenti</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="callout warn">
+    <span class="h">Nessuna licenza perpetua <span class="badge no">regola ferma</span></span>
+    Blumatica ha abituato questo mercato ad aspettarsele. Rifiutare. Contenuti che seguono le modifiche al D.Lgs. 81/2008 non si possono vendere una volta sola: una vendita perpetua crea una passività di manutenzione non finanziata. Il prepagato triennale a −15 % è il compromesso.
+  </div>
+</div>
+
+<!-- ============================== MODELLO A ============================== -->
+<div class="page">
+  <span class="sec-tab" style="background:var(--blue)">Modello A &nbsp;·&nbsp; Consulenti e studi</span>
+  <h1 class="doc">Multi-cliente: la piattaforma come capacità fatturabile</h1>
+  <div class="lede">Destinatario: uno studio come N2O SRL. Vende consulenza sulla sicurezza a molte aziende clienti e deve produrre documenti fatturabili su scala, con il proprio marchio.</div>
+  <div class="rule"></div>
+
+  <table class="plans">
+    <tr>
+      <th style="text-align:left;width:26%">&nbsp;</th>
+      <th>Solo</th>
+      <th class="star">Studio<span class="pt">consigliato</span></th>
+      <th>Network</th>
+      <th>Enterprise</th>
+    </tr>
+    <tr class="row-price"><td>Canone annuo</td><td>€1.490</td><td style="color:#0e7490">€3.900</td><td>€8.900</td><td>da €18.000</td></tr>
+    <tr><td>Destinatario</td><td>RSPP libero professionista</td><td>studio da 3–8 persone<br><span class="small muted">(N2O oggi)</span></td><td>rete multi-sede</td><td>franchising / rivenditore</td></tr>
+    <tr><td>Utenti</td><td>1</td><td>5</td><td>15</td><td>40</td></tr>
+    <tr class="hl"><td>Aziende clienti attive</td><td>15</td><td>60</td><td>200</td><td>illimitate</td></tr>
+    <tr><td>Tipi di documento</td><td>tutti e 17</td><td>tutti e 17</td><td>tutti e 17</td><td>tutti e 17</td></tr>
+    <tr><td>Crediti AI / anno</td><td>2.500</td><td>9.000</td><td>30.000</td><td>a consumo comune</td></tr>
+    <tr><td>Carta intestata white-label</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Dominio white-label</td><td>—</td><td>opzione</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Migrazione template</td><td>opzione</td><td><strong>1 set incl.</strong></td><td>3 set incl.</td><td>illimitata</td></tr>
+    <tr><td>Sotto-tenant per i clienti</td><td>—</td><td>—</td><td>10</td><td>illimitati</td></tr>
+    <tr><td>Accesso API</td><td>—</td><td>sola lettura</td><td>completo</td><td>completo + webhook</td></tr>
+    <tr><td>Assistenza</td><td>email, 3 gg lav.</td><td>email+chat, 1 g lav.</td><td>referente dedicato, 4 h</td><td>SLA 99,5 %, 2 h</td></tr>
+    <tr class="row-price" style="border-top:2px solid var(--navy)"><td>Avviamento, una tantum</td><td style="font-size:10pt">€0</td><td style="font-size:10pt;color:#0e7490">€1.500</td><td style="font-size:10pt">€3.500</td><td style="font-size:10pt">a preventivo</td></tr>
+  </table>
+
+  <p class="small"><strong>"Azienda cliente attiva"</strong> = un'azienda per cui nell'anno di abbonamento è stato generato o revisionato almeno un documento. I clienti archiviati restano consultabili per sempre e non contano. È la metrica più equa disponibile ed è quella con cui l'acquirente già ragiona: il suo portafoglio clienti.</p>
+
+  <h2>Perché questi numeri</h2>
+
+  <h3>1 &nbsp;Prezzato come quota del fatturato che produce</h3>
+  <table>
+    <tr><th>Piano</th><th class="c">Pratiche</th><th class="r">Fatturato lordo dello studio</th><th class="r">Costo piattaforma</th><th class="r">% sul fatturato</th></tr>
+    <tr><td>Solo</td><td class="c">15</td><td class="r">€22k–45k</td><td class="r">€1.490</td><td class="r good">3,3–6,6 %</td></tr>
+    <tr class="hl"><td>Studio</td><td class="c">60</td><td class="r">€90k–240k</td><td class="r">€3.900 + €1.500</td><td class="r good">1,6–4,3 % dal 2° anno</td></tr>
+    <tr><td>Network</td><td class="c">200</td><td class="r">€300k–800k</td><td class="r">€8.900 + €3.500</td><td class="r good">1,5–4,1 %</td></tr>
+  </table>
+  <p>Ogni livello si colloca nella fascia <strong>2–6 % del fatturato prodotto</strong>. La spesa in strumenti professionali è difendibile fino a circa il 10 %: l'obiezione non sarà quindi il prezzo, ma il costo di migrazione — che la quota di avviamento e la migrazione dei template servono proprio a convertire in fidelizzazione.</p>
+
+  <h3>2 &nbsp;Prezzato contro il lavoro che sostituisce</h3>
+  <div class="grid">
+    <div class="card"><div class="lab">Obiettivo di riduzione tempi</div><div class="big">60–70 %</div><div class="fine">sulla produzione documentale — l'obiettivo dichiarato del prodotto</div></div>
+    <div class="card"><div class="lab">Capacità recuperata, piano Studio</div><div class="big">€33.600</div><div class="fine">60 pratiche × 14 h risparmiate × €40/h costo pieno</div></div>
+    <div class="card"><div class="lab">Ritorno su €3.900</div><div class="big">8,6×</div><div class="fine">prima ancora di contare le pratiche che ora possono accettare</div></div>
+  </div>
+  <p class="small muted">Un set documentale completo fatto a mano richiede 12–20 ore; il costo pieno di un tecnico senior è €35–55/ora. <strong>È questo il dato con cui aprire la trattativa, non l'elenco delle funzionalità.</strong></p>
+
+  <h3>3 &nbsp;Prezzato contro ciò che il mercato paga per meno</h3>
+  <p>Studio a €3.900 vale circa 3× DVR Suite Pro (€1.200, solo DVR). Il sovrapprezzo è sostenuto da quattro elementi che un confronto diretto rende evidenti:</p>
+  <ul>
+    <li><strong>17 tipi di documento contro 1.</strong> Il listino Blumatica prezza i moduli €60–155 ciascuno: alle loro condizioni la sola libreria di allegati varrebbe oltre €1.300.</li>
+    <li><strong>AI che elimina l'inserimento dati</strong>, non che lo impagina — SDS in PDF → scheda chimica strutturata, foto di reparto → inventario attrezzature, libreria rischi → misure suggerite. Nessun concorrente italiano lo fa oggi.</li>
+    <li><strong>L'app di sopralluogo digitale.</strong> Il tecnico rileva una volta sola; l'ufficio non ridigita nulla. È qui che sta il risparmio di tempo reale.</li>
+    <li><strong>Output white-label.</strong> Logo, P.IVA e RSPP dello studio su ogni documento. Una licenza desktop non può farlo.</li>
+  </ul>
+
+  <h3>4 &nbsp;Perché la metrica è "aziende attive" e non gli utenti</h3>
+  <p>Gli utenti crescono con l'organico; il fatturato cresce con i clienti. Uno studio di 3 persone che segue 80 aziende vale più di uno studio di 10 persone che ne segue 20. Contare le aziende attive allinea il nostro ricavo al loro, rende automatica la crescita del contratto e toglie l'incentivo a condividere le credenziali. Gli utenti restano una metrica secondaria, così che uno studio da 40 persone non possa comprare il piano Solo.</p>
+
+  <h2>Economia unitaria <span class="small muted" style="font-weight:400">— tutti i costi caricati del 200 %</span></h2>
+  <table class="econ" style="font-size:8.1pt">
+    <tr>
+      <th>Piano</th><th class="r">Canone</th><th class="c">Pratiche</th>
+      <th class="r">Costo var.</th><th class="r">Infra</th><th class="r">MdC</th>
+      <th class="r">CAC obiett.</th><th class="r">Rientro</th><th class="r">LTV 3 anni</th><th class="r">LTV/CAC</th>
+    </tr>
+    <tr><td>Solo</td><td class="r price">€1.490</td><td class="c">15</td><td class="r">€110</td><td class="r">€99</td><td class="r good">86,0 %</td><td class="r">€900</td><td class="r">7,2 mesi</td><td class="r">€4.023</td><td class="r good">4,5×</td></tr>
+    <tr class="hl"><td>Studio</td><td class="r price">€3.900</td><td class="c">60</td><td class="r">€439</td><td class="r">€99</td><td class="r good">86,2 %</td><td class="r">€2.500</td><td class="r">7,7 mesi</td><td class="r">€10.530</td><td class="r good">4,2×</td></tr>
+    <tr><td>Network</td><td class="r price">€8.900</td><td class="c">200</td><td class="r">€1.463</td><td class="r">€99</td><td class="r good">82,5 %</td><td class="r">€6.000</td><td class="r">8,1 mesi</td><td class="r">€24.030</td><td class="r good">4,0×</td></tr>
+    <tr><td>Enterprise</td><td class="r price">€18.000</td><td class="c">500</td><td class="r">€3.656</td><td class="r">€360</td><td class="r good">77,7 %</td><td class="r">a trattativa</td><td class="r">—</td><td class="r">—</td><td class="r">—</td></tr>
+  </table>
+  <p class="src">Costo variabile = token AI (gpt-5.5 per SDS e vision, gpt-5.4-mini per il ragionamento, gpt-5.4-nano per il boilerplate) + chiamate Registro Imprese / ricerca / scraping, mix del 25 % di pratiche pesanti, maggiorato del 200 %. LTV a 3 anni con retention lorda 90 %. <strong>Tutti e tre i piani commerciali superano il 3× LTV/CAC e rientrano sotto i 12 mesi</strong> — questo segmento regge una vera forza commerciale (inside sales, convenzioni con gli ordini professionali, fiere), il segmento diretto no. È questa asimmetria la ragione per cui il Modello A parte per primo.</p>
+
+  <h2>I moduli aggiuntivi che contano di più qui</h2>
+  <table>
+    <tr><th>Modulo</th><th class="r">Prezzo</th><th class="r">Adozione attesa</th></tr>
+    <tr class="hl"><td>Avviamento e migrazione template</td><td class="r price">€1.500–4.000</td><td class="r">100 % da Studio in su <span class="small muted">(obbligatorio)</span></td></tr>
+    <tr><td>25 aziende attive in più</td><td class="r price">€600/anno</td><td class="r">~40 % entro il 2° anno</td></tr>
+    <tr><td>Utente aggiuntivo</td><td class="r price">€240/anno</td><td class="r">~50 %</td></tr>
+    <tr><td>Data certa, illimitata</td><td class="r price">€149/anno</td><td class="r">~50 %</td></tr>
+    <tr><td>Dominio white-label e rimozione marchio</td><td class="r price">€1.200/anno</td><td class="r">~30 % dei piani Studio</td></tr>
+    <tr><td>Ricarica crediti AI (2.000)</td><td class="r price">€249</td><td class="r">~25 %</td></tr>
+    <tr><td>Integrazione Drive / gestionale</td><td class="r price">€900/anno</td><td class="r">~20 %</td></tr>
+    <tr><td>Nuovo tipo di documento su misura</td><td class="r price">da €4.500</td><td class="r">~15 %, alto valore strategico</td></tr>
+  </table>
+  <p>La retention netta del ricavo si colloca così al <strong>112–118 %</strong>: è lo strato dei moduli aggiuntivi, non il canone base, a far crescere questo segmento nel tempo.</p>
+
+  <h2>Rischi</h2>
+  <table>
+    <tr><th style="width:38%">Rischio</th><th>Mitigazione</th></tr>
+    <tr><td>N2O è insieme primo cliente e potenziale concorrente degli altri studi</td><td>Riconoscere a N2O una posizione di partner fondatore (Studio a €0 per 3 anni, oppure revenue share) in cambio di diritti di citazione e contributo sui template. Da fissare ora, non ogni anno.</td></tr>
+    <tr><td>Aggiramento del conteggio "aziende attive" archiviando e riattivando</td><td>Conta qualunque azienda toccata nel periodo; gli archiviati restano leggibili ma congelati. Da imporre nel codice prima della prima vendita esterna.</td></tr>
+    <tr><td>Gli studi si aspettano licenze perpetue</td><td>Rifiutare, argomentando con la manutenzione normativa. Prepagato triennale a −15 % come compromesso.</td></tr>
+    <tr><td>Obiezione di prezzo ancorata ai €1.200 di DVR Suite</td><td>Riportare il confronto sul numero di documenti (17 contro 1) e sulle ore risparmiate (€33,6k). Mai sulla parità di funzionalità.</td></tr>
+    <tr><td><strong>Nel codice non esiste alcuna infrastruttura di fatturazione</strong></td><td>Abbonamenti Stripe + modelli <span class="mono">Subscription</span>/<span class="mono">UsageCounter</span> su <span class="mono">Organization</span> sono prerequisiti di qualunque vendita esterna. Da stimare prima di fissare la data di lancio.</td></tr>
+  </table>
+
+  <div class="verdict">
+    <span class="h">Posizionamento di lancio consigliato</span>
+    <p><strong>Aprire con Studio a €3.900 + €1.500 di avviamento.</strong> È il livello che N2O occupa già, quindi nasce con un caso cliente reale; pesa il 2–4 % del fatturato dell'acquirente; e recupera il costo di acquisizione in meno di otto mesi. Solo serve a rendere Studio ragionevole e a intercettare i liberi professionisti. Network serve a dare a Studio un posto dove crescere.</p>
+  </div>
+</div>
+
+<!-- ============================== MODELLO B ============================== -->
+<div class="page">
+  <span class="sec-tab" style="background:var(--green)">Modello B &nbsp;·&nbsp; Azienda diretta</span>
+  <h1 class="doc">Azienda singola: il fascicolo che resta aggiornato</h1>
+  <div class="lede">Destinatario: un <em>datore di lavoro</em> che deve avere il DVR della propria azienda e non vuole continuare a pagare un consulente perché lo ridigiti a ogni cambiamento.</div>
+  <div class="rule"></div>
+
+  <div class="callout warn">
+    <span class="h">Prima il posizionamento, poi il prezzo</span>
+    Questo livello <strong>non</strong> è un "DVR fai-da-te". Il <em>datore di lavoro</em> firma il DVR e ne risponde: uno strumento che gli consegna un documento non revisionato e si dilegua gli sta vendendo un'esposizione, e prima o poi costerà a N2O la propria reputazione davanti a un organo di vigilanza. Va venduto come <strong>"DVR assistito"</strong>: la piattaforma costruisce struttura, calcoli e testo; un RSPP abilitato revisiona e controfirma su richiesta. È questa impostazione a permetterci di stare sopra i prodotti fai-da-te da €350 e sotto il consulente — nello spazio che oggi nessuno occupa.
+  </div>
+
+  <table class="plans">
+    <tr>
+      <th style="text-align:left;width:30%">&nbsp;</th>
+      <th>Base</th>
+      <th class="star">Plus<span class="pt">consigliato</span></th>
+      <th>Multi-sede</th>
+    </tr>
+    <tr class="row-price"><td>Canone annuo</td><td>€490</td><td style="color:#047857">€990</td><td>€2.400</td></tr>
+    <tr><td>Primo anno, con avviamento guidato</td><td>€690</td><td>€1.290</td><td>€2.900</td></tr>
+    <tr><td>Destinatario</td><td>micro impresa, ≤15 lavoratori<br><span class="small muted">rischio basso / medio</span></td><td>PMI, 15–50 lavoratori</td><td>10–249 lavoratori<br><span class="small muted">più sedi</span></td></tr>
+    <tr class="hl"><td>Sedi / unità locali</td><td>1</td><td>3</td><td>10</td></tr>
+    <tr><td>Utenti</td><td>2</td><td>5</td><td>15</td></tr>
+    <tr><td>Documenti</td><td>DVR Master + MMC, VDT, Stress, Gestanti, Incendio</td><td>+ Microclima, Biologico, PEE, DUVRI, chimico (MoVaRisCh)</td><td>tutti e 17 — incl. manuale HACCP + 16 schede, POS</td></tr>
+    <tr><td>Crediti AI / anno</td><td>500</td><td>1.000</td><td>2.500</td></tr>
+    <tr><td>App di sopralluogo digitale</td><td>✓</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Revisioni e rigenerazioni illimitate</td><td>✓</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Promemoria revisione art. 29 c.3</td><td>✓</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Data certa</td><td>opzione €149/anno</td><td><strong>inclusa</strong></td><td><strong>inclusa</strong></td></tr>
+    <tr><td>Revisione assistita RSPP</td><td>opzione</td><td>1 / anno incl.</td><td>2 / anno incl.</td></tr>
+    <tr><td>Assistenza</td><td>email, 3 gg lav.</td><td>email + chat, 1 g lav.</td><td>telefono + referente</td></tr>
+  </table>
+  <p class="small">Prova gratuita di 30 giorni, tutte le funzioni, senza carta. L'avviamento guidato è una sessione da remoto di 60–90 minuti: è ciò che converte la prova in abbonamento in questo segmento e non va mai lasciato in self-service.</p>
+
+  <h2>Perché questi numeri</h2>
+
+  <h3>1 &nbsp;Ancorati alla fattura che già pagano</h3>
+  <p>Una PMI che acquista DVR + stress + VDT + data certa spende <strong>€1.175–2.100</strong> il primo anno — e ripaga a ogni revisione.</p>
+  <table>
+    <tr><th>Piano</th><th class="r">Canone</th><th>Sostituisce</th><th>Lettura</th></tr>
+    <tr><td>Base</td><td class="r price">€490</td><td>un singolo DVR di bassa complessità (€300–450)</td><td>Sta appena sopra un solo documento — ma include quattro allegati e revisioni illimitate. Su tre anni: €1.470 contro €900–1.350 di onorari per <em>gli stessi tre documenti fatti una volta sola</em>.</td></tr>
+    <tr class="hl"><td>Plus</td><td class="r price">€990</td><td>€1.200–2.100 di consulenza il primo anno</td><td>Si ripaga entro il primo anno e resta più conveniente a ogni rinnovo.</td></tr>
+    <tr><td>Multi-sede</td><td class="r price">€2.400</td><td>€3.000–8.000 di consulenza multi-sede</td><td>Deliberatamente l'ultimo livello — vedi §4.</td></tr>
+  </table>
+
+  <h3>2 &nbsp;Ancorati ai prodotti fai-da-te già sul mercato</h3>
+  <div class="split">
+    <div>
+      <table>
+        <tr><th>Prodotto</th><th class="r">Prezzo</th></tr>
+        <tr><td>Easywork "DVR Generator" Safety Box<br><span class="small muted">un DVR, web app fai-da-te + manuale cartaceo</span></td><td class="r price">€350–380<br><span class="small muted">una tantum</span></td></tr>
+        <tr><td>DVR Suite Starter<br><span class="small muted">1 DVR/anno, cloud, 50 MB</span></td><td class="r price">€120/anno</td></tr>
+        <tr class="hl"><td><strong>N2O Base</strong><br><span class="small muted">5 documenti, calcoli, AI, revisione assistita</span></td><td class="r price">€490/anno</td></tr>
+      </table>
+    </div>
+    <div>
+      <p class="tight"><strong>Base costa il 29 % in più della Safety Box e 4× DVR Suite Starter.</strong> Quel sovrapprezzo va guadagnato nella prima schermata del sito:</p>
+      <ul class="small">
+        <li>5 documenti in Base invece di 1 — 17 in Multi-sede</li>
+        <li>Calcoli veri, non modelli: indice NIOSH di sollevamento, soglia di esposizione VDT, punteggio stress INAIL, rischio incendio INF+SI+PI, PMV/PPD</li>
+        <li>Precompilazione dalla sola P.IVA — l'anagrafica si costruisce da sé</li>
+        <li>SDS in PDF → scheda chimica strutturata; foto di reparto → inventario attrezzature</li>
+        <li><strong>Revisioni illimitate</strong>, che sono l'obbligo ricorrente reale</li>
+        <li>Un RSPP disposto a metterci il proprio nome</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>3 &nbsp;Abbonamento e non una tantum — e lo dice la legge</h3>
+  <p>È questo l'argomento che rende la fatturazione annuale legittima anziché estrattiva:</p>
+  <div class="grid">
+    <div class="card"><div class="lab">Art. 29 c.3</div><div class="big">30 giorni</div><div class="fine">per aggiornare il DVR dopo nuove attrezzature, un infortunio o una modifica organizzativa. Un documento una tantum è già vecchio alla prima macchina acquistata.</div></div>
+    <div class="card"><div class="lab">Art. 28 c.2 — data certa</div><div class="big">€1.228–2.457</div><div class="fine">sanzione per un DVR privo di data certa (Cass. 14579/2026). Ogni revisione richiede una nuova marca temporale: un atto che si ripete ogni anno.</div></div>
+    <div class="card"><div class="lab">Legge PMI 2026</div><div class="big">ogni anno</div><div class="fine">L'informativa annuale scritta sui rischi del lavoro agile è ora obbligatoria e sanzionata — un documento da riemettere ogni anno, per ogni azienda con lavoratori da remoto.</div></div>
+  </div>
+  <p>Il valore ricorrente è <em>"il tuo fascicolo resta aggiornato e difendibile"</em>, non <em>"ti abbiamo venduto un file Word"</em>. L'abbonamento va prezzato su quella frase.</p>
+
+  <h3>4 &nbsp;Dove sta il tetto di prezzo</h3>
+  <p>Sopra i €2.400/anno l'acquirente smette di confrontarci con un software e comincia a confrontarci con un incarico RSPP pieno, con una persona in azienda. È una partita che non conviene giocare: appartiene al canale consulenti, e prenderla innesca esattamente il conflitto descritto in <strong>Fondamenta §8</strong>. <strong>Multi-sede a €2.400 è deliberatamente l'ultimo livello.</strong> Tutto ciò che sta sopra passa a uno studio partner.</p>
+
+  <h2>Economia unitaria <span class="small muted" style="font-weight:400">— tutti i costi caricati del 200 %</span></h2>
+  <table>
+    <tr><th>Piano</th><th class="r">Canone</th><th class="c">Pratiche / anno</th><th class="r">Costo variabile</th><th class="r">Infra</th><th class="r">Margine di contribuzione</th></tr>
+    <tr><td>Base</td><td class="r price">€490</td><td class="c">2 <span class="small muted">(iniziale + 1 revisione)</span></td><td class="r">€13</td><td class="r">€75</td><td class="r good">82,1 %</td></tr>
+    <tr class="hl"><td>Plus</td><td class="r price">€990</td><td class="c">4</td><td class="r">€29</td><td class="r">€75</td><td class="r good">89,5 %</td></tr>
+    <tr><td>Multi-sede</td><td class="r price">€2.400</td><td class="c">12</td><td class="r">€92</td><td class="r">€120</td><td class="r good">91,2 %</td></tr>
+  </table>
+  <table>
+    <tr><th>Piano</th><th class="r">Contratto annuo</th><th class="r">CAC obiettivo</th><th class="r">Rientro</th><th class="r">LTV (3 anni, 90 % ret.)</th><th class="r">LTV / CAC</th></tr>
+    <tr><td>Base</td><td class="r">€490</td><td class="r">€180</td><td class="r">4,4 mesi</td><td class="r">€1.323</td><td class="r good">7,3×</td></tr>
+    <tr class="hl"><td>Plus</td><td class="r">€990</td><td class="r">€320</td><td class="r">3,9 mesi</td><td class="r">€2.673</td><td class="r good">8,4×</td></tr>
+  </table>
+  <div class="callout warn">
+    <span class="h">Il CAC obiettivo è tutta la partita</span>
+    €180–320 funzionano solo con acquisizione in self-service: SEO su <em>"quanto costa il DVR"</em>, commercialisti e consulenti del lavoro come canale di segnalazione, convenzioni con le associazioni di categoria (Confartigianato, CNA, Confcommercio), presenza sui marketplace. <strong>Una rete commerciale sul campo non è finanziabile con un contratto da €490.</strong> Se il go-to-market finisse per richiedere telefonate, questo livello va abbandonato o riprezzato verso l'alto.
+  </div>
+
+  <h2>Moduli aggiuntivi</h2>
+  <table>
+    <tr><th>Modulo</th><th class="r">Prezzo</th><th>Nota</th></tr>
+    <tr><td>Sede / unità locale aggiuntiva</td><td class="r price">€180/anno</td><td>Principale via di crescita per le aziende che si espandono — adozione ~25 %</td></tr>
+    <tr class="hl"><td>Revisione assistita RSPP con controfirma</td><td class="r price">€390 / set</td><td>La risposta al rischio legale; margine di pura consulenza per N2O — adozione ~35 % il primo anno</td></tr>
+    <tr><td>Data certa, illimitata</td><td class="r price">€149/anno</td><td>Inclusa da Plus in su — adozione ~60 % su Base</td></tr>
+    <tr><td>Documento aggiuntivo su Base (POS, HACCP, DUVRI)</td><td class="r price">€190/anno cad.</td><td>Rampa di risalita verso Plus</td></tr>
+    <tr><td>Ricarica crediti AI (500)</td><td class="r price">€79</td><td>Raramente necessaria a questi volumi; esiste per evitare blocchi netti</td></tr>
+    <tr><td>Sopralluogo in sede</td><td class="r price">a preventivo</td><td>Protegge il fatturato di servizio già esistente di N2O</td></tr>
+    <tr><td>Pacchetto formazione / corsi</td><td class="r price">a listino partner</td><td>Ogni cliente con DVR ha anche obblighi formativi</td></tr>
+  </table>
+  <p class="small muted">Retention netta del ricavo stimata: <strong>106–110 %</strong> — inferiore al canale consulenti, come atteso nel segmento PMI.</p>
+
+  <div class="callout dark">
+    <span class="h">Presidio di segmentazione <span class="badge no" style="background:#7f1d1d;color:#fecaca;border-color:#991b1b">non negoziabile</span></span>
+    I piani diretti si vendono <strong>solo</strong> ad aziende con &lt;15 lavoratori in classe di rischio basso/medio (Base) o &lt;50 lavoratori (Plus). Tutto ciò che sta sopra, qualunque codice ATECO ad alto rischio e qualunque situazione di cantiere (POS/PSC) passa a un consulente partner, che mantiene il cliente e riceve il 20 % su quella posizione. Senza questa regola imposta <strong>nel flusso di registrazione, non solo nel contratto</strong>, i due modelli si aggrediscono a vicenda — e a soccombere è il canale consulenti, quello con 4× il valore di contratto e una rete commerciale finanziabile.
+  </div>
+
+  <h2>Rischi</h2>
+  <table>
+    <tr><th style="width:38%">Rischio</th><th>Mitigazione</th></tr>
+    <tr><td>Esposizione legale se un DVR auto-prodotto viene giudicato inadeguato</td><td>Mai comunicare "fai-da-te". Revisione assistita in evidenza. Condizioni contrattuali che dichiarano il DdL soggetto responsabile e la piattaforma uno strumento di redazione. <strong>Da far verificare a un legale prima del lancio.</strong></td></tr>
+    <tr><td>Il CAC supera i €320 e il livello va sottocosto</td><td>Subordinare il lancio a un CAC misurato su un test di canale a pagamento. Non scalare per ipotesi.</td></tr>
+    <tr><td>Carico di assistenza per euro molto superiore al canale consulenti</td><td>Contenuti di onboarding in self-service, guida in app (già costruita), SLA 3 giorni su Base. Monitorare il costo di servizio ogni mese; oltre il 15 % del contratto, portare Base a €690.</td></tr>
+    <tr><td>L'acquirente si aspetta un acquisto una tantum e mal sopporta il rinnovo</td><td>Aprire ogni materiale di comunicazione con l'art. 29 c.3 e la sanzione sulla data certa. La ricorrenza è normativa, non commerciale.</td></tr>
+    <tr><td>Nel codice non esistono fatturazione, controllo dei limiti né registrazione self-service</td><td>Stesso prerequisito del Modello A, più solleciti di pagamento e blocco funzionale per piano nell'interfaccia.</td></tr>
+  </table>
+
+  <div class="verdict" style="background:linear-gradient(135deg,#047857,#06b6d4)">
+    <span class="h">Posizionamento di lancio consigliato</span>
+    <p><strong>Non lanciare questo livello per primo.</strong> I piani consulenti valgono 4–8× di contratto, hanno una rete commerciale finanziabile e possono contare su N2O come caso reale. Costruire e validare il Modello A, poi lanciare <strong>Plus a €990</strong> come unico piano diretto di punta — con Base e Multi-sede come ancore laterali — attraverso partner di segnalazione anziché acquisizione a pagamento, e con il presidio di segmentazione attivo dal primo giorno.</p>
+  </div>
+</div>
