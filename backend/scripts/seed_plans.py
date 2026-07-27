@@ -7,9 +7,9 @@ tier, activating the Model B plans in Phase 5.
     python -m scripts.seed_plans            # apply
     python -m scripts.seed_plans --dry-run  # show what would change
 
-Idempotent. `stripe_price_id` is never touched: the Phase-4 Stripe setup script
+Idempotent. `paypal_plan_id` is never touched: the Phase-4 PayPal setup script
 owns that column, and clobbering it would detach a live subscription from its
-price.
+billing plan.
 """
 
 import argparse
@@ -27,7 +27,7 @@ from app.models.plan import Plan
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-# Everything except the primary key and stripe_price_id.
+# Everything except the primary key and paypal_plan_id.
 _UPDATABLE = (
     "model",
     "display_name",

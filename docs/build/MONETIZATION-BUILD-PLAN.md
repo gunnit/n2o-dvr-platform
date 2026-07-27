@@ -57,8 +57,14 @@ it only post-PMF if the direct product diverges at the engine level).
 | JWT claims `{sub, org, role}` | `core/security.py` `create_access_token`; consumed in `frontend/src/lib/auth.ts` | ✅ done — add only `account_type` |
 
 **What is missing and IS built here:** every monetization concept — `account_type`, plan catalogue,
-subscriptions, entitlement resolution, AI-credit + active-company + seat/site metering, Stripe,
-self-service direct signup, and the channel-conflict guardrail. `stripe` is **not** a dependency yet.
+subscriptions, entitlement resolution, AI-credit + active-company + seat/site metering, PayPal,
+self-service direct signup, and the channel-conflict guardrail.
+
+> **Payment provider: PayPal** (decided 2026-07-27, replacing the Stripe design this plan originally
+> carried). PayPal ships no maintained Python SDK for Subscriptions, so `app/billing/paypal_client.py`
+> calls the REST API over `httpx` — there is **no** payment-provider package in `requirements.txt`.
+> The sandbox is live: REST app *N2O DVR Platform* (merchant, IT), Subscriptions capability enabled,
+> credentials in `backend/.env`, verified by `python -m scripts.paypal_check`.
 
 ---
 
@@ -68,9 +74,10 @@ self-service direct signup, and the channel-conflict guardrail. `stripe` is **no
   `settings.ENTITLEMENTS_ENFORCE` (default `false`). The grandfather data migration (MB-1.1/1.3) and
   the resolver (MB-0.9) **must land in the same deploy**: a resolver live without every org owning a
   subscription row would 402 existing users.
-- **INV-2 — The DB is the source of truth for entitlements & usage; Stripe only for the payment
-  lifecycle.** Join them via `plans.stripe_price_id`. Webhooks are the *only* writer of
-  `subscriptions.status` / `current_period_end`.
+- **INV-2 — The DB is the source of truth for entitlements & usage; PayPal only for the payment
+  lifecycle.** Join them via `plans.paypal_plan_id`. Webhooks are the *only* writer of
+  `subscriptions.status` / `current_period_end`, and an event is only trusted after
+  `/v1/notifications/verify-webhook-signature` passes against `PAYPAL_WEBHOOK_ID`.
 - **INV-3 — Never put plan/limits/credits in the JWT.** The token stays `{sub, org, role, account_type}`.
   Entitlements resolve from the DB **every request** (the request already loads `User` from Postgres,
   so it's a free join). Anything cached in the token goes stale on upgrade/downgrade/credit-exhaustion.
@@ -100,8 +107,9 @@ Update the Status column as you go: `TODO` → `WIP` → `DONE` (or `BLOCKED`/`D
 
 | Phase | Task | Status | Notes |
 |---|---|---|---|
-| 0 Foundation | MB-0.1 deps (stripe, import-linter) | DONE | `stripe>=10.0.0`, `import-linter>=2.0` in `requirements.txt` |
-| 0 | MB-0.2 `billing/` module skeleton | DONE | `constants`/`entitlements` implemented; `metering`/`stripe_client` are documented stubs |
+| 0 Foundation | MB-0.1 deps (import-linter) | DONE | `import-linter>=2.0` in `requirements.txt`. No payment-provider package: PayPal is REST-over-`httpx` |
+| 0 | MB-0.2 `billing/` module skeleton | DONE | `constants`/`entitlements` implemented; `metering` is a documented stub; `paypal_client` has the auth layer only |
+| 0 | MB-0.12 PayPal sandbox + credentials | DONE | REST app *N2O DVR Platform* (merchant, IT, Subscriptions on); creds in `backend/.env`; verified via `scripts/paypal_check.py` |
 | 0 | MB-0.3 `Organization.account_type` | DONE | `String(16)`, `server_default='consultant'` |
 | 0 | MB-0.4 `plans` table + model | DONE | `models/plan.py` |
 | 0 | MB-0.5 `subscriptions` table + model | DONE | `models/subscription.py`, UNIQUE on `organization_id` |
@@ -235,13 +243,13 @@ Run against a database seeded to the exact production shape (6 orgs / 16 aziende
 | 2 | MB-2.6 flip `ENTITLEMENTS_ENFORCE=true` | TODO | |
 | **GATE 2** | meters enforced; N2O (founding) fully unaffected; 402 paths have tests | — | |
 | 3 First € | MB-3.1 admin set-plan/mark-paid endpoint | TODO | |
-| 3 | MB-3.2 Stripe customer + payment link | TODO | |
+| 3 | MB-3.2 PayPal subscription + approval link | TODO | |
 | 3 | MB-3.3 `GET /organizations/me/entitlements` | TODO | |
 | **GATE 3** | first consultant invoice paid | — | |
-| 4 Automate A | MB-4.1 Stripe products/prices setup script | TODO | |
-| 4 | MB-4.2 Checkout session endpoint | TODO | |
-| 4 | MB-4.3 webhook (idempotent, sole status writer) | TODO | |
-| 4 | MB-4.4 Billing Portal endpoint | TODO | |
+| 4 Automate A | MB-4.1 PayPal products/plans setup script | TODO | must be idempotent — sandbox merchant is shared with other Niuexa projects |
+| 4 | MB-4.2 Subscribe endpoint (approval redirect) | TODO | |
+| 4 | MB-4.3 webhook (signature-verified, idempotent, sole status writer) | TODO | register listener; store id in `PAYPAL_WEBHOOK_ID` |
+| 4 | MB-4.4 cancel/revise subscription endpoint | TODO | PayPal has no hosted billing portal — own screen |
 | 4 | MB-4.5 dunning → read-only downgrade | TODO | |
 | 4 | MB-4.6 FE: EntitlementsProvider + Gate + usage UI + billing page | TODO | |
 | **GATE 4 / REVENUE GATE** | Model A self-serve GA; sell to ≥1 non-founding studio before Phase 5 | — | |
@@ -288,7 +296,7 @@ ai_credits_year  INTEGER NULL   -- NULL = pooled/unmetered (A_ENTERPRISE)
 allowed_doc_types JSONB NULL    -- NULL = all 17; explicit subset for Model B (see §6)
 features         JSONB          -- {"white_label_domain":bool,"sub_tenants":int,"api":"none|read|full",
                                 --  "data_certa":bool,"rspp_reviews_included":int}
-stripe_price_id  TEXT NULL      -- filled in Phase 4
+paypal_plan_id   TEXT NULL      -- PayPal `P-…` billing plan id; filled in Phase 4
 active           BOOLEAN default true
 ```
 Seed values live in §5. Keep the catalogue in a seed migration/script, not hardcoded in business logic.
@@ -299,9 +307,11 @@ Seed values live in §5. Keep the catalogue in a seed migration/script, not hard
 id                    UUID PK
 organization_id       UUID FK organizations(id) UNIQUE   -- one active sub per org
 plan_code             TEXT FK plans(plan_code)
-status                TEXT        -- 'trialing'|'active'|'past_due'|'canceled'
-stripe_customer_id    TEXT NULL
-stripe_subscription_id TEXT NULL
+status                TEXT        -- 'trialing'|'active'|'past_due'|'canceled' (ours, not PayPal's;
+                                  --  webhook maps APPROVAL_PENDING/APPROVED->trialing, ACTIVE->active,
+                                  --  SUSPENDED->past_due, CANCELLED/EXPIRED->canceled)
+paypal_payer_id       TEXT NULL
+paypal_subscription_id TEXT NULL  -- PayPal `I-…` subscription id
 current_period_start  TIMESTAMPTZ NULL
 current_period_end    TIMESTAMPTZ NULL
 trial_end             TIMESTAMPTZ NULL
@@ -452,13 +462,14 @@ plans (`ai_credits_year IS NULL`) short-circuit `check()` to allow.
 ### PHASE 0 — Foundation (additive, zero behavior change)
 
 - [ ] **MB-0.1 — Dependencies.**
-  Add to `backend/requirements.txt`: `stripe>=10.0.0` and (dev) `import-linter>=2.0`.
-  **Verify:** `pip install -r requirements.txt` succeeds in the Linux venv.
+  Add to `backend/requirements.txt`: (dev) `import-linter>=2.0`. No payment-provider package —
+  PayPal has no maintained Python SDK for Subscriptions, so the client is REST over the existing
+  `httpx`. **Verify:** `pip install -r requirements.txt` succeeds in the Linux venv.
 
 - [ ] **MB-0.2 — `billing/` module skeleton.**
   Create `backend/app/billing/__init__.py`, `constants.py` (credit weights, the 17 doc types imported
   from the dispatcher registry, plan codes), `entitlements.py` (MB-0.9), `metering.py` (MB-2.3/2.4),
-  `stripe_client.py` (Phase 4). **Why:** one clean seam (INV-4/8).
+  `paypal_client.py` (auth layer now; commerce calls in Phase 3/4). **Why:** one clean seam (INV-4/8).
 
 - [ ] **MB-0.3 — `Organization.account_type`.** §4.1. **Acceptance:** column exists, defaults
   `'consultant'`. **Verify:** model imports; migration (MB-0.8) shows the column.
@@ -581,9 +592,10 @@ plans (`ai_credits_year IS NULL`) short-circuit `check()` to allow.
   (`require_role("admin")`) that sets `plan_code` + `status='active'` + period dates. Lets N2O bill a
   studio by hand today.
 
-- [ ] **MB-3.2 — Stripe customer + payment link.** Minimal: create a Stripe Customer for the org
-  (store `stripe_customer_id`), generate a one-off Payment Link for the plan price. No webhooks yet;
-  MB-3.1 flips status on confirmation.
+- [ ] **MB-3.2 — PayPal subscription + approval link.** Minimal: `POST /v1/billing/subscriptions`
+  for the plan's `paypal_plan_id`, store `paypal_subscription_id`, hand the operator the `approve`
+  link from `links[]` to send the customer. On approval PayPal returns the payer id → store
+  `paypal_payer_id`. No webhooks yet; MB-3.1 flips status on confirmation.
 
 - [ ] **MB-3.3 — `GET /organizations/me/entitlements`.** Returns the resolved `Entitlements` +
   current usage (credits used/remaining, active companies, seats used). The frontend (Phase 4) needs it.
@@ -593,27 +605,36 @@ plans (`ai_credits_year IS NULL`) short-circuit `check()` to allow.
 
 ### PHASE 4 — Automate Model A + usage UI
 
-- [ ] **MB-4.1 — Stripe products/prices setup script.** `backend/scripts/stripe_setup.py`: create 7
-  Products/annual Prices (tax-exclusive), write `stripe_price_id` back onto `plans`. Enable Stripe Tax;
-  prices exclusive of 22% IVA; collect P.IVA/CF (already on `Organization`) as tax id. **[DEFER]**
-  monthly (+20%) / 3-yr (−15%) variants, multi-currency.
+- [ ] **MB-4.1 — PayPal products/plans setup script.** `backend/scripts/paypal_setup.py`: create one
+  Product + 7 annual Plans (`/v1/catalogs/products`, `/v1/billing/plans`), write `paypal_plan_id`
+  back onto `plans`. Prices exclusive of 22% IVA — set it in the plan's `taxes` block
+  (`percentage: "22"`, `inclusive: false`). **Must be idempotent and match on name:** the sandbox
+  merchant account is shared with other Niuexa projects and already holds unrelated
+  products/plans, so never assume an empty catalogue. Pass `PayPal-Request-Id` for safe retries.
+  **[DEFER]** monthly (+20%) / 3-yr (−15%) variants, multi-currency.
 
-- [ ] **MB-4.2 — Checkout endpoint.** `POST /billing/checkout` → hosted Checkout Session for a
-  `plan_code` (+ optional one-time setup-fee line item). For direct trials (Phase 5): `trial_period_days=30`,
-  `payment_method_collection='if_required'`.
+- [ ] **MB-4.2 — Subscribe endpoint.** `POST /billing/subscribe` → `POST /v1/billing/subscriptions`
+  for a `plan_code`, returning the `approve` link for the browser to redirect to. Setup fees go in
+  the plan's `payment_preferences.setup_fee`. For direct trials (Phase 5): a zero-price first
+  billing cycle (PayPal models trials as cycles, not a `trial_period_days` flag).
 
 - [ ] **MB-4.3 — Webhook (sole status writer, INV-2).** `POST /billing/webhook` in `api/v1/billing.py`,
-  signature-verified, **idempotent by `event.id`**. Handle `checkout.session.completed`,
-  `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`,
-  `invoice.payment_failed`. These are the ONLY writers of `subscriptions.status`/`current_period_end`.
-  Overage packs (500=€79 / 2000=€249 / 10000=€990) = one-time `mode=payment` Checkout →
+  **verified** via `/v1/notifications/verify-webhook-signature` against `PAYPAL_WEBHOOK_ID` and
+  **idempotent by `event.id`**. Handle `BILLING.SUBSCRIPTION.{ACTIVATED,UPDATED,CANCELLED,SUSPENDED,
+  EXPIRED}` and `PAYMENT.SALE.{COMPLETED,DENIED}`. These are the ONLY writers of
+  `subscriptions.status`/`current_period_end`. Note PayPal does not send a period-end on every
+  event — read `billing_info.next_billing_time` from the subscription resource.
+  Overage packs (500=€79 / 2000=€249 / 10000=€990) = one-off Orders API capture →
   increment `usage_counters.overage_credits`.
 
-- [ ] **MB-4.4 — Billing Portal.** `POST /billing/portal` → Stripe Billing Portal session (card update,
-  plan change, cancel).
+- [ ] **MB-4.4 — Cancel / revise.** PayPal has no hosted billing portal, so this is our own screen:
+  `POST /billing/cancel` → `/v1/billing/subscriptions/{id}/cancel`, plan change →
+  `/v1/billing/subscriptions/{id}/revise` (returns a fresh approval link the customer must accept).
 
-- [ ] **MB-4.5 — Dunning → read-only.** On `invoice.payment_failed` → `status='past_due'` (keep full
-  access during Smart Retries grace). On final failure → downgrade to **read-only**: view/download
+- [ ] **MB-4.5 — Dunning → read-only.** On `PAYMENT.SALE.DENIED` /
+  `BILLING.SUBSCRIPTION.SUSPENDED` → `status='past_due'` (keep full access while PayPal retries; the
+  plan's `payment_preferences.payment_failure_threshold` sets how many attempts it makes before
+  suspending). On final failure → downgrade to **read-only**: view/download
   existing DVRs, **no new generation**, **never hard-delete** (matches D.Lgs. retention). Implement as
   an entitlement the resolver returns when `status='canceled'/'past_due'` past grace.
 
@@ -715,7 +736,7 @@ plans (`ai_credits_year IS NULL`) short-circuit `check()` to allow.
 - **OPEN-DECISION-2 — N2O founding terms.** `A_FOUNDING` at €0/3-yr assumed. Confirm the exact
   founding-partner deal (revenue share vs free) and write it so it isn't renegotiated annually
   (`01-CONSULENTI-E-STUDI.md` risk table).
-- **OPEN-DECISION-3 — Fattura elettronica (SdI).** Stripe does not emit Italian e-invoices. Phase 3/4
+- **OPEN-DECISION-3 — Fattura elettronica (SdI).** PayPal does not emit Italian e-invoices. Phase 3/4
   reconcile into the commercialista's tool manually; collect `codice destinatario`/PEC at signup. Decide
   if/when to integrate Fatture in Cloud. **[DEFER]**, non-blocking for first revenue.
 - **OPEN-DECISION-4 — "active company" definition edge cases.** Confirm archived-but-touched behavior

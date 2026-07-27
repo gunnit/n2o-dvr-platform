@@ -233,8 +233,9 @@ def test_null_account_type_defaults_to_consultant():
     [
         ("active", True),
         ("trialing", True),
-        # Dunning grace: Stripe Smart Retries run for days and a customer must
-        # not lose access to their DVR mid-retry. Read-only comes at MB-4.5.
+        # Dunning grace: PayPal retries a failed payment over several days and a
+        # customer must not lose access to their DVR mid-retry. Read-only comes
+        # at MB-4.5.
         ("past_due", True),
         ("canceled", False),
     ],

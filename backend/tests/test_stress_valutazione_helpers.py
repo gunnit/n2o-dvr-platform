@@ -59,6 +59,9 @@ def _make_row(**overrides):
         "id": uuid.uuid4(),
         "azienda_id": uuid.uuid4(),
         "gruppo_omogeneo": "Azienda intera",
+        # Feedback #17: per-mansione valutazioni. NULL = Generale, which is
+        # what a legacy company-wide row carries.
+        "mansione": None,
         "area_a_eventi_sentinella": {"A.1": "INALTERATO"},
         "area_b_contenuto_lavoro": {"B1.1": "SI"},
         "area_c_contesto_lavoro": {"C1.1": "NO"},
@@ -99,6 +102,13 @@ def test_serialize_without_calc_omits_derived_fields():
     resp = _serialize(row)
     assert resp.azione is None
     assert resp.unanswered == []
+
+
+def test_serialize_carries_mansione():
+    """Feedback #17: each mansione gets its own row, so the serializer must
+    carry `mansione` through — a NULL one means Generale, not 'missing'."""
+    assert _serialize(_make_row()).mansione is None
+    assert _serialize(_make_row(mansione="Saldatore")).mansione == "Saldatore"
 
 
 def test_serialize_handles_null_jsonb_columns():

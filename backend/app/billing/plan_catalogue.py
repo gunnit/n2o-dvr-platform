@@ -8,7 +8,7 @@ Rows land in the ``plans`` table two ways:
 
 * the Phase-1 migration seeds them once, so a deploy is self-sufficient;
 * ``backend/scripts/seed_plans.py`` re-applies this module whenever the
-  catalogue changes (a price rise, a new tier, ``stripe_price_id`` backfill).
+  catalogue changes (a price rise, a new tier, ``paypal_plan_id`` backfill).
 
 ``tests/test_plan_catalogue.py`` asserts the migration's literals still match
 this module, so the two can't drift apart.

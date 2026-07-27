@@ -89,10 +89,25 @@ class Settings(BaseSettings):
     # tenant). Flip to true only after the grandfather migration has given every
     # org a subscription row and the shadow logs have been reviewed (GATE 1).
     ENTITLEMENTS_ENFORCE: bool = False
-    # Stripe owns the payment lifecycle only; entitlements are read from
-    # Postgres (INV-2). Empty key = billing endpoints stay dormant.
-    STRIPE_SECRET_KEY: str = ""
-    STRIPE_WEBHOOK_SECRET: str = ""
+    # PayPal owns the payment lifecycle only; entitlements are read from
+    # Postgres (INV-2). Empty client id = billing endpoints stay dormant.
+    # "sandbox" | "live" — selects the API host, so a stray sandbox credential
+    # in production fails to authenticate instead of silently charging nobody.
+    PAYPAL_ENV: str = "sandbox"
+    PAYPAL_CLIENT_ID: str = ""
+    PAYPAL_CLIENT_SECRET: str = ""
+    # Set once the webhook is registered (MB-4.3). Required to verify inbound
+    # webhook signatures — an unverified webhook must never be trusted to write
+    # subscriptions.status.
+    PAYPAL_WEBHOOK_ID: str = ""
+
+    @property
+    def PAYPAL_API_BASE(self) -> str:
+        return (
+            "https://api-m.paypal.com"
+            if self.PAYPAL_ENV == "live"
+            else "https://api-m.sandbox.paypal.com"
+        )
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

@@ -133,9 +133,14 @@ def test_rischi_specifici_section_aggregates_persona_codes():
     assert "varia per lavoratore" in text
 
 
-def test_dpi_per_mansione_falls_back_when_no_persona_has_flags():
-    """When no persona carries any DPI flag, the section must emit the
-    'in fase di compilazione' fallback paragraph instead of an empty grid."""
+def test_dpi_per_mansione_documents_mansione_with_no_flags():
+    """A mansione whose persone carry no DPI flags still gets its own grid
+    with an explicit "nessun DPI" row (b780497).
+
+    Silently omitting the mansione is the failure mode this guards: an
+    inspector reading the DVR must be able to tell "no PPE is prescribed
+    for this role, and here is why" apart from "this role was forgotten".
+    """
     persone = [
         _FakePersona(id="p1", nominativo="Mario Rossi", mansione="Operaio"),
     ]
@@ -144,7 +149,42 @@ def test_dpi_per_mansione_falls_back_when_no_persona_has_flags():
     gen._add_dpi_per_mansione_section(doc, persone, extras={})
 
     text = _all_text(doc).lower()
+    assert "operaio" in text
+    assert "nessun dpi specifico richiesto" in text
+    # The justification is the point of the row — a bare "nessuno" would
+    # not be defensible at audit.
+    assert "sorveglianza sanitaria" in text
+
+
+def test_dpi_per_mansione_gestante_row_cites_dlgs_151():
+    """art. 12 D.Lgs. 151/2001 requires documented protective measures for
+    a gestante worker even when no PPE is prescribed."""
+    persone = [
+        _FakePersona(id="p1", nominativo="Anna Bianchi", mansione="Impiegata gestante"),
+    ]
+    gen = _new_generator()
+    doc = Document()
+    gen._add_dpi_per_mansione_section(doc, persone, extras={})
+
+    text = _all_text(doc).lower()
+    assert "151/2001" in text
+
+
+def test_dpi_per_mansione_falls_back_when_no_mansioni_at_all():
+    """With nothing to tabulate (no persona carries a mansione), the section
+    must emit the 'in fase di compilazione' paragraph rather than a bare
+    heading followed by nothing."""
+    persone = [
+        _FakePersona(id="p1", nominativo="Mario Rossi", mansione=None),
+        _FakePersona(id="p2", nominativo="Anna Bianchi", mansione="   "),
+    ]
+    gen = _new_generator()
+    doc = Document()
+    gen._add_dpi_per_mansione_section(doc, persone, extras={})
+
+    text = _all_text(doc).lower()
     assert "in fase di compilazione" in text
+    assert not doc.tables
 
 
 def test_sorveglianza_protocol_table_aggregates_per_mansione():

@@ -307,12 +307,25 @@ def test_dvr_parte_iii_env_block_structure(generated_outputs):
         f"got {si_no_tables}"
     )
 
+    # Template Tables 27-33 column structure (DVR_TEMPLATE_MAPPING.md
+    # "Risk assessment table column structure"). The index column label must
+    # match the N2O template's own table header ordering — the template uses
+    # "I = P + 2*D" in its risk tables and "I = 2*D + P" in its methodology
+    # prose, and the generated DVR reproduces both. 7937654 collapsed the
+    # header to the prose form; this pins it back to the template's.
+    risk_table_header = [
+        "PERICOLO",
+        "CONDIZIONI DI IMPIEGO O DI ESPOSIZIONE",
+        "RISCHIO",
+        "MISURE DI PREVENZIONE E PROTEZIONE ATTUATE E DPI",
+        "I = P + 2*D",
+    ]
     category_headers_seen = 0
     for table in doc.tables:
         if not table.rows:
             continue
         header_texts = [cell.text.strip() for cell in table.rows[0].cells]
-        if header_texts[:1] == ["PERICOLO"] and "I = P + 2*D" in header_texts:
+        if header_texts == risk_table_header:
             category_headers_seen += 1
     assert category_headers_seen >= 12, (
         f"expected ≥12 per-category risk tables (6 envs × 2 cats), "

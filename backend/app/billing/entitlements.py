@@ -78,9 +78,9 @@ class Entitlements:
     def is_active(self) -> bool:
         """Whether the subscription is in a state that still grants access.
 
-        ``past_due`` counts as active: Stripe Smart Retries run for days and a
-        customer must not lose their DVR mid-dunning. The read-only downgrade
-        on final failure is MB-4.5.
+        ``past_due`` counts as active: PayPal retries a failed payment over
+        several days and a customer must not lose their DVR mid-dunning. The
+        read-only downgrade on final failure is MB-4.5.
         """
         return self.status in ACTIVE_STATUSES
 

@@ -60,9 +60,10 @@ class Plan(Base):
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
 
-    # Filled by the Phase 4 Stripe setup script. The join key between our
-    # catalogue and Stripe's; Stripe never owns entitlements (INV-2).
-    stripe_price_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Filled by the Phase 4 PayPal catalogue setup script — the `P-…` billing
+    # plan id. The join key between our catalogue and PayPal's; PayPal never
+    # owns entitlements (INV-2).
+    paypal_plan_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Sellable today. Retiring a plan sets this false; existing subscriptions
     # on it keep resolving, so rows are never deleted.
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))

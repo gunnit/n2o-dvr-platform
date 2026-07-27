@@ -2,7 +2,7 @@
 
 One live subscription per org, enforced by a UNIQUE constraint on
 ``organization_id``. This table (joined to ``plans``) is the source of truth
-for entitlements; Stripe owns only the payment lifecycle (INV-2). Once the
+for entitlements; PayPal owns only the payment lifecycle (INV-2). Once the
 Phase 4 webhook lands it is the **sole writer** of ``status`` and
 ``current_period_*`` — nothing else may set them.
 """
@@ -31,8 +31,9 @@ class Subscription(Base):
     # — see billing.constants.SUBSCRIPTION_STATUSES.
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="active")
 
-    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    stripe_subscription_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # PayPal's payer id (the customer) and `I-…` subscription id.
+    paypal_payer_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    paypal_subscription_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Timezone-aware throughout: renewal and trial boundaries decide whether a
     # customer can generate a document, so a naive local timestamp is a bug.

@@ -79,11 +79,15 @@ ACCOUNT_TYPE_CONSULTANT = "consultant"
 ACCOUNT_TYPE_DIRECT = "direct"
 ACCOUNT_TYPES: frozenset[str] = frozenset({ACCOUNT_TYPE_CONSULTANT, ACCOUNT_TYPE_DIRECT})
 
-# `subscriptions.status` values. Mirrors the Stripe subscription lifecycle;
-# webhooks are the only writer once Phase 4 lands (INV-2).
+# `subscriptions.status` values. Our own vocabulary, not PayPal's: the Phase-4
+# webhook maps PayPal's subscription states onto these (APPROVAL_PENDING /
+# APPROVED -> trialing, ACTIVE -> active, SUSPENDED -> past_due,
+# CANCELLED / EXPIRED -> canceled). Webhooks are the only writer (INV-2).
 SUBSCRIPTION_STATUSES: frozenset[str] = frozenset(
     {"trialing", "active", "past_due", "canceled"}
 )
 # Statuses that still grant generation rights. `past_due` keeps full access
-# during Stripe Smart Retries; the read-only downgrade is MB-4.5.
+# while PayPal retries a failed payment (a plan's `payment_failure_threshold`
+# allows several attempts before it gives up); the read-only downgrade is
+# MB-4.5.
 ACTIVE_STATUSES: frozenset[str] = frozenset({"trialing", "active", "past_due"})

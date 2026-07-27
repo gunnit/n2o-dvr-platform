@@ -20,19 +20,6 @@ concurrency:
   group: backend-ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Five tests fail on main as of 2026-07-27, predating this workflow. They are
-# excluded from the blocking step and re-run in a separate non-blocking one, so
-# the debt stays visible without making every PR red — a check that is always
-# red teaches people to ignore it, which is worse than no check at all.
-# Remove these once the underlying bugs are fixed.
-env:
-  KNOWN_FAILING: >-
-    --deselect tests/test_dvr_persona_dpi_rischi.py::test_dpi_per_mansione_falls_back_when_no_persona_has_flags
-    --deselect tests/test_generators.py::test_dvr_parte_iii_env_block_structure
-    --deselect tests/test_stress_valutazione_helpers.py::test_serialize_carries_calculator_derived_fields
-    --deselect tests/test_stress_valutazione_helpers.py::test_serialize_without_calc_omits_derived_fields
-    --deselect tests/test_stress_valutazione_helpers.py::test_serialize_handles_null_jsonb_columns
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -60,7 +47,8 @@ jobs:
       # Read at import time; empty values keep the AI and billing integrations
       # dormant in CI.
       OPENAI_API_KEY: ""
-      STRIPE_SECRET_KEY: ""
+      PAYPAL_CLIENT_ID: ""
+      PAYPAL_CLIENT_SECRET: ""
 
     steps:
       - uses: actions/checkout@v4
@@ -92,14 +80,4 @@ jobs:
       - name: Tests
         # DATABASE_URL points at the service container, so tests/test_billing_schema_db.py
         # runs for real here instead of skipping.
-        run: pytest -q ${{ env.KNOWN_FAILING }}
-
-      - name: Known-failing tests (informational, does not block)
-        if: always()
-        continue-on-error: true
-        run: |
-          echo "These fail on main and predate this workflow. Fix them and delete this step."
-          pytest -q \
-            tests/test_dvr_persona_dpi_rischi.py::test_dpi_per_mansione_falls_back_when_no_persona_has_flags \
-            tests/test_generators.py::test_dvr_parte_iii_env_block_structure \
-            tests/test_stress_valutazione_helpers.py
+        run: pytest -q

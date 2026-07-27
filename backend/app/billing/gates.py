@@ -152,8 +152,9 @@ def ensure_site_slot(
 def ensure_subscription_active(ent: Entitlements, org_id: uuid.UUID | None = None) -> None:
     """Gate write operations for a lapsed subscription (MB-4.5).
 
-    ``past_due`` deliberately still passes: Stripe Smart Retries run for days
-    and a customer must not lose their DVR mid-dunning. Read and download paths
+    ``past_due`` deliberately still passes: PayPal retries a failed payment over
+    several days and a customer must not lose their DVR mid-dunning. Read and
+    download paths
     must never call this — a canceled tenant keeps access to documents it
     already generated, which D.Lgs. 81/2008 retention requires.
     """

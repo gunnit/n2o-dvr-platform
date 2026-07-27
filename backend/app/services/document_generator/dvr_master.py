@@ -3190,7 +3190,14 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             "CONDIZIONI DI IMPIEGO O DI ESPOSIZIONE",
             "RISCHIO",
             "MISURE DI PREVENZIONE E PROTEZIONE ATTUATE E DPI",
-            "I = 2*D + P",
+            # Mirrors the header used in the 54 risk-table cells of the N2O
+            # template (DVR_TEMPLATE_MAPPING.md §"Risk assessment table column
+            # structure"). The template writes the operands in this order in
+            # its *tables* and as "I = 2*D + P" in its methodology *prose* —
+            # both appear verbatim in the delivered DVR, matching the source
+            # document. Same quantity either way; do not "normalize" one to
+            # the other.
+            "I = P + 2*D",
         ]
         table = doc.add_table(rows=1, cols=len(headers))
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
