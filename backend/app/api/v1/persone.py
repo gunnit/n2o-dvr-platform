@@ -5,6 +5,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.billing.entitlements import Entitlements, get_entitlements
+from app.billing.metering import metered
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.db.session import get_db
 from app.dependencies import get_current_org
@@ -169,6 +171,7 @@ async def suggerisci_dpi_rischi(
     azienda_id: uuid.UUID,
     persona_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
     """AI-suggest DPI + rischi specifici for a single persona.
@@ -211,9 +214,12 @@ async def suggerisci_dpi_rischi(
         else []
     )
 
-    return await suggest_dpi_rischi(
-        mansione_nome=(persona.mansione or "").strip() or None,
-        attrezzature_speciali_codes=list(persona.attrezzature_speciali or []),
-        ambienti=ambienti,
-        attrezzature=attrezzature,
-    )
+    # MB-2.4 — keyed on the person: re-running the DPI suggester for the same
+    # worker is one billable action.
+    async with metered(org_id, "reasoning", f"dpi-rischi:{persona_id}", db, ent):
+        return await suggest_dpi_rischi(
+            mansione_nome=(persona.mansione or "").strip() or None,
+            attrezzature_speciali_codes=list(persona.attrezzature_speciali or []),
+            ambienti=ambienti,
+            attrezzature=attrezzature,
+        )

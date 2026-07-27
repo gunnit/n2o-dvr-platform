@@ -17,10 +17,11 @@ usage but never deny, and a would-be denial is logged as ``WOULD_402``.
 
 import logging
 import uuid
+from contextlib import asynccontextmanager
 from datetime import date
 
 from fastapi import HTTPException, status
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.billing.constants import CREDIT_WEIGHTS
@@ -201,6 +202,37 @@ async def refund_credits(
     )
 
 
+@asynccontextmanager
+async def metered(
+    org_id: uuid.UUID,
+    kind: str,
+    idem_key: str,
+    db: AsyncSession,
+    ent: Entitlements,
+):
+    """Charge for one AI action, releasing the charge if the call fails.
+
+        async with metered(org_id, "reasoning", f"misure:{rischio_id}", db, ent):
+            misure = await suggest_measures(rischio)
+
+    Reserves before the body runs (INV-7 — a 402 is raised before the provider
+    is contacted), releases on exception, and **commits either way**. The commit
+    matters: most suggester endpoints are otherwise read-only and never commit,
+    so without it the ledger and counter writes would be discarded when the
+    request's session closes and the customer would be using AI for free.
+    """
+    await spend_credits(org_id, kind, idem_key, db, ent)
+    try:
+        yield
+    except Exception:
+        # The work never happened — give the credits back rather than bill for
+        # a provider outage.
+        await refund_credits(org_id, kind, idem_key, db, ent)
+        await db.commit()
+        raise
+    await db.commit()
+
+
 async def is_company_active(
     org_id: uuid.UUID, azienda_id: uuid.UUID, db: AsyncSession, ent: Entitlements
 ) -> bool:
@@ -247,6 +279,50 @@ async def record_active_company(
         )
     ).first()
     return row is not None
+
+
+async def record_activation_for_azienda(azienda_id: uuid.UUID, db: AsyncSession) -> bool:
+    """Resolve the owning org and mark the company active for its period.
+
+    The one entry point every completion path uses — the Celery worker when a
+    generation finishes, and the API when ``restore``, ``sync-from-gdoc`` or
+    ``save-edited-version`` mints a completed row directly. Each resolves the
+    org itself, so callers need only the azienda.
+
+    **Best-effort by design.** A metering failure must never fail a document:
+    the document is the legally-required product, the meter is an accounting
+    record that can be reconciled. The ceiling is enforced at the API
+    (``gates.ensure_company_slot``), not here.
+
+    Returns True if this was the company's first activation of the period.
+    """
+    from app.billing.entitlements import resolve_entitlements
+    from app.models.azienda import Azienda
+
+    try:
+        org_id = (
+            await db.execute(
+                select(Azienda.organization_id).where(Azienda.id == azienda_id)
+            )
+        ).scalar_one_or_none()
+        if org_id is None:
+            return False
+        ent = await resolve_entitlements(org_id, db)
+        first = await record_active_company(org_id, azienda_id, db, ent)
+        await db.commit()
+        if first:
+            logger.info(
+                "billing: azienda %s activated for org %s period %s",
+                azienda_id, org_id, ent.meter_period_start,
+            )
+        return first
+    except Exception:  # pragma: no cover — never break a document over billing
+        logger.exception("billing: failed to record activation for azienda %s", azienda_id)
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        return False
 
 
 def period_of(ent: Entitlements) -> date:

@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from celery.exceptions import SoftTimeLimitExceeded
 from sqlalchemy import select, update
 
+from app.billing.metering import record_activation_for_azienda
 from app.celery_app import celery_app
 from app.db.session import async_session_factory
 from app.models.documento_generato import DocumentoGenerato
@@ -119,6 +120,11 @@ async def _run_generation(document_id: uuid.UUID) -> None:
                     logger.exception("Completion-hash compute failed for %s", doc.id)
             await db.commit()
             logger.info("Generated %s v%s -> %s", doc.tipo_documento, doc.versione, output_path)
+
+            # MB-2.3 — the company is now billable for this period. After the
+            # commit, so a metering problem can never roll back a finished
+            # document.
+            await record_activation_for_azienda(doc.azienda_id, db)
 
             # Attempt Google Drive upload (best-effort)
             try:

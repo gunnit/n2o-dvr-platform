@@ -17,6 +17,7 @@ for the canonical "I picked an activity type" flow.
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -25,6 +26,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
+from app.billing.entitlements import Entitlements, get_entitlements
+from app.billing.metering import metered
 from app.core.audit import log_audit
 from app.core.exceptions import AIError, BadRequestError, NotFoundError
 from app.data.haccp_activity_types import (
@@ -295,6 +298,7 @@ async def suggest_ccp(
     azienda_id: uuid.UUID,
     body: HaccpSuggestCcpRequest,
     user: User = Depends(get_current_user),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
     """Generate AI suggestions for a CCP's detail fields from its name.
@@ -319,14 +323,36 @@ async def suggest_ccp(
 
     from app.services.ai.haccp_ccp_suggester import suggest_ccp_details
 
-    try:
-        result = await suggest_ccp_details(
-            nome,
-            settore=settore,
-            attivita=body.attivita,
-        )
-    except AIError as exc:
-        raise HTTPException(status_code=502, detail=exc.detail) from exc
+    # MB-2.4 — nothing is persisted here, so the key is the azienda plus a
+    # digest of the three inputs that determine the answer. Asking about the
+    # same CCP twice is a replay; asking about a different one is new work.
+    ccp_digest = hashlib.sha256(
+        "|".join(
+            (
+                nome.lower(),
+                (settore or "").strip().lower(),
+                (body.attivita or "").strip().lower(),
+            )
+        ).encode()
+    ).hexdigest()[:32]
+
+    async with metered(
+        user.organization_id,
+        "reasoning",
+        f"haccp_ccp:{azienda_id}:{ccp_digest}",
+        db,
+        ent,
+    ):
+        try:
+            result = await suggest_ccp_details(
+                nome,
+                settore=settore,
+                attivita=body.attivita,
+            )
+        except AIError as exc:
+            # Raised inside the context manager on purpose: the 502 propagates
+            # through `metered`, which releases the credits first.
+            raise HTTPException(status_code=502, detail=exc.detail) from exc
 
     return HaccpSuggestCcpResponse(
         fase=result.fase,

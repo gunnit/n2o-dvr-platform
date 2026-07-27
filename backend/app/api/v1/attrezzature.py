@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from pathlib import Path
 
@@ -6,6 +7,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.billing.entitlements import Entitlements, get_entitlements
+from app.billing.metering import metered
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.db.session import get_db
 from app.dependencies import get_current_org
@@ -152,6 +155,7 @@ async def suggerisci_attrezzature(
     azienda_id: uuid.UUID,
     ambiente_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
     """Phase 5.3 — AI-suggest typical equipment for an ambiente.
@@ -181,7 +185,21 @@ async def suggerisci_attrezzature(
         )
     ).scalars().all()
 
-    items = await suggest_attrezzature(amb, azienda, list(existing))
+    # MB-2.4 — the endpoint persists nothing, so there's no row id to key on.
+    # The ambiente plus a digest of what's already declared is the right key:
+    # stable when the operator re-runs the suggester unchanged, different once
+    # they tick items in and ask again (which is genuinely new work).
+    context_digest = hashlib.sha1(
+        "|".join(sorted(existing)).encode()
+    ).hexdigest()[:12]
+    async with metered(
+        org_id,
+        "reasoning",
+        f"attrezzature-suggest:{ambiente_id}:{context_digest}",
+        db,
+        ent,
+    ):
+        items = await suggest_attrezzature(amb, azienda, list(existing))
     return SuggestAttrezzatureResponse(items=items)
 
 
@@ -193,6 +211,7 @@ async def estrai_attrezzature_da_foto(
     azienda_id: uuid.UUID,
     ambiente_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
     """Vision-extract attrezzature visible in the ambiente's photos.
@@ -254,9 +273,18 @@ async def estrai_attrezzature_da_foto(
         )
     ).scalars().all()
 
-    items = await extract_attrezzature_from_photos(
-        amb, azienda, list(usable_paths), list(existing)
-    )
+    # MB-2.4 — vision costs 4x a text suggester. Keyed on the exact photo set,
+    # so re-running after uploading another photo is new work but a retry of
+    # the same set is free.
+    photos_digest = hashlib.sha1(
+        ",".join(sorted(str(p) for p in usable_paths)).encode()
+    ).hexdigest()[:12]
+    async with metered(
+        org_id, "vision", f"attrezzature-vision:{ambiente_id}:{photos_digest}", db, ent
+    ):
+        items = await extract_attrezzature_from_photos(
+            amb, azienda, list(usable_paths), list(existing)
+        )
     return ExtractAttrezzatureFromPhotosResponse(
         items=items,
         photos_used=len(usable_paths),

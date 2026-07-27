@@ -10,6 +10,7 @@ before ``/{pos_id}`` so FastAPI doesn't try to parse ``meta`` as a UUID.
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from typing import Any
 
@@ -20,6 +21,8 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from pydantic import BaseModel as PydanticBaseModel
 
+from app.billing.entitlements import Entitlements, get_entitlements
+from app.billing.metering import metered
 from app.core.exceptions import AIError, NotFoundError
 from app.db.session import get_db
 from app.dependencies import get_current_org
@@ -280,6 +283,7 @@ async def suggest_phase_details(
     azienda_id: uuid.UUID,
     body: PhaseSuggestRequest,
     org_id: uuid.UUID = Depends(get_current_org),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ) -> PhaseSuggestResponse:
     """Generate AI suggestions for a POS construction phase.
@@ -298,10 +302,17 @@ async def suggest_phase_details(
 
     from app.services.ai.pos_phase_suggester import suggest_phase_details as _suggest
 
-    try:
-        result = await _suggest(body.fase_nome.strip())
-    except AIError as exc:
-        raise HTTPException(status_code=502, detail=exc.detail) from exc
+    # MB-2.4 — keyed on the phase name, the only input that changes the answer.
+    phase_digest = hashlib.sha256(
+        body.fase_nome.strip().lower().encode()
+    ).hexdigest()[:16]
+    async with metered(
+        org_id, "reasoning", f"pos_phase:{azienda_id}:{phase_digest}", db, ent
+    ):
+        try:
+            result = await _suggest(body.fase_nome.strip())
+        except AIError as exc:
+            raise HTTPException(status_code=502, detail=exc.detail) from exc
 
     return PhaseSuggestResponse(
         descrizione=result.descrizione,
@@ -337,6 +348,7 @@ async def suggest_dpi_matrix(
     azienda_id: uuid.UUID,
     body: DpiMatrixSuggestRequest,
     org_id: uuid.UUID = Depends(get_current_org),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ) -> DpiMatrixSuggestResponse:
     """AI auto-fill for the POS DPI matrix (feedback #64/#50).
@@ -371,13 +383,20 @@ async def suggest_dpi_matrix(
         suggest_dpi_matrix as _suggest,
     )
 
-    try:
-        matrix = await _suggest(
-            ruoli=roles,
-            fasi=phases,
-            azienda_context=azienda_context,
-        )
-    except AIError as exc:
-        raise HTTPException(status_code=502, detail=exc.detail) from exc
+    # MB-2.4 — keyed on the role/phase selection that determines the matrix.
+    matrix_digest = hashlib.sha256(
+        "|".join(sorted(roles) + ["::"] + sorted(phases)).encode()
+    ).hexdigest()[:16]
+    async with metered(
+        org_id, "reasoning", f"pos_dpimatrix:{azienda_id}:{matrix_digest}", db, ent
+    ):
+        try:
+            matrix = await _suggest(
+                ruoli=roles,
+                fasi=phases,
+                azienda_context=azienda_context,
+            )
+        except AIError as exc:
+            raise HTTPException(status_code=502, detail=exc.detail) from exc
 
     return DpiMatrixSuggestResponse(matrix=matrix)

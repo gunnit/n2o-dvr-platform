@@ -5,6 +5,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.billing.entitlements import Entitlements, get_entitlements
+from app.billing.metering import metered
 from app.core.exceptions import NotFoundError
 from app.db.session import get_db
 from app.dependencies import get_current_org
@@ -177,6 +179,7 @@ async def suggerisci_misure(
     azienda_id: uuid.UUID,
     rischio_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
     """Generate 2-5 AI-suggested improvement measures for a risk (US-2.6).
@@ -198,7 +201,10 @@ async def suggerisci_misure(
     if not rischio:
         raise NotFoundError("Valutazione rischio not found")
 
-    misure = await suggest_measures(rischio)
+    # MB-2.4 — charged before the call, so an out-of-credit request never
+    # reaches OpenAI. Keyed on the risk so a retry for the same one is free.
+    async with metered(org_id, "reasoning", f"misure:{rischio_id}", db, ent):
+        misure = await suggest_measures(rischio)
     return SuggestMeasuresResponse(misure=misure)
 
 
@@ -210,6 +216,7 @@ async def suggerisci_rischi(
     azienda_id: uuid.UUID,
     ambiente_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
     """Phase 8.3 — AI-suggest applicable risks + scoring for an ambiente.
@@ -247,5 +254,8 @@ async def suggerisci_rischi(
         )
     ).scalars().all()
 
-    response = await suggest_rischi(ambiente, azienda, list(attrezzature))
+    # MB-2.4 — keyed on the ambiente: re-running the suggester for the same
+    # environment is one billable action, not one per click.
+    async with metered(org_id, "reasoning", f"rischi-suggest:{ambiente_id}", db, ent):
+        response = await suggest_rischi(ambiente, azienda, list(attrezzature))
     return SuggestRischiResponse(items=response.items, sintesi=response.sintesi)

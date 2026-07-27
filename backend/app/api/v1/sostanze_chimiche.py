@@ -7,6 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.billing.entitlements import Entitlements, get_entitlements
+from app.billing.metering import spend_credits
 from app.core.exceptions import AIError, BadRequestError, NotFoundError
 from app.db.session import async_session_factory, get_db
 from app.dependencies import get_current_org
@@ -85,6 +87,7 @@ async def batch_upload_sds(
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     org_id: uuid.UUID = Depends(get_current_org),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
     """Accept up to 20 SDS PDFs, queue each for async AI extraction.
@@ -156,6 +159,14 @@ async def batch_upload_sds(
         )
         db.add(sostanza)
         await db.flush()  # populate sostanza.id without committing yet
+
+        # MB-2.4 — SDS extraction is the priciest per-document AI action (8
+        # credits). Charged here, at the last point where org/db/ent are in
+        # scope: the extraction itself runs in a BackgroundTask with its own
+        # session and no request context. Charging per queued file means a
+        # 402 mid-batch rolls back the whole request — no rows created, no
+        # tasks dispatched, nothing sent to OpenAI.
+        await spend_credits(org_id, "sds", f"sds:{sostanza.id}", db, ent)
 
         results.append(
             BatchUploadFileResult(

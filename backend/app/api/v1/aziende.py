@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
+from app.billing.entitlements import Entitlements, get_entitlements
+from app.billing.metering import metered
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.db.session import get_db
 from app.dependencies import get_current_org, get_current_user
@@ -211,6 +213,8 @@ class AutofillRequest(BaseModel):
 async def autofill_azienda(
     body: AutofillRequest,
     user: User = Depends(get_current_user),
+    ent: Entitlements = Depends(get_entitlements),
+    db: AsyncSession = Depends(get_db),
 ):
     """Suggest Azienda field values from a P.IVA via VIES + Google + AI.
 
@@ -224,7 +228,19 @@ async def autofill_azienda(
     piva = (body.partita_iva or "").strip()
     if not piva.isdigit() or len(piva) != 11:
         raise BadRequestError("Partita IVA deve essere di 11 cifre")
-    return await autofill_from_piva(piva)
+
+    # MB-2.4 — the most expensive action at 15 credits: the Registro Imprese
+    # lookup is billed per call upstream. Keyed per P.IVA per period, so a
+    # retry (or the operator re-checking the same company while filling the
+    # form) is free, while looking it up again next period bills again.
+    async with metered(
+        user.organization_id,
+        "visura",
+        f"visura:{piva}:{ent.meter_period_start.isoformat()}",
+        db,
+        ent,
+    ):
+        return await autofill_from_piva(piva)
 
 
 @router.post("", response_model=AziendaResponse, status_code=201)
@@ -367,6 +383,7 @@ async def genera_descrizione(
     azienda_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
     user: User | None = Depends(get_current_user),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
     """Generate an AI company description for DVR Part I (US-2.1).
@@ -391,7 +408,20 @@ async def genera_descrizione(
     if not azienda:
         raise NotFoundError("Azienda not found")
 
-    description = await generate_company_description(azienda)
+    # MB-2.4 — keyed on how many revisions already exist. A failed call writes
+    # no revision, so a retry reuses the key and is free; a deliberate
+    # regeneration comes after a new revision and is charged as new work.
+    revision_seq = (
+        await db.execute(
+            select(func.count(DescriptionRevision.id)).where(
+                DescriptionRevision.azienda_id == azienda_id
+            )
+        )
+    ).scalar() or 0
+    async with metered(
+        org_id, "reasoning", f"desc:{azienda_id}:{revision_seq}", db, ent
+    ):
+        description = await generate_company_description(azienda)
 
     db.add(
         DescriptionRevision(

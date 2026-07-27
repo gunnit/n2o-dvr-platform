@@ -13,6 +13,13 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.billing.entitlements import Entitlements, get_entitlements
+from app.billing.gates import ensure_company_slot, ensure_doc_type_allowed
+from app.billing.metering import (
+    count_active_companies,
+    is_company_active,
+    record_activation_for_azienda,
+)
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.db.session import get_db
 from app.dependencies import get_current_org, get_current_user
@@ -235,12 +242,62 @@ async def _get_azienda(azienda_id: uuid.UUID, org_id: uuid.UUID, db: AsyncSessio
     return azienda
 
 
+async def _ensure_company_slot_available(
+    ent: Entitlements, org_id: uuid.UUID, azienda_id: uuid.UUID, db: AsyncSession
+) -> None:
+    """Gate the Model A active-company meter, synchronously (MB-2.3).
+
+    The worker records the activation, but the ceiling is enforced *here* so the
+    user gets a 402 on the request instead of a background job that quietly
+    produces nothing. A company already counted this period passes for free —
+    otherwise a consultant sitting at 15/15 could never finish the fifteenth
+    company's documents.
+    """
+    if ent.max_companies is None:
+        return
+    already = await is_company_active(org_id, azienda_id, db, ent)
+    if already:
+        return
+    active = await count_active_companies(org_id, db, ent)
+    ensure_company_slot(ent, active, already_active=False, org_id=org_id)
+
+
+def _enqueue_generation(doc: DocumentoGenerato, ent: Entitlements, org_id: uuid.UUID) -> None:
+    """The ONLY place a generation task is dispatched (MB-2.2).
+
+    Both the single and batch endpoints funnel through here so no future code
+    path can reach the worker without passing the doc-type gate first (INV-5).
+    ``tests/test_billing_enforcement.py`` fails the build if a bare
+    ``generate_document_task.delay(`` appears anywhere else.
+
+    The gate is re-checked at dispatch rather than trusted from the caller: the
+    endpoint's earlier check and this one bracket the row creation, so a type
+    that slipped through a future refactor still cannot reach a worker.
+    """
+    ensure_doc_type_allowed(ent, doc.tipo_documento, org_id)
+    try:
+        from app.tasks.document_tasks import generate_document_task
+
+        generate_document_task.delay(str(doc.id))
+    except HTTPException:
+        # A 402 from the gate must reach the client, not be swallowed as a
+        # broker failure.
+        raise
+    except Exception:
+        # If the broker is unavailable, log and leave the pending record in
+        # place — the task can be retried manually.
+        import logging
+
+        logging.getLogger(__name__).exception("Celery dispatch failed for %s", doc.id)
+
+
 @router.post("/generate", response_model=DocumentResponse, status_code=202)
 async def generate_document(
     azienda_id: uuid.UUID,
     body: DocumentGenerateRequest,
     org_id: uuid.UUID = Depends(get_current_org),
     user: User = Depends(get_current_user),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
     """Trigger async document generation for a single document type.
@@ -249,6 +306,11 @@ async def generate_document(
     immediately. The actual generation will be handled by a Celery worker.
     """
     azienda = await _get_azienda(azienda_id, org_id, db)
+    # MB-2.1: is this document type in the plan? Checked before any work — no
+    # row is created for a document the tenant cannot have.
+    ensure_doc_type_allowed(ent, body.tipo_documento, org_id)
+    # MB-2.3: would this consume a new client-company slot?
+    await _ensure_company_slot_available(ent, org_id, azienda_id, db)
     # Audit F-004: refuse DVR Master with all anagrafica contact fields NULL.
     await _ensure_anagrafica_complete_for_dvr(azienda, body.tipo_documento)
     # US-4.1 AC2: block dependent documents (PEE) until the DVR Master exists.
@@ -282,15 +344,7 @@ async def generate_document(
     await db.commit()
     await db.refresh(doc)
 
-    # Dispatch Celery task for async generation
-    try:
-        from app.tasks.document_tasks import generate_document_task
-        generate_document_task.delay(str(doc.id))
-    except Exception:
-        # If the broker is unavailable, fall back to a warning log but still
-        # return the pending record — the task can be retried manually.
-        import logging
-        logging.getLogger(__name__).exception("Celery dispatch failed")
+    _enqueue_generation(doc, ent, org_id)
 
     return _doc_to_response(doc, await _resolve_user_name(doc.generated_by, db))
 
@@ -433,6 +487,7 @@ async def batch_generate_documents(
     body: DocumentBatchRequest,
     org_id: uuid.UUID = Depends(get_current_org),
     user: User = Depends(get_current_user),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
     """Trigger async generation for multiple document types at once."""
@@ -447,6 +502,14 @@ async def batch_generate_documents(
             status_code=409,
             detail=f"Sopralluogo incompleto: {', '.join(missing)}",
         )
+
+    # MB-2.1: gate every requested type up front. All-or-nothing on purpose —
+    # partially fulfilling a batch would leave the user guessing which of the
+    # documents they asked for actually exist.
+    for tipo in body.tipi_documento:
+        ensure_doc_type_allowed(ent, tipo, org_id)
+    # MB-2.3: a batch activates the company once, not once per document.
+    await _ensure_company_slot_available(ent, org_id, azienda_id, db)
 
     created_docs: list[DocumentoGenerato] = []
 
@@ -477,16 +540,10 @@ async def batch_generate_documents(
 
     await db.commit()
 
-    from app.tasks.document_tasks import generate_document_task
-
     responses: list[DocumentResponse] = []
     for doc in created_docs:
         await db.refresh(doc)
-        try:
-            generate_document_task.delay(str(doc.id))
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception("Celery dispatch failed for %s", doc.id)
+        _enqueue_generation(doc, ent, org_id)
         responses.append(
             _doc_to_response(doc, await _resolve_user_name(doc.generated_by, db))
         )
@@ -650,6 +707,9 @@ async def restore_document(
     db.add(new_doc)
     await db.commit()
     await db.refresh(new_doc)
+    # MB-2.3 — a restore mints a completed document, so it activates the
+    # company just like a fresh generation. ON CONFLICT keeps it to one row.
+    await record_activation_for_azienda(new_doc.azienda_id, db)
 
     return _doc_to_response(new_doc, await _resolve_user_name(new_doc.generated_by, db))
 
@@ -849,6 +909,8 @@ async def sync_document_from_gdoc(
     source.gdoc_file_id = None
     await db.commit()
     await db.refresh(new_doc)
+    # MB-2.3 — a Google-Doc sync mints a completed document.
+    await record_activation_for_azienda(new_doc.azienda_id, db)
     try:
         await delete_gdoc(stale_gdoc_id)
     except Exception:
@@ -1207,5 +1269,7 @@ async def save_edited_version(
     source.content_overrides = None
     await db.commit()
     await db.refresh(new_doc)
+    # MB-2.3 — saving an edited version mints a completed document.
+    await record_activation_for_azienda(new_doc.azienda_id, db)
 
     return _doc_to_response(new_doc, await _resolve_user_name(new_doc.generated_by, db))

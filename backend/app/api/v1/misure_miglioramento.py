@@ -18,6 +18,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.billing.entitlements import Entitlements, get_entitlements
+from app.billing.metering import refund_credits, spend_credits
 from app.core.exceptions import NotFoundError
 from app.db.session import get_db
 from app.dependencies import get_current_org
@@ -170,6 +172,7 @@ async def genera_da_rischi(
         ),
     ),
     org_id: uuid.UUID = Depends(get_current_org),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
     """Generate AI improvement measures for every applicable PericoloValutazione
@@ -234,7 +237,19 @@ async def genera_da_rischi(
     current_max = (await db.execute(max_ordine_stmt)).scalar()
     next_ordine = (current_max or 0) + 1
 
+    # MB-2.4 — charge for the whole fan-out up front, one credit per pericolo,
+    # sequentially. The suggester calls below run concurrently on this same
+    # AsyncSession, and a session cannot be used from two coroutines at once —
+    # so the metering writes must happen before the gather, not inside it.
+    # A 402 here stops the batch before any call reaches OpenAI.
+    for per in pending:
+        await spend_credits(org_id, "reasoning", f"misure:{per.id}", db, ent)
+    await db.commit()
+
     sem = asyncio.Semaphore(_AI_CONCURRENCY)
+    # Pericoli whose suggestion failed; refunded after the gather so the
+    # customer isn't billed for a provider error.
+    failed_ids: list[uuid.UUID] = []
 
     async def _gen_one(per: PericoloValutazione):
         async with sem:
@@ -262,9 +277,18 @@ async def genera_da_rischi(
                 logger.warning(
                     "suggest_measures failed for pericolo %s: %s", per.id, exc
                 )
+                # Appending to a list is safe here — these coroutines are
+                # concurrent but single-threaded. The DB refund happens after
+                # the gather, where the session is ours alone again.
+                failed_ids.append(per.id)
                 return per, []
 
     results = await asyncio.gather(*(_gen_one(p) for p in pending))
+
+    for pid in failed_ids:
+        await refund_credits(org_id, "reasoning", f"misure:{pid}", db, ent)
+    if failed_ids:
+        await db.commit()
 
     new_rows: list[MisuraMiglioramento] = []
     ordine = next_ordine

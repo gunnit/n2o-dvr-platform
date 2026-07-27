@@ -6,6 +6,8 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.billing.entitlements import Entitlements, get_entitlements
+from app.billing.gates import ensure_seat_available
 from app.core.security import hash_password
 from app.db.session import get_db
 from app.dependencies import require_role
@@ -75,6 +77,7 @@ async def list_users(
 async def create_user(
     body: UserCreate,
     admin: User = Depends(require_role("admin")),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
     _validate_role(body.role)
@@ -82,6 +85,18 @@ async def create_user(
     existing = await db.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email già registrata")
+
+    # MB-2.5 — seats are a plan limit. Counted here rather than tracked on the
+    # subscription so the number can never drift from reality: it *is* the
+    # number of users in the org.
+    seats_used = (
+        await db.execute(
+            select(func.count(User.id)).where(
+                User.organization_id == admin.organization_id
+            )
+        )
+    ).scalar_one()
+    ensure_seat_available(ent, seats_used, admin.organization_id)
 
     user = User(
         organization_id=admin.organization_id,

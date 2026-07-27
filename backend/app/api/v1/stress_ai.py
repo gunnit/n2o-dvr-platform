@@ -10,6 +10,8 @@ Privacy: only aggregated INAIL indicator answers + computed scores are
 sent to the AI. No codice fiscale, ID document, or personal health data.
 """
 
+import hashlib
+import json
 import uuid
 
 from fastapi import APIRouter, Depends
@@ -17,6 +19,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.billing.entitlements import Entitlements, get_entitlements
+from app.billing.metering import metered
 from app.core.exceptions import NotFoundError
 from app.db.session import get_db
 from app.dependencies import get_current_org
@@ -65,6 +69,7 @@ async def ai_misure_correttive(
     azienda_id: uuid.UUID,
     body: StressAiMisureRequest,
     org_id: uuid.UUID = Depends(get_current_org),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
     """Suggest AI-generated misure correttive for the stress assessment.
@@ -76,5 +81,14 @@ async def ai_misure_correttive(
     """
     await _verify_azienda(azienda_id, org_id, db)
     calc = calculate_stress(body.answers)
-    suggestion = await suggest_stress_misure(body.answers, calc)
+    # MB-2.4 — the questionnaire has no persistent id, so the answers hash is
+    # the stable key: re-submitting the same answers is a replay, changing one
+    # answer is genuinely new work.
+    answers_key = hashlib.sha256(
+        json.dumps(body.answers, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()[:16]
+    async with metered(
+        org_id, "reasoning", f"stress-misure:{azienda_id}:{answers_key}", db, ent
+    ):
+        suggestion = await suggest_stress_misure(body.answers, calc)
     return StressAiMisureResponse(suggestion=suggestion)
