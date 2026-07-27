@@ -14,6 +14,7 @@ This module is the only thing endpoints may use to learn about plans; reading
 import logging
 import uuid
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 
 from fastapi import Depends
@@ -55,6 +56,23 @@ class Entitlements:
     ai_credits_year: int | None
     features: dict[str, Any] = field(default_factory=dict)
     status: str = "active"
+    # Start of the current subscription period. Every meter — AI credits and
+    # active companies — is keyed on this date, so the whole system must agree
+    # on one value. Plans are annual (three years for founding), so this is NOT
+    # the calendar month. None only in the no-subscription fallback, where
+    # `meter_period_start` substitutes a stable stand-in.
+    period_start: date | None = None
+    period_end: date | None = None
+
+    @property
+    def meter_period_start(self) -> date:
+        """The date the usage meters key on.
+
+        Falls back to the start of the current month when there is no
+        subscription — the fallback path is unmetered anyway, so the value only
+        needs to be stable and non-null.
+        """
+        return self.period_start or date.today().replace(day=1)
 
     @property
     def is_active(self) -> bool:
@@ -164,6 +182,16 @@ async def resolve_entitlements(org_id: uuid.UUID, db: AsyncSession) -> Entitleme
         ai_credits_year=plan.ai_credits_year,
         features=dict(plan.features or {}),
         status=subscription.status,
+        period_start=(
+            subscription.current_period_start.date()
+            if subscription.current_period_start
+            else None
+        ),
+        period_end=(
+            subscription.current_period_end.date()
+            if subscription.current_period_end
+            else None
+        ),
     )
 
 

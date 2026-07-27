@@ -174,12 +174,59 @@ Update the Status column as you go: `TODO` → `WIP` → `DONE` (or `BLOCKED`/`D
   hand-written with hand-picked revision ids; the Phase-0 migration matches that
   convention. It was *verified* against autogenerate (which reports no drift)
   rather than produced by it.
-| 1 Grandfather | MB-1.1 backfill `account_type='consultant'` | TODO | |
-| 1 | MB-1.2 seed plan catalogue | TODO | |
-| 1 | MB-1.3 N2O `A_FOUNDING` subscription | TODO | |
-| 1 | MB-1.4 backfill `active_company_periods` | TODO | |
-| 1 | MB-1.5 shadow-mode compute+log helpers | TODO | |
-| **GATE 1** | shadow logs verified vs live traffic 2–3 days; nobody would have been blocked | — | |
+| 1 Grandfather | MB-1.1 backfill `account_type='consultant'` | DONE | migration `de3f4a5b6c7d`; no-op in practice — the Phase-0 ALTER already backfilled |
+| 1 | MB-1.2 seed plan catalogue | DONE | `app/billing/plan_catalogue.py` + `scripts/seed_plans.py`; B plans seeded **inactive** |
+| 1 | MB-1.3 `A_FOUNDING` subscription | DONE | **every** existing org, not a name match — see Deviation D-5 |
+| 1 | MB-1.4 backfill `active_company_periods` | DONE | keyed on the subscription period — see Deviation D-6 |
+| 1 | MB-1.5 shadow-mode compute+log helpers | DONE | `billing/gates.py` + `billing/metering.py`; no call sites yet — see Deviation D-7 |
+| **GATE 1** | shadow logs verified vs live traffic 2–3 days; nobody would have been blocked | **BLOCKED — see D-7** | the observation window cannot open until Phase 2 wires the call sites |
+
+### Phase 1 deviations (recorded per §0 rule 8)
+
+- **D-5 — there is no organization named "N2O".** MB-1.3 says to find the tenant
+  by `name ILIKE 'N2O%'`; that matches **zero rows**. A read-only production query
+  on 2026-07-27 returned 6 organizations — *Deploy Smoke Test's*, *Test Render
+  User's*, *Stripe Design Test's*, *Niuexa Test*, *Niuexa QA*, *Marco Raja* — 7
+  users, 16 aziende, 76 completed documents, newest user 2026-05-28. All internal
+  or early-access; **no public signups**, so grandfathering carries no commercial
+  risk. The migration therefore keys off *every existing organization*, which is
+  also what MB-1.3's own acceptance criterion demands ("every existing org has
+  exactly one active subscription"). When the real N2O tenant is provisioned it
+  gets a plan through MB-3.1 like any other customer.
+- **D-6 — the meter period is the subscription period, not the calendar month.**
+  First-draft MB-1.4 keyed `active_company_periods.period_start` on
+  `date_trunc('month', now())`. Wrong on both counts: §4.4/§4.6 define the column
+  as the start of the *subscription* period, and plans are annual (three years for
+  founding), so a month key would (a) never match what the metering code computes
+  and (b) exclude most of the period's history. On the production-shaped fixture
+  the wrong version backfilled 6 companies where the correct one backfills 15 —
+  a 60% under-count of a billable meter. `Entitlements` now carries
+  `period_start`/`period_end` and a `meter_period_start` property so one value is
+  agreed everywhere.
+- **D-7 — GATE 1 is in the wrong place in this plan.** It asks to "watch shadow
+  logs against real N2O traffic for 2–3 days", but MB-1.5 only *implements* the
+  gate functions; every call site belongs to Phase 2 (MB-2.1/2.2/2.4/2.5). With no
+  callers there are no shadow logs to watch. **Correct sequencing:** land Phase 2's
+  wiring with `ENTITLEMENTS_ENFORCE=false` — *that* deploy is the shadow period —
+  then observe for 2–3 days, then flip the flag in MB-2.6. GATE 1 and GATE 2
+  effectively merge into one observation window before the flip.
+
+### Phase 1 verification evidence
+
+Run against a database seeded to the exact production shape (6 orgs / 16 aziende /
+76 completed documents), migrated from Phase 0 and round-tripped:
+
+- MB-1.3's own verify query returns **zero** orgs without a subscription; all 6 on
+  `A_FOUNDING`/`active` with a 3-year term.
+- Catalogue seeded: 8 plans, 5 active, all 3 Model B plans inactive; no B plan
+  contains `pos`, `haccp` or `haccp_forms` (OPEN-DECISION-1 default held).
+- `active_company_periods` backfilled 15 rows, every one keyed on its
+  subscription's `current_period_start`, no duplicates.
+- The resolver returns a real `A_FOUNDING` entitlement (not the fallback) for all
+  6 orgs, granting all 17 doc types and 9,000 credits.
+- `scripts/seed_plans.py --dry-run` against the migrated DB reports **0 changes**,
+  confirming the migration's frozen literals and `plan_catalogue.py` agree.
+- 483 tests pass (5 pre-existing deselected); 5 import contracts kept.
 | 2 Enforce | MB-2.1 doc-type gate at chokepoints | TODO | |
 | 2 | MB-2.2 single guarded `enqueue_generation()` | TODO | |
 | 2 | MB-2.3 active-company metering at completion | TODO | |

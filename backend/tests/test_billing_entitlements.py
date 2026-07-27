@@ -18,6 +18,7 @@ import asyncio
 import dataclasses
 import logging
 import uuid
+from datetime import date, datetime
 from types import SimpleNamespace
 from typing import Any
 
@@ -71,7 +72,12 @@ def _plan(**overrides: Any) -> Any:
 
 
 def _subscription(**overrides: Any) -> Any:
-    defaults: dict[str, Any] = dict(plan_code="A_STUDIO", status="active")
+    defaults: dict[str, Any] = dict(
+        plan_code="A_STUDIO",
+        status="active",
+        current_period_start=datetime(2026, 4, 1),
+        current_period_end=datetime(2029, 4, 1),
+    )
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
 
@@ -126,6 +132,9 @@ def test_model_a_plan_resolves_with_no_doc_type_restriction():
     # NULL allowed_doc_types means all 17, not "none".
     assert ent.allowed_doc_types is None
     assert all(ent.allows_doc_type(t) for t in ALL_DOC_TYPES)
+    # Meters key on the subscription period, not the calendar month.
+    assert ent.period_start == date(2026, 4, 1)
+    assert ent.meter_period_start == date(2026, 4, 1)
 
 
 def test_model_b_plan_restricts_doc_types_and_normalizes_casing():

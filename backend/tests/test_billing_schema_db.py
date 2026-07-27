@@ -287,6 +287,173 @@ def test_every_completion_path_yields_one_active_company_row():
     assert _in_one_loop(body) == 1
 
 
+# --- the metering helpers themselves (MB-1.5) ------------------------------
+
+
+def _metered_ent(credits: int | None = 100):
+    """An entitlement whose meters key on a fixed period."""
+    from app.billing.entitlements import Entitlements
+
+    return Entitlements(
+        account_type="consultant",
+        plan_code="A_SOLO",
+        allowed_doc_types=None,
+        seats=1,
+        max_companies=2,
+        max_sites=None,
+        ai_credits_year=credits,
+        features={},
+        status="active",
+        period_start=PERIOD,
+    )
+
+
+def test_spend_credits_charges_once_and_then_402s(monkeypatch):
+    """The real helper, not hand-written SQL: a replayed key is free, and the
+    request that would exceed the allowance raises rather than calling OpenAI."""
+    from app.billing import metering
+    from app.config import settings
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(settings, "ENTITLEMENTS_ENFORCE", True, raising=False)
+    ent = _metered_ent(credits=16)  # exactly two SDS extractions
+
+    async def body(s, org_id):
+        key = f"sds:{uuid.uuid4()}"
+        first = await metering.spend_credits(org_id, "sds", key, s, ent)
+        # Same action replayed (Celery retry): must not charge again.
+        replay = await metering.spend_credits(org_id, "sds", key, s, ent)
+        # A different action fits exactly.
+        second = await metering.spend_credits(org_id, "sds", f"sds:{uuid.uuid4()}", s, ent)
+        used = (
+            await s.execute(
+                text("SELECT ai_credits_used FROM usage_counters WHERE organization_id=:o"),
+                {"o": org_id},
+            )
+        ).scalar()
+        # The third exceeds 16 and must raise.
+        try:
+            await metering.spend_credits(org_id, "sds", f"sds:{uuid.uuid4()}", s, ent)
+            raised = None
+        except HTTPException as exc:
+            raised = exc.status_code
+        # A rejected spend must not leave its idempotency claim behind, or the
+        # customer could never retry it after buying more credits.
+        events = (
+            await s.execute(
+                text("SELECT count(*) FROM ai_usage_events WHERE organization_id=:o"),
+                {"o": org_id},
+            )
+        ).scalar()
+        await s.commit()
+        return first, replay, second, used, raised, events
+
+    first, replay, second, used, raised, events = _in_one_loop(body)
+    assert (first, replay, second) == (True, True, True)
+    assert used == 16, "two 8-credit extractions, the replay charging nothing"
+    assert raised == 402
+    assert events == 2, "the rejected spend must not keep an idempotency claim"
+
+
+def test_spend_credits_never_raises_in_shadow_mode(monkeypatch):
+    """INV-1: with enforcement off, an exhausted org still gets through."""
+    from app.billing import metering
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "ENTITLEMENTS_ENFORCE", False, raising=False)
+    ent = _metered_ent(credits=1)
+
+    async def body(s, org_id):
+        results = [
+            await metering.spend_credits(org_id, "sds", f"sds:{i}:{org_id}", s, ent)
+            for i in range(3)
+        ]
+        await s.commit()
+        return results
+
+    assert _in_one_loop(body) == [True, True, True]
+
+
+def test_pooled_plan_skips_metering_entirely(monkeypatch):
+    from app.billing import metering
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "ENTITLEMENTS_ENFORCE", True, raising=False)
+    ent = _metered_ent(credits=None)  # A_ENTERPRISE
+
+    async def body(s, org_id):
+        allowed = await metering.spend_credits(org_id, "sds", f"k:{org_id}", s, ent)
+        counters = (
+            await s.execute(
+                text("SELECT count(*) FROM usage_counters WHERE organization_id=:o"),
+                {"o": org_id},
+            )
+        ).scalar()
+        await s.commit()
+        return allowed, counters
+
+    # Unmetered means no rows written at all, not "a counter that never fills".
+    assert _in_one_loop(body) == (True, 0)
+
+
+def test_refund_releases_a_reservation_whose_call_failed(monkeypatch):
+    from app.billing import metering
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "ENTITLEMENTS_ENFORCE", True, raising=False)
+    ent = _metered_ent(credits=100)
+
+    async def body(s, org_id):
+        key = f"sds:{uuid.uuid4()}"
+        await metering.spend_credits(org_id, "sds", key, s, ent)
+        await metering.refund_credits(org_id, "sds", key, s, ent)
+        used = (
+            await s.execute(
+                text("SELECT ai_credits_used FROM usage_counters WHERE organization_id=:o"),
+                {"o": org_id},
+            )
+        ).scalar()
+        # Refunding twice must not drive the meter negative.
+        await metering.refund_credits(org_id, "sds", key, s, ent)
+        after = (
+            await s.execute(
+                text("SELECT ai_credits_used FROM usage_counters WHERE organization_id=:o"),
+                {"o": org_id},
+            )
+        ).scalar()
+        # The key is free again, so the customer can retry the action.
+        retry = await metering.spend_credits(org_id, "sds", key, s, ent)
+        await s.commit()
+        return used, after, retry
+
+    assert _in_one_loop(body) == (0, 0, True)
+
+
+def test_active_company_recording_and_counting():
+    from app.billing import metering
+
+    ent = _metered_ent()
+
+    async def body(s, org_id):
+        az = uuid.uuid4()
+        await s.execute(
+            text("INSERT INTO aziende (id, organization_id, ragione_sociale, survey_status) "
+                 "VALUES (:a, :o, 'Cliente', 'draft')"),
+            {"a": az, "o": org_id},
+        )
+        before = await metering.is_company_active(org_id, az, s, ent)
+        first = await metering.record_active_company(org_id, az, s, ent)
+        again = await metering.record_active_company(org_id, az, s, ent)
+        after = await metering.is_company_active(org_id, az, s, ent)
+        count = await metering.count_active_companies(org_id, s, ent)
+        await s.commit()
+        return before, first, again, after, count
+
+    # First activation is billable; every later completion for the same company
+    # in the same period is not.
+    assert _in_one_loop(body) == (False, True, False, True, 1)
+
+
 def test_one_subscription_per_organization():
     insert = text(
         "INSERT INTO subscriptions (id, organization_id, plan_code, status) "

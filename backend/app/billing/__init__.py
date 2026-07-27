@@ -27,6 +27,20 @@ from app.billing.entitlements import (
     get_entitlements,
     resolve_entitlements,
 )
+from app.billing.gates import (
+    ensure_company_slot,
+    ensure_doc_type_allowed,
+    ensure_seat_available,
+    ensure_site_slot,
+    ensure_subscription_active,
+)
+from app.billing.metering import (
+    count_active_companies,
+    is_company_active,
+    record_active_company,
+    refund_credits,
+    spend_credits,
+)
 
 __all__ = [
     "ALL_DOC_TYPES",
@@ -37,4 +51,14 @@ __all__ = [
     "Entitlements",
     "get_entitlements",
     "resolve_entitlements",
+    "ensure_company_slot",
+    "ensure_doc_type_allowed",
+    "ensure_seat_available",
+    "ensure_site_slot",
+    "ensure_subscription_active",
+    "count_active_companies",
+    "is_company_active",
+    "record_active_company",
+    "refund_credits",
+    "spend_credits",
 ]
