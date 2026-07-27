@@ -15,6 +15,18 @@ class Organization(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
+    # Which product this tenant bought: 'consultant' (Model A — a safety studio
+    # managing many client companies) or 'direct' (Model B — a single company
+    # documenting itself). The server_default grandfathers every existing org
+    # into 'consultant' so the live N2O tenant is never locked out (INV-1).
+    #
+    # This may only affect first-paint IA and which signup route was used —
+    # never business logic. All A-vs-B divergence is driven by the plan
+    # catalogue and the entitlement record (INV-4).
+    account_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="consultant"
+    )
+
     # --- Branding / letterhead (per-organization, all optional) ---------------
     # `name` doubles as the firm name printed on document letterhead.
     # The logo is stored as bytes in the DB (not on disk): document generation

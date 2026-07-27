@@ -1,0 +1,92 @@
+; Import contracts for the billing seam.
+; See docs/build/MONETIZATION-BUILD-PLAN.md §2 (Invariants).
+;
+; Run locally:  lint-imports --config .importlinter   (from backend/)
+
+[importlinter]
+root_packages =
+    app
+include_external_packages = False
+
+; --- INV-8 -----------------------------------------------------------------
+; Regulatory content stays single-sourced and billing-agnostic. The 17 document
+; generators and the calculators produce legally-binding Italian safety
+; documents; their output must never depend on what someone paid. Billing may
+; *read* the doc-type registry (billing.constants imports the dispatcher), but
+; the dependency may never point the other way.
+[importlinter:contract:generators-are-billing-free]
+name = Document generators must not import billing
+type = forbidden
+source_modules =
+    app.services.document_generator
+forbidden_modules =
+    app.billing
+allow_indirect_imports = False
+
+; The risk/NIOSH/MoVaRisCh calculators are the other half of the regulatory
+; core. Same rule: a formula must not know about plans.
+[importlinter:contract:calculators-are-billing-free]
+name = Risk calculators must not import billing
+type = forbidden
+source_modules =
+    app.services.risk_calculator
+    app.services.movarisch_calculator
+forbidden_modules =
+    app.billing
+allow_indirect_imports = False
+
+; --- INV-3 / INV-5 ---------------------------------------------------------
+; Endpoints must resolve entitlements through app.billing.entitlements, which
+; applies the INV-1 soft-fail and the NULL-means-unlimited semantics. An
+; endpoint reading Subscription or Plan directly would silently reimplement
+; those rules — and get them wrong on the org that has no subscription row.
+;
+; allow_indirect_imports = True is REQUIRED here, and means "only direct imports
+; are violations". The resolver itself imports these models, so the sanctioned
+; chain app.api -> app.billing.entitlements -> app.models.plan is three hops. With
+; indirect chains checked, this contract would break the moment MB-2.1 adds the
+; prescribed `Depends(get_entitlements)` to documents.py — i.e. it would forbid
+; the exact architecture it exists to protect. Direct-only is also the precise
+; rule we want: go *through* the resolver, don't reach *around* it.
+[importlinter:contract:api-uses-the-resolver]
+name = API layer must not read billing tables directly
+type = forbidden
+source_modules =
+    app.api
+forbidden_modules =
+    app.models.subscription
+    app.models.plan
+    app.models.usage_counter
+    app.models.ai_usage_event
+    app.models.active_company_period
+allow_indirect_imports = True
+
+; The Celery worker records usage (MB-2.3) but must go through
+; app.billing.metering for the same reason: idempotency and the enforce flag
+; live there, not at each call site. Direct-only, for the same reason as above.
+[importlinter:contract:tasks-use-the-metering-helpers]
+name = Celery tasks must not write billing tables directly
+type = forbidden
+source_modules =
+    app.tasks
+forbidden_modules =
+    app.models.subscription
+    app.models.plan
+    app.models.usage_counter
+    app.models.ai_usage_event
+    app.models.active_company_period
+allow_indirect_imports = True
+
+; --- Privacy -------------------------------------------------------------
+; services/ai/client.py is the OpenAI + privacy boundary (never send codice
+; fiscale, identity documents, or health data). Metering happens one layer
+; above it, at the endpoint. Keeping billing out of the AI client stops the
+; two concerns from tangling.
+[importlinter:contract:ai-client-is-billing-free]
+name = AI client must not import billing
+type = forbidden
+source_modules =
+    app.services.ai
+forbidden_modules =
+    app.billing
+allow_indirect_imports = False

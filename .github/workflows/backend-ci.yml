@@ -1,0 +1,105 @@
+name: Backend CI
+
+# First automated check in this repo. It guards three things: the import
+# contracts that protect the billing seam (docs/build/MONETIZATION-BUILD-PLAN.md
+# §2, INV-8), that migrations apply *and roll back* against a real Postgres, and
+# the test suite.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Five tests fail on main as of 2026-07-27, predating this workflow. They are
+# excluded from the blocking step and re-run in a separate non-blocking one, so
+# the debt stays visible without making every PR red — a check that is always
+# red teaches people to ignore it, which is worse than no check at all.
+# Remove these once the underlying bugs are fixed.
+env:
+  KNOWN_FAILING: >-
+    --deselect tests/test_dvr_persona_dpi_rischi.py::test_dpi_per_mansione_falls_back_when_no_persona_has_flags
+    --deselect tests/test_generators.py::test_dvr_parte_iii_env_block_structure
+    --deselect tests/test_stress_valutazione_helpers.py::test_serialize_carries_calculator_derived_fields
+    --deselect tests/test_stress_valutazione_helpers.py::test_serialize_without_calc_omits_derived_fields
+    --deselect tests/test_stress_valutazione_helpers.py::test_serialize_handles_null_jsonb_columns
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: dev
+          POSTGRES_DB: n2o_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:dev@localhost:5432/n2o_ci
+      # Read at import time; empty values keep the AI and billing integrations
+      # dormant in CI.
+      OPENAI_API_KEY: ""
+      STRIPE_SECRET_KEY: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Import contracts
+        run: lint-imports --config .importlinter
+
+      - name: Migrations apply and roll back cleanly
+        # Round-trips the newest revision so a migration that cannot be undone is
+        # caught here rather than during a production rollback. Works without an
+        # explicit PYTHONPATH because alembic.ini sets prepend_sys_path = . —
+        # without that, env.py cannot import `app` (DEPLOY.md §3).
+        run: |
+          alembic upgrade head
+          alembic downgrade -1
+          alembic upgrade head
+
+      - name: Tests
+        # DATABASE_URL points at the service container, so tests/test_billing_schema_db.py
+        # runs for real here instead of skipping.
+        run: pytest -q ${{ env.KNOWN_FAILING }}
+
+      - name: Known-failing tests (informational, does not block)
+        if: always()
+        continue-on-error: true
+        run: |
+          echo "These fail on main and predate this workflow. Fix them and delete this step."
+          pytest -q \
+            tests/test_dvr_persona_dpi_rischi.py::test_dpi_per_mansione_falls_back_when_no_persona_has_flags \
+            tests/test_generators.py::test_dvr_parte_iii_env_block_structure \
+            tests/test_stress_valutazione_helpers.py

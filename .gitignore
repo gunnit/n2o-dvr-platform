@@ -27,7 +27,10 @@ Thumbs.db
 
 # Build
 dist/
-build/
+# Anchored to the repo root: an unanchored `build/` also swallowed docs/build/,
+# which is documentation, not a build artifact.
+/build/
+**/node_modules/**/build/
 *.egg-info/
 .next/
 .vercel/

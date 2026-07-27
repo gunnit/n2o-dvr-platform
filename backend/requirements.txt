@@ -19,3 +19,8 @@ python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 httpx>=0.27.0
 email-validator>=2.1.0
+# Billing (monetization Phase 0+). Only the payment lifecycle lives in Stripe;
+# entitlements and usage are read from Postgres (INV-2).
+stripe>=10.0.0
+# Test/lint tooling (pytest, pytest-asyncio, import-linter) lives in
+# requirements-dev.txt so it stays out of the deployed image.

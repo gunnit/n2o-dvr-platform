@@ -31,6 +31,15 @@ from app.models.pee_plan import PeePlan
 from app.models.duvri import Duvri
 from app.models.pos import Pos
 
+# Monetization (billing Phase 0). Plan catalogue + entitlement/usage records.
+# Imported here so `from app.models import *` in alembic/env.py registers them
+# on Base.metadata for autogenerate.
+from app.models.plan import Plan
+from app.models.subscription import Subscription
+from app.models.usage_counter import UsageCounter
+from app.models.ai_usage_event import AiUsageEvent
+from app.models.active_company_period import ActiveCompanyPeriod
+
 # Cross-cutting
 from app.models.audit_log import AuditLog
 from app.models.ai_feedback import AiFeedback
@@ -67,6 +76,11 @@ __all__ = [
     "PeePlan",
     "Duvri",
     "Pos",
+    "Plan",
+    "Subscription",
+    "UsageCounter",
+    "AiUsageEvent",
+    "ActiveCompanyPeriod",
     "AuditLog",
     "AiFeedback",
     "UserFeedback",

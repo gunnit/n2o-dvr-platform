@@ -82,6 +82,18 @@ class Settings(BaseSettings):
     GITHUB_FEEDBACK_LABELS: list[str] = ["user-feedback"]
     GITHUB_API_TIMEOUT_SECONDS: float = 8.0
 
+    # Billing / entitlements. Master switch for every paywall check (doc-type
+    # gate, AI credits, seats, active companies). Default OFF so the checks run
+    # in **shadow mode**: they compute the decision and log what *would* have
+    # been blocked, then allow it anyway (INV-1 — never lock out the live N2O
+    # tenant). Flip to true only after the grandfather migration has given every
+    # org a subscription row and the shadow logs have been reviewed (GATE 1).
+    ENTITLEMENTS_ENFORCE: bool = False
+    # Stripe owns the payment lifecycle only; entitlements are read from
+    # Postgres (INV-2). Empty key = billing endpoints stay dormant.
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
