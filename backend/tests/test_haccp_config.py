@@ -170,13 +170,13 @@ def test_merge_on_empty_existing_returns_defaults_unchanged():
 
 
 def test_router_registers_haccp_endpoints():
+    from tests.conftest import route_pairs
+
     from app.api.v1.router import api_router
 
-    paths = {
-        (method, getattr(r, "path", ""))
-        for r in api_router.routes
-        for method in getattr(r, "methods", set()) or set()
-    }
+    # Walks nested routers, so this survives FastAPI changing whether
+    # include_router() flattens child routes onto the parent. See conftest.
+    paths = route_pairs(api_router)
     assert ("GET", "/api/v1/haccp/_meta/activity-types") in paths
     assert ("GET", "/api/v1/aziende/{azienda_id}/haccp/config") in paths
     assert ("PUT", "/api/v1/aziende/{azienda_id}/haccp/config") in paths

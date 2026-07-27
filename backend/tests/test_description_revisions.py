@@ -342,13 +342,13 @@ def test_company_description_context_skips_visura_when_absent():
 
 def test_router_registers_visura_and_revisions_routes():
     """Fail loudly if any of the three US-2.1 endpoints ever gets unwired."""
+    from tests.conftest import route_pairs
+
     from app.api.v1.router import api_router
 
-    paths = {
-        (method, getattr(r, "path", ""))
-        for r in api_router.routes
-        for method in getattr(r, "methods", set()) or set()
-    }
+    # Walks nested routers, so this survives FastAPI changing whether
+    # include_router() flattens child routes onto the parent. See conftest.
+    paths = route_pairs(api_router)
     base = "/api/v1/aziende/{azienda_id}"
     assert ("POST", f"{base}/visura") in paths, "POST /visura missing"
     assert ("GET", f"{base}/description-revisions") in paths, "GET /description-revisions missing"

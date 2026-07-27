@@ -119,13 +119,13 @@ def test_update_schema_rejects_empty_titolo_when_provided():
 
 def test_router_registers_all_four_library_endpoints():
     """Fail loudly if someone removes an endpoint the measures-panel depends on."""
+    from tests.conftest import route_pairs
+
     from app.api.v1.router import api_router
 
-    paths = {
-        (method, getattr(r, "path", ""))
-        for r in api_router.routes
-        for method in getattr(r, "methods", set()) or set()
-    }
+    # Walks nested routers, so this survives FastAPI changing whether
+    # include_router() flattens child routes onto the parent. See conftest.
+    paths = route_pairs(api_router)
     prefix = "/api/v1/aziende/{azienda_id}/rischi/misure-libreria"
     assert ("GET", prefix) in paths, "list endpoint missing"
     assert ("POST", prefix) in paths, "create endpoint missing"

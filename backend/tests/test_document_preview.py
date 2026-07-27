@@ -626,13 +626,13 @@ def test_override_address_regex_grammar():
 
 
 def test_router_registers_preview_and_override_endpoints():
+    from tests.conftest import route_pairs
+
     from app.api.v1.router import api_router
 
-    paths = {
-        (method, getattr(r, "path", ""))
-        for r in api_router.routes
-        for method in getattr(r, "methods", set()) or set()
-    }
+    # Walks nested routers, so this survives FastAPI changing whether
+    # include_router() flattens child routes onto the parent. See conftest.
+    paths = route_pairs(api_router)
     assert ("GET", "/api/v1/documenti/{document_id}/preview") in paths
     assert (
         "GET",

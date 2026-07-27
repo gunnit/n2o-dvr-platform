@@ -262,13 +262,13 @@ def test_phases_update_accepts_empty_list():
 def test_router_registers_phases_endpoint():
     """Fail loudly if anyone renames the PUT /fasi endpoint
     the frontend phase-builder card depends on."""
+    from tests.conftest import route_pairs
+
     from app.api.v1.router import api_router
 
-    paths = {
-        (method, getattr(r, "path", ""))
-        for r in api_router.routes
-        for method in getattr(r, "methods", set()) or set()
-    }
+    # Walks nested routers, so this survives FastAPI changing whether
+    # include_router() flattens child routes onto the parent. See conftest.
+    paths = route_pairs(api_router)
     prefix = "/api/v1/aziende/{azienda_id}/pos/{pos_id}"
     assert ("PUT", f"{prefix}/fasi") in paths, "phase-list endpoint missing"
 

@@ -34,13 +34,13 @@ from app.api.v1.ai_feedback import (
 
 def test_router_registers_admin_summary_and_recent():
     """The admin panel hits /admin/summary + /admin/recent — keep them."""
+    from tests.conftest import route_pairs
+
     from app.api.v1.router import api_router
 
-    paths = {
-        (method, getattr(r, "path", ""))
-        for r in api_router.routes
-        for method in getattr(r, "methods", set()) or set()
-    }
+    # Walks nested routers, so this survives FastAPI changing whether
+    # include_router() flattens child routes onto the parent. See conftest.
+    paths = route_pairs(api_router)
     assert ("GET", "/api/v1/ai-feedback/admin/summary") in paths
     assert ("GET", "/api/v1/ai-feedback/admin/recent") in paths
     # And the original POST endpoint stays — the panel reads, the
