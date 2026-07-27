@@ -39,6 +39,7 @@ from app.models.subscription import Subscription
 from app.models.usage_counter import UsageCounter
 from app.models.ai_usage_event import AiUsageEvent
 from app.models.active_company_period import ActiveCompanyPeriod
+from app.models.billing_webhook_event import BillingWebhookEvent
 
 # Cross-cutting
 from app.models.audit_log import AuditLog
@@ -81,6 +82,7 @@ __all__ = [
     "UsageCounter",
     "AiUsageEvent",
     "ActiveCompanyPeriod",
+    "BillingWebhookEvent",
     "AuditLog",
     "AiFeedback",
     "UserFeedback",

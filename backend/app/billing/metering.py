@@ -325,6 +325,47 @@ async def record_activation_for_azienda(azienda_id: uuid.UUID, db: AsyncSession)
         return False
 
 
+_USAGE = text(
+    """
+    SELECT ai_credits_used, overage_credits
+      FROM usage_counters
+     WHERE organization_id = :org AND period_start = :period
+    """
+)
+
+
+async def usage_summary(
+    org_id: uuid.UUID, db: AsyncSession, ent: Entitlements
+) -> dict[str, int | None]:
+    """Current-period consumption, for the billing screen (MB-3.3).
+
+    Read-only and safe to call on every page load. A missing counter row means
+    the org has not spent anything this period, which reads as zero rather than
+    as an error — the row is created lazily on first spend.
+    """
+    row = (
+        await db.execute(_USAGE, {"org": org_id, "period": ent.meter_period_start})
+    ).first()
+    used, overage = (row[0], row[1]) if row is not None else (0, 0)
+
+    allowance: int | None = None
+    remaining: int | None = None
+    if not ent.credits_unmetered and ent.ai_credits_year is not None:
+        allowance = ent.ai_credits_year + (overage or 0)
+        remaining = max(0, allowance - (used or 0))
+
+    return {
+        "ai_credits_used": used or 0,
+        "ai_credits_included": ent.ai_credits_year,
+        "ai_credits_overage": overage or 0,
+        # None = pooled/unmetered (A_ENTERPRISE); the UI shows "illimitato".
+        "ai_credits_allowance": allowance,
+        "ai_credits_remaining": remaining,
+        "active_companies": await count_active_companies(org_id, db, ent),
+        "max_companies": ent.max_companies,
+    }
+
+
 def period_of(ent: Entitlements) -> date:
     """The period key every meter for this org agrees on."""
     return ent.meter_period_start

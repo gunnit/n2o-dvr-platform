@@ -14,7 +14,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.billing.entitlements import Entitlements, get_entitlements
-from app.billing.gates import ensure_company_slot, ensure_doc_type_allowed
+from app.billing.gates import (
+    ensure_company_slot,
+    ensure_doc_type_allowed,
+    ensure_subscription_active,
+)
 from app.billing.metering import (
     count_active_companies,
     is_company_active,
@@ -273,7 +277,12 @@ def _enqueue_generation(doc: DocumentoGenerato, ent: Entitlements, org_id: uuid.
     The gate is re-checked at dispatch rather than trusted from the caller: the
     endpoint's earlier check and this one bracket the row creation, so a type
     that slipped through a future refactor still cannot reach a worker.
+
+    MB-4.5 lives here too: a lapsed subscription may not *generate*. Read and
+    download paths deliberately never call this — a canceled tenant keeps access
+    to documents it already produced, which D.Lgs. 81/2008 retention requires.
     """
+    ensure_subscription_active(ent, org_id)
     ensure_doc_type_allowed(ent, doc.tipo_documento, org_id)
     try:
         from app.tasks.document_tasks import generate_document_task
@@ -306,6 +315,10 @@ async def generate_document(
     immediately. The actual generation will be handled by a Celery worker.
     """
     azienda = await _get_azienda(azienda_id, org_id, db)
+    # MB-4.5 first: a lapsed tenant should be told their subscription is
+    # inactive, not sent off to fix anagrafica for a document they cannot
+    # generate either way. Re-checked at dispatch, which is the guarantee.
+    ensure_subscription_active(ent, org_id)
     # MB-2.1: is this document type in the plan? Checked before any work — no
     # row is created for a document the tenant cannot have.
     ensure_doc_type_allowed(ent, body.tipo_documento, org_id)
@@ -492,6 +505,10 @@ async def batch_generate_documents(
 ):
     """Trigger async generation for multiple document types at once."""
     await _get_azienda(azienda_id, org_id, db)
+
+    # MB-4.5 — see the note in `generate_document`: the subscription answer
+    # comes before any completeness complaint.
+    ensure_subscription_active(ent, org_id)
 
     # B1 — refuse to enqueue tasks against an incomplete sopralluogo. The
     # frontend disables the button when survey_status == draft, but we

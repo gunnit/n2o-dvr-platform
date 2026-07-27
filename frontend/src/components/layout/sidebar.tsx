@@ -8,6 +8,7 @@ import {
   BookOpen,
   Building2,
   ClipboardList,
+  CreditCard,
   FileText,
   FlaskConical,
   LayoutDashboard,
@@ -30,6 +31,7 @@ const navigation = [
   { name: "Documenti", href: "/documents", icon: FileText },
   { name: "Valutazioni", href: "/assessments", icon: FlaskConical },
   { name: "Guida", href: "/guida", icon: BookOpen },
+  { name: "Abbonamento", href: "/billing", icon: CreditCard },
   { name: "Impostazioni", href: "/settings", icon: Settings },
 ];
 

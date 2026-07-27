@@ -6,6 +6,7 @@ from app.api.v1.ambienti import router as ambienti_router
 from app.api.v1.attrezzature import router as attrezzature_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.aziende import router as aziende_router
+from app.api.v1.billing import router as billing_router
 from app.api.v1.biologico_valutazioni import router as biologico_router
 from app.api.v1.calculations import router as calculations_router
 from app.api.v1.documents import download_router as documents_download_router
@@ -70,3 +71,4 @@ api_router.include_router(vdt_router)
 api_router.include_router(admin_backups_router)
 api_router.include_router(users_router)
 api_router.include_router(organizations_router)
+api_router.include_router(billing_router)

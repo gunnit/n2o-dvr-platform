@@ -235,23 +235,23 @@ Run against a database seeded to the exact production shape (6 orgs / 16 aziende
 - `scripts/seed_plans.py --dry-run` against the migrated DB reports **0 changes**,
   confirming the migration's frozen literals and `plan_catalogue.py` agree.
 - 483 tests pass (5 pre-existing deselected); 5 import contracts kept.
-| 2 Enforce | MB-2.1 doc-type gate at chokepoints | TODO | |
-| 2 | MB-2.2 single guarded `enqueue_generation()` | TODO | |
-| 2 | MB-2.3 active-company metering at completion | TODO | |
-| 2 | MB-2.4 AI-credit metering at 9 routers | TODO | |
-| 2 | MB-2.5 seat limit on user invite | TODO | |
-| 2 | MB-2.6 flip `ENTITLEMENTS_ENFORCE=true` | TODO | |
+| 2 Enforce | MB-2.1 doc-type gate at chokepoints | DONE | `documents.py` single + batch |
+| 2 | MB-2.2 single guarded `enqueue_generation()` | DONE | `_enqueue_generation`; `test_billing_enforcement.py` fails the build on a bare `.delay(` elsewhere |
+| 2 | MB-2.3 active-company metering at completion | DONE | `record_activation_for_azienda` in `tasks/document_tasks.py` |
+| 2 | MB-2.4 AI-credit metering at 9 routers | DONE | `metered()` / `spend_credits` across 11 routers |
+| 2 | MB-2.5 seat limit on user invite | DONE | `users.py` `ensure_seat_available` |
+| 2 | MB-2.6 flip `ENTITLEMENTS_ENFORCE=true` | **TODO — needs the shadow window** | Blocked on 2–3 days of `WOULD_402` logs from production, per the Phase-1/2 sequencing note. Do not flip blind (INV-1) |
 | **GATE 2** | meters enforced; N2O (founding) fully unaffected; 402 paths have tests | — | |
-| 3 First € | MB-3.1 admin set-plan/mark-paid endpoint | TODO | |
-| 3 | MB-3.2 PayPal subscription + approval link | TODO | |
-| 3 | MB-3.3 `GET /organizations/me/entitlements` | TODO | |
+| 3 First € | MB-3.1 admin set-plan/mark-paid endpoint | DONE | `POST /billing/admin/organizations/{id}/plan` |
+| 3 | MB-3.2 PayPal subscription + approval link | DONE | folded into MB-4.2 — one `/billing/subscribe` serves both |
+| 3 | MB-3.3 entitlements endpoint | DONE | `GET /billing/entitlements` (plan + live usage); also `GET /billing/plans` |
 | **GATE 3** | first consultant invoice paid | — | |
-| 4 Automate A | MB-4.1 PayPal products/plans setup script | TODO | must be idempotent — sandbox merchant is shared with other Niuexa projects |
-| 4 | MB-4.2 Subscribe endpoint (approval redirect) | TODO | |
-| 4 | MB-4.3 webhook (signature-verified, idempotent, sole status writer) | TODO | register listener; store id in `PAYPAL_WEBHOOK_ID` |
-| 4 | MB-4.4 cancel/revise subscription endpoint | TODO | PayPal has no hosted billing portal — own screen |
-| 4 | MB-4.5 dunning → read-only downgrade | TODO | |
-| 4 | MB-4.6 FE: EntitlementsProvider + Gate + usage UI + billing page | TODO | |
+| 4 Automate A | MB-4.1 PayPal products/plans setup script | DONE | `scripts/paypal_setup.py` + `tests/test_paypal_setup.py`. Sandbox: product `PROD-59E111111A742631C`, 7 plans (A active, B `CREATED`), `A_FOUNDING` skipped |
+| 4 | MB-4.2 Subscribe endpoint (approval redirect) | DONE | `POST /billing/subscribe`, admin-only; plan moves only on the ACTIVATED webhook |
+| 4 | MB-4.3 webhook (signature-verified, idempotent, sole status writer) | **CODE DONE — listener not registered** | `POST /billing/webhook` + `billing_webhook_events` ledger + `scripts/paypal_webhook_setup.py`. `PAYPAL_WEBHOOK_ID` is still empty, and verification fails closed without it |
+| 4 | MB-4.4 cancel/revise subscription endpoint | DONE | `POST /billing/{cancel,revise}` |
+| 4 | MB-4.5 dunning → read-only downgrade | DONE | `ensure_subscription_active` at both generate endpoints + `_enqueue_generation` |
+| 4 | MB-4.6 FE: entitlements hook + usage UI + billing page | DONE | `/billing` page, `use-entitlements.ts`, `lib/billing.ts`, sidebar entry |
 | **GATE 4 / REVENUE GATE** | Model A self-serve GA; sell to ≥1 non-founding studio before Phase 5 | — | |
 | 5 Model B | MB-5.1 seed B plans (POS/HACCP per OPEN-DECISION-1) | TODO | |
 | 5 | MB-5.2 `data/ateco_rischio.py` risk table | TODO | |
@@ -605,18 +605,41 @@ plans (`ai_credits_year IS NULL`) short-circuit `check()` to allow.
 
 ### PHASE 4 — Automate Model A + usage UI
 
-- [ ] **MB-4.1 — PayPal products/plans setup script.** `backend/scripts/paypal_setup.py`: create one
-  Product + 7 annual Plans (`/v1/catalogs/products`, `/v1/billing/plans`), write `paypal_plan_id`
-  back onto `plans`. Prices exclusive of 22% IVA — set it in the plan's `taxes` block
-  (`percentage: "22"`, `inclusive: false`). **Must be idempotent and match on name:** the sandbox
-  merchant account is shared with other Niuexa projects and already holds unrelated
-  products/plans, so never assume an empty catalogue. Pass `PayPal-Request-Id` for safe retries.
+- [x] **MB-4.1 — PayPal products/plans setup script.** `backend/scripts/paypal_setup.py` — one
+  Product + 7 annual Plans, writing `paypal_plan_id` back onto `plans`. Prices ex-IVA via the plan's
+  `taxes` block (`percentage: "22"`, `inclusive: false`); one infinite (`total_cycles: 0`) annual
+  REGULAR cycle; `payment_failure_threshold: 3` to match the `past_due` dunning grace (MB-4.5).
+
+  `--dry-run` reports without writing; `--live` is a required acknowledgement when
+  `PAYPAL_ENV=live`; `--update-pricing` is required to push a catalogue price change onto an existing
+  plan (repricing is a commercial act, not a script side effect).
+
+  **Behaviour worth knowing before MB-4.2:**
+  - **`A_FOUNDING` gets no PayPal plan** — €0 grandfather row, never sold. Anything reading
+    `paypal_plan_id` must tolerate `NULL` for it.
+  - **Model B plans are created `CREATED`, not `ACTIVE`,** mirroring `active=False`. A plan that is
+    not `ACTIVE` cannot be subscribed to, so INV-9 holds even if a plan id leaks. Phase 5 flips
+    `active` in the catalogue and re-running the script activates them.
+  - **Idempotency is three-tier:** stored `paypal_plan_id` → exact name match within our product →
+    create with a deterministic `PayPal-Request-Id`. Verified by wiping every `paypal_plan_id` and
+    re-running: it re-bound all 7 to the same ids and created nothing. The shared sandbox merchant
+    already holds another project's product, which the script leaves alone.
+  - **Amounts must be compared numerically.** PayPal echoes `"3900.00"` back as `"3900.0"`; a string
+    comparison reports phantom drift on every run. See `prices_differ`.
+  - **`plans.paypal_plan_id` is environment-specific** — sandbox and live issue different ids, so a
+    database belongs to exactly one PayPal env. A stored id that 404s is logged loudly and re-resolved.
+
   **[DEFER]** monthly (+20%) / 3-yr (−15%) variants, multi-currency.
 
 - [ ] **MB-4.2 — Subscribe endpoint.** `POST /billing/subscribe` → `POST /v1/billing/subscriptions`
-  for a `plan_code`, returning the `approve` link for the browser to redirect to. Setup fees go in
-  the plan's `payment_preferences.setup_fee`. For direct trials (Phase 5): a zero-price first
-  billing cycle (PayPal models trials as cycles, not a `trial_period_days` flag).
+  for a `plan_code`, returning the `approve` link for the browser to redirect to. For direct trials
+  (Phase 5): a zero-price first billing cycle (PayPal models trials as cycles, not a
+  `trial_period_days` flag).
+  **First-year setup fees are this step's problem, not MB-4.1's.** §5 defines them as one-time line
+  items and the catalogue holds no fee data, so `paypal_setup.py` deliberately emits no
+  `payment_preferences.setup_fee` — a plan-level setup fee is charged on *every* subscription created
+  from that plan, which is wrong for a first-year-only charge. Bill them as a separate one-off Orders
+  API capture alongside the subscription.
 
 - [ ] **MB-4.3 — Webhook (sole status writer, INV-2).** `POST /billing/webhook` in `api/v1/billing.py`,
   **verified** via `/v1/notifications/verify-webhook-signature` against `PAYPAL_WEBHOOK_ID` and

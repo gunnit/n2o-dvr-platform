@@ -100,6 +100,12 @@ class Settings(BaseSettings):
     # webhook signatures — an unverified webhook must never be trusted to write
     # subscriptions.status.
     PAYPAL_WEBHOOK_ID: str = ""
+    # Where PayPal sends the customer back after approving or abandoning a
+    # subscription. Must be the public frontend origin — a localhost value in
+    # production strands the customer on a dead page mid-purchase.
+    FRONTEND_URL: str = "http://localhost:3000"
+    # Shown on PayPal's approval page. The tenant sees this while paying.
+    PAYPAL_BRAND_NAME: str = "N2O DVR"
 
     @property
     def PAYPAL_API_BASE(self) -> str:
