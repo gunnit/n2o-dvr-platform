@@ -27,7 +27,12 @@ class RischioChimicoEsposizione(Base):
     __tablename__ = "rischio_chimico_esposizioni"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    azienda_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("aziende.id", ondelete="CASCADE"))
+    # Indexed for the per-azienda list query, matching every other assessment
+    # table. Created by migration x5y6z7a8b9c0 as
+    # ix_rischio_chimico_esposizioni_azienda_id — the same name index=True derives.
+    azienda_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("aziende.id", ondelete="CASCADE"), index=True
+    )
     persona_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("persone.id", ondelete="SET NULL"))
     sostanza_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("sostanze_chimiche.id", ondelete="SET NULL")

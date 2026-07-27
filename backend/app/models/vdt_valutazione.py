@@ -10,7 +10,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text, func
+from sqlalchemy import Boolean, Date, ForeignKey, Index, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +22,14 @@ if TYPE_CHECKING:
 
 class VdtValutazione(Base):
     __tablename__ = "vdt_valutazioni"
+
+    __table_args__ = (
+        # Range-scan index for the "Visite in scadenza / scadute" widgets
+        # (app/api/v1/sorveglianza.py). Declared explicitly rather than via
+        # index=True because migration a7b8c9d0e1f2 named it
+        # ix_vdt_prossima_visita, not the ix_<table>_<column> default.
+        Index("ix_vdt_prossima_visita", "data_prossima_visita"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     azienda_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("aziende.id", ondelete="CASCADE"))
@@ -47,7 +55,7 @@ class VdtValutazione(Base):
     # data_prossima_visita is materialised so the dashboard widgets can do
     # a single indexed range-scan on the whole org.
     data_ultima_visita: Mapped[date | None] = mapped_column(Date)
-    data_prossima_visita: Mapped[date | None] = mapped_column(Date, index=True)
+    data_prossima_visita: Mapped[date | None] = mapped_column(Date)
     eta_50_plus: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

@@ -8,7 +8,7 @@ US-2.1 AC2: every AI generation and every operator save snapshots one row,
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -25,6 +25,12 @@ ALLOWED_SOURCES: tuple[str, ...] = (SOURCE_AI, SOURCE_MANUAL)
 
 class DescriptionRevision(Base):
     __tablename__ = "description_revisions"
+
+    __table_args__ = (
+        # Every list query is `WHERE azienda_id = :id ORDER BY created_at DESC`.
+        # Created by migration d1e2f3a4b5c6.
+        Index("ix_description_revisions_azienda_created", "azienda_id", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     azienda_id: Mapped[uuid.UUID] = mapped_column(

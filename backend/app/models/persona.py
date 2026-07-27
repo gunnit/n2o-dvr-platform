@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -51,7 +51,7 @@ class Persona(Base):
     rischi_specifici_codes: Mapped[list[str]] = mapped_column(
         JSONB, nullable=False, default=list, server_default="[]"
     )
-    dpi_rischi_note: Mapped[str | None] = mapped_column(String, nullable=True)
+    dpi_rischi_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Feedback #3 (2026-05-19): explicit flag tracking whether this worker has
     # completed the most recent mandatory training cycle (D.Lgs. 81/2008 art. 37).
     # Bool only — last-training-date and expiry deferred until the client confirms

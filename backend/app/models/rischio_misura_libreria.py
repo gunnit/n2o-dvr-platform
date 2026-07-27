@@ -15,7 +15,7 @@ suggesting exact duplicates of what is already saved on the risk.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,6 +24,16 @@ from app.db.base import Base
 
 class RischioMisuraLibreria(Base):
     __tablename__ = "rischi_misure_libreria"
+
+    __table_args__ = (
+        # Every list query is `WHERE azienda_id = :id [AND categoria_rischio = :cat]`
+        # (app/api/v1/rischi_misure.py). Created by migration a9c0d1e2f3b4.
+        Index(
+            "ix_rischi_misure_libreria_azienda_categoria",
+            "azienda_id",
+            "categoria_rischio",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -51,7 +61,9 @@ class RischioMisuraLibreria(Base):
     #   manual      — typed from scratch
     provenance: Mapped[str] = mapped_column(String, nullable=False, default="manual")
 
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

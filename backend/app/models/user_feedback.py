@@ -9,7 +9,7 @@ triage since user-reported priority is historically unreliable.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, Text, func
+from sqlalchemy import ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,6 +18,14 @@ from app.db.base import Base
 
 class UserFeedback(Base):
     __tablename__ = "user_feedback"
+
+    __table_args__ = (
+        # The admin triage list filters `WHERE organization_id = :org [AND status = :s]`
+        # and orders by created_at DESC (app/api/v1/feedback.py). Both created by
+        # migration e5f6a7b8c9d1.
+        Index("ix_user_feedback_org_status", "organization_id", "status"),
+        Index("ix_user_feedback_created_at", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)

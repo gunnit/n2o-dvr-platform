@@ -9,7 +9,7 @@ AI suggestions are performing.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, Text, func
+from sqlalchemy import ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,6 +18,12 @@ from app.db.base import Base
 
 class AiFeedback(Base):
     __tablename__ = "ai_feedback"
+
+    __table_args__ = (
+        # Lookup by what the feedback is about — used when tracing signals back
+        # to a specific suggestion. Created by migration c3d4e5f6a7b8.
+        Index("ix_ai_feedback_entity", "entity_type", "entity_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("organizations.id"))
