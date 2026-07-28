@@ -499,3 +499,203 @@ def test_one_subscription_per_organization():
 
     # The resolver's join assumes at most one row; the DB must guarantee it.
     assert _in_one_loop(body) is True
+
+
+# --- Credit packs (D-14) ---------------------------------------------------
+
+
+def test_granting_a_pack_extends_the_period_allowance():
+    """The write half of `overage_credits`, end to end against real SQL.
+
+    Two properties in one pass: the upsert creates the counter row when the org
+    has never spent anything, and a second grant *adds* rather than replaces —
+    a customer who buys two packs in a period must get both.
+    """
+    from app.billing import metering
+    from app.billing.entitlements import Entitlements
+
+    async def body(s, org_id):
+        ent = Entitlements(
+            account_type="consultant",
+            plan_code="A_SOLO",
+            allowed_doc_types=None,
+            seats=1,
+            max_companies=15,
+            max_sites=None,
+            ai_credits_year=100,
+            period_start=PERIOD,
+        )
+        # No counter row exists yet — the upsert has to create it.
+        first = await metering.grant_overage_credits(org_id, 500, PERIOD, s)
+        second = await metering.grant_overage_credits(org_id, 2_000, PERIOD, s)
+        await s.commit()
+
+        # And the spend query must now let a call through that the plan alone
+        # would refuse: 100 included + 2,500 purchased.
+        summary = await metering.usage_summary(org_id, s, ent)
+        spent = await metering.spend_credits(org_id, "sds", f"sds:{uuid.uuid4()}", s, ent)
+        await s.commit()
+        return first, second, summary, spent
+
+    first, second, summary, spent = _in_one_loop(body)
+    assert (first, second) == (500, 2_500), "a second pack must add, not replace"
+    assert summary["ai_credits_overage"] == 2_500
+    assert summary["ai_credits_allowance"] == 2_600
+    assert summary["ai_credits_remaining"] == 2_600
+    assert spent is True
+
+
+def test_a_pack_only_credits_the_period_it_was_bought_in():
+    """`overage_credits` is per (org, period) and deliberately does not roll over.
+
+    Pinned because the UI promises exactly this next to the buy button
+    ("valgono per il periodo in corso"), and a silent change to the key would
+    make that copy wrong in the customer's favour or ours.
+    """
+    from app.billing import metering
+
+    next_period = dt.date(PERIOD.year + 1, PERIOD.month, PERIOD.day)
+
+    async def body(s, org_id):
+        await metering.grant_overage_credits(org_id, 500, PERIOD, s)
+        await s.commit()
+        rows = (
+            await s.execute(
+                text(
+                    "SELECT period_start, overage_credits FROM usage_counters "
+                    "WHERE organization_id=:o ORDER BY period_start"
+                ),
+                {"o": org_id},
+            )
+        ).all()
+        return [(r[0], r[1]) for r in rows], next_period
+
+    rows, following = _in_one_loop(body)
+    assert rows == [(PERIOD, 500)]
+    assert all(period != following for period, _ in rows)
+
+
+def test_one_purchase_row_per_paypal_order():
+    """The UNIQUE index is what makes the settle path exactly-once.
+
+    Without it, the browser return and the webhook could each insert their own
+    row for the same order and each grant its credits.
+    """
+    insert = text(
+        """
+        INSERT INTO credit_purchases
+            (id, organization_id, pack_code, credits, amount_cents, paypal_order_id,
+             status, period_start)
+        VALUES (:i, :o, 'PACK_500', 500, 7900, 'ORDER-DUP', 'pending', :p)
+        """
+    )
+
+    async def body(s, org_id):
+        await s.execute(insert, {"i": uuid.uuid4(), "o": org_id, "p": PERIOD})
+        await s.commit()
+        try:
+            await s.execute(insert, {"i": uuid.uuid4(), "o": org_id, "p": PERIOD})
+            await s.commit()
+            return False
+        except Exception:
+            await s.rollback()
+            return True
+
+    assert _in_one_loop(body) is True
+
+
+def test_settling_the_same_order_twice_credits_once():
+    """The property the whole credit-pack design exists to guarantee.
+
+    Simulates the real race outcome: the browser's `/credits/capture` and the
+    webhook both call `complete_purchase` for one paid order. The first must
+    grant and return a receipt; the second must find nothing to do and leave the
+    balance alone.
+    """
+    from app.billing import credits as ledger
+
+    async def body(s, org_id):
+        await s.execute(
+            text(
+                """
+                INSERT INTO credit_purchases
+                    (id, organization_id, pack_code, credits, amount_cents,
+                     paypal_order_id, status, period_start)
+                VALUES (:i, :o, 'PACK_2000', 2000, 24900, 'ORDER-ONCE', 'pending', :p)
+                """
+            ),
+            {"i": uuid.uuid4(), "o": org_id, "p": PERIOD},
+        )
+        await s.commit()
+
+        first = await ledger.complete_purchase("ORDER-ONCE", s)
+        await s.commit()
+        second = await ledger.complete_purchase("ORDER-ONCE", s)
+        await s.commit()
+
+        overage = (
+            await s.execute(
+                text(
+                    "SELECT overage_credits FROM usage_counters "
+                    "WHERE organization_id=:o AND period_start=:p"
+                ),
+                {"o": org_id, "p": PERIOD},
+            )
+        ).scalar()
+        purchased = await ledger.credits_purchased_in_period(org_id, PERIOD, s)
+        return first, second, overage, purchased
+
+    first, second, overage, purchased = _in_one_loop(body)
+    assert first is not None and first.credits == 2_000
+    assert second is None, "the second settle must be a no-op, not a second grant"
+    assert overage == 2_000, "the balance must reflect exactly one pack"
+    assert purchased == 2_000
+
+
+def test_settling_an_unknown_order_is_a_no_op():
+    """A subscription renewal also arrives as `PAYMENT.CAPTURE.COMPLETED`.
+
+    Its order id matches no `credit_purchases` row, and that must read as
+    "nothing to do" rather than as an error that makes PayPal retry forever.
+    """
+    from app.billing import credits as ledger
+
+    async def body(s, _org_id):
+        return await ledger.complete_purchase("ORDER-DOES-NOT-EXIST", s)
+
+    assert _in_one_loop(body) is None
+
+
+def test_usage_by_kind_reports_the_breakdown():
+    """The tracker's "dove sono andati" list, against real rows."""
+    from app.billing import metering
+    from app.billing.entitlements import Entitlements
+
+    async def body(s, org_id):
+        ent = Entitlements(
+            account_type="consultant",
+            plan_code="A_SOLO",
+            allowed_doc_types=None,
+            seats=1,
+            max_companies=15,
+            max_sites=None,
+            ai_credits_year=1_000,
+            period_start=PERIOD,
+        )
+        for kind, key in [
+            ("sds", "a"),
+            ("sds", "b"),
+            ("reasoning", "c"),
+            ("vision", "d"),
+        ]:
+            await metering.spend_credits(org_id, kind, f"{kind}:{key}:{org_id}", s, ent)
+        await s.commit()
+        return await metering.usage_by_kind(org_id, s, ent)
+
+    rows = _in_one_loop(body)
+    by_kind = {r["kind"]: r for r in rows}
+    # Ordered by credits descending: 16 for two SDS, 4 for vision, 1 reasoning.
+    assert [r["kind"] for r in rows] == ["sds", "vision", "reasoning"]
+    assert by_kind["sds"] == {"kind": "sds", "actions": 2, "credits": 16}
+    assert by_kind["vision"]["credits"] == 4
+    assert by_kind["reasoning"]["credits"] == 1

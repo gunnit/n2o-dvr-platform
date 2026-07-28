@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import {
   Building2,
@@ -45,6 +44,8 @@ import AttrezzatureTab from "@/components/aziende/tabs/attrezzature-tab";
 import RischiTab from "@/components/aziende/tabs/rischi-tab";
 import DocumentiTab from "@/components/aziende/tabs/documenti-tab";
 import MiglioramentoTab from "@/components/aziende/tabs/miglioramento-tab";
+import { usePermissions } from "@/hooks/use-permissions";
+import { AZIENDE_CREATE } from "@/lib/permissions";
 
 // Detail-page tab keys — shared between the trigger list and the
 // deep-link helpers below. Order mirrors the wizard (M3) minus
@@ -78,10 +79,10 @@ export default function AziendaDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = params.id as string;
-  const { data: session } = useSession();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const role = (session?.user as any)?.role as string | undefined;
-  const isAdmin = role === "admin";
+  // Editing the anagrafica and dropping the client are portfolio decisions
+  // (AZIENDE_CREATE / AZIENDE_DELETE), not survey work.
+  const { can } = usePermissions();
+  const isAdmin = can(AZIENDE_CREATE);
 
   const [azienda, setAzienda] = useState<Azienda | null>(null);
   const [persone, setPersone] = useState<Persona[]>([]);

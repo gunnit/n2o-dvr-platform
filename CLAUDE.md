@@ -168,12 +168,41 @@ to know before touching any endpoint that creates data:
 - **`ai_credits_year = None` means "pooled and unmetered" (Enterprise), not
   "no credits".** Use `0` for a tenant that bought nothing. Getting this backwards
   hands non-payers unlimited OpenAI spend.
+- **Credit top-ups are sellable** (€79 / €249 / €990, `backend/app/billing/credit_packs.py`)
+  as one-time PayPal *Orders*, not subscriptions. They land on
+  `usage_counters.overage_credits` for the **current period only** — packs do not
+  roll over, and `/billing` says so next to the buy button. The grant is
+  exactly-once via the `credit_purchases.status` flip, because the browser return
+  and the webhook both settle the same order; never call
+  `metering.grant_overage_credits` from anywhere but `billing/credits.py`.
 - **Production runs PayPal in *sandbox* on purpose**, so the funnel can be walked
   with test money. `plans.paypal_plan_id` therefore holds sandbox ids, and going
   live requires reissuing them — `DEPLOY.md` §4b-bis, not an env-var flip.
 
 Plan/limit source of truth: `backend/app/billing/plan_catalogue.py` (mirrors
 `docs/pricing/`). Phase history and deviations: `docs/build/MONETIZATION-BUILD-PLAN.md`.
+
+## Roles vs. plans — two gates, never conflated
+
+`app/billing/*` answers **what the organization bought** and fails with `402`.
+`app/core/permissions.py` answers **what this person may do inside it** and fails
+with `403`. Both apply to the same endpoints; neither substitutes for the other.
+
+- Gate on a **capability**, not a role: `Depends(require_capability(DOCUMENTS_GENERATE))`.
+  `require_role("admin")` survives only for a gate that really is about the role
+  as a category, and `test_no_endpoint_still_hardcodes_the_admin_role` fails the
+  build if a new one appears in `app/api/`.
+- The three personas nest — `operatore_campo` ⊂ `operatore_ufficio` ⊂ `admin` —
+  and `validate_matrix()` enforces it. Roughly: field collects (survey,
+  assessments, AI, read documents), office also finalises (`documents:generate`),
+  admin also owns the portfolio, the money and the team.
+- **Reads are never role-gated away.** Every role holds `documents:read` and
+  `aziende:read`, for the same D.Lgs. 81/2008 retention reason the paywall never
+  gates downloads.
+- The frontend renders its navigation from the capability list `GET /auth/me`
+  returns (`frontend/src/lib/permissions.ts` + `usePermissions()`), never from a
+  second copy of the matrix. Hiding a button is cosmetic; the 403 is the rule.
+  `backend/tests/test_permissions.py` reads the TypeScript to keep the two in step.
 
 ## Live URLs
 

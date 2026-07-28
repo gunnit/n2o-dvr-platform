@@ -12,6 +12,7 @@ import {
   FlaskConical,
   Flame,
   Handshake,
+  Lock,
   Microscope,
   Monitor,
   Package,
@@ -24,9 +25,22 @@ import { Label } from "@/components/ui/label";
 import type { Azienda } from "@/types";
 import { apiCall } from "@/lib/api-client";
 import { Monogram, type AccentKey } from "@/components/cards/Monogram";
+import { cn } from "@/lib/utils";
+import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
+import { isDocTypeGated } from "@/hooks/use-entitlements";
 
 type AssessmentType = {
   slug: string;
+  /**
+   * The `tipo_documento` values this assessment feeds. A plan that grants none
+   * of them cannot produce anything from this screen, so the card renders
+   * locked — the channel guardrail (INV-9) made visible instead of discovered
+   * as a 402 at the end of an hour's data entry.
+   *
+   * A list, not a single key: "Microclima" produces both the moderate and the
+   * severe-heat allegato, and holding either is enough to make the work useful.
+   */
+  docTypes: string[];
   title: string;
   metodo: string;
   description: string;
@@ -37,6 +51,7 @@ type AssessmentType = {
 const assessmentTypes: AssessmentType[] = [
   {
     slug: "risk",
+    docTypes: ["dvr_master"],
     title: "Valutazione Rischi",
     metodo: "D.Lgs. 81/2008 · Formula I = 2D + P",
     description:
@@ -46,6 +61,7 @@ const assessmentTypes: AssessmentType[] = [
   },
   {
     slug: "mmc",
+    docTypes: ["allegato_mmc"],
     title: "Movimentazione Manuale dei Carichi",
     metodo: "NIOSH · UNI EN ISO 11228",
     description: "Indice di sollevamento, PLR, fattori correttivi.",
@@ -54,6 +70,7 @@ const assessmentTypes: AssessmentType[] = [
   },
   {
     slug: "vdt",
+    docTypes: ["allegato_vdt"],
     title: "Videoterminali",
     metodo: "D.Lgs. 81/2008 · Titolo VII",
     description: "Esposizione ≥ 20h/settimana, postura, illuminotecnica.",
@@ -62,6 +79,7 @@ const assessmentTypes: AssessmentType[] = [
   },
   {
     slug: "stress",
+    docTypes: ["allegato_stress"],
     title: "Stress Lavoro-Correlato",
     metodo: "Metodo INAIL",
     description: "Check-list 76 indicatori · analisi preliminare e approfondita.",
@@ -70,6 +88,7 @@ const assessmentTypes: AssessmentType[] = [
   },
   {
     slug: "incendio",
+    docTypes: ["allegato_incendio"],
     title: "Rischio Incendio",
     metodo: "D.M. 03/09/2021",
     description: "Scoring INF + SI + PI · classificazione livello basso/medio/alto.",
@@ -78,6 +97,7 @@ const assessmentTypes: AssessmentType[] = [
   },
   {
     slug: "microclima",
+    docTypes: ["allegato_microclima", "allegato_microclima_severo"],
     title: "Microclima",
     metodo: "UNI EN ISO 7730 / 7933",
     description: "PMV/PPD per ambienti moderati; PHS per ambienti caldo-severi.",
@@ -86,6 +106,7 @@ const assessmentTypes: AssessmentType[] = [
   },
   {
     slug: "biologico",
+    docTypes: ["allegato_biologico_alimentare", "allegato_biologico_asilo", "allegato_biologico_dentisti"],
     title: "Rischio Biologico",
     metodo: "D.Lgs. 81/2008 · Titolo X",
     description: "Agenti biologici · alimentare, asilo, odontoiatrico.",
@@ -94,6 +115,7 @@ const assessmentTypes: AssessmentType[] = [
   },
   {
     slug: "gestanti",
+    docTypes: ["allegato_gestanti"],
     title: "Gestanti, Puerpere, Allattamento",
     metodo: "D.Lgs. 151/2001",
     description: "Valutazione per lavoratrici madri · mansioni compatibili.",
@@ -102,6 +124,7 @@ const assessmentTypes: AssessmentType[] = [
   },
   {
     slug: "pos",
+    docTypes: ["pos"],
     title: "Piano Operativo di Sicurezza",
     metodo: "Cantieri temporanei o mobili",
     description: "POS per imprese esecutrici in cantiere.",
@@ -110,6 +133,7 @@ const assessmentTypes: AssessmentType[] = [
   },
   {
     slug: "duvri",
+    docTypes: ["duvri"],
     title: "DUVRI",
     metodo: "Art. 26 D.Lgs. 81/2008",
     description: "Rischi da interferenza in appalti · oneri della sicurezza.",
@@ -118,6 +142,7 @@ const assessmentTypes: AssessmentType[] = [
   },
   {
     slug: "pee",
+    docTypes: ["pee_azienda", "pee_comune"],
     title: "Piano di Emergenza ed Evacuazione",
     metodo: "D.M. 02/09/2021",
     description: "Procedure evacuazione, squadre, planimetrie.",
@@ -126,6 +151,7 @@ const assessmentTypes: AssessmentType[] = [
   },
   {
     slug: "haccp",
+    docTypes: ["haccp", "haccp_forms"],
     title: "HACCP — Sicurezza alimentare",
     metodo: "Reg. CE 852/2004",
     description: "CCP, schede auto-controllo, manuale aziendale.",
@@ -135,6 +161,10 @@ const assessmentTypes: AssessmentType[] = [
 ];
 
 export default function AssessmentsIndexPage() {
+  // What the *organization* bought. The other visibility axis — what this
+  // *person* may do — is `usePermissions`, and the sidebar already hides this
+  // whole section from a role without ASSESSMENTS_WRITE.
+  const { entitlements } = useEntitlementsContext();
   const [aziende, setAziende] = useState<Azienda[]>([]);
   const [selectedAziendaId, setSelectedAziendaId] = useState<string>("");
   const [loadingAziende, setLoadingAziende] = useState(true);
@@ -248,12 +278,23 @@ export default function AssessmentsIndexPage() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filtered.map((t) => {
               const Icon = t.icon;
-              return (
-                <Link
-                  key={t.slug}
-                  href={`/assessments/${t.slug}/${selectedAziendaId}`}
-                  className="group relative flex flex-col gap-3 rounded-md border border-[#e5edf5] bg-white p-[18px] shadow-stripe-ambient transition-[box-shadow,transform,border-color] duration-200 hover:-translate-y-0.5 hover:border-[#d1d9e3] hover:shadow-stripe-elevated"
-                >
+              // Locked when the plan grants none of the documents this
+              // assessment produces. `isDocTypeGated` is deliberately
+              // conservative — it answers false whenever we cannot be sure, so
+              // a flaky entitlements fetch shows an open card rather than a
+              // padlock on work the tenant is entitled to.
+              const locked = t.docTypes.every((d) => isDocTypeGated(entitlements, d));
+              // A locked card must not be a link: the whole point is that the
+              // route behind it would end in a 402. The "Non incluso nel piano"
+              // link to /billing at the bottom is the one affordance it keeps.
+              const cardClass = cn(
+                "group relative flex flex-col gap-3 rounded-md border border-[#e5edf5] bg-white p-[18px] shadow-stripe-ambient transition-[box-shadow,transform,border-color] duration-200",
+                locked
+                  ? "bg-[#fafbfc] opacity-75"
+                  : "hover:-translate-y-0.5 hover:border-[#d1d9e3] hover:shadow-stripe-elevated"
+              );
+              const body = (
+                <>
                   <div className="flex items-start gap-3">
                     <Monogram accent={t.accent}>
                       <Icon className="h-5 w-5" strokeWidth={1.75} />
@@ -276,11 +317,35 @@ export default function AssessmentsIndexPage() {
                     <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-[#94a3b8]">
                       /{t.slug}
                     </span>
-                    <span className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-primary transition-transform group-hover:translate-x-0.5">
-                      Apri
-                      <ArrowRight className="h-3 w-3" strokeWidth={2.25} />
-                    </span>
+                    {locked ? (
+                      <Link
+                        href="/billing"
+                        className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-[#64748d] hover:text-primary"
+                      >
+                        <Lock className="h-3 w-3" strokeWidth={2.25} />
+                        Non incluso nel piano
+                      </Link>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-primary transition-transform group-hover:translate-x-0.5">
+                        Apri
+                        <ArrowRight className="h-3 w-3" strokeWidth={2.25} />
+                      </span>
+                    )}
                   </div>
+                </>
+              );
+
+              return locked ? (
+                <div key={t.slug} className={cardClass}>
+                  {body}
+                </div>
+              ) : (
+                <Link
+                  key={t.slug}
+                  href={`/assessments/${t.slug}/${selectedAziendaId}`}
+                  className={cardClass}
+                >
+                  {body}
                 </Link>
               );
             })}

@@ -5,6 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import capabilities_for, has_capability
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
@@ -42,8 +43,51 @@ async def get_current_org(user: User = Depends(get_current_user)) -> uuid.UUID:
 
 
 def require_role(*roles: str):
+    """Gate on the role name itself.
+
+    Kept for the handful of screens that really are "admin only" as a category
+    rather than because of one named action (the oversight tools). Anything that
+    guards a *specific* capability should use :func:`require_capability`, which
+    survives the role list changing.
+    """
+
     async def _check(user: User = Depends(get_current_user)) -> User:
         if user.role not in roles:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
         return user
     return _check
+
+
+def require_capability(*capabilities: str):
+    """Gate on what the person may *do*, from ``app.core.permissions``.
+
+    403, never 402: this is "your role does not allow it", which no amount of
+    money fixes. The paywall is a separate decision made by ``app.billing.gates``
+    and both may apply to the same endpoint — generating a document needs the
+    capability *and* an active plan that covers the document type.
+
+    All listed capabilities are required (AND), because every real call site
+    guards one action. The Italian detail surfaces directly in the operator's
+    UI.
+    """
+
+    async def _check(user: User = Depends(get_current_user)) -> User:
+        missing = [c for c in capabilities if not has_capability(user.role, c)]
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Il tuo ruolo non consente questa operazione. "
+                    "Chiedi a un amministratore dell'organizzazione."
+                ),
+            )
+        return user
+
+    return _check
+
+
+async def get_current_capabilities(
+    user: User = Depends(get_current_user),
+) -> frozenset[str]:
+    """The signed-in user's capability set."""
+    return capabilities_for(user.role)

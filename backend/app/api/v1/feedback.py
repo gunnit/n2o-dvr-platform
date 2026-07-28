@@ -20,7 +20,8 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.dependencies import get_current_user, require_role
+from app.core.permissions import ADMIN_TOOLS
+from app.dependencies import get_current_user, require_capability
 from app.models.user import User
 from app.models.user_feedback import UserFeedback
 from app.services import github_issues
@@ -119,7 +120,7 @@ async def list_feedback(
     type: FeedbackType | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-    admin: User = Depends(require_role("admin")),
+    admin: User = Depends(require_capability(ADMIN_TOOLS)),
     db: AsyncSession = Depends(get_db),
 ) -> list[FeedbackAdminRow]:
     stmt = (
@@ -164,7 +165,7 @@ _CLOSE_REASON: dict[str, github_issues.CloseReason] = {
 async def update_feedback(
     feedback_id: uuid.UUID,
     body: FeedbackUpdate,
-    admin: User = Depends(require_role("admin")),
+    admin: User = Depends(require_capability(ADMIN_TOOLS)),
     db: AsyncSession = Depends(get_db),
 ) -> UserFeedback:
     result = await db.execute(

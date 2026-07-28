@@ -30,7 +30,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.audit import log_audit
 from app.db.session import get_db
-from app.dependencies import require_role
+from app.core.permissions import ADMIN_TOOLS
+from app.dependencies import require_capability
 from app.models.audit_log import AuditLog
 from app.models.user import User
 
@@ -98,7 +99,7 @@ def _audit_to_response(row: AuditLog) -> BackupEventResponse:
 
 @router.get("/status", response_model=BackupStatusResponse)
 async def get_backup_status(
-    _user: User = Depends(require_role("admin")),
+    _user: User = Depends(require_capability(ADMIN_TOOLS)),
     db: AsyncSession = Depends(get_db),
 ) -> BackupStatusResponse:
     """Return the backup config + latest backup events.
@@ -143,7 +144,7 @@ async def get_backup_status(
 @router.post("/event", response_model=BackupEventResponse, status_code=201)
 async def record_backup_event(
     body: BackupEventBody,
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(require_capability(ADMIN_TOOLS)),
     db: AsyncSession = Depends(get_db),
 ) -> BackupEventResponse:
     """Record a backup completion or failure event in the audit trail.

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import {
   Copy,
@@ -19,6 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApi } from "@/hooks/use-api";
 import { FormError } from "@/components/ui/form-error";
+import { usePermissions } from "@/hooks/use-permissions";
+import { ADMIN_TOOLS } from "@/lib/permissions";
 
 interface MeResponse {
   id: string;
@@ -35,9 +36,10 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 export default function SettingsPage() {
-  const { data: session } = useSession();
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  const isAdmin = role === "admin";
+  // Each entry is hidden by the capability its own page enforces, so the hub
+  // can never advertise a screen that then bounces the user back here.
+  const { can } = usePermissions();
+  const isAdmin = can(ADMIN_TOOLS);
 
   return (
     <div className="space-y-8">

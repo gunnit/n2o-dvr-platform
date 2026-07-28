@@ -367,10 +367,78 @@ sites in the entire codebase.
   (INV-8, enforced by `test_ai_client_has_no_billing_concepts`). The customer-
   facing "AI credit tracker" now exists and is accurate *in credits*. Margin
   reconciliation against an OpenAI invoice remains impossible and is unbuilt.
-- **D-14 — no overage top-up path.** `usage_counters.overage_credits` is read by
-  the spend query and written by nothing. Under enforcement an exhausted tenant's
-  only route is a plan upgrade; the €249/€79 credit packs in the pricing docs are
-  not sellable.
+- **~~D-14 — no overage top-up path.~~ RESOLVED 2026-07-28.** The €79 / €249 /
+  €990 packs from `docs/pricing/00-FONDAMENTA.md` §7 are sellable. Catalogue in
+  `app/billing/credit_packs.py`, ledger in `credit_purchases` (migration
+  `f8a9b0c1d2e3`), one-time PayPal **Orders v2** rather than a subscription —
+  so no PayPal-side catalogue to provision and no `DEPLOY.md` §4b-bis equivalent
+  for going live. Two settlement paths (`POST /billing/credits/capture` on the
+  browser return, `PAYMENT.CAPTURE.COMPLETED` on the webhook) race by design;
+  the conditional `UPDATE … WHERE status='pending'` in
+  `billing/credits.py::complete_purchase` makes exactly one of them grant.
+  Three deliberate scope calls:
+  - **Packs do not roll over.** `overage_credits` lives on the
+    `(organization, period_start)` counter, so a pack tops up the period it was
+    bought in. `/billing` states the expiry date next to the buy button.
+  - **A live, metered subscription is required.** Selling to an unsubscribed
+    tenant would hand out credits `ensure_subscription_active` still refuses to
+    let them use; selling to `A_ENTERPRISE` would sell a ceiling raise where
+    there is no ceiling. Both are 409.
+  - **`BILLING_MANAGE` only** (see §12) — buying commits the organization to a
+    charge, so an operator can watch the tracker but not spend.
+
+- **D-15 — the AI credit tracker is per-period, not per-user.** `/billing` now
+  shows remaining credits, the included/purchased split and a per-action
+  breakdown (`GET /billing/entitlements` → `usage.by_kind`), but the breakdown
+  is aggregated over the whole organization. "Which operator burned 400 credits
+  on visure" is answerable from `ai_usage_events` by hand and not surfaced —
+  the table carries no `user_id`, only the org. Adding one is a migration plus a
+  metering-signature change, deliberately not done here.
+
+---
+
+## 3-bis. Role visibility (added 2026-07-28)
+
+Entitlements answer *what the organization bought* and fail with **402**. They
+never answered *what this person may do inside it*, which was `user.role ==
+"admin"` re-derived at roughly twenty call sites across both stacks. That is now
+one matrix in `backend/app/core/permissions.py`, enforced by
+`dependencies.require_capability` and failing with **403**.
+
+Both checks apply to the same endpoints and neither substitutes for the other: a
+field operator on Enterprise still cannot manage users; an admin on a lapsed
+plan still cannot generate a document.
+
+| Capability | `operatore_campo` | `operatore_ufficio` | `admin` |
+|---|:--:|:--:|:--:|
+| `aziende:read`, `survey:write`, `assessments:write`, `documents:read`, `ai:use`, `billing:read` | ✓ | ✓ | ✓ |
+| `documents:generate`, `documents:delete` | — | ✓ | ✓ |
+| `aziende:create`, `aziende:delete` | — | — | ✓ |
+| `billing:manage`, `users:manage`, `org:manage`, `admin:tools` | — | — | ✓ |
+
+Four things worth knowing before changing it:
+
+- **The roles nest**, and `test_permissions.py::test_matrix_is_self_consistent`
+  enforces it. A non-nesting matrix means "promoting" someone takes something
+  away, which no admin expects from a dropdown of three ascending roles.
+- **`documents:generate` is the one genuine behaviour change.** A field operator
+  could previously generate a DVR; the personas in `USER_STORIES.md` say they
+  collect and the office finalises, and generation is the signed, billable,
+  legally-operative act. An admin re-roles anyone in one click at `/admin/users`.
+- **`aziende:create` / `aziende:delete` stay admin-only** because US-5.1 states
+  it as an acceptance criterion and (Model A) it starts the active-company
+  meter. `test_aziende_creation_and_deletion_stay_admin_only` pins it.
+- **Reads are never role-gated away.** `documents:read` and `aziende:read` are
+  held by every role, for the same D.Lgs. 81/2008 retention reason the paywall
+  never gates downloads.
+
+The frontend renders navigation from the capability list `GET /auth/me` returns
+(stored on the NextAuth session), not from a copied role map —
+`test_frontend_capability_strings_match_the_backend` and
+`test_frontend_legacy_fallback_matches_the_backend_matrix` keep the one
+role-derived fallback honest. `/admin/users` renders the whole table from
+`GET /users/roles`, so what an admin reads before assigning a role is generated
+from the matrix the API enforces.
 
 ---
 

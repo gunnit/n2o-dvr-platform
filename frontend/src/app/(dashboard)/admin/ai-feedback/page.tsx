@@ -31,6 +31,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useApi } from "@/hooks/use-api";
+import { usePermissions } from "@/hooks/use-permissions";
+import { ADMIN_TOOLS } from "@/lib/permissions";
 
 /**
  * Admin AI feedback panel (US-5.3 second half).
@@ -103,6 +105,7 @@ function formatDate(iso: string): string {
 export default function AdminAIFeedbackPage() {
   const { apiFetch } = useApi();
   const { data: session, status: sessionStatus } = useSession();
+  const { can } = usePermissions();
   const router = useRouter();
 
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -117,11 +120,12 @@ export default function AdminAIFeedbackPage() {
   // mirrors the backups panel pattern (US-5.4) for UX symmetry.
   useEffect(() => {
     if (sessionStatus !== "authenticated") return;
-    const role = (session?.user as { role?: string } | undefined)?.role;
-    if (role !== "admin") {
+    // Capability, not role: the redirect and the API's 403 now answer to the
+    // same rule in `lib/permissions` / `core/permissions.py`.
+    if (!can(ADMIN_TOOLS)) {
       router.replace("/dashboard");
     }
-  }, [session, sessionStatus, router]);
+  }, [can, session, sessionStatus, router]);
 
   const load = useCallback(async () => {
     setLoading(true);

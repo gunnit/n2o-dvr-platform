@@ -6,9 +6,12 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   AlertCircle,
+  Check,
   KeyRound,
   Loader2,
+  Minus,
   RefreshCw,
+  ShieldCheck,
   UserPlus,
 } from "lucide-react";
 
@@ -44,6 +47,9 @@ import { cn } from "@/lib/utils";
 import { FormError } from "@/components/ui/form-error";
 import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
 import { formatSeats } from "@/lib/billing";
+import { type RoleDefinition, usePermissions, useRoles } from "@/hooks/use-permissions";
+import { USERS_MANAGE, roleLabel } from "@/lib/permissions";
+import { CAPABILITY_LABELS } from "@/lib/capability-labels";
 
 interface UserRow {
   id: string;
@@ -62,14 +68,12 @@ interface StatsRow {
   documenti_count: number;
 }
 
-const ROLE_OPTIONS = [
-  { value: "admin", label: "Admin" },
-  { value: "operatore_ufficio", label: "Operatore ufficio" },
-  { value: "operatore_campo", label: "Operatore campo" },
-];
-
-const ROLE_LABEL: Record<string, string> = Object.fromEntries(
-  ROLE_OPTIONS.map((r) => [r.value, r.label]),
+// The role dropdown's options. `useRoles()` supplies richer descriptions for
+// the matrix above, but the picker must still render before that request lands
+// — and must keep working if it fails — so the three codes stay here. Labels
+// come from `lib/permissions`, the same strings the server returns.
+const ROLE_OPTIONS = ["admin", "operatore_ufficio", "operatore_campo"].map(
+  (value) => ({ value, label: roleLabel(value) }),
 );
 
 function formatDate(iso: string): string {
@@ -89,14 +93,101 @@ function RoleBadge({ role }: { role: string }) {
         : "bg-slate-100 text-slate-700";
   return (
     <Badge className={cn(tone, "hover:" + tone)}>
-      {ROLE_LABEL[role] ?? role}
+      {roleLabel(role)}
     </Badge>
+  );
+}
+
+/**
+ * "Chi può fare cosa" — the role matrix, rendered from the server's own answer.
+ *
+ * An admin assigning "Operatore sul campo" to a colleague is making a decision
+ * about what that person will and will not be able to do, and until now the
+ * only description of that was a three-word label. Every row here comes from
+ * `GET /users/roles`, so it cannot drift from what the API enforces.
+ *
+ * Renders nothing when the fetch failed: the role picker below still works, and
+ * an empty explanatory table is worse than none.
+ */
+function RoleMatrix({ roles }: { roles: RoleDefinition[] }) {
+  if (roles.length === 0) return null;
+
+  // The union of every role's grants, in the order the most privileged role
+  // lists them — so the columns read from "everyone can" down to "only admin".
+  const allCapabilities = Array.from(
+    new Set(roles.flatMap((r) => r.capabilities))
+  ).sort(
+    (a, b) =>
+      roles.filter((r) => r.capabilities.includes(b)).length -
+      roles.filter((r) => r.capabilities.includes(a)).length
+  );
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4" />
+          Ruoli e permessi
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-3">
+          {roles.map((r) => (
+            <div key={r.role} className="rounded-md border p-3">
+              <RoleBadge role={r.role} />
+              <p className="mt-2 text-sm text-muted-foreground">{r.description}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[34rem] text-sm">
+            <thead>
+              <tr className="text-left text-xs text-muted-foreground">
+                <th className="py-2 pr-4 font-medium">Permesso</th>
+                {roles.map((r) => (
+                  <th key={r.role} className="py-2 px-2 text-center font-medium">
+                    {r.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {allCapabilities.map((capability) => (
+                <tr key={capability} className="border-t">
+                  <td className="py-2 pr-4">{CAPABILITY_LABELS[capability] ?? capability}</td>
+                  {roles.map((r) => (
+                    <td key={r.role} className="px-2 py-2 text-center">
+                      {r.capabilities.includes(capability) ? (
+                        <Check
+                          className="mx-auto h-4 w-4 text-emerald-600"
+                          aria-label="consentito"
+                        />
+                      ) : (
+                        <Minus
+                          className="mx-auto h-4 w-4 text-muted-foreground/40"
+                          aria-label="non consentito"
+                        />
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
 export default function AdminUsersPage() {
   const { apiFetch } = useApi();
   const { data: session, status: sessionStatus } = useSession();
+  const { can } = usePermissions();
+  // Served by the API so the table below describes the matrix the server
+  // enforces, not a copy of it.
+  const roles = useRoles();
   const router = useRouter();
 
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -110,11 +201,12 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     if (sessionStatus !== "authenticated") return;
-    const role = (session?.user as { role?: string } | undefined)?.role;
-    if (role !== "admin") {
+    // Capability, not role: the redirect and the API's 403 now answer to the
+    // same rule in `lib/permissions` / `core/permissions.py`.
+    if (!can(USERS_MANAGE)) {
       router.replace("/dashboard");
     }
-  }, [session, sessionStatus, router]);
+  }, [can, session, sessionStatus, router]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -220,6 +312,8 @@ export default function AdminUsersPage() {
           {error}
         </div>
       )}
+
+      <RoleMatrix roles={roles} />
 
       <Card>
         <CardHeader>

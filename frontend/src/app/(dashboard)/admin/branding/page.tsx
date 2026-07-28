@@ -17,6 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApi } from "@/hooks/use-api";
 import { fetchImageBlobUrl } from "@/lib/api-client";
+import { usePermissions } from "@/hooks/use-permissions";
+import { ORG_MANAGE } from "@/lib/permissions";
 
 interface Branding {
   id: string;
@@ -83,6 +85,7 @@ const TEXT_FIELDS: { key: keyof FormFields; label: string; placeholder?: string;
 export default function AdminBrandingPage() {
   const { apiFetch } = useApi();
   const { data: session, status: sessionStatus } = useSession();
+  const { can } = usePermissions();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -97,9 +100,9 @@ export default function AdminBrandingPage() {
 
   useEffect(() => {
     if (sessionStatus !== "authenticated") return;
-    const role = (session?.user as { role?: string } | undefined)?.role;
-    if (role !== "admin") router.replace("/dashboard");
-  }, [session, sessionStatus, router]);
+    // Capability, not role — see `lib/permissions`.
+    if (!can(ORG_MANAGE)) router.replace("/dashboard");
+  }, [can, session, sessionStatus, router]);
 
   const refreshLogoPreview = useCallback(async (present: boolean) => {
     setLogoUrl((prev) => {

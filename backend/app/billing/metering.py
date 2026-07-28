@@ -325,6 +325,49 @@ async def record_activation_for_azienda(azienda_id: uuid.UUID, db: AsyncSession)
         return False
 
 
+_GRANT_OVERAGE = text(
+    """
+    INSERT INTO usage_counters (id, organization_id, period_start, overage_credits)
+    VALUES (gen_random_uuid(), :org, :period, :credits)
+    ON CONFLICT (organization_id, period_start)
+    DO UPDATE SET overage_credits = usage_counters.overage_credits + :credits,
+                  updated_at = now()
+    RETURNING overage_credits
+    """
+)
+
+
+async def grant_overage_credits(
+    org_id: uuid.UUID, credits: int, period: date, db: AsyncSession
+) -> int:
+    """Add purchased credits to a period's allowance. Returns the new total.
+
+    The write half of ``usage_counters.overage_credits``, which the spend query
+    has read since Phase 0 and nothing has ever written (D-14). A single upsert,
+    so it is safe against a concurrent first spend creating the counter row.
+
+    Deliberately **not** idempotent on its own: two identical calls grant twice,
+    because two customers buying the same pack in the same second is a real
+    thing that must credit both. Exactly-once is the caller's job and belongs
+    where the natural key is — the ``credit_purchases.status`` flip in
+    ``api/v1/billing.py``. Do not call this from anywhere that lacks that guard.
+
+    ``period`` is passed rather than taken from an ``Entitlements`` so the
+    webhook path, which resolves entitlements for a tenant that is not the
+    request's own, cannot silently credit the wrong meter.
+    """
+    total = (
+        await db.execute(
+            _GRANT_OVERAGE, {"org": org_id, "period": period, "credits": credits}
+        )
+    ).scalar_one()
+    logger.info(
+        "billing: granted %d overage credits to org %s for period %s (now %d)",
+        credits, org_id, period, total,
+    )
+    return int(total)
+
+
 _USAGE = text(
     """
     SELECT ai_credits_used, overage_credits
@@ -364,6 +407,46 @@ async def usage_summary(
         "active_companies": await count_active_companies(org_id, db, ent),
         "max_companies": ent.max_companies,
     }
+
+
+_USAGE_BY_KIND = text(
+    """
+    SELECT kind, count(*) AS actions, coalesce(sum(weight), 0) AS credits
+      FROM ai_usage_events
+     WHERE organization_id = :org
+       AND created_at >= :period
+     GROUP BY kind
+     ORDER BY credits DESC
+    """
+)
+
+
+async def usage_by_kind(
+    org_id: uuid.UUID, db: AsyncSession, ent: Entitlements
+) -> list[dict[str, int | str]]:
+    """Where this period's credits went, one row per action type.
+
+    Answers the question the single "1.240 / 2.500" number cannot: *what* is
+    burning the allowance. An SDS extraction costs eight times a measure
+    suggestion, so "you have used half your credits" is not actionable on its
+    own — "you have used half your credits, 80% of them on schede di sicurezza"
+    is.
+
+    Dated from ``created_at`` rather than a period column, because
+    ``ai_usage_events`` deliberately has none: the row is an idempotency claim
+    first and a ledger entry second. That makes this a *reporting* query, not
+    a metering one — the authoritative balance is always ``usage_counters``,
+    which is what the spend path reads. The two agree except across a renewal
+    boundary, where a refunded-and-re-spent action could shift a row by a day;
+    that is acceptable for a breakdown chart and unacceptable for a balance,
+    which is why they are separate queries.
+    """
+    rows = (
+        await db.execute(_USAGE_BY_KIND, {"org": org_id, "period": ent.meter_period_start})
+    ).all()
+    return [
+        {"kind": row[0], "actions": int(row[1]), "credits": int(row[2])} for row in rows
+    ]
 
 
 def period_of(ent: Entitlements) -> date:

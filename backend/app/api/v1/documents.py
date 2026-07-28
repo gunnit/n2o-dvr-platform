@@ -26,7 +26,8 @@ from app.billing.metering import (
 )
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.db.session import get_db
-from app.dependencies import get_current_org, get_current_user
+from app.core.permissions import DOCUMENTS_GENERATE
+from app.dependencies import get_current_org, require_capability
 from app.models.ambiente import Ambiente
 from app.models.azienda import Azienda
 from app.models.documento_generato import DocumentoGenerato
@@ -330,7 +331,7 @@ async def generate_document(
     azienda_id: uuid.UUID,
     body: DocumentGenerateRequest,
     org_id: uuid.UUID = Depends(get_current_org),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability(DOCUMENTS_GENERATE)),
     ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
@@ -524,7 +525,7 @@ async def batch_generate_documents(
     azienda_id: uuid.UUID,
     body: DocumentBatchRequest,
     org_id: uuid.UUID = Depends(get_current_org),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability(DOCUMENTS_GENERATE)),
     ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
@@ -667,7 +668,7 @@ async def restore_document(
     azienda_id: uuid.UUID,
     document_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability(DOCUMENTS_GENERATE)),
     ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
@@ -772,7 +773,13 @@ async def restore_document(
 _GDOC_EDITABLE_TYPES: set[str] = {"dvr_master"}
 
 
-@download_router.post("/{document_id}/open-for-editing", response_model=DocumentEditLinkResponse)
+@download_router.post(
+    "/{document_id}/open-for-editing",
+    response_model=DocumentEditLinkResponse,
+    # Editing the finished document is the office operator's review job, not the
+    # field operator's. Reading and downloading it stay open to everyone.
+    dependencies=[Depends(require_capability(DOCUMENTS_GENERATE))],
+)
 async def open_document_for_editing(
     document_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
@@ -853,7 +860,7 @@ async def open_document_for_editing(
 async def sync_document_from_gdoc(
     document_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability(DOCUMENTS_GENERATE)),
     ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
@@ -977,7 +984,11 @@ async def sync_document_from_gdoc(
     return _doc_to_response(new_doc, await _resolve_user_name(new_doc.generated_by, db))
 
 
-@download_router.delete("/{document_id}/gdoc", response_model=DocumentResponse)
+@download_router.delete(
+    "/{document_id}/gdoc",
+    response_model=DocumentResponse,
+    dependencies=[Depends(require_capability(DOCUMENTS_GENERATE))],
+)
 async def discard_gdoc_edits(
     document_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
@@ -1193,7 +1204,11 @@ async def preview_document_image(
     )
 
 
-@download_router.patch("/{document_id}/overrides", response_model=OverridesResponse)
+@download_router.patch(
+    "/{document_id}/overrides",
+    response_model=OverridesResponse,
+    dependencies=[Depends(require_capability(DOCUMENTS_GENERATE))],
+)
 async def patch_document_overrides(
     document_id: uuid.UUID,
     body: OverridesPatchRequest,
@@ -1242,7 +1257,7 @@ async def patch_document_overrides(
 async def save_edited_version(
     document_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability(DOCUMENTS_GENERATE)),
     ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSession } from "next-auth/react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -34,6 +33,8 @@ import {
   planDisplayName,
 } from "@/components/billing/billing-ui";
 import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
+import { usePermissions } from "@/hooks/use-permissions";
+import { AZIENDE_CREATE, BILLING_READ } from "@/lib/permissions";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -303,13 +304,11 @@ type FilterKey = "all" | "active" | "draft";
 
 export default function DashboardPage() {
   const { apiFetch, isAuthenticated } = useApi();
-  const { data: session } = useSession();
   // A direct tenant documents its own company, not a portfolio of clients —
   // "Clienti attivi" is the wrong noun for a datore di lavoro (P2-1).
   const vocab = useTenantVocabulary();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const role = (session?.user as any)?.role as string | undefined;
-  const isAdmin = role === "admin";
+  const { can } = usePermissions();
+  const canCreateAzienda = can(AZIENDE_CREATE);
 
   const [aziende, setAziende] = useState<AziendaWithScadenza[]>([]);
   const [kpis, setKpis] = useState<DashboardKpis | null>(null);
@@ -477,7 +476,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {isAdmin && (
+          {canCreateAzienda && (
             <Link
               href="/aziende/new"
               className="inline-flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-[13px] font-semibold text-white shadow-stripe-ambient transition-colors hover:bg-[#1b5594]"
@@ -816,6 +815,10 @@ function QuickActionsPanel() {
 function PlanUsagePanel() {
   const { entitlements, loading } = useEntitlementsContext();
   const vocab = useTenantVocabulary();
+  const { can } = usePermissions();
+  // Same rule as the sidebar badge: a role without billing visibility gets no
+  // plan panel rather than a panel it cannot act on.
+  if (!can(BILLING_READ)) return null;
   if (loading || !entitlements) return null;
 
   const ent = entitlements;

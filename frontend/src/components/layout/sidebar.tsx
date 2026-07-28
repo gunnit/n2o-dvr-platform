@@ -26,22 +26,74 @@ import { planDisplayName } from "@/components/billing/billing-ui";
 import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
 import { fetchImageBlobUrl } from "@/lib/api-client";
 import { creditsPercent } from "@/lib/billing";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useTenantVocabulary } from "@/hooks/use-tenant-vocabulary";
+import {
+  ADMIN_TOOLS,
+  ASSESSMENTS_WRITE,
+  AZIENDE_READ,
+  BILLING_READ,
+  type Capability,
+  DOCUMENTS_READ,
+  ORG_MANAGE,
+  SURVEY_WRITE,
+  USERS_MANAGE,
+} from "@/lib/permissions";
 
-const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Aziende", href: "/aziende", icon: Building2 },
-  { name: "Sopralluoghi", href: "/survey", icon: ClipboardList },
-  { name: "Documenti", href: "/documents", icon: FileText },
-  { name: "Valutazioni", href: "/assessments", icon: FlaskConical },
-  { name: "Guida", href: "/guida", icon: BookOpen },
-  { name: "Abbonamento", href: "/billing", icon: CreditCard },
-  { name: "Impostazioni", href: "/settings", icon: Settings },
-];
+type NavItem = {
+  name: string;
+  href: string;
+  icon: typeof LayoutDashboard;
+  /** Hidden unless the user holds this. Absent = visible to everyone. */
+  capability?: Capability;
+};
 
-const adminNavigation = [
-  { name: "Utenti", href: "/admin/users", icon: Users },
-  { name: "Personalizzazione", href: "/admin/branding", icon: Palette },
-  { name: "Feedback", href: "/admin/feedback", icon: MessagesSquare },
+/**
+ * The main navigation, as a function of who is looking.
+ *
+ * Two filters, deliberately kept apart:
+ *
+ * * **capability** — what this person's role permits. A field operator has no
+ *   business on `/admin/users`, so the entry is not rendered at all rather than
+ *   rendered into a 403.
+ * * **vocabulary** — what the tenant's channel calls things. A consultant
+ *   manages "Aziende" (a client portfolio); a direct company manages "La mia
+ *   azienda" (itself). Same route, same data, different noun.
+ *
+ * Neither filter gates anything: every route is re-checked server-side.
+ */
+function mainNavigation(companiesTitle: string): NavItem[] {
+  return [
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    {
+      name: companiesTitle,
+      href: "/aziende",
+      icon: Building2,
+      capability: AZIENDE_READ,
+    },
+    { name: "Sopralluoghi", href: "/survey", icon: ClipboardList, capability: SURVEY_WRITE },
+    { name: "Documenti", href: "/documents", icon: FileText, capability: DOCUMENTS_READ },
+    {
+      name: "Valutazioni",
+      href: "/assessments",
+      icon: FlaskConical,
+      capability: ASSESSMENTS_WRITE,
+    },
+    { name: "Guida", href: "/guida", icon: BookOpen },
+    { name: "Abbonamento", href: "/billing", icon: CreditCard, capability: BILLING_READ },
+    { name: "Impostazioni", href: "/settings", icon: Settings },
+  ];
+}
+
+const adminNavigation: NavItem[] = [
+  { name: "Utenti", href: "/admin/users", icon: Users, capability: USERS_MANAGE },
+  {
+    name: "Personalizzazione",
+    href: "/admin/branding",
+    icon: Palette,
+    capability: ORG_MANAGE,
+  },
+  { name: "Feedback", href: "/admin/feedback", icon: MessagesSquare, capability: ADMIN_TOOLS },
 ];
 
 type SidebarUser = {
@@ -54,6 +106,15 @@ export function Sidebar({ user }: { user: SidebarUser }) {
   const pathname = usePathname();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const { can, roleLabel } = usePermissions();
+  const vocabulary = useTenantVocabulary();
+
+  const navigation = mainNavigation(vocabulary.companiesTitle).filter(
+    (item) => !item.capability || can(item.capability)
+  );
+  const adminItems = adminNavigation.filter(
+    (item) => !item.capability || can(item.capability)
+  );
 
   // Load the organization's custom logo for the app chrome. Falls back
   // silently to the default Shield mark on 404 / any failure. The product
@@ -137,12 +198,12 @@ export function Sidebar({ user }: { user: SidebarUser }) {
           <span>Segnala</span>
         </button>
 
-        {user.role === "admin" && (
+        {adminItems.length > 0 && (
           <>
             <div className="mt-6 mb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-white/40">
               Amministrazione
             </div>
-            {adminNavigation.map((item) => {
+            {adminItems.map((item) => {
               const isActive = pathname?.startsWith(item.href);
               const Icon = item.icon;
               return (
@@ -165,7 +226,9 @@ export function Sidebar({ user }: { user: SidebarUser }) {
         )}
       </nav>
 
-      <PlanTracker />
+      {/* The plan badge is itself a permissioned surface: a role that cannot
+          read billing has no use for a meter it can neither act on nor change. */}
+      {can(BILLING_READ) && <PlanTracker />}
 
       <div className="mt-auto border-t border-white/10 px-4 pt-4">
         <div className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-white/5">
@@ -176,9 +239,9 @@ export function Sidebar({ user }: { user: SidebarUser }) {
             <p className="truncate text-[12px] font-medium text-white">
               {user.name ?? user.email ?? "Utente"}
             </p>
-            <p className="truncate text-[10px] text-white/50">
-              {user.role ?? "Operatore"}
-            </p>
+            {/* The human label, not the identifier: this line used to read
+                "operatore_ufficio" to the operator it described. */}
+            <p className="truncate text-[10px] text-white/50">{roleLabel}</p>
           </div>
           <button
             onClick={() => signOut()}
