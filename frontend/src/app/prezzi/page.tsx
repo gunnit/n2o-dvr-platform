@@ -115,7 +115,7 @@ export default async function PrezziPage() {
                 </Link>
                 <a
                   href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Richiesta preventivo — N2O DVR")}`}
-                  className="inline-flex h-[46px] items-center rounded-[4px] border border-white/34 px-[26px] text-[15px] font-medium text-white transition-colors hover:border-white/60 hover:bg-white/10"
+                  className="inline-flex h-[46px] items-center rounded-[4px] border border-white/45 px-[26px] text-[15px] font-medium text-white transition-colors hover:border-white/70 hover:bg-white/10"
                 >
                   Richiedi un preventivo
                 </a>

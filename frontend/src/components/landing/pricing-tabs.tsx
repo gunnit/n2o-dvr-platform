@@ -1,7 +1,8 @@
 "use client";
 
+import { Check } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import {
   ADDONS,
   COMPARISON,
@@ -47,24 +48,39 @@ function PlanCard({ plan, signedIn }: { plan: PricingPlan; signedIn: boolean }) 
   return (
     <article
       className={[
-        "relative flex flex-col rounded-[10px] border p-6 sm:px-6 sm:py-7",
+        // Below lg the cards stack or pair up and a flex column is enough.
+        // From lg they sit in one row, where `subgrid` makes every card share
+        // the same seven row tracks — so price, setup note, feature list and
+        // CTA line up across columns no matter how many lines each string
+        // wraps to. Without it a two-line setup note pushes that card's
+        // features 18px out of step with its neighbours.
+        "flex flex-col rounded-[10px] border p-6 sm:px-6 sm:py-7",
+        "lg:row-span-7 lg:grid lg:grid-rows-subgrid lg:gap-0",
         dark
-          ? "border-[#061b31] bg-[#061b31] shadow-stripe-standard"
+          ? "dark-section border-[#061b31] bg-[#061b31] shadow-stripe-standard"
           : plan.featured
             ? "border-[#003d74] bg-white shadow-stripe-elevated"
             : "border-[#e5edf5] bg-white shadow-stripe-standard",
       ].join(" ")}
     >
-      {plan.featured && (
-        <span className="absolute -top-[11px] left-6 rounded-[4px] bg-[#003d74] px-2.5 py-[3px] text-[11px] font-semibold tracking-[0.08em] text-white uppercase">
-          Consigliato
-        </span>
-      )}
-      <p
-        className={`font-heading text-[19px] font-medium tracking-[-0.015em] ${dark ? "text-white" : "text-[#061b31]"}`}
-      >
-        {plan.name}
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <p
+          className={`font-heading text-[19px] font-medium tracking-[-0.015em] ${dark ? "text-white" : "text-[#061b31]"}`}
+        >
+          {plan.name}
+        </p>
+        {/* Kept inside the card edge on purpose: the row is pulled up into the
+            dark hero, and a navy badge overhanging that band sat at 1.6:1. */}
+        {plan.featured && (
+          <span
+            className={`shrink-0 rounded-[4px] px-2 py-[3px] text-[10.5px] font-semibold tracking-[0.08em] uppercase ${
+              dark ? "bg-white text-[#061b31]" : "bg-[#003d74] text-white"
+            }`}
+          >
+            Consigliato
+          </span>
+        )}
+      </div>
       <p
         className={`mt-1.5 min-h-10 text-[13.5px] leading-[1.5] ${dark ? "text-white/62" : "text-[#64748d]"}`}
       >
@@ -90,9 +106,14 @@ function PlanCard({ plan, signedIn }: { plan: PricingPlan; signedIn: boolean }) 
             key={feature}
             className={`flex gap-[9px] text-[13.5px] leading-[1.45] ${dark ? "text-white/82" : "text-[#273951]"}`}
           >
-            <span aria-hidden className={dark ? "text-[#a5c8ff]" : "text-[#003d74]"}>
-              —
-            </span>
+            {/* A check, not an em dash: the comparison table below uses "—"
+                to mean *not* included, and the same glyph cannot carry both
+                meanings on one page. */}
+            <Check
+              aria-hidden
+              strokeWidth={2.5}
+              className={`mt-[3px] size-[13px] shrink-0 ${dark ? "text-[#a5c8ff]" : "text-[#003d74]"}`}
+            />
             {feature}
           </li>
         ))}
@@ -102,7 +123,7 @@ function PlanCard({ plan, signedIn }: { plan: PricingPlan; signedIn: boolean }) 
         <Link
           href={checkoutHref(plan, signedIn)}
           className={[
-            "mt-6 inline-flex h-[42px] items-center justify-center rounded-[4px] text-[14.5px] font-medium transition-colors",
+            "mt-6 inline-flex h-11 items-center justify-center rounded-[4px] text-[14.5px] font-medium transition-colors",
             plan.featured
               ? "bg-[#003d74] text-white hover:bg-[#1b5594]"
               : "border border-[#003d74] bg-white text-[#003d74] hover:bg-[#f6f9fc]",
@@ -114,7 +135,7 @@ function PlanCard({ plan, signedIn }: { plan: PricingPlan; signedIn: boolean }) 
         <a
           href={contactHref(plan)}
           className={[
-            "mt-6 inline-flex h-[42px] items-center justify-center rounded-[4px] text-[14.5px] font-medium transition-colors",
+            "mt-6 inline-flex h-11 items-center justify-center rounded-[4px] text-[14.5px] font-medium transition-colors",
             dark
               ? "bg-white text-[#061b31] hover:bg-[#e5edf5]"
               : plan.featured
@@ -133,19 +154,28 @@ function ComparisonTable({ audience }: { audience: Audience }) {
   const table = COMPARISON[audience];
   const headCell =
     "border-b border-[#e5edf5] px-[18px] py-3.5 text-left text-[13.5px] font-semibold";
+  // The label column stays pinned while the plan columns scroll, so a reader
+  // 400px into the horizontal scroll still knows which row they are on.
+  // `inset` shadow rather than `border-r`: with border-collapse a real border
+  // on a sticky cell scrolls away from it.
+  const stickyLabel =
+    "sticky left-0 z-10 shadow-[inset_-1px_0_0_#e5edf5,6px_0_10px_-8px_rgba(6,27,49,0.14)]";
 
   return (
     <div className="mt-16">
-      <h2 className="font-heading text-[22px] font-normal tracking-[-0.018em] text-[#061b31]">
+      <h2 className="font-heading text-[24px] font-light tracking-[-0.022em] text-[#061b31]">
         Confronto completo
       </h2>
+      <p className="mt-1.5 text-[12.5px] text-[#64748d] lg:hidden">
+        Scorri la tabella in orizzontale per confrontare tutti i piani.
+      </p>
       <div className="mt-5 overflow-x-auto rounded-[10px] border border-[#e5edf5] bg-white shadow-stripe-standard">
         <table className="w-full min-w-[760px] border-collapse text-[13.5px]">
           <thead>
             <tr className="bg-[#f6f9fc]">
               <th
                 scope="col"
-                className="border-b border-[#e5edf5] px-[22px] py-3.5 text-left text-[11.5px] font-semibold tracking-[0.08em] text-[#273951] uppercase"
+                className={`${stickyLabel} z-20 border-b border-[#e5edf5] bg-[#f6f9fc] px-[22px] py-3.5 text-left text-[11.5px] font-semibold tracking-[0.08em] text-[#273951] uppercase`}
               >
                 Caratteristica
               </th>
@@ -162,10 +192,10 @@ function ComparisonTable({ audience }: { audience: Audience }) {
           </thead>
           <tbody>
             {table.rows.map(([label, ...values]) => (
-              <tr key={label}>
+              <tr key={label} className="group">
                 <th
                   scope="row"
-                  className="border-b border-[#eef2f7] px-[22px] py-[13px] text-left font-normal text-[#64748d]"
+                  className={`${stickyLabel} border-b border-[#eef2f7] bg-white px-[22px] py-[13px] text-left font-normal text-[#64748d] group-hover:bg-[#f9fbfd]`}
                 >
                   {label}
                 </th>
@@ -174,7 +204,12 @@ function ComparisonTable({ audience }: { audience: Audience }) {
                     key={`${label}-${table.columns[i]}`}
                     className={[
                       "tnum border-b border-[#eef2f7] px-[18px] py-[13px]",
-                      i === table.highlight ? "bg-[#f6f9fc]" : "",
+                      // Tracking a row across five columns needs a hover
+                      // target; the highlighted column keeps its own tint so
+                      // it stays legible as a band under the cursor.
+                      i === table.highlight
+                        ? "bg-[#f6f9fc] group-hover:bg-[#eaf1f8]"
+                        : "group-hover:bg-[#f9fbfd]",
                       value === "Sì"
                         ? "text-[#108c3d]"
                         : value === "—"
@@ -200,7 +235,7 @@ function ComparisonTable({ audience }: { audience: Audience }) {
 function AddOns({ audience }: { audience: Audience }) {
   return (
     <div className="mt-14">
-      <h2 className="font-heading text-[22px] font-normal tracking-[-0.018em] text-[#061b31]">
+      <h2 className="font-heading text-[24px] font-light tracking-[-0.022em] text-[#061b31]">
         Add-on
       </h2>
       <div className="mt-5 grid gap-px overflow-hidden rounded-[10px] border border-[#e5edf5] bg-[#e5edf5] sm:grid-cols-2 lg:grid-cols-3">
@@ -255,6 +290,28 @@ export function PricingTabs({ signedIn }: { signedIn: boolean }) {
     window.history.replaceState(null, "", `#${next}`);
   }
 
+  // Arrow keys move between tabs, as the ARIA tabs pattern expects. Paired
+  // with the roving tabindex below, so Tab leaves the tablist rather than
+  // stepping through every tab.
+  function onTabKeys(event: KeyboardEvent<HTMLButtonElement>) {
+    const order = TABS.map((t) => t.id);
+    const at = order.indexOf(audience);
+    const next =
+      event.key === "ArrowRight"
+        ? order[(at + 1) % order.length]
+        : event.key === "ArrowLeft"
+          ? order[(at - 1 + order.length) % order.length]
+          : event.key === "Home"
+            ? order[0]
+            : event.key === "End"
+              ? order[order.length - 1]
+              : null;
+    if (!next) return;
+    event.preventDefault();
+    select(next);
+    document.getElementById(`tab-${next}`)?.focus();
+  }
+
   const activeNote = TABS.find((t) => t.id === audience)?.note;
   const plans = PLANS[audience];
 
@@ -300,7 +357,13 @@ export function PricingTabs({ signedIn }: { signedIn: boolean }) {
                   role="tab"
                   id={`tab-${tab.id}`}
                   aria-selected={on}
-                  aria-controls={`panel-${tab.id}`}
+                  // Only one panel is ever in the DOM, and its id is the
+                  // audience itself (it doubles as the /prezzi#aziende scroll
+                  // anchor). Pointing the inactive tab at an id that does not
+                  // exist is worse than omitting the attribute.
+                  aria-controls={on ? tab.id : undefined}
+                  tabIndex={on ? 0 : -1}
+                  onKeyDown={onTabKeys}
                   onClick={() => select(tab.id)}
                   className={[
                     "cursor-pointer rounded-[5px] px-[22px] py-[11px] text-[14.5px] font-medium transition-colors",
@@ -328,8 +391,16 @@ export function PricingTabs({ signedIn }: { signedIn: boolean }) {
         <div className="mx-auto w-full max-w-[1160px] px-6 pb-[84px] sm:px-7">
           <div
             className={[
-              "-mt-14 grid items-stretch gap-[18px] sm:grid-cols-2",
+              // The row laps 56px up into the dark hero, and that hero is
+              // `relative` with an opaque background — without a stacking
+              // context of its own this grid paints *under* it and the top of
+              // every card is swallowed. z-10 stays well below the z-60 nav.
+              "relative z-10 -mt-14 grid items-stretch gap-[18px] sm:grid-cols-2",
               plans.length === 4 ? "lg:grid-cols-4" : "lg:grid-cols-3",
+              // Seven tracks — name, audience, price, price note, setup note,
+              // features (the one that stretches), CTA — for the cards to
+              // subgrid onto. Only from lg, where every card is on one row.
+              "lg:grid-rows-[auto_auto_auto_auto_auto_1fr_auto]",
             ].join(" ")}
           >
             {plans.map((plan) => (
