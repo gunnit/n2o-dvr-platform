@@ -48,12 +48,15 @@ _B_PLUS_DOCS = _B_BASE_DOCS + [
     "duvri",
 ]
 
-# ⚠️ OPEN-DECISION-1. The pricing deck gives Multi-sede "all 17 incl. POS +
-# HACCP", which contradicts both the POS/construction → partner guardrail and
-# the <50-worker ceiling for direct plans. Until a human resolves it, POS,
-# HACCP and HACCP_FORMS are excluded from *every* Model B plan. Do not add them
-# here without that decision — shipping POS to a direct tenant is the
-# channel-conflict scenario the whole guardrail exists to prevent.
+# OPEN-DECISION-1 — RESOLVED 2026-07-28, option (i): Multi-sede stays in the
+# direct channel, but POS, HACCP and HACCP_FORMS are excluded from *every* Model
+# B plan, permanently. The pricing deck's "all 17 incl. POS + HACCP" is
+# overruled: POS means a temporary or mobile construction site and HACCP means a
+# food-chain audit, both of which route to a consultant partner who keeps the
+# client. Shipping either to a direct tenant is the channel-conflict scenario
+# the whole guardrail exists to prevent, so `test_no_model_b_plan_includes_pos_
+# or_haccp` guards it. The /prezzi comparison footnote already tells customers
+# this.
 _B_MULTISEDE_DOCS = _B_PLUS_DOCS + ["pee_comune"]
 
 
@@ -165,8 +168,17 @@ PLAN_CATALOGUE: list[dict[str, Any]] = [
         "active": True,
     },
     # --- Model B: direct companies. -----------------------------------------
-    # Seeded inactive: not sellable until Phase 5 (MB-5.1) flips them on, after
-    # the eligibility gate, the DdL consent copy and legal review exist.
+    # Activated 2026-07-28 (MB-5.1). Sellable self-serve through
+    # `POST /auth/register-direct` → `/billing` → PayPal. What keeps the channel
+    # guardrail standing is `allowed_doc_types`, not the `active` flag: no B plan
+    # grants `pos`, `haccp` or `haccp_forms`, so a construction or food-chain
+    # customer still has to go through a consultant for those.
+    #
+    # NOT shipped with these: the ATECO eligibility gate (MB-5.2/5.3) and the
+    # partner-referral routing (MB-5.5/5.6). Nothing therefore *refuses* a
+    # signup by size or risk class — a 200-person firm can buy Base. That is a
+    # deliberate scope call, not an oversight; the copy on /prezzi and /register
+    # must not promise a pre-purchase idoneità check that does not run.
     {
         "plan_code": "B_BASE",
         "model": "B",
@@ -184,7 +196,7 @@ PLAN_CATALOGUE: list[dict[str, Any]] = [
             "data_certa": False,  # available as an add-on
             "rspp_reviews_included": 0,
         },
-        "active": False,
+        "active": True,
     },
     {
         "plan_code": "B_PLUS",
@@ -203,7 +215,7 @@ PLAN_CATALOGUE: list[dict[str, Any]] = [
             "data_certa": True,
             "rspp_reviews_included": 1,
         },
-        "active": False,
+        "active": True,
     },
     {
         "plan_code": "B_MULTISEDE",
@@ -222,9 +234,9 @@ PLAN_CATALOGUE: list[dict[str, Any]] = [
             "data_certa": True,
             "rspp_reviews_included": 2,
         },
-        # Blocked on OPEN-DECISION-1 — whether Multi-sede belongs in the direct
-        # channel at all. Stays inactive even after Phase 5 until that lands.
-        "active": False,
+        # OPEN-DECISION-1 resolved in favour of keeping Multi-sede in the direct
+        # channel, minus POS/HACCP. See the `_B_MULTISEDE_DOCS` note above.
+        "active": True,
     },
 ]
 

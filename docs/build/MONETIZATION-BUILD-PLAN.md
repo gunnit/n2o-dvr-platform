@@ -252,19 +252,64 @@ Run against a database seeded to the exact production shape (6 orgs / 16 aziende
 | 4 | MB-4.4 cancel/revise subscription endpoint | DONE | `POST /billing/{cancel,revise}` |
 | 4 | MB-4.5 dunning → read-only downgrade | DONE | `ensure_subscription_active` at both generate endpoints + `_enqueue_generation` |
 | 4 | MB-4.6 FE: entitlements hook + usage UI + billing page | DONE | `/billing` page, `use-entitlements.ts`, `lib/billing.ts`, sidebar entry |
-| 4 | MB-4.7 public acquisition surface (added 2026-07-28) | DONE | New landing `/` + price list `/prezzi` (`components/landing/*`). Funnel: `/prezzi` → `/register?piano=` → `/billing?piano=` → `subscribe`. Only `A_SOLO`/`A_STUDIO` are self-serve; Network/Enterprise and **all** Model B plans are mailto leads (onboarding fees are invoiced separately, and Model B is blocked on MB-5.2/5.3/5.7). `?piano=` is a UI hint only — re-validated in `/billing/subscribe` |
+| 4 | MB-4.7 public acquisition surface (added 2026-07-28) | DONE | New landing `/` + price list `/prezzi` (`components/landing/*`). Funnel: `/prezzi` → `/register?piano=` → `/billing?piano=` → `subscribe`. Network/Enterprise stay mailto leads (quoted deals). `A_SOLO`/`A_STUDIO` were self-serve from the start; **all three Model B plans joined them on 2026-07-28** (MB-5.1). Onboarding fees are still invoiced separately. `?piano=` is a UI hint only — re-validated in `/billing/subscribe`, and it also picks the signup route (`B_*` → `/auth/register-direct`) |
 | 4 | MB-4.2/4.3 sandbox verification (2026-07-28) | DONE | `create_subscription` → `I-V0SEF0F77J9A` `APPROVAL_PENDING` + valid approval link. Production still returns `[]` from `/billing/plans` (no `paypal_plan_id`); go-live runbook in `DEPLOY.md` §4b |
 | **GATE 4 / REVENUE GATE** | Model A self-serve GA; sell to ≥1 non-founding studio before Phase 5 | — | |
-| 5 Model B | MB-5.1 seed B plans (POS/HACCP per OPEN-DECISION-1) | TODO | |
-| 5 | MB-5.2 `data/ateco_rischio.py` risk table | TODO | |
-| 5 | MB-5.3 `evaluate_direct_eligibility()` + tests | TODO | |
-| 5 | MB-5.4 `POST /auth/register-direct` | TODO | |
-| 5 | MB-5.5 PartnerReferral + SegmentationDecision + RevShareLedger | TODO | |
-| 5 | MB-5.6 referral claim (re-parent azienda, 20%) | TODO | |
-| 5 | MB-5.7 DdL-responsibility consent (server-validated) | TODO | |
-| 5 | MB-5.8 FE: /imprese, /prezzi, (signup)/prova, doc-type Gate | TODO | |
-| 5 | MB-5.9 30-day trial wiring | TODO | |
+| 5 Model B | MB-5.1 activate B plans (POS/HACCP per OPEN-DECISION-1) | DONE | migration `ab1c2d3e4f5a`; OPEN-DECISION-1 resolved option (i) — see below |
+| 5 | MB-5.2 `data/ateco_rischio.py` risk table | **DEFER** | out of scope of the 2026-07-28 pass — see **Deviation D-8** |
+| 5 | MB-5.3 `evaluate_direct_eligibility()` + tests | **DEFER** | ditto D-8 |
+| 5 | MB-5.4 `POST /auth/register-direct` | DONE | `api/v1/auth.py`; `account_type` is a property of the endpoint, never a request field |
+| 5 | MB-5.5 PartnerReferral + SegmentationDecision + RevShareLedger | **DEFER** | ditto D-8 |
+| 5 | MB-5.6 referral claim (re-parent azienda, 20%) | **DEFER** | ditto D-8 |
+| 5 | MB-5.7 DdL-responsibility consent (server-validated) | DONE | `app/data/ddl_consent.py` + `organizations.ddl_consent_at/_version`; **wording still unreviewed by counsel** |
+| 5 | MB-5.8 FE: /imprese, /prezzi, (signup)/prova, doc-type Gate | PARTIAL | `/prezzi` aziende tab is self-serve and `/register?piano=B_*` renders the consent; `/imprese`, the `prova` wizard and the `<Gate>` on assessment cards are not built |
+| 5 | MB-5.9 30-day trial wiring | **DEFER** | explicitly declined 2026-07-28: aziende pay on signup, like consultants |
 | 5 | MB-5.10 guided-setup flow | TODO | |
+
+### Phase 5 (partial) — what shipped on 2026-07-28
+
+Scope was deliberately narrowed to **"a direct company can pay"**, not the whole
+of Phase 5. Delivered:
+
+- `plan_catalogue.py` B rows `active=True` + migration `ab1c2d3e4f5a`, which also
+  adds the two consent columns. Verified on a database migrated from empty:
+  `upgrade head` → `downgrade -1` → `upgrade head` clean, 8 plan rows with B at
+  6/13/14 doc types, `seed_plans.py --dry-run` reports **0 changes**, and
+  `compare_metadata` reports **0 drift**.
+- `POST /auth/register-direct`, the shared `_provision_tenant()` both signup
+  routes use, and `account_type` in the JWT (INV-3: that claim and nothing more).
+- Frontend: `/prezzi` aziende plans are `cta: "checkout"`; `/register?piano=B_*`
+  switches to the direct route, relabels the org field and renders the consent;
+  `lib/consent.ts` mirrors the backend wording and echoes its version back;
+  `/billing` shows sedi rather than "aziende attive" for a direct tenant.
+- Tests: `tests/test_direct_signup.py` (7 tests — provisioning, both consent
+  refusals, the endpoint-not-field guarantee, login's DB-sourced claim, and the
+  purchase-side channel guardrail both as a filtered list and as a 403 on a
+  direct tenant POSTing a Model A plan code). 604 backend tests pass, 5 import
+  contracts kept, `tsc` and `eslint` clean, `next build` green.
+
+### Phase 5 deviations (recorded per §0 rule 8)
+
+- **OPEN-DECISION-1 — RESOLVED, option (i).** Multi-sede stays in the direct
+  channel; POS, HACCP and HACCP_FORMS are excluded from **every** Model B plan,
+  permanently. `test_no_model_b_plan_includes_pos_or_haccp` enforces it and
+  `/prezzi`'s comparison footnote states it to customers.
+- **D-8 — the direct channel ships with no eligibility gate.** MB-5.2/5.3/5.5/5.6
+  are deferred, so nothing refuses a signup by worker count, ATECO class or
+  construction flag: a 200-person firm can buy Base. What still holds the channel
+  guardrail is the doc-type map — POS and HACCP are unreachable on any B plan, so
+  a cantiere or a food-chain customer must still go through a consultant for the
+  documents that matter. **Consequence to watch:** the `/prezzi` and `/register`
+  copy promising a "verifica di idoneità" before activation was removed in the
+  same commit, because it would now be a false statement.
+- **D-9 — an unpaid direct tenant is unrestricted until it buys.** A freshly
+  registered org owns no `subscriptions` row, so the resolver's INV-1 soft-fail
+  returns the fully permissive fallback — including all 17 doc types. That is
+  pre-existing (it is equally true of a fresh consultant signup) and inert while
+  `ENTITLEMENTS_ENFORCE=false`, but opening the direct channel is what makes it
+  reachable by strangers rather than by invited studios. Tightening it means
+  revisiting the INV-1 fallback, which is a deliberate design decision — hence
+  flagged, not silently changed.
 | **GATE 5 / CAC GATE** | one paid-channel test; scale only if CAC ≲ €320 (Plus), else raise Base to €690 | — | |
 
 ---
@@ -416,11 +461,13 @@ Network +€3,500) are one-time Checkout line items, not plan fields — handle 
   *(the pricing doc lists "chemical (MoVaRisCh)" for Plus — that is currently an **assessment**
   (`RischioChimicoEsposizione`) folded into the DVR, not a standalone `tipo_documento`. When the
   MoVaRisCh allegato ships as its own doc type, add it here. See memory `rischio-chimico-module.md`.)*
-- **`B_MULTISEDE`** = ⚠️ **see OPEN-DECISION-1.** The pricing doc says "all 17 incl. HACCP + POS", but
-  that contradicts the segmentation guardrail (POS = construction → route to a partner) **and** the
-  worker-count guardrail (Multi-sede targets 10–249 workers, above the <50 ceiling for direct plans).
-  **Default until resolved:** `B_MULTISEDE` = Plus set **+** `["pee_comune","allegato_biologico_*"]`
-  but **POS and HACCP excluded**. Do not silently ship POS/HACCP to a direct tenant.
+- **`B_MULTISEDE`** = Plus set **+** `["pee_comune"]` — 14 types, **POS, HACCP and HACCP_FORMS
+  excluded**. Settled by OPEN-DECISION-1 on 2026-07-28 (option (i)), overruling the pricing doc's
+  "all 17 incl. HACCP + POS": POS means a construction site and HACCP a food-chain audit, both of
+  which route to a consultant partner. This exclusion is now the *entire* remaining segmentation
+  guardrail — the worker-count half of option (i) is unenforced while MB-5.3 is deferred (D-8) — so
+  do not relax it without replacing it. `test_no_model_b_plan_includes_pos_or_haccp` fails the build
+  if anyone tries.
 
 ---
 
@@ -752,12 +799,11 @@ plans (`ai_credits_year IS NULL`) short-circuit `check()` to allow.
 
 ## 10. Open decisions (resolve with the human / N2O — do NOT self-resolve)
 
-- **OPEN-DECISION-1 (blocking for MB-5.1) — `B_MULTISEDE` scope & existence.** The pricing doc gives
-  Multi-sede "all 17 incl. POS + HACCP" at 10–249 workers, which contradicts (a) the POS/construction
-  → partner guardrail and (b) the <50-worker direct ceiling. Options: (i) keep Multi-sede but exclude
-  POS/HACCP and cap at <50 workers; (ii) drop Multi-sede from the direct channel entirely and route
-  those firms to consultants; (iii) explicitly carve an exception with counsel. **Default coded until
-  decided:** POS/HACCP excluded from every B plan.
+- ~~**OPEN-DECISION-1 (blocking for MB-5.1) — `B_MULTISEDE` scope & existence.**~~ **RESOLVED
+  2026-07-28, option (i):** Multi-sede stays in the direct channel, and POS / HACCP / HACCP_FORMS are
+  excluded from every Model B plan permanently. The worker-count cap named in option (i) is *not*
+  enforced — MB-5.3 is deferred (D-8), so the ceiling exists in the pricing copy only. The pricing
+  deck's "all 17 incl. POS + HACCP" for Multi-sede is overruled.
 - **OPEN-DECISION-2 — N2O founding terms.** `A_FOUNDING` at €0/3-yr assumed. Confirm the exact
   founding-partner deal (revenue share vs free) and write it so it isn't renegotiated annually
   (`01-CONSULENTI-E-STUDI.md` risk table).

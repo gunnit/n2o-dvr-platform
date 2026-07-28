@@ -172,9 +172,21 @@ PYTHONPATH=. python -m scripts.paypal_setup --live
 PYTHONPATH=. python -m scripts.paypal_webhook_setup --url https://n2o-dvr-api.onrender.com --live
 ```
 
-Then walk one real purchase end to end: `/prezzi` → "Attiva Solo" → register →
-PayPal approval → back to `/billing?esito=ok` → the plan flips to `active` once
-`BILLING.SUBSCRIPTION.ACTIVATED` lands.
+Then walk one real purchase end to end, **once per channel** — the two funnels
+provision different account types and only the matching price list is offered:
+
+| Channel | Walk | Signup route |
+|---|---|---|
+| Consultants (Model A) | `/prezzi#consulenti` → "Attiva Solo" | `POST /auth/register` |
+| Companies (Model B) | `/prezzi#aziende` → "Attiva Base" | `POST /auth/register-direct` |
+
+Either way: register → PayPal approval → back to `/billing?esito=ok` → the plan
+flips to `active` once `BILLING.SUBSCRIPTION.ACTIVATED` lands. On the direct
+walk, confirm the signup form shows the datore-di-lavoro acknowledgement and
+that the resulting organization has `account_type = 'direct'` with
+`ddl_consent_at` / `ddl_consent_version` filled in — a direct tenant without
+those was provisioned around the consent, which is the one thing that path must
+never do.
 
 **Watch out for:**
 
@@ -184,10 +196,18 @@ PayPal approval → back to `/billing?esito=ok` → the plan flips to `active` o
   against a scratch database instead.
 - `A_FOUNDING` deliberately gets no PayPal plan (€0 grandfather row). Anything
   reading `paypal_plan_id` must tolerate `NULL` for it.
-- Model B plans (`B_BASE`, `B_PLUS`, `B_MULTISEDE`) are seeded `active=false`
-  and are **lead-only on the price list** — their CTA is a mailto, not checkout.
-  Activating them needs the eligibility gate, the ATECO risk table and the DdL
-  consent copy (MB-5.2 / 5.3 / 5.7), none of which exist yet.
+- Model B plans (`B_BASE`, `B_PLUS`, `B_MULTISEDE`) went **self-serve on
+  2026-07-28** (MB-5.1). Migration `ab1c2d3e4f5a` sets `active = true`, and
+  `paypal_setup.py` derives PayPal's plan status from that column — so a
+  merchant account set up *before* that date holds those three plans as
+  `CREATED`, which cannot be subscribed to. Re-run `paypal_setup.py` after
+  deploying this migration; it activates them in place and does not reissue ids.
+- What still routes Model B customers to a consultant is the **doc-type map**,
+  not the price list: no B plan grants `pos`, `haccp` or `haccp_forms`. There is
+  deliberately **no automated eligibility gate** — the ATECO risk table and
+  partner-referral routing (MB-5.2 / 5.3 / 5.5 / 5.6) are not built, so nothing
+  refuses a signup by worker count or risk class. Do not add copy anywhere
+  promising a pre-purchase "verifica di idoneità".
 - One-time onboarding fees (Studio €1.500, Network €3.500, and the Model B
   first-year uplifts) are **not** charged by the subscription — the catalogue
   holds no fee data and `paypal_setup.py` emits no plan-level `setup_fee` on

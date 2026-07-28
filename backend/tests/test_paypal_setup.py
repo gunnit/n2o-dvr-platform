@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.billing.plan_catalogue import PLANS_BY_CODE
+from app.billing.plan_catalogue import PLAN_CATALOGUE, PLANS_BY_CODE
 from scripts.paypal_setup import (
     CURRENCY,
     IVA_PERCENTAGE,
@@ -97,11 +97,23 @@ def test_model_a_plans_are_created_active(code):
 
 
 @pytest.mark.parametrize("code", ["B_BASE", "B_PLUS", "B_MULTISEDE"])
-def test_model_b_plans_are_not_subscribable_before_phase_5(code):
-    """INV-9 / OPEN-DECISION-1: Model B is seeded inactive. The PayPal plan must
-    mirror that, so a leaked plan id still cannot be subscribed to."""
-    assert PLANS_BY_CODE[code]["active"] is False
-    assert plan_body(PLANS_BY_CODE[code], "PROD-X")["status"] == "CREATED"
+def test_model_b_plans_are_subscribable_from_phase_5(code):
+    """MB-5.1: the direct channel is open, so the PayPal plans must be ACTIVE.
+
+    A `CREATED` plan cannot be subscribed to, so leaving these behind would show
+    a customer a working "Attiva Base" button that dies at PayPal.
+    """
+    assert PLANS_BY_CODE[code]["active"] is True
+    assert plan_body(PLANS_BY_CODE[code], "PROD-X")["status"] == "ACTIVE"
+
+
+def test_paypal_plan_status_mirrors_the_catalogue():
+    """The catalogue's `active` column is the single source of truth for what is
+    sellable — `paypal_setup.py` derives PayPal's status from it rather than
+    carrying its own list, so the two cannot disagree."""
+    for plan in PLAN_CATALOGUE:
+        expected = "ACTIVE" if plan["active"] else "CREATED"
+        assert plan_body(plan, "PROD-X")["status"] == expected, plan["plan_code"]
 
 
 @pytest.mark.parametrize(

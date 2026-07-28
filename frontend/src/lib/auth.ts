@@ -33,6 +33,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           accessToken: data.access_token,
           role: payload.role,
           organizationId: payload.org,
+          // 'consultant' | 'direct'. Absent on tokens issued before the direct
+          // channel shipped, so treat undefined as 'consultant'. This decides
+          // first-paint IA only — which price list to show. Every limit and
+          // every purchase is re-resolved from the database server-side
+          // (INV-3), so a stale claim can never grant anything.
+          accountType: payload.account_type ?? "consultant",
         };
       },
     }),
@@ -45,6 +51,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.accessToken = u.accessToken;
         token.role = u.role;
         token.organizationId = u.organizationId;
+        token.accountType = u.accountType;
       }
       return token;
     },
@@ -55,6 +62,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       (session.user as any).role = token.role;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (session.user as any).organizationId = token.organizationId;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (session.user as any).accountType = token.accountType ?? "consultant";
       return session;
     },
   },

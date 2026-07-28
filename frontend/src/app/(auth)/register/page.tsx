@@ -8,6 +8,7 @@ import { Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DDL_CONSENT_TEXT, DDL_CONSENT_VERSION } from "@/lib/consent";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -17,7 +18,21 @@ const PLAN_NAMES: Record<string, string> = {
   A_STUDIO: "Studio",
   A_NETWORK: "Network",
   A_ENTERPRISE: "Enterprise",
+  B_BASE: "Base",
+  B_PLUS: "Plus",
+  B_MULTISEDE: "Multi-sede",
 };
+
+/**
+ * Which signup route a plan belongs to. The account type is a property of the
+ * endpoint, not a form field — it decides which price list the tenant may ever
+ * buy from, so `/register` cannot be talked into creating a direct tenant and
+ * vice versa. `?piano=` is only a hint; a visitor who arrives with no plan gets
+ * the consultant form, which is the older and larger channel.
+ */
+function isDirectPlan(planCode: string | null): boolean {
+  return planCode?.startsWith("B_") ?? false;
+}
 
 function RegisterForm() {
   const router = useRouter();
@@ -27,6 +42,7 @@ function RegisterForm() {
   // the full plan list on /billing.
   const piano = searchParams.get("piano");
   const planName = piano ? PLAN_NAMES[piano] : undefined;
+  const direct = isDirectPlan(piano);
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -53,17 +69,34 @@ function RegisterForm() {
       return;
     }
 
+    // The backend refuses a direct signup without this anyway (INV-5); checking
+    // here just avoids a round-trip to be told so.
+    if (direct && formData.get("consenso_datore_lavoro") !== "on") {
+      setError(
+        "Per attivare un piano per aziende devi confermare la dichiarazione del datore di lavoro."
+      );
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await fetch(`${API_URL}/api/v1/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          full_name: formData.get("full_name"),
-          email,
-          password,
-          organization_name: formData.get("organization_name") || null,
-        }),
-      });
+      const res = await fetch(
+        `${API_URL}/api/v1/auth/${direct ? "register-direct" : "register"}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            full_name: formData.get("full_name"),
+            email,
+            password,
+            organization_name: formData.get("organization_name") || null,
+            ...(direct && {
+              consenso_datore_lavoro: true,
+              consenso_versione: DDL_CONSENT_VERSION,
+            }),
+          }),
+        }
+      );
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -176,7 +209,7 @@ function RegisterForm() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="organization_name" className={labelClass}>
-            Studio o organizzazione
+            {direct ? "Ragione sociale dell'impresa" : "Studio o organizzazione"}
           </Label>
           <Input
             id="organization_name"
@@ -186,6 +219,23 @@ function RegisterForm() {
             placeholder="Es. N2O SRL"
           />
         </div>
+        {direct && (
+          <div className="rounded-md border border-[#e5edf5] bg-[#f6f9fc] p-3.5">
+            <label
+              htmlFor="consenso_datore_lavoro"
+              className="flex cursor-pointer gap-2.5 text-[12.5px] leading-[1.55] text-[#273951]"
+            >
+              <input
+                id="consenso_datore_lavoro"
+                name="consenso_datore_lavoro"
+                type="checkbox"
+                required
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#003d74]"
+              />
+              <span>{DDL_CONSENT_TEXT}</span>
+            </label>
+          </div>
+        )}
         {error && <p className="text-sm text-destructive">{error}</p>}
         <Button type="submit" className="mt-2 w-full" disabled={loading}>
           {loading ? "Registrazione in corso..." : "Registrati"}
@@ -203,15 +253,24 @@ function RegisterForm() {
       </p>
 
       <p className="mt-4 border-t border-[#e5edf5] pt-4 text-center text-[12.5px] leading-[1.55] text-[#64748d]">
-        Sei un&apos;azienda che deve documentare la propria sicurezza? I piani
-        diretti si attivano dopo una verifica di idoneit&agrave;:{" "}
-        <a
-          href="mailto:support@dvr-sicurezza.it?subject=Richiesta%20accesso%20piani%20per%20aziende"
-          className="font-medium text-primary hover:underline"
-        >
-          scrivici
-        </a>
-        .
+        {direct ? (
+          <>
+            Sei invece un consulente o uno studio che segue pi&ugrave; aziende
+            clienti?{" "}
+            <Link href="/prezzi#consulenti" className="font-medium text-primary hover:underline">
+              Guarda i piani per consulenti
+            </Link>
+            .
+          </>
+        ) : (
+          <>
+            Sei un&apos;azienda che deve documentare la propria sicurezza?{" "}
+            <Link href="/prezzi#aziende" className="font-medium text-primary hover:underline">
+              Guarda i piani per aziende
+            </Link>
+            .
+          </>
+        )}
       </p>
     </div>
   );

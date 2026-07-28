@@ -352,14 +352,24 @@ export function PricingTabs({ signedIn }: { signedIn: boolean }) {
               </div>
               <div>
                 <p className="text-[11.5px] font-semibold tracking-[0.1em] text-[#003d74] uppercase">
-                  A chi sono riservati
+                  A chi sono pensati
                 </p>
                 <p className="mt-2.5 text-[14px] leading-[1.6] text-[#64748d]">
-                  Imprese sotto le soglie dimensionali e di rischio previste.
-                  Cantieri temporanei o mobili, classi ATECO ad alto rischio e
-                  organici superiori vengono indirizzati a uno studio partner,
-                  che mantiene il cliente. Per questo i piani diretti si attivano
-                  dopo una verifica di idoneità, non con un pagamento immediato.
+                  Imprese che documentano la propria sicurezza, entro le soglie
+                  dimensionali e di rischio di ciascun piano. Restano fuori il
+                  POS del cantiere temporaneo o mobile e il manuale HACCP: non
+                  sono inclusi in nessun piano diretto e passano da uno studio
+                  partner, che mantiene il cliente. Se la tua impresa rientra in
+                  questi casi{" "}
+                  <a
+                    className="text-[#003d74] hover:underline"
+                    href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
+                      "Richiesta studio partner — N2O DVR"
+                    )}`}
+                  >
+                    scrivici
+                  </a>{" "}
+                  e ti mettiamo in contatto.
                 </p>
               </div>
             </div>

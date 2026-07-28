@@ -121,8 +121,8 @@ export const PLANS: Record<Audience, PricingPlan[]> = {
         "Revisioni e rigenerazioni illimitate",
         "Promemoria art. 29 c.3",
       ],
-      cta: "contact",
-      ctaLabel: "Richiedi l'accesso",
+      cta: "checkout",
+      ctaLabel: "Attiva Base",
     },
     {
       planCode: "B_PLUS",
@@ -138,8 +138,8 @@ export const PLANS: Record<Audience, PricingPlan[]> = {
         "Data certa inclusa",
         "1 revisione RSPP l'anno",
       ],
-      cta: "contact",
-      ctaLabel: "Richiedi l'accesso",
+      cta: "checkout",
+      ctaLabel: "Attiva Plus",
       featured: true,
     },
     {
@@ -156,8 +156,8 @@ export const PLANS: Record<Audience, PricingPlan[]> = {
         "2 revisioni RSPP l'anno",
         "Telefono e referente dedicato",
       ],
-      cta: "contact",
-      ctaLabel: "Richiedi l'accesso",
+      cta: "checkout",
+      ctaLabel: "Attiva Multi-sede",
     },
   ],
 };

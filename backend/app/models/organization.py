@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import LargeBinary, String, func
+from sqlalchemy import DateTime, LargeBinary, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,6 +26,17 @@ class Organization(Base):
     account_type: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default="consultant"
     )
+
+    # MB-5.7 — the datore-di-lavoro acknowledgement a direct signup must give:
+    # the employer signs the DVR and carries the responsibility, the platform
+    # only drafts. NULL on every consultant org (a studio signs nothing on its
+    # clients' behalf). Written once at registration and never updated — these
+    # two columns are the evidentiary record that the consent was shown and
+    # accepted, so the version pins *which* wording was accepted.
+    ddl_consent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ddl_consent_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     # --- Branding / letterhead (per-organization, all optional) ---------------
     # `name` doubles as the firm name printed on document letterhead.

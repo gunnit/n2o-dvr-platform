@@ -1,11 +1,18 @@
-"""The plan catalogue, and its agreement with the migration that seeds it.
+"""The plan catalogue, and its agreement with the migrations that build it.
 
 The catalogue lives in two places by design: `app/billing/plan_catalogue.py`
-(editable, used by the seed script) and literal SQL in migration
-`de3f4a5b6c7d` (frozen, so a deploy is self-sufficient and a refactor of the
-module can never break an old migration). This module is what stops those two
-drifting — a price changed in one place and not the other would mean a
-freshly-migrated database disagrees with a re-seeded one.
+(editable, used by the seed script) and literal SQL in the migrations (frozen,
+so a deploy is self-sufficient and a refactor of the module can never break an
+old migration). This module is what stops those two drifting — a price changed
+in one place and not the other would mean a freshly-migrated database disagrees
+with a re-seeded one.
+
+What the migrations must agree with the catalogue on is the state at **head**,
+not at any single revision. `de3f4a5b6c7d` seeds every plan and puts the Model B
+rows inactive; `ab1c2d3e4f5a` later activates them. A database migrated from
+empty passes through both, so the comparison below replays them in order rather
+than reading the seed alone — which is also why the seed's frozen literals are
+never edited when the catalogue changes.
 """
 
 from __future__ import annotations
@@ -23,10 +30,11 @@ from app.billing.plan_catalogue import (
     validate_catalogue,
 )
 
-_MIGRATION = (
-    Path(__file__).resolve().parents[1]
-    / "alembic" / "versions" / "de3f4a5b6c7d_grandfather_existing_orgs.py"
-)
+_VERSIONS = Path(__file__).resolve().parents[1] / "alembic" / "versions"
+# Seeds every plan row (Model B inactive).
+_MIGRATION = _VERSIONS / "de3f4a5b6c7d_grandfather_existing_orgs.py"
+# MB-5.1: flips the Model B rows active so they can be bought.
+_ACTIVATION = _VERSIONS / "ab1c2d3e4f5a_enable_model_b_plans.py"
 
 # Column order of the PLANS tuples in the migration.
 _FIELDS = [
@@ -77,7 +85,37 @@ def _migration_plans() -> dict[str, dict]:
         )
         plan["features"] = json.loads(plan["features"])
         out[plan["plan_code"]] = plan
+
+    _apply_activation(out)
     return out
+
+
+def _activated_plan_codes() -> set[str]:
+    """The plan codes `ab1c2d3e4f5a` switches on, read from the migration.
+
+    Read rather than hardcoded so that adding a plan to that tuple without
+    activating it in the catalogue (or the reverse) shows up as a drift failure,
+    which is the whole job of this module.
+    """
+    source = _ACTIVATION.read_text(encoding="utf-8")
+    # Guard the assumption the overlay below encodes: if the migration ever
+    # stops meaning "make these buyable", replaying it as `active = True` would
+    # quietly test the wrong thing.
+    assert "SET active = true" in source, (
+        f"{_ACTIVATION.name} no longer activates plans — update the replay below"
+    )
+    tree = ast.parse(source)
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", None) == "_B_PLANS":
+            return set(ast.literal_eval(node.value))
+    raise AssertionError(f"_B_PLANS literal not found in {_ACTIVATION.name}")
+
+
+def _apply_activation(plans: dict[str, dict]) -> None:
+    """Replay the activation migration over the seeded rows."""
+    for code in _activated_plan_codes():
+        assert code in plans, f"{code} is activated but never seeded"
+        plans[code]["active"] = True
 
 
 def test_catalogue_is_internally_valid():
@@ -133,11 +171,17 @@ def test_model_b_plans_are_a_strict_progression():
     assert multi <= ALL_DOC_TYPES
 
 
-def test_model_b_plans_ship_inactive():
-    """Not sellable until Phase 5 wires eligibility, consent and legal review."""
+def test_model_b_plans_are_sellable():
+    """MB-5.1, 2026-07-28: the direct channel is open for business.
+
+    `active` is what `list_purchasable()` filters on, so this is the difference
+    between a company being able to buy a plan and `GET /billing/plans` handing
+    it an empty list. Turning any of these back off is a commercial decision,
+    not a refactor — it silently closes the channel.
+    """
     for plan in PLAN_CATALOGUE:
         if plan["model"] == "B":
-            assert plan["active"] is False, plan["plan_code"]
+            assert plan["active"] is True, plan["plan_code"]
 
 
 def test_prices_increase_with_capability():

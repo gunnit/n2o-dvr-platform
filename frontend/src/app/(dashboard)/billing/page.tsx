@@ -133,7 +133,14 @@ function CurrentPlanCard({ ent }: { ent: Entitlements }) {
         <p className="text-2xl font-semibold">{ent.plan_code}</p>
         <dl className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
           <Row label="Utenti inclusi" value={String(ent.seats)} />
-          <Row label="Aziende attive" value={formatLimit(ent.max_companies)} />
+          {/* A consultant plan meters client companies; a direct plan meters the
+              tenant's own sedi. `max_companies` is null on every B plan, so
+              showing that row to a direct tenant would read "illimitato". */}
+          {ent.account_type === "direct" ? (
+            <Row label="Sedi incluse" value={formatLimit(ent.max_sites)} />
+          ) : (
+            <Row label="Aziende attive" value={formatLimit(ent.max_companies)} />
+          )}
           <Row
             label="Crediti AI / anno"
             value={ent.ai_credits_year === null ? "illimitati" : String(ent.ai_credits_year)}
@@ -197,13 +204,20 @@ function UsageCard({ ent }: { ent: Entitlements }) {
               : undefined
           }
         />
-        <Meter
-          icon={<Users className="h-4 w-4" />}
-          label="Aziende attive"
-          used={ent.usage.active_companies}
-          total={ent.usage.max_companies}
-          percent={companies}
-        />
+        {/* The active-company meter is a Model A concept: it counts how many
+            *client* companies a studio touched this period. A direct tenant
+            documents one company — its own — so the meter would always read
+            "1 / ∞" and mean nothing. Sedi are the direct-channel limit, but
+            nothing meters them yet, so we show no bar rather than a fake one. */}
+        {ent.account_type !== "direct" && (
+          <Meter
+            icon={<Users className="h-4 w-4" />}
+            label="Aziende attive"
+            used={ent.usage.active_companies}
+            total={ent.usage.max_companies}
+            percent={companies}
+          />
+        )}
       </CardContent>
     </Card>
   );
@@ -381,7 +395,16 @@ function PlanPicker({
                 <p className="text-xs text-muted-foreground">all&apos;anno, IVA esclusa</p>
                 <ul className="mt-3 flex-1 space-y-1 text-sm text-muted-foreground">
                   <li>{plan.seats} utenti</li>
-                  <li>{formatLimit(plan.max_companies)} aziende attive</li>
+                  {/* The two channels meter different things: a consultant plan
+                      caps client companies, a direct plan caps the company's own
+                      sedi. Showing "illimitato aziende attive" on a Base plan —
+                      which is what max_companies=null renders as — would read as
+                      a promise it never made. */}
+                  <li>
+                    {plan.model === "B"
+                      ? `${formatLimit(plan.max_sites)} sedi`
+                      : `${formatLimit(plan.max_companies)} aziende attive`}
+                  </li>
                   <li>
                     {plan.ai_credits_year === null
                       ? "Crediti AI illimitati"
