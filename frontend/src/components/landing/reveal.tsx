@@ -14,12 +14,15 @@ export function Reveal({
   className,
   delay = 0,
   as: Tag = "div",
+  id,
 }: {
   children: ReactNode;
   className?: string;
   /** Stagger, in ms, applied once the element reveals. */
   delay?: number;
   as?: "div" | "section" | "article" | "figure";
+  /** Set when the revealed element is itself a scroll anchor. */
+  id?: string;
 }) {
   const ref = useRef<HTMLElement>(null);
   const skipMotion = useSkipMotion();
@@ -49,6 +52,7 @@ export function Reveal({
     <Tag
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ref={ref as any}
+      id={id}
       className={className}
       style={
         skipMotion

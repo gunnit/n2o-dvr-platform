@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
@@ -34,6 +34,23 @@ function isDirectPlan(planCode: string | null): boolean {
   return planCode?.startsWith("B_") ?? false;
 }
 
+/**
+ * FastAPI answers a validation failure with `detail` as a list of error
+ * objects, not a string. Passing that straight to `new Error()` used to put
+ * the literal text "[object Object]" in front of the customer.
+ */
+function readableDetail(detail: unknown, status: number): string {
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const first = detail.find(
+      (d): d is { msg: string } =>
+        typeof d === "object" && d !== null && typeof (d as { msg?: unknown }).msg === "string"
+    );
+    if (first) return first.msg;
+  }
+  return `Registrazione non riuscita (errore ${status}). Riprova o scrivici a support@dvr-sicurezza.it.`;
+}
+
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -46,10 +63,28 @@ function RegisterForm() {
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [reveal, setReveal] = useState(false);
+  const [caps, setCaps] = useState(false);
+  /** Which field the message is about, so it can be marked and focused. */
+  const [badField, setBadField] = useState<"password" | "confirm_password" | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  function fail(message: string, field: typeof badField = null) {
+    setError(message);
+    setBadField(field);
+    setLoading(false);
+    // Send the caret where the problem is; an error the customer has to go
+    // hunting for is barely better than no error.
+    if (field) {
+      const el = formRef.current?.elements.namedItem(field);
+      if (el instanceof HTMLInputElement) el.focus();
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
+    setBadField(null);
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
@@ -58,24 +93,21 @@ function RegisterForm() {
     const confirmPassword = formData.get("confirm_password") as string;
 
     if (password !== confirmPassword) {
-      setError("Le password non coincidono");
-      setLoading(false);
+      fail("Le due password non coincidono.", "confirm_password");
       return;
     }
 
     if (password.length < 8) {
-      setError("La password deve essere di almeno 8 caratteri");
-      setLoading(false);
+      fail("La password deve essere di almeno 8 caratteri.", "password");
       return;
     }
 
     // The backend refuses a direct signup without this anyway (INV-5); checking
     // here just avoids a round-trip to be told so.
     if (direct && formData.get("consenso_datore_lavoro") !== "on") {
-      setError(
+      fail(
         "Per attivare un piano per aziende devi confermare la dichiarazione del datore di lavoro."
       );
-      setLoading(false);
       return;
     }
 
@@ -100,7 +132,7 @@ function RegisterForm() {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail || `Errore: ${res.status}`);
+        throw new Error(readableDetail(body.detail, res.status));
       }
 
       // Sign in with the credentials just registered, so the customer goes
@@ -123,8 +155,11 @@ function RegisterForm() {
       router.push(target);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Errore nella registrazione");
-      setLoading(false);
+      fail(
+        err instanceof Error
+          ? err.message
+          : "Non è stato possibile completare la registrazione. Riprova."
+      );
     }
   }
 
@@ -136,8 +171,8 @@ function RegisterForm() {
         <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-md bg-primary/10 ring-1 ring-primary/20">
           <Shield className="h-5 w-5 text-primary" strokeWidth={1.75} />
         </div>
-        <h1 className="font-heading text-[26px] leading-[1.12] font-light tracking-[-0.015em] text-[#061b31]">
-          Crea Account
+        <h1 className="font-heading text-[30px] leading-[1.1] font-light tracking-[-0.025em] text-[#061b31]">
+          Crea un account
         </h1>
         <p className="type-body mt-2">
           {planName
@@ -153,7 +188,7 @@ function RegisterForm() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="full_name" className={labelClass}>
             Nome Completo *
@@ -182,16 +217,32 @@ function RegisterForm() {
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="password" className={labelClass}>
-              Password *
-            </Label>
+            <div className="flex items-baseline justify-between gap-2">
+              <Label htmlFor="password" className={labelClass}>
+                Password *
+              </Label>
+              {/* This form asks for the password twice; being able to read it
+                  back is what stops the mismatch error from happening. */}
+              <button
+                type="button"
+                onClick={() => setReveal((r) => !r)}
+                className="text-[11.5px] font-medium text-primary transition-colors hover:text-[#1b5594]"
+              >
+                {reveal ? "Nascondi" : "Mostra"}
+              </button>
+            </div>
             <Input
               id="password"
               name="password"
-              type="password"
+              type={reveal ? "text" : "password"}
               required
               autoComplete="new-password"
               placeholder="Minimo 8 caratteri"
+              aria-invalid={badField === "password" || undefined}
+              onKeyUp={(e) => {
+                const on = e.getModifierState?.("CapsLock") ?? false;
+                if (on !== caps) setCaps(on);
+              }}
             />
           </div>
           <div className="space-y-1.5">
@@ -201,12 +252,20 @@ function RegisterForm() {
             <Input
               id="confirm_password"
               name="confirm_password"
-              type="password"
+              type={reveal ? "text" : "password"}
               required
               autoComplete="new-password"
+              aria-invalid={badField === "confirm_password" || undefined}
+              onKeyUp={(e) => {
+                const on = e.getModifierState?.("CapsLock") ?? false;
+                if (on !== caps) setCaps(on);
+              }}
             />
           </div>
         </div>
+        {caps && (
+          <p className="-mt-1.5 text-[12px] text-[#9b6829]">Blocco maiuscole attivo.</p>
+        )}
         <div className="space-y-1.5">
           <Label htmlFor="organization_name" className={labelClass}>
             {direct ? "Ragione sociale dell'impresa" : "Studio o organizzazione"}
@@ -236,9 +295,37 @@ function RegisterForm() {
             </label>
           </div>
         )}
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <Button type="submit" className="mt-2 w-full" disabled={loading}>
-          {loading ? "Registrazione in corso..." : "Registrati"}
+        {/* role=alert so the message is announced. It used to be a bare <p>,
+            which a screen reader never mentioned at all. */}
+        {error && (
+          <div
+            role="alert"
+            className="flex items-start gap-2.5 rounded-md border border-[rgba(199,42,58,0.28)] bg-[rgba(199,42,58,0.05)] px-3.5 py-3"
+          >
+            <span className="mt-px flex shrink-0 text-[#c72a3a]">
+              <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+                <circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+                <path
+                  d="M7 6.4v3.4M7 4.1v.6"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </span>
+            <p className="text-[13px] leading-[1.45] text-[#c72a3a]">{error}</p>
+          </div>
+        )}
+        <Button
+          type="submit"
+          className="mt-2 flex w-full items-center justify-center gap-2.5"
+          disabled={loading}
+        >
+          {loading && (
+            <span className="h-[15px] w-[15px] animate-spin rounded-full border-[1.6px] border-white/32 border-t-white" />
+          )}
+          {loading ? "Registrazione in corso…" : "Registrati"}
         </Button>
       </form>
 

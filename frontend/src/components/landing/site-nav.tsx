@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 /**
@@ -35,6 +36,7 @@ const PRIORITY_CLASS: Record<string, string> = {
 
 export function SiteNav({ variant = "overlay" }: { variant?: Variant }) {
   const onLanding = variant === "overlay";
+  const pathname = usePathname();
   // Overlay starts transparent; solid is never anything else.
   const [solid, setSolid] = useState(variant === "solid");
 
@@ -106,14 +108,21 @@ export function SiteNav({ variant = "overlay" }: { variant?: Variant }) {
             </a>
           ))}
           {/* Hidden on phones only because the CTA beside it already goes to
-              /prezzi — dropping the duplicate is what buys the CTA room to fit. */}
+              /prezzi — dropping the duplicate is what buys the CTA room to fit.
+              It is also the only nav item that can be the current page, so it
+              carries the wayfinding state for the whole bar. */}
           <Link
             href="/prezzi"
+            aria-current={pathname === "/prezzi" ? "page" : undefined}
             className={[
               "hidden text-[14px] whitespace-nowrap transition-colors sm:inline-flex",
-              frosted
-                ? "text-[#64748d] hover:text-[#061b31]"
-                : "text-white/75 hover:text-white",
+              pathname === "/prezzi"
+                ? frosted
+                  ? "font-medium text-[#061b31]"
+                  : "font-medium text-white"
+                : frosted
+                  ? "text-[#64748d] hover:text-[#061b31]"
+                  : "text-white/75 hover:text-white",
             ].join(" ")}
           >
             Prezzi

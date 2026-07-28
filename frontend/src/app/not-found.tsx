@@ -18,11 +18,22 @@ export default function NotFound() {
             L&apos;indirizzo richiesto non esiste o &egrave; stato spostato.
           </p>
         </div>
-        <Link href="/dashboard">
-          <Button className="h-10 w-full rounded-md bg-primary text-sm font-medium text-white hover:bg-[#1b5594] shadow-stripe-ambient">
-            Torna alla dashboard
-          </Button>
-        </Link>
+        {/* Two ways out, because this page is reached from both sides of the
+            login wall. Sending everyone to /dashboard bounced a logged-out
+            visitor who mistyped a public URL straight back to /login. */}
+        <div className="flex flex-col gap-2.5">
+          <Link href="/dashboard">
+            <Button className="shadow-stripe-ambient h-10 w-full rounded-md bg-primary text-sm font-medium text-white hover:bg-[#1b5594]">
+              Torna alla dashboard
+            </Button>
+          </Link>
+          <Link
+            href="/"
+            className="flex h-10 w-full items-center justify-center rounded-md border border-[#e5edf5] bg-white text-sm font-medium text-primary transition-colors hover:border-primary hover:bg-[#f6f9fc]"
+          >
+            Vai al sito pubblico
+          </Link>
+        </div>
       </div>
     </div>
   );

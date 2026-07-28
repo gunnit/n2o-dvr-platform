@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Check } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -123,7 +124,33 @@ const FATTURAZIONE: { label: string; title: string; body: string }[] = [
 const EYEBROW = "text-[12px] font-medium tracking-[0.16em] uppercase";
 const SECTION_H2 =
   "font-heading text-[clamp(1.9rem,3.2vw,2.6rem)] leading-[1.1] font-light tracking-[-0.028em] text-balance";
-const DASH_ITEM = "flex gap-[11px] text-[14.5px] text-[#273951]";
+/** Card and sub-section heads. Weight 300 like every other heading here. */
+const CARD_H3 =
+  "font-heading text-[23px] font-light leading-[1.28] tracking-[-0.018em] text-[#061b31]";
+
+/**
+ * "What you get" lists. A check, not an em dash — /prezzi's comparison table
+ * spends "—" on *not* included, and the two pages have to agree on the glyph.
+ */
+function FeatureList({ items, className }: { items: string[]; className?: string }) {
+  return (
+    <ul className={`grid gap-[11px] ${className ?? "mt-6"}`}>
+      {items.map((item) => (
+        <li
+          key={item}
+          className="flex gap-[11px] text-[14.5px] leading-[1.5] text-[#273951]"
+        >
+          <Check
+            aria-hidden
+            strokeWidth={2.5}
+            className="mt-[4px] size-[13px] shrink-0 text-[#003d74]"
+          />
+          {item}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export default async function Home() {
   const session = await auth();
@@ -263,7 +290,7 @@ export default async function Home() {
                     >
                       1
                     </span>
-                    <h3 className="font-heading text-[23px] font-normal tracking-[-0.018em] text-[#061b31]">
+                    <h3 className={CARD_H3}>
                       Sopralluogo digitale
                     </h3>
                   </div>
@@ -273,20 +300,13 @@ export default async function Home() {
                     guida la visita. Niente appunti da trascrivere al rientro: i
                     dati nascono già ordinati e collegati all&apos;azienda.
                   </p>
-                  <ul className="mt-6 grid gap-2.5">
-                    {[
+                  <FeatureList
+                    items={[
                       "Autofill dell'anagrafica dalla sola P.IVA",
                       "Scheda di sicurezza PDF → sostanza chimica strutturata",
                       "Foto del reparto → inventario attrezzature",
-                    ].map((item) => (
-                      <li key={item} className={DASH_ITEM}>
-                        <span aria-hidden className="text-[#003d74]">
-                          —
-                        </span>
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
+                    ]}
+                  />
                 </div>
                 <ParallaxImage
                   src="/landing/sopralluogo.webp"
@@ -310,7 +330,7 @@ export default async function Home() {
                     >
                       2
                     </span>
-                    <h3 className="font-heading text-[23px] font-normal tracking-[-0.018em] text-[#061b31]">
+                    <h3 className={CARD_H3}>
                       Valutazioni e calcoli
                     </h3>
                   </div>
@@ -369,7 +389,7 @@ export default async function Home() {
                     >
                       3
                     </span>
-                    <h3 className="font-heading text-[23px] font-normal tracking-[-0.018em] text-[#061b31]">
+                    <h3 className={CARD_H3}>
                       Generazione e revisione
                     </h3>
                   </div>
@@ -432,7 +452,10 @@ export default async function Home() {
                   <p className="text-[11.5px] font-semibold tracking-[0.12em] text-[#003d74] uppercase">
                     Per consulenti e studi
                   </p>
-                  <h3 className="mt-3 font-heading text-[24px] font-normal tracking-[-0.02em] text-[#061b31]">
+                  {/* min-h of two line boxes: these two cards sit side by side
+                      and one title wraps to two lines, which used to push its
+                      whole column — body, bullets — 36px out of step. */}
+                  <h3 className={`${CARD_H3} mt-3 md:min-h-[2lh]`}>
                     Produci per tutto il tuo portafoglio clienti
                   </h3>
                   <p className="mt-3.5 text-[15px] leading-[1.62] text-[#64748d]">
@@ -440,21 +463,14 @@ export default async function Home() {
                     P.IVA e nominativo RSPP stampati su ogni documento. La
                     piattaforma resta invisibile al cliente finale.
                   </p>
-                  <ul className="mt-6 grid gap-[11px]">
-                    {[
+                  <FeatureList
+                    items={[
                       "Tutti e 17 i tipi di documento su ogni piano",
                       "Da 15 a 200+ aziende clienti attive",
                       "Migrazione dei tuoi template, white-label, API",
                       "Portali self-service per i clienti (da Network)",
-                    ].map((item) => (
-                      <li key={item} className={DASH_ITEM}>
-                        <span aria-hidden className="text-[#003d74]">
-                          —
-                        </span>
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
+                    ]}
+                  />
                   <div className="mt-auto flex items-baseline gap-3.5 pt-7">
                     <Link
                       href="/prezzi#consulenti"
@@ -473,11 +489,16 @@ export default async function Home() {
                 </div>
               </Reveal>
 
+              {/* The anchor belongs on the card, not on its photo: the id had
+                  landed on the inner image box, so "Sono un'azienda" in the
+                  hero scrolled 312px past the section heading to the top of a
+                  picture. The article already carried the scroll-mt for it. */}
               <Reveal
                 as="article"
+                id="aziende"
                 className="flex scroll-mt-[90px] flex-col overflow-hidden rounded-[10px] border border-[#e5edf5] bg-white shadow-stripe-standard"
               >
-                <div id="aziende" className="h-[250px] scroll-mt-[90px] overflow-hidden bg-[#061b31]">
+                <div className="h-[250px] overflow-hidden bg-[#061b31]">
                   <Image
                     src="/landing/ruolo-datore.webp"
                     alt="Datore di lavoro davanti alla propria officina"
@@ -492,7 +513,10 @@ export default async function Home() {
                   <p className="text-[11.5px] font-semibold tracking-[0.12em] text-[#003d74] uppercase">
                     Per aziende
                   </p>
-                  <h3 className="mt-3 font-heading text-[24px] font-normal tracking-[-0.02em] text-[#061b31]">
+                  {/* min-h of two line boxes: these two cards sit side by side
+                      and one title wraps to two lines, which used to push its
+                      whole column — body, bullets — 36px out of step. */}
+                  <h3 className={`${CARD_H3} mt-3 md:min-h-[2lh]`}>
                     Tieni aggiornato il tuo fascicolo, non rifarlo ogni volta
                   </h3>
                   <p className="mt-3.5 text-[15px] leading-[1.62] text-[#64748d]">
@@ -500,21 +524,14 @@ export default async function Home() {
                     calcoli e testi; un RSPP certificato rivede e controfirma su
                     richiesta. Il datore di lavoro resta il responsabile e lo sa.
                   </p>
-                  <ul className="mt-6 grid gap-[11px]">
-                    {[
+                  <FeatureList
+                    items={[
                       "Revisioni e rigenerazioni illimitate",
                       "Promemoria di aggiornamento art. 29 c.3",
                       "Data certa: marca temporale e deposito PEC",
                       "Revisione RSPP assistita inclusa da Plus",
-                    ].map((item) => (
-                      <li key={item} className={DASH_ITEM}>
-                        <span aria-hidden className="text-[#003d74]">
-                          —
-                        </span>
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
+                    ]}
+                  />
                   <div className="mt-auto flex items-baseline gap-3.5 pt-7">
                     <Link
                       href="/prezzi#aziende"
