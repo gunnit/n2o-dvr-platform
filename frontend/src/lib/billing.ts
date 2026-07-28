@@ -201,9 +201,31 @@ export function formatDateTime(iso: string | null): string {
   });
 }
 
+/**
+ * Options for `NUMBER_FORMAT`, widened by hand.
+ *
+ * `minimumGroupingDigits` is ES2023 Intl and this project's TypeScript lib
+ * still types `NumberFormatOptions` without it, so the literal is declared
+ * against an extended type rather than cast — a cast would also silence a
+ * genuine typo in one of the neighbouring keys.
+ */
+const GROUPED_IT: Intl.NumberFormatOptions & { minimumGroupingDigits?: number } = {
+  useGrouping: true,
+  // Italian CLDR sets this to 2, so a bare it-IT formatter renders 2000 as
+  // "2000" but 10000 as "10.000". Every credit figure written down elsewhere —
+  // the pack names from the catalogue ("2.000 crediti"), `docs/pricing`, the
+  // public price list — groups from four digits, and the mismatch surfaced as a
+  // card titled "2.000 crediti" above a button reading "Acquista 2000 crediti".
+  minimumGroupingDigits: 1,
+};
+
+// Constructing an Intl formatter is not free and this runs once per figure on
+// a screen full of them.
+const NUMBER_FORMAT = new Intl.NumberFormat("it-IT", GROUPED_IT);
+
 /** 1240 → "1.240". Thousands separators make four-digit balances readable. */
 export function formatNumber(value: number): string {
-  return new Intl.NumberFormat("it-IT").format(value);
+  return NUMBER_FORMAT.format(value);
 }
 
 /**

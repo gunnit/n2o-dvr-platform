@@ -173,7 +173,7 @@ export function CreditTracker({
                       <div className="flex items-baseline justify-between gap-3 text-sm">
                         <span className="min-w-0 truncate">{creditKindLabel(row.kind)}</span>
                         <span className="shrink-0 tabular-nums text-muted-foreground">
-                          {formatNumber(row.credits)} cr · {row.actions}{" "}
+                          {formatNumber(row.credits)} cr · {formatNumber(row.actions)}{" "}
                           {row.actions === 1 ? "azione" : "azioni"}
                         </span>
                       </div>

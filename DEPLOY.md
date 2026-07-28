@@ -130,26 +130,36 @@ Three things must happen, in this order, to switch it on. **Step 1 needs the
 PayPal credentials, so a human has to run it** — it cannot be done from a coding
 session, which must not handle API keys.
 
-1. **Confirm the credentials on `n2o-dvr-api` are the sandbox pair.** They are
-   already set — probed 2026-07-28: `POST /billing/subscribe` returns `409`
-   ("piano non acquistabile") rather than `503` ("Pagamenti non configurati"),
-   and the 503 guard runs *before* the plan lookup, so a non-503 proves
-   `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` are both non-empty.
+1. **Replace the credentials on `n2o-dvr-api` with the sandbox pair.**
+   ⚠️ **Confirmed wrong as of 2026-07-29** — this is no longer a "check whether".
+   The keys set on the service are non-empty but do not authenticate: production
+   logs show
 
-   What is **not** proven is which environment they belong to. They were set
-   while `PAYPAL_ENV=live`; if they are live-merchant keys they will not
-   authenticate against `api-m.sandbox.paypal.com` and every checkout returns
-   502. One command from the Render shell settles it:
+   ```
+   httpx.HTTPStatusError: Client error '401 Unauthorized' for url
+   'https://api-m.sandbox.paypal.com/v1/oauth2/token'
+   ```
+
+   which is exactly the failure this step warned about — they were set while
+   `PAYPAL_ENV=live`, so they are live-merchant keys being offered to the
+   sandbox host. The sandbox pair in `backend/.env` **does** authenticate
+   (verified against `/v1/oauth2/token`, app id `APP-0BY2542729361932X`), so the
+   fix is to copy those two values into Render → `n2o-dvr-api` → Environment.
+   Both are `sync: false` in `render.yaml` precisely so they never land in git,
+   and a coding session must not handle them — this step is yours.
+
+   Until it is done, **every** payment path is dead, not just subscriptions:
+   `POST /billing/credits/checkout` cannot reach PayPal either, so credit packs
+   fail alongside plans.
+
+   Verify from the Render shell afterwards:
 
 ```bash
 PYTHONPATH=. python -m scripts.paypal_check
 ```
 
    Expect `env=sandbox`, a token, and the product list including
-   `PROD-59E111111A742631C  N2O DVR Platform`. If it fails to authenticate,
-   replace both keys with the sandbox pair from `backend/.env` (Render dashboard
-   → Environment; both are `sync: false` in `render.yaml` precisely so they
-   never land in git).
+   `PROD-59E111111A742631C  N2O DVR Platform`.
 
    `PAYPAL_ENV` (`sandbox`), `ENTITLEMENTS_ENFORCE` (`true`) and `FRONTEND_URL`
    (`https://dvr-sicurezza.it`) are pinned in `render.yaml` — do **not** override
@@ -295,7 +305,8 @@ tenants or reset them with `POST /billing/admin/organizations/{id}/plan`.
 | Pre-deploy fails: `No module named 'psycopg2'` | `env.py` not using `_normalize_async_url()`. See §3. |
 | Pre-deploy fails: `Multiple head revisions are present for given argument 'head'` | Parallel migration branches. Run `PYTHONPATH=. alembic merge -m "merge" <head1> <head2>` locally + commit. |
 | Next.js build fails: `useSearchParams() should be wrapped in a suspense boundary` | Any page reading `useSearchParams` must be wrapped in `<Suspense>` (client component). `/login`, `/register` and `/billing` all do this. |
-| `/billing` shows "Nessun piano acquistabile online" | Expected until §4b is done — no `paypal_plan_id` on the plan rows. |
+| `/billing` shows the price list with every button disabled | Expected until §4b is done — no `paypal_plan_id` on the plan rows, so `GET /billing/plans` is `[]` and the page falls back to the static catalogue. |
+| `POST /billing/credits/checkout` returns 502 ("PayPal non ha potuto avviare il pagamento") | The PayPal credentials on `n2o-dvr-api` do not authenticate. Check the API log for `paypal: credentials rejected (HTTP 401)`. See §4b step 1. |
 | Customer paid on PayPal but the plan never activated | `PAYPAL_WEBHOOK_ID` unset or wrong, so signature verification fails closed. See §4b step 3. |
 | Landing scroll animation frozen in an automated browser | Not a bug: the fascicolo stack is driven by `requestAnimationFrame`, which is paused while `document.visibilityState === "hidden"`. Verify the geometry with `node frontend/scripts/check-stack-geometry.mjs` instead. |
 | Frontend returns 502 for ~2 min after deploy | Normal Render cold-start; uvicorn/next is binding the port. |

@@ -14,10 +14,10 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { PLAN_DISPLAY_NAMES } from "@/components/landing/pricing-data";
 import { Meter, Notice, StatusPill, planDisplayName } from "@/components/billing/billing-ui";
 import { CreditTracker } from "@/components/billing/credit-tracker";
 import { CreditPacksPanel } from "@/components/billing/credit-packs-panel";
+import { PlanPriceList } from "@/components/billing/plan-price-list";
 import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
 import { useApi } from "@/hooks/use-api";
 import { useCreditPacks, usePlans } from "@/hooks/use-entitlements";
@@ -90,8 +90,14 @@ function BillingPageInner() {
     <div className="space-y-8">
       <div>
         <h1 className="type-h1">Abbonamento e crediti</h1>
+        {/* The subtitle used to promise a credit tracker unconditionally, but
+            everything credit-related is gated on `subscribed` — so a tenant
+            without a plan read "quanto hai consumato" above a page that showed
+            no consumption anywhere. */}
         <p className="type-body mt-2">
-          Il tuo piano, quanto hai consumato e come aggiungere crediti AI
+          {entitlements?.subscribed
+            ? "Il tuo piano, quanto hai consumato e come aggiungere crediti AI"
+            : "Attiva un piano per generare documenti e usare le funzioni AI"}
         </p>
       </div>
 
@@ -112,6 +118,14 @@ function BillingPageInner() {
         <>
           <PlanSummary ent={entitlements} />
 
+          {/* Order follows what the reader has to do next. With a plan, the
+              question is "how many credits are left"; without one, it is "what
+              do I buy" — so the picker leads and the credit sections, which are
+              all gated behind a subscription anyway, follow it. */}
+          {!entitlements.subscribed && canManage && (
+            <PlanPicker ent={entitlements} onChanged={refresh} preselected={piano} />
+          )}
+
           {/* Consumption against a plan the tenant does not hold is not a
               meaningful reading — the meters would show "0 / ∞" and claim
               "nessun limite su questo piano" for a plan that isn't there. */}
@@ -131,20 +145,28 @@ function BillingPageInner() {
                 }
               />
               <PlanLimits ent={entitlements} />
-              <div id="crediti" className="scroll-mt-24">
-                <CreditPacksPanel
-                  ent={entitlements}
-                  packs={packs}
-                  purchases={purchases}
-                  canBuy={canManage}
-                />
-              </div>
             </>
           )}
 
-          {canManage ? (
+          {/* Shown with or without a plan. The panel greys itself out and says
+              why (`blockedReason`), which answers "can I just buy credits
+              instead of a plan?" on the page rather than in a support ticket. */}
+          {canManage && (
+            <div id="crediti" className="scroll-mt-24">
+              <CreditPacksPanel
+                ent={entitlements}
+                packs={packs}
+                purchases={purchases}
+                canBuy={canManage}
+              />
+            </div>
+          )}
+
+          {entitlements.subscribed && canManage && (
             <PlanPicker ent={entitlements} onChanged={refresh} preselected={piano} />
-          ) : (
+          )}
+
+          {!canManage && (
             <p className="text-sm text-muted-foreground">
               Solo un amministratore dell&apos;organizzazione può modificare
               l&apos;abbonamento o acquistare crediti.
@@ -251,19 +273,34 @@ function PlanSummary({ ent }: { ent: Entitlements }) {
             )}
           </div>
         </div>
-        <StatusPill status={ent.status} />
+        {/* The pill reads "Nessun piano attivo" for `status: none`, which is
+            word-for-word what the heading beside it already says. Two identical
+            labels an inch apart look like a rendering bug, so the pill earns its
+            place only once there is a subscription whose state it can report. */}
+        {ent.subscribed && <StatusPill status={ent.status} />}
       </div>
 
       <div className="space-y-3 px-6 pb-6">
         {/* A tenant that has never purchased has no plan limits to report —
             listing "illimitato" against every row would describe rights it does
-            not hold. Show what it means instead. */}
+            not hold. Say what the absence *costs* instead: repeating "non hai un
+            abbonamento" under a heading that just said so tells them nothing
+            they can act on. */}
         {!ent.subscribed && (
           <Notice tone="warn">
-            Non hai ancora attivato un abbonamento.{" "}
-            {ent.enforced
-              ? "Attiva un piano qui sotto per generare i documenti."
-              : "Puoi già usare la piattaforma: durante questa fase nessuna operazione viene bloccata. Attiva un piano qui sotto per mettere in regola l'abbonamento."}
+            {ent.enforced ? (
+              <>
+                Senza un piano attivo non puoi <strong>generare nuovi documenti</strong>,
+                aggiungere aziende o usare le funzioni AI. Consultare e scaricare i
+                documenti già generati resta sempre possibile.
+              </>
+            ) : (
+              <>
+                Puoi già usare la piattaforma: durante questa fase nessuna operazione
+                viene bloccata. Attiva un piano per mettere in regola
+                l&apos;abbonamento.
+              </>
+            )}
           </Notice>
         )}
         {ent.status === "past_due" && (
@@ -450,61 +487,17 @@ function PlanPicker({
 
   if (loading) return null;
   if (plans.length === 0) {
-    // The customer may have arrived here straight from "Attiva Base" on the
-    // public price list. Dropping that intent silently — which is what a bare
-    // "nessun piano disponibile" does — reads as if the click did nothing.
-    // Name the plan back to them and hand over a route that still works.
-    const chosen = PLAN_DISPLAY_NAMES[preselected ?? ""];
-    const subject = encodeURIComponent(
-      chosen
-        ? `Attivazione piano ${chosen} — N2O DVR`
-        : "Attivazione abbonamento — N2O DVR"
-    );
+    // `/billing/plans` only lists what PayPal can sell — a row needs a
+    // `paypal_plan_id`. Empty means the deployment has not been provisioned
+    // against a merchant, not that the product has no plans, so show the price
+    // list and say why the buttons are off rather than leaving the customer
+    // with a mailto and no idea what anything costs.
     return (
-      <div className="rounded-lg border bg-card">
-        <div className="border-b p-6">
-          <h2 className="font-heading text-[15px] font-medium">
-            {chosen ? `Attivazione del piano ${chosen}` : "Attivazione abbonamento"}
-          </h2>
-        </div>
-        <div className="space-y-3 p-6 text-sm text-muted-foreground">
-          {chosen ? (
-            <p>
-              Hai scelto il piano <strong className="text-foreground">{chosen}</strong>. Il
-              pagamento online non è al momento attivo su questo ambiente, quindi
-              non possiamo portarti su PayPal.
-            </p>
-          ) : (
-            <p>Il pagamento online non è al momento attivo su questo ambiente.</p>
-          )}
-          <p>
-            Scrivici a{" "}
-            <a
-              className="text-primary hover:underline"
-              href={`mailto:support@dvr-sicurezza.it?subject=${subject}`}
-            >
-              support@dvr-sicurezza.it
-            </a>{" "}
-            e attiviamo il piano per te.
-            {/* This sentence used to promise "puoi continuare a usare la
-                piattaforma senza limitazioni" unconditionally. That was written
-                during the shadow window and became false the moment
-                ENTITLEMENTS_ENFORCE went on: an unsubscribed tenant is refused
-                document generation and azienda creation. Telling someone they
-                are unrestricted while the server 402s them is the worst
-                possible combination, so the claim now follows `enforced`. */}
-            {ent.enforced ? (
-              <>
-                {" "}
-                Nel frattempo puoi consultare e scaricare i documenti già
-                generati, ma non crearne di nuovi.
-              </>
-            ) : (
-              <> Nel frattempo puoi continuare a usare la piattaforma senza limitazioni.</>
-            )}
-          </p>
-        </div>
-      </div>
+      <PlanPriceList
+        accountType={ent.account_type}
+        currentPlanCode={ent.plan_code}
+        preselected={preselected}
+      />
     );
   }
 

@@ -146,7 +146,13 @@ export function CreditPacksPanel({
                 {busy === pack.pack_code && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Acquista {formatNumber(pack.credits)} crediti
+                {/* The count is the card's heading two lines up; repeating it
+                    here only gave it a second chance to be formatted
+                    differently. The accessible name keeps it, because three
+                    buttons all reading "Acquista" are indistinguishable to
+                    anyone navigating by button list. */}
+                <span aria-hidden="true">Acquista</span>
+                <span className="sr-only">Acquista {pack.display_name}</span>
               </Button>
             </div>
           ))}

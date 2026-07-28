@@ -5,9 +5,7 @@ read from Postgres, joined to PayPal via ``plans.paypal_plan_id``. The webhook
 is the sole writer of ``subscriptions.status`` and ``current_period_*`` — no
 other code path may set them.
 
-**Only the auth layer is implemented.** It exists so the configured sandbox
-credentials are verifiable from the app (see ``scripts/paypal_check.py``).
-The commerce calls arrive with their phases:
+What lives here:
 
 * ``MB-3.2`` — create a subscription for an organization, return the approval
   link the operator sends to the customer.
@@ -19,6 +17,13 @@ The commerce calls arrive with their phases:
 * ``MB-4.4`` — cancel / revise. PayPal has no hosted billing portal equivalent
   to Stripe's, so MB-4.4 becomes our own screen calling
   ``/v1/billing/subscriptions/{id}/{cancel,revise}``.
+* ``D-14`` — Orders v2, for one-time credit packs.
+
+**Everything raised out of this module is ``PayPalError`` or
+``PayPalNotConfigured``.** The endpoints in ``app.api.v1.billing`` catch the
+former to answer 502; anything else — an ``httpx`` status or transport error —
+escapes as a 500, which on the credit path also strands the ``pending``
+``credit_purchases`` row written before checkout calls out.
 
 Prices are exclusive of IVA 22%; PayPal Subscriptions applies tax via the
 plan's ``taxes`` block. PayPal does not emit Italian e-invoices (SdI) —
@@ -52,6 +57,9 @@ _token_expires_at: float = 0.0
 _token_lock = asyncio.Lock()
 
 
+_TOKEN_PATH = "/v1/oauth2/token"
+
+
 class PayPalNotConfigured(RuntimeError):
     """Raised when a PayPal call is attempted without credentials.
 
@@ -59,6 +67,22 @@ class PayPalNotConfigured(RuntimeError):
     billing feature is dormant (the default in dev and CI), not that PayPal
     rejected us.
     """
+
+
+class PayPalError(RuntimeError):
+    """A PayPal call failed — bad status, or the request never got there.
+
+    The single exception type every caller in ``app.api.v1.billing`` catches, so
+    everything raised out of this module has to be one: an escaping
+    ``httpx.HTTPStatusError`` becomes an unhandled 500 rather than the 502 the
+    endpoints are written to return. ``status_code`` is 0 when the request
+    failed before PayPal answered.
+    """
+
+    def __init__(self, method: str, path: str, status_code: int, body: str) -> None:
+        self.status_code = status_code
+        self.body = body
+        super().__init__(f"{method} {path} -> HTTP {status_code}: {body[:500]}")
 
 
 def is_configured() -> bool:
@@ -82,14 +106,36 @@ async def get_access_token(force_refresh: bool = False) -> str:
         if not force_refresh and _token and time.monotonic() < _token_expires_at:
             return _token
 
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            resp = await client.post(
-                f"{settings.PAYPAL_API_BASE}/v1/oauth2/token",
-                auth=(settings.PAYPAL_CLIENT_ID, settings.PAYPAL_CLIENT_SECRET),
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-                data={"grant_type": "client_credentials"},
-            )
-        resp.raise_for_status()
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                resp = await client.post(
+                    f"{settings.PAYPAL_API_BASE}/v1/oauth2/token",
+                    auth=(settings.PAYPAL_CLIENT_ID, settings.PAYPAL_CLIENT_SECRET),
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    data={"grant_type": "client_credentials"},
+                )
+        except httpx.RequestError as exc:
+            # Never leave a transport failure as an httpx exception: every caller
+            # catches PayPalError, so an httpx one escapes as an unhandled 500 —
+            # and in `checkout_credits` it also strands the `pending` purchase
+            # row the endpoint writes before calling out.
+            raise PayPalError(
+                "POST", _TOKEN_PATH, 0, f"{type(exc).__name__}: {exc}"
+            ) from exc
+
+        if resp.status_code >= 300:
+            if resp.status_code in (401, 403):
+                # Not transient and not worth retrying: the configured client id
+                # and secret are wrong for this environment. The commonest cause
+                # is live-merchant keys pointed at the sandbox host (or the
+                # reverse), which authenticates nowhere.
+                log.error(
+                    "paypal: credentials rejected (HTTP %s) by %s — check that "
+                    "PAYPAL_CLIENT_ID/PAYPAL_CLIENT_SECRET belong to the %s app",
+                    resp.status_code, settings.PAYPAL_API_BASE, settings.PAYPAL_ENV,
+                )
+            raise PayPalError("POST", _TOKEN_PATH, resp.status_code, resp.text)
+
         payload = resp.json()
 
         _token = payload["access_token"]
@@ -142,23 +188,19 @@ async def request(
         )
 
     token = await get_access_token()
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await _send(client, token)
-        if resp.status_code == 401:
-            resp = await _send(client, await get_access_token(force_refresh=True))
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await _send(client, token)
+            if resp.status_code == 401:
+                resp = await _send(client, await get_access_token(force_refresh=True))
+    except httpx.RequestError as exc:
+        # Same contract as the token fetch: callers handle PayPalError, so a
+        # timeout or DNS failure must arrive as one too.
+        raise PayPalError(method, path, 0, f"{type(exc).__name__}: {exc}") from exc
     return resp
 
 
 # --- Subscriptions ---------------------------------------------------------
-
-
-class PayPalError(RuntimeError):
-    """A PayPal call returned a non-success status."""
-
-    def __init__(self, method: str, path: str, status_code: int, body: str) -> None:
-        self.status_code = status_code
-        self.body = body
-        super().__init__(f"{method} {path} -> HTTP {status_code}: {body[:500]}")
 
 
 async def _json(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
