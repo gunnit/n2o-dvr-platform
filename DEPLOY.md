@@ -130,15 +130,26 @@ Three things must happen, in this order, to switch it on. **Step 1 needs the
 PayPal credentials, so a human has to run it** — it cannot be done from a coding
 session, which must not handle API keys.
 
-1. **Set the sandbox credentials on `n2o-dvr-api` only** (Render dashboard →
-   Environment). Both are `sync: false` in `render.yaml` precisely so they never
-   land in git. Read the values from `credentials/paypal-sandbox.json`
-   (gitignored) or the PayPal developer dashboard → Apps → *N2O DVR Platform*:
+1. **Confirm the credentials on `n2o-dvr-api` are the sandbox pair.** They are
+   already set — probed 2026-07-28: `POST /billing/subscribe` returns `409`
+   ("piano non acquistabile") rather than `503` ("Pagamenti non configurati"),
+   and the 503 guard runs *before* the plan lookup, so a non-503 proves
+   `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` are both non-empty.
 
-   | Key | Value |
-   |---|---|
-   | `PAYPAL_CLIENT_ID` | from the **sandbox** REST app |
-   | `PAYPAL_CLIENT_SECRET` | ditto |
+   What is **not** proven is which environment they belong to. They were set
+   while `PAYPAL_ENV=live`; if they are live-merchant keys they will not
+   authenticate against `api-m.sandbox.paypal.com` and every checkout returns
+   502. One command from the Render shell settles it:
+
+```bash
+PYTHONPATH=. python -m scripts.paypal_check
+```
+
+   Expect `env=sandbox`, a token, and the product list including
+   `PROD-59E111111A742631C  N2O DVR Platform`. If it fails to authenticate,
+   replace both keys with the sandbox pair from `backend/.env` (Render dashboard
+   → Environment; both are `sync: false` in `render.yaml` precisely so they
+   never land in git).
 
    `PAYPAL_ENV` (`sandbox`), `ENTITLEMENTS_ENFORCE` (`true`) and `FRONTEND_URL`
    (`https://dvr-sicurezza.it`) are pinned in `render.yaml` — do **not** override

@@ -155,6 +155,26 @@ All project docs are branded with Niuexa header/footer, version 1.0, April 2026.
 
 **Phase: Deployed to production infra** (2026-04-17). Full stack live on Render (Frankfurt): frontend, API, Celery worker, Postgres, Redis. See `DEPLOY.md` for the runbook, live URLs, and the non-obvious `render.yaml` quirks discovered during first deploy (retired postgres plan, rootDir, PYTHONPATH for alembic, asyncpg URL normalization, Next.js Suspense boundary).
 
+**Monetization is live and enforcing** (2026-07-28). The platform sells plans —
+consultant (`A_*`) and direct-company (`B_*`) — through PayPal, and
+`ENTITLEMENTS_ENFORCE=true` means plan limits actually return `402`. Three things
+to know before touching any endpoint that creates data:
+
+- **Every write path that produces new work needs an entitlement gate.** Document
+  generation, azienda creation, user invites and all 13 AI endpoints are gated;
+  `backend/tests/test_billing_enforcement.py` fails the build if a new bypass
+  appears. Read and download paths are deliberately *never* gated — D.Lgs.
+  81/2008 retention means a lapsed tenant keeps its existing documents.
+- **`ai_credits_year = None` means "pooled and unmetered" (Enterprise), not
+  "no credits".** Use `0` for a tenant that bought nothing. Getting this backwards
+  hands non-payers unlimited OpenAI spend.
+- **Production runs PayPal in *sandbox* on purpose**, so the funnel can be walked
+  with test money. `plans.paypal_plan_id` therefore holds sandbox ids, and going
+  live requires reissuing them — `DEPLOY.md` §4b-bis, not an env-var flip.
+
+Plan/limit source of truth: `backend/app/billing/plan_catalogue.py` (mirrors
+`docs/pricing/`). Phase history and deviations: `docs/build/MONETIZATION-BUILD-PLAN.md`.
+
 ## Live URLs
 
 - **Frontend**: https://dvr-sicurezza.it (canonical custom domain) — also https://www.dvr-sicurezza.it and https://n2o-dvr-frontend.onrender.com (Render fallback)
