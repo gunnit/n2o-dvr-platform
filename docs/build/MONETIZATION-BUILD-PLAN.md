@@ -240,7 +240,7 @@ Run against a database seeded to the exact production shape (6 orgs / 16 aziende
 | 2 | MB-2.3 active-company metering at completion | DONE | `record_activation_for_azienda` in `tasks/document_tasks.py` |
 | 2 | MB-2.4 AI-credit metering at 9 routers | DONE | `metered()` / `spend_credits` across 11 routers |
 | 2 | MB-2.5 seat limit on user invite | DONE | `users.py` `ensure_seat_available` |
-| 2 | MB-2.6 flip `ENTITLEMENTS_ENFORCE=true` | **TODO — needs the shadow window** | Blocked on 2–3 days of `WOULD_402` logs from production, per the Phase-1/2 sequencing note. Do not flip blind (INV-1) |
+| 2 | MB-2.6 flip `ENTITLEMENTS_ENFORCE=true` | **DONE 2026-07-28** | `render.yaml` `"true"`. The shadow window was abandoned as evidence, not satisfied — see **Deviation D-10** |
 | **GATE 2** | meters enforced; N2O (founding) fully unaffected; 402 paths have tests | — | |
 | 3 First € | MB-3.1 admin set-plan/mark-paid endpoint | DONE | `POST /billing/admin/organizations/{id}/plan` |
 | 3 | MB-3.2 PayPal subscription + approval link | DONE | folded into MB-4.2 — one `/billing/subscribe` serves both |
@@ -311,6 +311,66 @@ of Phase 5. Delivered:
   revisiting the INV-1 fallback, which is a deliberate design decision — hence
   flagged, not silently changed.
 | **GATE 5 / CAC GATE** | one paid-channel test; scale only if CAC ≲ €320 (Plus), else raise Base to €690 | — | |
+| 6 Make it bite | MB-6.1 split the INV-1 fallback + grandfather backfill | DONE | `_data_gap_entitlements` vs `_unsubscribed_entitlements`; migration `e7f8a9b0c1d2` |
+| 6 | MB-6.2 close the three completion bypasses | DONE | `_ensure_new_version_allowed` on restore / sync-from-gdoc / save-edited-version + `test_direct_completion_paths_are_gated_not_just_metered` |
+| 6 | MB-6.3 gate `create_azienda` | DONE | `_ensure_can_add_azienda`; **first and only call site of `ensure_site_slot`**, which had been sold and unenforced since Phase 0 |
+| 6 | MB-6.4 startup warning on unescapable paywall | DONE | `main.py` lifespan; enforcement on + PayPal unconfigured = a signup that cannot pay its way out |
+| 6 | MB-6.5 production on PayPal **sandbox** | DONE (code) | `render.yaml` `PAYPAL_ENV: sandbox`; runbook rewritten as `DEPLOY.md` §4b, go-live as §4b-bis |
+| 6 | MB-6.6 FE: entitlements everywhere, AI credit tracker, doc-type locks | DONE | see the Phase 6 section below |
+
+### Phase 6 — making the paywall real (2026-07-28)
+
+Phases 0–5 built a complete, correct, **inert** billing layer. The reported
+symptom — *"we buy a plan and nothing changes; there are no limits; there is no
+AI credit tracker"* — had two causes and neither was a missing feature:
+
+1. `ENTITLEMENTS_ENFORCE=false`, so all five gates computed a decision, logged
+   `WOULD_402`, and allowed.
+2. `useEntitlements()` had exactly **one** consumer, `/billing`. The rest of the
+   product never asked what plan the tenant held, so buying one changed two
+   cards on one page and nothing else.
+
+Three real holes were also found and closed (MB-6.2/6.3): `restore`,
+`sync-from-gdoc` and `save-edited-version` each minted a completed version and
+recorded an activation without ever passing a gate, and `ensure_site_slot` — the
+enforcement of the `max_sites` limit that Model B is *sold on* — had zero call
+sites in the entire codebase.
+
+### Phase 6 deviations (recorded per §0 rule 8)
+
+- **D-10 — the MB-2.6 shadow window was abandoned, not satisfied.** The plan
+  required 2–3 days of production `WOULD_402` logs before flipping. Those logs
+  are worthless and cannot be made otherwise: before MB-6.1 the permissive
+  fallback returned `allowed_doc_types=None` and unlimited everything, so the
+  gates evaluated "allowed" and logged **nothing** — an empty dataset that reads
+  as a pass. After MB-6.1 the window would have had to start over. The flip was
+  instead justified directly, which is stronger evidence than the logs would
+  have been: migration `e7f8a9b0c1d2` guarantees every pre-existing org owns an
+  `A_FOUNDING`/`active` subscription (INV-1), and that was **verified against
+  production** rather than assumed — `GET /billing/entitlements` returned
+  `plan_code=A_FOUNDING, status=active, subscribed=true, max_companies=60`.
+- **D-11 — consultant azienda creation stays open at the ceiling.** MB-6.3 gates
+  creation for Model B (`max_sites`) but deliberately not for Model A, because
+  `docs/pricing/01-CONSULENTI-E-STUDI.md` sells *active* companies — "an azienda
+  with at least one document generated or revised in the subscription year" —
+  and there is no archive flag on `Azienda` to distinguish dormant rows. Gating
+  row creation would under-deliver the contract. The ceiling bites at first
+  generation, where it always did; the UI now shows `N / max` so the limit is
+  visible before it is hit.
+- **D-12 — production runs against PayPal sandbox.** Owner's decision, so the
+  funnel can be walked with test money. `plans.paypal_plan_id` in the production
+  database therefore holds **sandbox** ids. Going live is not an env-var flip:
+  the ids must be reissued and the webhook re-registered (`DEPLOY.md` §4b-bis).
+- **D-13 — still no AI *cost* accounting.** Credits remain fixed weights
+  (`reasoning=1`, `vision=4`, `sds=8`, `visura=15`) with no relation to actual
+  OpenAI spend; `services/ai/client.py` discards `response.usage` by contract
+  (INV-8, enforced by `test_ai_client_has_no_billing_concepts`). The customer-
+  facing "AI credit tracker" now exists and is accurate *in credits*. Margin
+  reconciliation against an OpenAI invoice remains impossible and is unbuilt.
+- **D-14 — no overage top-up path.** `usage_counters.overage_credits` is read by
+  the spend query and written by nothing. Under enforcement an exhausted tenant's
+  only route is a plan upgrade; the €249/€79 credit packs in the pricing docs are
+  not sellable.
 
 ---
 

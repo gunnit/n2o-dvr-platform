@@ -66,15 +66,17 @@ class Tenant:
         self.headers = {"Authorization": f"Bearer {token}"}
 
 
-async def _provision(session, *, plan_code: str, plan_kwargs: dict) -> Tenant:
+async def _provision(
+    session, *, plan_code: str, plan_kwargs: dict, account_type: str = "consultant"
+) -> Tenant:
     from app.core.security import create_access_token, hash_password
 
     org_id, user_id, azienda_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     suffix = str(org_id)[:8]
 
     await session.execute(
-        text("INSERT INTO organizations (id, name) VALUES (:i, :n)"),
-        {"i": org_id, "n": f"pytest-402-{suffix}"},
+        text("INSERT INTO organizations (id, name, account_type) VALUES (:i, :n, :t)"),
+        {"i": org_id, "n": f"pytest-402-{suffix}", "t": account_type},
     )
     await session.execute(
         text(
@@ -132,7 +134,7 @@ async def _provision(session, *, plan_code: str, plan_kwargs: dict) -> Tenant:
     return Tenant(org_id, user_id, azienda_id, token)
 
 
-def _with_tenant(plan_code: str, enforce: bool, body, **plan_kwargs):
+def _with_tenant(plan_code: str, enforce: bool, body, account_type: str = "consultant", **plan_kwargs):
     """Provision a tenant, run `body(client, tenant)`, then clean up.
 
     One event loop for everything (asyncpg binds connections to their loop),
@@ -160,7 +162,12 @@ def _with_tenant(plan_code: str, enforce: bool, body, **plan_kwargs):
         tenant = None
         try:
             async with factory() as s:
-                tenant = await _provision(s, plan_code=plan_code, plan_kwargs=plan_kwargs)
+                tenant = await _provision(
+                    s,
+                    plan_code=plan_code,
+                    plan_kwargs=plan_kwargs,
+                    account_type=account_type,
+                )
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
@@ -372,3 +379,120 @@ def test_exhausted_credits_402_before_reaching_openai(monkeypatch):
     )
     assert resp.status_code == 402, resp.text
     assert called["n"] == 0, "the AI service was called despite a 402"
+
+
+# --- site slot (MB-6.2, Model B) -------------------------------------------
+#
+# `ensure_site_slot` shipped in Phase 0 with **zero call sites**: `max_sites`
+# (1 / 3 / 10) was on the price list and in the plans table, and nothing ever
+# consulted it. These are the tests that keep it wired.
+
+
+def test_direct_tenant_cannot_exceed_its_site_limit():
+    """A Base tenant (1 sede) already owns one azienda — the second is a 402."""
+
+    async def body(client, t):
+        return await client.post(
+            "/api/v1/aziende",
+            json={"ragione_sociale": "Seconda sede"},
+            headers=t.headers,
+        )
+
+    resp = _with_tenant(
+        "PYTEST_B_ONESITE", True, body,
+        account_type="direct", max_sites=1, ai_credits_year=100,
+    )
+    assert resp.status_code == 402, resp.text
+    assert "sedi" in resp.json()["detail"].lower()
+
+
+def test_direct_tenant_within_its_site_limit_may_add_one():
+    async def body(client, t):
+        return await client.post(
+            "/api/v1/aziende",
+            json={"ragione_sociale": "Seconda sede"},
+            headers=t.headers,
+        )
+
+    resp = _with_tenant(
+        "PYTEST_B_THREESITES", True, body,
+        account_type="direct", max_sites=3, ai_credits_year=100,
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def test_consultant_creation_stays_open_at_the_company_ceiling():
+    """Model A sells *active* companies, not rows (docs/pricing/01). A
+    consultant sitting at its ceiling may still file a new client; the limit
+    bites at generation. Blocking here would under-deliver the contract."""
+
+    async def body(client, t):
+        return await client.post(
+            "/api/v1/aziende",
+            json={"ragione_sociale": "Cliente numero due"},
+            headers=t.headers,
+        )
+
+    resp = _with_tenant(
+        "PYTEST_A_ATCEILING", True, body,
+        model="A", max_companies=1, max_sites=1, ai_credits_year=100,
+    )
+    # max_sites=1 is set precisely to prove it is ignored for a consultant.
+    assert resp.status_code == 201, resp.text
+
+
+def test_shadow_mode_lets_the_extra_sede_through():
+    async def body(client, t):
+        return await client.post(
+            "/api/v1/aziende",
+            json={"ragione_sociale": "Seconda sede"},
+            headers=t.headers,
+        )
+
+    resp = _with_tenant(
+        "PYTEST_B_SITESHADOW", False, body,
+        account_type="direct", max_sites=1, ai_credits_year=100,
+    )
+    assert resp.status_code != 402, resp.text
+
+
+def test_lapsed_tenant_cannot_burn_unlimited_ai(monkeypatch):
+    """`ai_credits_year=None` means *pooled and unmetered* — the Enterprise
+    tier. The unsubscribed fallback used it to mean "no plan", and because the
+    AI endpoints meter without calling `ensure_subscription_active`, that handed
+    every non-payer unlimited OpenAI spend at our cost (MB-6.2)."""
+    called = {"n": 0}
+
+    async def _never(*args, **kwargs):  # pragma: no cover - must not run
+        called["n"] += 1
+        raise AssertionError("OpenAI was contacted for an unsubscribed tenant")
+
+    import app.api.v1.aziende as aziende_router
+
+    monkeypatch.setattr(aziende_router, "generate_company_description", _never)
+
+    async def body(client, t):
+        # Drop the subscription row: this is precisely a self-serve signup that
+        # has not bought yet, or a tenant whose plan was deleted.
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        eng = create_async_engine(_URL)
+        try:
+            async with async_sessionmaker(eng)() as s:
+                await s.execute(
+                    text("DELETE FROM subscriptions WHERE organization_id = :o"),
+                    {"o": t.org_id},
+                )
+                await s.commit()
+        finally:
+            await eng.dispose()
+        return await client.post(
+            f"/api/v1/aziende/{t.azienda_id}/genera-descrizione", headers=t.headers
+        )
+
+    resp = _with_tenant(
+        "PYTEST_UNSUBSCRIBED", True, body,
+        model="A", allowed_doc_types=None, ai_credits_year=9000,
+    )
+    assert resp.status_code == 402, resp.text
+    assert called["n"] == 0, "the AI service was called for a tenant with no plan"

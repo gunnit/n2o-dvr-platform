@@ -17,14 +17,23 @@ import {
   Plus,
   Search,
   Users,
+  Zap,
 } from "lucide-react";
 
 import type { Azienda } from "@/types";
 import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
+import { companiesPercent, creditsPercent } from "@/lib/billing";
 import { parseApiDate } from "@/lib/ui/api-date";
 import { useTenantVocabulary } from "@/hooks/use-tenant-vocabulary";
 import { SurveillanceAlerts } from "@/components/dashboard/surveillance-alerts";
+import {
+  Meter,
+  StatusPill,
+  percentOf,
+  planDisplayName,
+} from "@/components/billing/billing-ui";
+import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -711,6 +720,7 @@ export default function DashboardPage() {
             {/* Side stack: quick actions + todos + activity ------------- */}
             <aside className="flex flex-col gap-4">
               <QuickActionsPanel />
+              <PlanUsagePanel />
               <TodosPanel todos={todos} />
               <ActivityPanel items={activity} />
             </aside>
@@ -791,6 +801,76 @@ function QuickActionsPanel() {
             </Link>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Plan and consumption, one panel deep in the operator's daily view.
+ *
+ * The same readings as `/billing`, using the same `Meter` so the two never
+ * diverge. Self-hides while the entitlements request is in flight and when it
+ * failed — a usage panel that guesses is worse than no usage panel.
+ */
+function PlanUsagePanel() {
+  const { entitlements, loading } = useEntitlementsContext();
+  const vocab = useTenantVocabulary();
+  if (loading || !entitlements) return null;
+
+  const ent = entitlements;
+  // The two channels meter different things: a consultant plan caps the client
+  // companies it may keep active, a direct plan caps its own sedi. Same rows in
+  // `usage`, different ceiling — and `vocab` supplies the right noun.
+  const isDirect = ent.account_type === "direct";
+  const unitsTotal = isDirect ? ent.max_sites : ent.usage.max_companies;
+  const unitsPercent = isDirect
+    ? percentOf(ent.usage.active_companies, ent.max_sites)
+    : companiesPercent(ent.usage);
+
+  return (
+    <section className="overflow-hidden rounded-md border border-[#e5edf5] bg-white shadow-stripe-ambient">
+      <div className="flex items-center justify-between gap-2 border-b border-[#e5edf5] px-4 py-3">
+        <h3 className="font-heading text-[14px] font-semibold text-[#061b31]">
+          Abbonamento
+        </h3>
+        <StatusPill status={ent.status} className="px-2 py-0.5 text-[10.5px]" />
+      </div>
+      <div className="space-y-4 p-4">
+        <p className="text-[13.5px] font-semibold text-[#061b31]">
+          {planDisplayName(ent)}
+        </p>
+
+        {ent.subscribed ? (
+          <>
+            <Meter
+              icon={<Zap className="h-4 w-4" />}
+              label="Crediti AI"
+              used={ent.usage.ai_credits_used}
+              total={ent.usage.ai_credits_allowance}
+              percent={creditsPercent(ent.usage)}
+            />
+            <Meter
+              icon={<Building2 className="h-4 w-4" />}
+              label={vocab.activeCompanies}
+              used={ent.usage.active_companies}
+              total={unitsTotal}
+              percent={unitsPercent}
+            />
+          </>
+        ) : (
+          <p className="text-[12.5px] text-[#64748d]">
+            Attiva un abbonamento per vedere i consumi del periodo.
+          </p>
+        )}
+
+        <Link
+          href="/billing"
+          className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-primary hover:text-[#1b5594]"
+        >
+          Gestisci abbonamento
+          <ArrowRight className="h-3 w-3" strokeWidth={2.5} />
+        </Link>
       </div>
     </section>
   );

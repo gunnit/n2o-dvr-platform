@@ -11,9 +11,11 @@ import {
   AlertCircle,
   Clock,
   History,
+  Lock,
   User as UserIcon,
   Pencil,
 } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -38,6 +40,8 @@ import type { Azienda, DocumentoGenerato } from "@/types";
 import { apiCall, downloadFile } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { useTenantVocabulary } from "@/hooks/use-tenant-vocabulary";
+import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
+import { isDocTypeGated } from "@/hooks/use-entitlements";
 
 const complexityColors: Record<string, string> = {
   Alta: "bg-[rgba(186,26,26,0.1)] text-[#ba1a1a] border border-[rgba(186,26,26,0.3)]",
@@ -104,6 +108,10 @@ const statusConfig: Record<string, { color: string; label: string; icon: typeof 
 
 export default function DocumentsPage() {
   const vocab = useTenantVocabulary();
+  // Plan gating is advisory here: `isDocTypeGated` returns false whenever we
+  // cannot be sure (no entitlements loaded, backend still in shadow mode), and
+  // the backend's 402 remains the only authority (INV-5).
+  const { entitlements } = useEntitlementsContext();
   const [aziende, setAziende] = useState<Azienda[]>([]);
   const [selectedAziendaId, setSelectedAziendaId] = useState<string>("");
   const [documenti, setDocumenti] = useState<DocumentoGenerato[]>([]);
@@ -244,6 +252,14 @@ export default function DocumentsPage() {
       setGenerateError("Genera prima il DVR Master");
       return;
     }
+    // The card's button is already disabled in this case; the guard is here for
+    // the keyboard/programmatic path, not as the paywall.
+    if (isDocTypeGated(entitlements, typeKey)) {
+      setGenerateError(
+        "Questo tipo di documento non è incluso nel tuo piano. Passa a un piano superiore per generarlo.",
+      );
+      return;
+    }
     // US-4.4: open the subset dialog instead of firing immediately.
     if (typeKey === "haccp_forms") {
       // Default to all selected each time the dialog opens so the operator
@@ -278,17 +294,31 @@ export default function DocumentsPage() {
 
   async function handleGenerateAll() {
     if (!selectedAziendaId) return;
+    setGenerateError(null);
+    // Asking the backend for types this plan does not include earns a 402 for
+    // the whole batch. Send what the tenant is entitled to instead.
+    const tipi = documentTypes
+      .map((d) => d.key)
+      .filter((key) => !isDocTypeGated(entitlements, key));
+    if (tipi.length === 0) {
+      setGenerateError(
+        "Nessun tipo di documento incluso nel tuo piano. Aggiorna il piano per generare i documenti.",
+      );
+      return;
+    }
     setGeneratingAll(true);
     try {
       await apiCall(`/api/v1/aziende/${selectedAziendaId}/documents/batch`, {
         method: "POST",
-        body: JSON.stringify({
-          tipi_documento: documentTypes.map((d) => d.key),
-        }),
+        body: JSON.stringify({ tipi_documento: tipi }),
       });
       await fetchDocumenti();
-    } catch {
-      // silently handle
+    } catch (err) {
+      // Swallowing this used to make a quota rejection look like a no-op: the
+      // spinner stopped, nothing appeared, and no message explained why.
+      setGenerateError(
+        err instanceof Error ? err.message : "Generazione non riuscita",
+      );
     } finally {
       setGeneratingAll(false);
     }
@@ -425,6 +455,11 @@ export default function DocumentsPage() {
                     // surface; the block itself is enforced by the backend.
                     const blockedByDvr =
                       DVR_DEPENDENT_TYPES.has(docType.key) && !dvrReady;
+                    // Plan lock. Unlike the DVR dependency — which the operator
+                    // can clear themselves, so its button stays clickable — this
+                    // one cannot be cleared from this page, so the button is
+                    // disabled and the way out is a link to /billing.
+                    const gatedByPlan = isDocTypeGated(entitlements, docType.key);
                     const ActionIcon = docType.icon;
                     const isReady =
                       existing?.status === "ready" ||
@@ -436,6 +471,7 @@ export default function DocumentsPage() {
                         className={cn(
                           "group relative overflow-hidden rounded-md border border-[#e5edf5] bg-white shadow-stripe-ambient transition-[box-shadow,border-color] hover:border-[#d1d9e3] hover:shadow-stripe-elevated",
                           blockedByDvr && "opacity-75",
+                          gatedByPlan && "opacity-60",
                         )}
                       >
                         <span
@@ -473,6 +509,21 @@ export default function DocumentsPage() {
                             <p className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11.5px] text-amber-800">
                               Genera prima il DVR Master
                             </p>
+                          )}
+
+                          {gatedByPlan && (
+                            <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5">
+                              <Badge className="border border-amber-300 bg-amber-100 text-amber-900">
+                                <Lock className="mr-1 h-2.5 w-2.5" />
+                                Non incluso nel piano
+                              </Badge>
+                              <Link
+                                href="/billing"
+                                className="text-[11.5px] font-semibold text-primary underline-offset-2 hover:underline"
+                              >
+                                Passa a un piano superiore
+                              </Link>
+                            </div>
                           )}
 
                           {existing && config ? (
@@ -543,7 +594,13 @@ export default function DocumentsPage() {
                               disabled={
                                 isGenerating ||
                                 status === "generating" ||
-                                status === "in_progress"
+                                status === "in_progress" ||
+                                gatedByPlan
+                              }
+                              title={
+                                gatedByPlan
+                                  ? "Il tuo piano non include questo tipo di documento"
+                                  : undefined
                               }
                             >
                               {isGenerating ||

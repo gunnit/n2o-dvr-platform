@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/sidebar";
 import { AutoBreadcrumbs } from "@/components/layout/auto-breadcrumbs";
 import { Providers } from "@/components/providers";
+import { EntitlementsProvider } from "@/components/billing/entitlements-provider";
+import { PlanRequiredBanner } from "@/components/billing/plan-required-banner";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -18,13 +20,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <Providers>
-      <div className="min-h-screen bg-background">
-        <Sidebar user={user} />
-        <div className="ml-64 flex min-h-screen flex-col">
-          <AutoBreadcrumbs />
-          <main className="mx-auto w-full max-w-screen-xl flex-1 px-8 py-8">{children}</main>
+      {/* One entitlements fetch for the whole shell — the sidebar plan badge,
+          the banner and every page below read the same result. */}
+      <EntitlementsProvider>
+        <div className="min-h-screen bg-background">
+          <Sidebar user={user} />
+          <div className="ml-64 flex min-h-screen flex-col">
+            <AutoBreadcrumbs />
+            <main className="mx-auto w-full max-w-screen-xl flex-1 px-8 py-8">
+              <PlanRequiredBanner />
+              {children}
+            </main>
+          </div>
         </div>
-      </div>
+      </EntitlementsProvider>
     </Providers>
   );
 }

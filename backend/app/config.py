@@ -115,6 +115,16 @@ class Settings(BaseSettings):
             else "https://api-m.sandbox.paypal.com"
         )
 
+    @property
+    def paypal_is_configured(self) -> bool:
+        """Whether a checkout could even be attempted.
+
+        Mirrors `billing.paypal_client.is_configured()` but lives on settings so
+        that non-billing code (the startup check in `main.py`) can ask without
+        importing the billing package.
+        """
+        return bool(self.PAYPAL_CLIENT_ID and self.PAYPAL_CLIENT_SECRET)
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

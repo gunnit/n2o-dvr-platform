@@ -158,9 +158,18 @@ def _unsubscribed_entitlements(account_type: str) -> Entitlements:
       case. Under shadow mode it logs ``WOULD_402 reason=subscription``, which
       is exactly the evidence GATE 2 needs and which the old permissive
       fallback silently withheld.
-    * ``seats`` is 1 — the admin who signed up. Every other limit stays ``None``
-      because the subscription gate already covers the case; duplicating the
-      refusal across four gates would just make the shadow log noisier.
+    * ``seats`` is 1 — the admin who signed up.
+    * ``ai_credits_year`` is **0, not None** (MB-6.2). ``None`` means *pooled and
+      unmetered* — the Enterprise tier — and :attr:`credits_unmetered` makes
+      ``spend_credits`` short-circuit to "allow". The AI endpoints meter but do
+      not call ``ensure_subscription_active``, so a ``None`` here handed every
+      unsubscribed and every lapsed tenant unlimited OpenAI spend at our cost.
+      Zero is the honest value: nothing was bought, so nothing is included.
+
+    ``max_companies`` / ``max_sites`` do stay ``None``, because unlike credits
+    those are only ever consulted on paths that already pass through
+    ``ensure_subscription_active`` — the subscription gate speaks for them, and
+    duplicating the refusal would just make the shadow log noisier.
 
     Safe to be non-active only because migration ``e7f8a9b0c1d2`` gave every
     pre-existing organization an explicit ``A_FOUNDING`` row (INV-1).
@@ -172,7 +181,7 @@ def _unsubscribed_entitlements(account_type: str) -> Entitlements:
         seats=1,
         max_companies=None,
         max_sites=None,
-        ai_credits_year=None,
+        ai_credits_year=0,
         features={},
         status=STATUS_NONE,
     )

@@ -22,7 +22,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FeedbackDialog } from "@/components/feedback/feedback-dialog";
+import { planDisplayName } from "@/components/billing/billing-ui";
+import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
 import { fetchImageBlobUrl } from "@/lib/api-client";
+import { creditsPercent } from "@/lib/billing";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -162,6 +165,8 @@ export function Sidebar({ user }: { user: SidebarUser }) {
         )}
       </nav>
 
+      <PlanTracker />
+
       <div className="mt-auto border-t border-white/10 px-4 pt-4">
         <div className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-white/5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-medium text-white ring-1 ring-white/15">
@@ -186,5 +191,84 @@ export function Sidebar({ user }: { user: SidebarUser }) {
       </div>
       <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
     </aside>
+  );
+}
+
+/**
+ * Plan name + AI credit consumption, on every authenticated page.
+ *
+ * The product owner's requirement: an operator should never have to open
+ * `/billing` to find out how many crediti AI are left. Renders nothing while
+ * the entitlements request is in flight — a skeleton that resolves into a
+ * two-line block would shove the user footer around on every navigation — and
+ * nothing at all if the request failed, because a missing badge is honest and a
+ * "0 crediti" badge is not.
+ */
+function PlanTracker() {
+  const { entitlements, loading } = useEntitlementsContext();
+  if (loading || !entitlements) return null;
+
+  const ent = entitlements;
+
+  if (!ent.subscribed) {
+    return (
+      <div className="mt-4 px-4">
+        <Link
+          href="/billing"
+          className="block rounded-md border border-white/10 bg-white/5 p-3 transition-colors hover:bg-white/10"
+        >
+          <p className="text-[10px] font-medium uppercase tracking-wider text-white/40">
+            Piano
+          </p>
+          <p className="mt-0.5 text-[12.5px] font-medium text-white">Nessun piano</p>
+          <span className="mt-2.5 flex h-7 items-center justify-center rounded-md bg-primary px-3 text-[11.5px] font-semibold text-white ring-1 ring-white/15 transition-colors hover:bg-[#1b5594]">
+            Attiva un piano
+          </span>
+        </Link>
+      </div>
+    );
+  }
+
+  const allowance = ent.usage.ai_credits_allowance;
+  const percent = creditsPercent(ent.usage);
+  // Same thresholds as the meters on /billing and the dashboard: amber at 75%,
+  // red at 90%. Warn before the wall, not at it.
+  const fill =
+    percent !== null && percent >= 90
+      ? "bg-red-500"
+      : percent !== null && percent >= 75
+        ? "bg-amber-500"
+        : "bg-emerald-500";
+
+  return (
+    <div className="mt-4 px-4">
+      <Link
+        href="/billing"
+        className="block rounded-md border border-white/10 bg-white/5 p-3 transition-colors hover:bg-white/10"
+      >
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-white/40">
+            Piano
+          </span>
+          <span className="truncate text-[12px] font-medium text-white">
+            {planDisplayName(ent)}
+          </span>
+        </div>
+        <div className="mt-2 flex items-baseline justify-between gap-2 text-[11px]">
+          <span className="text-white/55">Crediti AI</span>
+          <span className="tnum text-white/80">
+            {ent.usage.ai_credits_used} / {allowance === null ? "illimitati" : allowance}
+          </span>
+        </div>
+        {allowance !== null && (
+          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+            <div
+              className={cn("h-full rounded-full transition-all", fill)}
+              style={{ width: `${percent ?? 0}%` }}
+            />
+          </div>
+        )}
+      </Link>
+    </div>
   );
 }

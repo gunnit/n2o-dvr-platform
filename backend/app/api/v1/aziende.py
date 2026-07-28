@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
+from app.billing.constants import ACCOUNT_TYPE_DIRECT
 from app.billing.entitlements import Entitlements, get_entitlements
+from app.billing.gates import ensure_site_slot, ensure_subscription_active
 from app.billing.metering import metered
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.db.session import get_db
@@ -91,6 +93,26 @@ def _require_admin(user: User) -> None:
             status_code=403,
             detail="Solo gli amministratori possono creare clienti",
         )
+
+
+async def _ensure_can_add_azienda(
+    ent: Entitlements, org_id: uuid.UUID, db: AsyncSession
+) -> None:
+    """Gate a new `aziende` row against the plan (MB-6.3).
+
+    See the call site for why the two account types are metered differently.
+    Both first need a live subscription: an org that has never bought, or whose
+    plan lapsed, may read and download everything it already has but may not
+    start new work. `past_due` deliberately passes — PayPal retries for days
+    and a customer must not lose their tooling mid-dunning.
+    """
+    ensure_subscription_active(ent, org_id)
+    if ent.account_type != ACCOUNT_TYPE_DIRECT:
+        return
+    current_sites = await db.scalar(
+        select(func.count()).select_from(Azienda).where(Azienda.organization_id == org_id)
+    )
+    ensure_site_slot(ent, int(current_sites or 0), org_id=org_id)
 
 
 @router.get("", response_model=list[AziendaResponse])
@@ -247,9 +269,23 @@ async def autofill_azienda(
 async def create_azienda(
     body: AziendaCreate,
     user: User = Depends(get_current_user),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
     _require_admin(user)
+    # MB-6.3 — the two channels meter this row differently, and the difference
+    # is the sold contract, not a preference:
+    #
+    # * **Direct (Model B).** An `aziende` row *is* a sede/unità locale, and the
+    #   plan sells 1 / 3 / 10 of them. This is `ensure_site_slot`'s only call
+    #   site — before it, `max_sites` was sold and never enforced.
+    # * **Consultant (Model A).** The plan sells *active* client companies —
+    #   "an azienda with at least one document generated or revised in the
+    #   subscription year" (docs/pricing/01-CONSULENTI-E-STUDI.md). Creating a
+    #   row is deliberately free; the ceiling bites in `documents.py` at first
+    #   generation. Blocking creation here would under-deliver what was sold,
+    #   so we don't — the UI surfaces "N / max aziende attive" instead.
+    await _ensure_can_add_azienda(ent, user.organization_id, db)
     # Feedback 04/05: prevent duplicate clients by P.IVA within the same org.
     # No DB UNIQUE constraint yet — production data may already contain
     # duplicates that would block an Alembic migration. Application-level

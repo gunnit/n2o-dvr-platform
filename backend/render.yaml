@@ -43,12 +43,21 @@ services:
       #
       # This is a production-only blueprint, so the value is pinned here rather
       # than left to the dashboard: a blueprint sync overwrites dashboard edits
-      # for any key that is not `sync: false`, and silently reverting a live
-      # merchant to sandbox would strand every real subscription — PayPal would
-      # stop recognising the ids we hold. Sandbox work belongs on a scratch
-      # database, never on this one (plan ids are environment-specific).
+      # for any key that is not `sync: false`.
+      #
+      # ⚠️ DELIBERATELY `sandbox` (2026-07-28, owner's decision). Production runs
+      # the full purchase path against PayPal's sandbox so the whole funnel can
+      # be walked end to end with test money before any real card is taken.
+      # Consequences, all of which are intentional:
+      #   * `plans.paypal_plan_id` in the production DB now holds SANDBOX ids.
+      #     Plan ids are environment-specific, so switching this key to `live`
+      #     REQUIRES re-running `scripts/paypal_setup.py --live` to reissue them
+      #     and re-registering the webhook. Flipping the key alone silently
+      #     breaks checkout — every id we hold becomes unrecognised.
+      #   * No real money can be collected while this says `sandbox`.
+      # The go-live switch is DEPLOY.md §4b.
       - key: PAYPAL_ENV
-        value: live
+        value: sandbox
       - key: PAYPAL_CLIENT_ID
         sync: false
       - key: PAYPAL_CLIENT_SECRET
@@ -62,10 +71,23 @@ services:
       # frontend origin or they land on a dead page mid-purchase.
       - key: FRONTEND_URL
         value: https://dvr-sicurezza.it
-      # The paywall. Stays false until the shadow-log window has been reviewed
-      # (MB-2.6 / GATE 2) — flipping it blind can lock out the live N2O tenant.
+      # The paywall (MB-2.6 / GATE 2). ON since 2026-07-28.
+      #
+      # What made it safe to flip: migration `e7f8a9b0c1d2` backfills an
+      # `A_FOUNDING`/`active` subscription for every organization that lacked
+      # one, so no existing tenant resolves to the unsubscribed state (INV-1).
+      # Verified against production before flipping — `GET /billing/entitlements`
+      # returned plan_code=A_FOUNDING, status=active, subscribed=true.
+      #
+      # With this true, an org with NO subscription row (i.e. a self-serve
+      # signup that has not bought yet) gets 402 on document generation, on
+      # creating an azienda, and on every AI endpoint. That is the funnel
+      # working as designed — but it means a signup is a dead end unless the
+      # plans are purchasable, so keep the PayPal provisioning in DEPLOY.md §4b
+      # done. `app/main.py` logs a startup warning if this is true while PayPal
+      # is unconfigured, which is exactly that dead end.
       - key: ENTITLEMENTS_ENFORCE
-        value: "false"
+        value: "true"
       # The DVR Google Docs editing endpoints (/documenti/{id}/open-for-editing
       # + /sync-from-gdoc) run on the API service and need the same Drive
       # credentials + target folder as the worker. Upload a Secret File

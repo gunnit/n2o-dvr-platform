@@ -4,18 +4,18 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, CreditCard, Loader2, Users, Zap } from "lucide-react";
+import { CheckCircle2, CreditCard, Loader2, Users, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PLAN_DISPLAY_NAMES } from "@/components/landing/pricing-data";
+import { Meter, Notice, StatusPill, planDisplayName } from "@/components/billing/billing-ui";
+import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
 import { useApi } from "@/hooks/use-api";
-import { useEntitlements, usePlans } from "@/hooks/use-entitlements";
+import { usePlans } from "@/hooks/use-entitlements";
 import {
   type Entitlements,
   type Plan,
-  STATUS_LABELS,
-  STATUS_TONE,
   companiesPercent,
   creditsPercent,
   formatEuro,
@@ -46,7 +46,9 @@ export default function BillingPage() {
 function BillingPageInner() {
   const { data: session } = useSession();
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
-  const { entitlements, loading, error, refresh } = useEntitlements();
+  // Shared with the sidebar badge and the dashboard card — one fetch per shell,
+  // and `refresh()` after a PayPal return updates all of them at once.
+  const { entitlements, loading, error, refresh } = useEntitlementsContext();
   const params = useSearchParams();
 
   // PayPal bounces the customer back here after approval. The subscription is
@@ -113,7 +115,6 @@ function BillingPageInner() {
 }
 
 function CurrentPlanCard({ ent }: { ent: Entitlements }) {
-  const tone = STATUS_TONE[ent.status];
   const until = formatPeriodEnd(ent.period_end);
   return (
     <Card>
@@ -121,22 +122,13 @@ function CurrentPlanCard({ ent }: { ent: Entitlements }) {
         <CardTitle className="flex items-center gap-2">
           <CreditCard className="h-5 w-5" /> Piano attuale
         </CardTitle>
-        <span
-          className={
-            "rounded-full px-3 py-1 text-xs font-medium " +
-            (tone === "ok"
-              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-              : tone === "warn"
-                ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300"
-                : "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300")
-          }
-        >
-          {STATUS_LABELS[ent.status]}
-        </span>
+        <StatusPill status={ent.status} />
       </CardHeader>
       <CardContent className="space-y-3">
+        {/* `plan_code` is an internal identifier: the customer bought "Studio",
+            not "A_STUDIO". */}
         <p className="text-2xl font-semibold">
-          {ent.subscribed ? ent.plan_code : "Nessun piano attivo"}
+          {ent.subscribed ? planDisplayName(ent) : "Nessun piano attivo"}
         </p>
 
         {/* A tenant that has never purchased has no plan limits to report —
@@ -248,52 +240,6 @@ function UsageCard({ ent }: { ent: Entitlements }) {
         )}
       </CardContent>
     </Card>
-  );
-}
-
-function Meter({
-  icon,
-  label,
-  used,
-  total,
-  percent,
-  extra,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  used: number;
-  total: number | null;
-  percent: number | null;
-  extra?: string;
-}) {
-  // Warn before the wall, not at it: an operator who discovers the limit at
-  // 100% has already been interrupted mid-job.
-  const tone = percent === null ? "ok" : percent >= 90 ? "bad" : percent >= 75 ? "warn" : "ok";
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-sm">
-        <span className="flex items-center gap-2 font-medium">
-          {icon}
-          {label}
-        </span>
-        <span className="tabular-nums text-muted-foreground">
-          {used} / {total === null ? "∞" : total}
-        </span>
-      </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className={
-            "h-full rounded-full transition-all " +
-            (tone === "bad" ? "bg-red-500" : tone === "warn" ? "bg-amber-500" : "bg-emerald-500")
-          }
-          style={{ width: `${percent ?? 0}%` }}
-        />
-      </div>
-      {total === null && (
-        <p className="text-xs text-muted-foreground">Nessun limite su questo piano.</p>
-      )}
-      {extra && <p className="text-xs text-muted-foreground">{extra}</p>}
-    </div>
   );
 }
 
@@ -515,22 +461,6 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between gap-4 sm:block">
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="font-medium">{value}</dd>
-    </div>
-  );
-}
-
-function Notice({ tone, children }: { tone: "warn" | "bad"; children: React.ReactNode }) {
-  return (
-    <div
-      className={
-        "flex gap-2 rounded-md border p-3 text-sm " +
-        (tone === "warn"
-          ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
-          : "border-red-300 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200")
-      }
-    >
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-      <div>{children}</div>
     </div>
   );
 }

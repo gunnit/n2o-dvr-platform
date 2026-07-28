@@ -175,12 +175,17 @@ export async function parseApiError(res: Response): Promise<ParsedApiError> {
     topMessage = (body as { detail: string }).detail;
   }
 
+  // Only reached when the body carried no usable `detail`. Plan gates always
+  // send one — an Italian sentence naming the limit that was hit — and it is
+  // far more specific than anything we could write here, so it wins above.
   if (!topMessage) {
     topMessage =
       status >= 500
         ? "Errore del server. Riprova tra qualche istante."
         : status === 401
         ? "Sessione scaduta. Effettua nuovamente il login."
+        : status === 402
+        ? "Il tuo piano non include questa operazione. Aggiorna il piano per continuare."
         : status === 403
         ? "Non hai i permessi per eseguire questa operazione."
         : status === 404

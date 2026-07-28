@@ -266,6 +266,31 @@ async def _ensure_company_slot_available(
     ensure_company_slot(ent, active, already_active=False, org_id=org_id)
 
 
+async def _ensure_new_version_allowed(
+    ent: Entitlements,
+    org_id: uuid.UUID,
+    azienda_id: uuid.UUID,
+    tipo_documento: str | None,
+    db: AsyncSession,
+) -> None:
+    """The three gates every *new completed version* must pass (MB-6.2).
+
+    ``/generate`` reaches the worker through ``_enqueue_generation``, which
+    carries its own gates. Three endpoints — restore, sync-from-gdoc and
+    save-edited-version — skip the worker entirely, mint a completed row
+    themselves and then call ``record_activation_for_azienda``. Until this
+    helper existed they were an unguarded side door: a canceled tenant could
+    keep producing versions, and an activation could push a consultant past the
+    active-company ceiling without ever consulting it.
+
+    Ordering matches ``/generate``: subscription first (the most actionable
+    message), then doc type, then the company slot.
+    """
+    ensure_subscription_active(ent, org_id)
+    ensure_doc_type_allowed(ent, tipo_documento, org_id)
+    await _ensure_company_slot_available(ent, org_id, azienda_id, db)
+
+
 def _enqueue_generation(doc: DocumentoGenerato, ent: Entitlements, org_id: uuid.UUID) -> None:
     """The ONLY place a generation task is dispatched (MB-2.2).
 
@@ -643,6 +668,7 @@ async def restore_document(
     document_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
     user: User = Depends(get_current_user),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
     """Restore a historical version as a new version (US-2.9).
@@ -664,6 +690,12 @@ async def restore_document(
         raise NotFoundError("Document not found")
     if not source.file_content and (not source.file_path or not os.path.exists(source.file_path)):
         raise BadRequestError("Impossibile ripristinare una bozza")
+
+    # A restore mints a *new completed version* and records an activation, so
+    # it is document production, not retrieval — it takes the same three gates
+    # as /generate. Downloading an existing version stays ungated on purpose
+    # (D.Lgs. 81/2008 retention); only minting v+1 is charged for.
+    await _ensure_new_version_allowed(ent, org_id, azienda_id, source.tipo_documento, db)
 
     # Next version number for this document type
     result = await db.execute(
@@ -822,6 +854,7 @@ async def sync_document_from_gdoc(
     document_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
     user: User = Depends(get_current_user),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
     """Pull the latest Google Doc content back into a new version row.
@@ -843,6 +876,11 @@ async def sync_document_from_gdoc(
 
     if not source.gdoc_file_id:
         raise BadRequestError("Nessuna modifica in Google Docs da sincronizzare")
+
+    # Pulling edited content back mints a new completed version (MB-6.2).
+    await _ensure_new_version_allowed(
+        ent, org_id, source.azienda_id, source.tipo_documento, db
+    )
 
     from app.services.gdrive_service import (
         delete_gdoc,
@@ -1205,6 +1243,7 @@ async def save_edited_version(
     document_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
     user: User = Depends(get_current_user),
+    ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
     """Fold pending overrides into a NEW completed version row.
@@ -1227,6 +1266,11 @@ async def save_edited_version(
             status_code=status.HTTP_409_CONFLICT,
             detail="Nessuna modifica da salvare",
         )
+
+    # Folding overrides into v+1 mints a new completed version (MB-6.2).
+    await _ensure_new_version_allowed(
+        ent, org_id, source.azienda_id, source.tipo_documento, db
+    )
 
     docx_bytes = _load_docx_bytes(source)
 

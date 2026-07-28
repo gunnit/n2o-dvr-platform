@@ -151,6 +151,67 @@ def test_all_completion_paths_record_the_activation():
     assert "record_activation_for_azienda(" in worker
 
 
+def test_direct_completion_paths_are_gated_not_just_metered():
+    """Recording an activation is accounting; it is not a gate (MB-6.2).
+
+    The three endpoints that mint a completed row without going through the
+    worker used to record the activation and never ask whether the tenant was
+    allowed to produce it — a canceled subscription could still emit versions,
+    and an activation could silently exceed the active-company ceiling. Each
+    must now take an `ent` dependency and funnel through
+    `_ensure_new_version_allowed`, which applies the same three gates
+    `/generate` does.
+    """
+    source = DOCUMENTS.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    bypass_endpoints = {
+        "restore_document",
+        "sync_document_from_gdoc",
+        "save_edited_version",
+    }
+    seen: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.AsyncFunctionDef) or node.name not in bypass_endpoints:
+            continue
+        seen.add(node.name)
+        args = {a.arg for a in node.args.args + node.args.kwonlyargs}
+        assert "ent" in args, (
+            f"{node.name} mints a completed version but takes no entitlements "
+            "dependency — it would bypass the paywall (INV-5)"
+        )
+        calls = {
+            n.func.id
+            for n in ast.walk(node)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+        }
+        assert "_ensure_new_version_allowed" in calls, (
+            f"{node.name} must call _ensure_new_version_allowed before writing a "
+            "new version"
+        )
+    assert seen == bypass_endpoints, f"endpoint(s) renamed or removed: {bypass_endpoints - seen}"
+
+
+def test_creating_an_azienda_is_gated():
+    """`create_azienda` is where a direct tenant's `max_sites` is sold and, until
+    MB-6.2, never enforced — `ensure_site_slot` had zero call sites."""
+    aziende = (APP / "api" / "v1" / "aziende.py").read_text(encoding="utf-8")
+    tree = ast.parse(aziende)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "create_azienda":
+            args = {a.arg for a in node.args.args + node.args.kwonlyargs}
+            assert "ent" in args, "create_azienda takes no entitlements dependency"
+            calls = {
+                n.func.id
+                for n in ast.walk(node)
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+            }
+            assert "_ensure_can_add_azienda" in calls
+            break
+    else:  # pragma: no cover - the endpoint disappearing is itself the failure
+        raise AssertionError("create_azienda not found in aziende.py")
+    assert "ensure_site_slot(" in aziende, "the site limit is sold but unenforced"
+
+
 # --- INV-8: the seam holds -------------------------------------------------
 
 

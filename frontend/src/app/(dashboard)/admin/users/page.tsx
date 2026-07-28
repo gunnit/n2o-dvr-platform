@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
@@ -41,6 +42,8 @@ import {
 import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
 import { FormError } from "@/components/ui/form-error";
+import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
+import { formatSeats } from "@/lib/billing";
 
 interface UserRow {
   id: string;
@@ -136,11 +139,36 @@ export default function AdminUsersPage() {
     load();
   }, [load]);
 
+  // Seats come from the plan. Fail open: no entitlements (or a backend still in
+  // shadow mode) means we show nothing and block nothing — the server's 402 is
+  // the only real gate (INV-5).
+  const { entitlements } = useEntitlementsContext();
+  const seats = entitlements?.seats ?? null;
+  const seatLimitReached =
+    entitlements !== null &&
+    entitlements.enforced &&
+    seats !== null &&
+    users.length >= seats;
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="type-h1">Utenti</h1>
+          <div className="flex flex-wrap items-baseline gap-3">
+            <h1 className="type-h1">Utenti</h1>
+            {seats !== null && !loading && (
+              <Link
+                href="/billing"
+                className="rounded-full border border-[#e5edf5] bg-[#f6f9fc] px-2.5 py-0.5 text-[11.5px] font-semibold text-[#273951] transition-colors hover:border-primary/40 hover:text-primary"
+                title="Utenti inclusi nel piano"
+              >
+                <span className="tnum">
+                  {users.length} / {formatSeats(seats)}
+                </span>{" "}
+                utenti
+              </Link>
+            )}
+          </div>
           <p className="text-muted-foreground">
             Gestisci i membri del team e visualizza chi ha creato clienti e
             documenti.
@@ -155,12 +183,36 @@ export default function AdminUsersPage() {
             )}
             Aggiorna
           </Button>
-          <Button size="sm" onClick={() => setAddOpen(true)}>
-            <UserPlus className="mr-1 h-3.5 w-3.5" />
-            Aggiungi utente
-          </Button>
+          {/* `title` on a disabled button never fires (pointer-events: none), so
+              the span carries it and the hint below states it in plain text. */}
+          <span
+            title={
+              seatLimitReached
+                ? "Hai raggiunto il numero di utenti inclusi nel piano"
+                : undefined
+            }
+          >
+            <Button
+              size="sm"
+              onClick={() => setAddOpen(true)}
+              disabled={seatLimitReached}
+            >
+              <UserPlus className="mr-1 h-3.5 w-3.5" />
+              Aggiungi utente
+            </Button>
+          </span>
         </div>
       </div>
+
+      {seatLimitReached && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Hai usato tutti gli utenti inclusi nel piano.{" "}
+          <Link href="/billing" className="font-semibold underline underline-offset-2">
+            Aggiorna il piano
+          </Link>{" "}
+          per aggiungerne altri.
+        </div>
+      )}
 
       {error && (
         <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">

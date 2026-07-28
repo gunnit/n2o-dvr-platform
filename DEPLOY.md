@@ -102,28 +102,47 @@ PayPal. **Every part of that chain is deployed and works** — verified against
 sandbox on 2026-07-28: `create_subscription` returned `I-V0SEF0F77J9A`,
 `APPROVAL_PENDING`, with a valid approval link.
 
-It is nonetheless **inert in production**, and deliberately so. `GET
+It is nonetheless **inert in production** until provisioned. `GET
 /api/v1/billing/plans` returns `[]` there, because `list_purchasable()` filters
 on `is_checkoutable` (`paypal_plan_id IS NOT NULL AND price_year_cents > 0`) and
 no production plan row has a `paypal_plan_id` yet. Customers see "Nessun piano
 acquistabile online al momento" with a mailto, not a broken button.
 
-Three things must happen, in this order, to switch it on. **All three need the
-live PayPal credentials, so a human has to run them** — they cannot be done from
-a coding session that must not handle API keys.
+> ### ⚠️ Production runs against PayPal **sandbox** (since 2026-07-28)
+>
+> `PAYPAL_ENV` is pinned to `sandbox` in `render.yaml` on purpose, so the entire
+> funnel — price list → signup → approval → webhook → plan activation → limits
+> biting — can be walked with test money. **No real money can be collected in
+> this state.** Use the sandbox buyer account in `credentials/paypal-sandbox.json`.
+>
+> Everything below is written for that mode. The switch to real revenue is
+> §4b-bis, and it is *not* just flipping the env var — plan ids are
+> environment-specific, so they must be reissued.
+>
+> Related: `ENTITLEMENTS_ENFORCE` is now `true`. A tenant with no subscription
+> row is refused document generation, azienda creation and every AI endpoint.
+> That makes the provisioning below **load-bearing**: skip it and a new signup
+> is a dead end it cannot pay its way out of. The API logs a startup warning
+> when enforcement is on and PayPal is unconfigured — grep for
+> `ENTITLEMENTS_ENFORCE is on but PayPal is not configured`.
 
-1. **Set the live credentials on `n2o-dvr-api` only** (Render dashboard →
-   Environment). Two keys, both `sync: false` in `render.yaml` precisely so they
-   never land in git:
+Three things must happen, in this order, to switch it on. **Step 1 needs the
+PayPal credentials, so a human has to run it** — it cannot be done from a coding
+session, which must not handle API keys.
+
+1. **Set the sandbox credentials on `n2o-dvr-api` only** (Render dashboard →
+   Environment). Both are `sync: false` in `render.yaml` precisely so they never
+   land in git. Read the values from `credentials/paypal-sandbox.json`
+   (gitignored) or the PayPal developer dashboard → Apps → *N2O DVR Platform*:
 
    | Key | Value |
    |---|---|
-   | `PAYPAL_CLIENT_ID` | from the **live** REST app, not the sandbox one |
+   | `PAYPAL_CLIENT_ID` | from the **sandbox** REST app |
    | `PAYPAL_CLIENT_SECRET` | ditto |
 
-   `PAYPAL_ENV` (`live`) and `FRONTEND_URL` (`https://dvr-sicurezza.it`) are
-   already pinned in `render.yaml` — do **not** override them in the dashboard,
-   a blueprint sync would revert the edit.
+   `PAYPAL_ENV` (`sandbox`), `ENTITLEMENTS_ENFORCE` (`true`) and `FRONTEND_URL`
+   (`https://dvr-sicurezza.it`) are pinned in `render.yaml` — do **not** override
+   them in the dashboard, a blueprint sync would revert the edit.
 
    **The worker needs none of these.** `n2o-dvr-worker` imports only
    `billing.metering.record_activation_for_azienda`, which writes usage counters
@@ -151,25 +170,40 @@ ssh srv-d7glpedckfvc73fvagk0@ssh.frankfurt.render.com
 cd /opt/render/project/src/backend && export PYTHONPATH=.
 ```
 
-2. **Create the products and plans on the live merchant account**, writing
-   `paypal_plan_id` back onto the `plans` table. `--live` is a required
-   acknowledgement when `PAYPAL_ENV=live`; run the dry run first and read it.
+2. **Bind the sandbox plans to the production `plans` table.** The sandbox
+   merchant already holds product `PROD-59E111111A742631C` with all 7 plans
+   `ACTIVE`; the script is idempotent and matches on name, so this run mostly
+   just writes the existing ids back onto the rows. `--live` is *not* needed —
+   it is only a required acknowledgement when `PAYPAL_ENV=live`. Run the dry run
+   first and read it.
 
 ```bash
 PYTHONPATH=. python -m scripts.paypal_setup --dry-run
 ```
 
 ```bash
-PYTHONPATH=. python -m scripts.paypal_setup --live
+PYTHONPATH=. python -m scripts.paypal_setup
+```
+
+   Confirm afterwards that the price list is no longer empty — this is the
+   single best check that the whole chain is wired:
+
+```bash
+curl -s https://n2o-dvr-api.onrender.com/api/v1/billing/plans -H "Authorization: Bearer $TOKEN" | head -c 400
 ```
 
 3. **Register the webhook listener** and put the id it prints into
    `PAYPAL_WEBHOOK_ID`, then redeploy. Until this is set, signature verification
    fails closed and **no subscription will ever activate** — the customer pays
-   and stays on the old plan.
+   and stays on the old plan. This is the failure that costs the most, because
+   it happens *after* the money moves.
 
 ```bash
-PYTHONPATH=. python -m scripts.paypal_webhook_setup --url https://n2o-dvr-api.onrender.com --live
+PYTHONPATH=. python -m scripts.paypal_webhook_setup --url https://n2o-dvr-api.onrender.com
+```
+
+```bash
+PYTHONPATH=. python -m scripts.paypal_webhook_setup --list
 ```
 
 Then walk one real purchase end to end, **once per channel** — the two funnels
@@ -213,9 +247,33 @@ never do.
   holds no fee data and `paypal_setup.py` emits no plan-level `setup_fee` on
   purpose, since that would recur on every subscription. Invoice them
   separately. `/prezzi` says so on the card and under the add-on grid.
-- `ENTITLEMENTS_ENFORCE` is still `false`. Checkout works without it; what it
-  changes is whether limits actually *bite*. Flip it only after reviewing a few
-  days of `WOULD_402` shadow logs (GATE 2 in the monetization build plan).
+- `ENTITLEMENTS_ENFORCE` is **`true`** since 2026-07-28. Checkout works without
+  it; what it changes is whether limits actually *bite*. It was safe to flip
+  because migration `e7f8a9b0c1d2` gave every pre-existing organization an
+  `A_FOUNDING`/`active` subscription — verified live before the flip
+  (`GET /billing/entitlements` → `plan_code=A_FOUNDING, subscribed=true`). If you
+  ever restore a database from before that migration, turn this back off first
+  or every existing tenant gets a 402.
+
+## 4b-bis. Switching from sandbox to real money
+
+Not a one-line change. `plans.paypal_plan_id` is **environment-specific**, so the
+ids currently in the production database are sandbox ids that the live merchant
+account has never heard of. In order:
+
+1. Create (or reuse) the **live** REST app on the PayPal dashboard with the
+   Subscriptions capability, and set its `PAYPAL_CLIENT_ID` /
+   `PAYPAL_CLIENT_SECRET` on `n2o-dvr-api`.
+2. Change `PAYPAL_ENV` to `live` in `backend/render.yaml` (it is blueprint-pinned,
+   so edit the file — a dashboard edit gets reverted on the next sync) and deploy.
+3. Re-run `PYTHONPATH=. python -m scripts.paypal_setup --live`. This issues **new**
+   plan ids on the live merchant and overwrites the sandbox ones.
+4. Re-run `paypal_webhook_setup --url https://n2o-dvr-api.onrender.com --live` and
+   replace `PAYPAL_WEBHOOK_ID`. The sandbox webhook id will not verify live events.
+5. Walk one real purchase per channel and then refund it.
+
+Any subscription created in sandbox is meaningless afterwards — cancel the test
+tenants or reset them with `POST /billing/admin/organizations/{id}/plan`.
 
 ## 5. Troubleshooting
 

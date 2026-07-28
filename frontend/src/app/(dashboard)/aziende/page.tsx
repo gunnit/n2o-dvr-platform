@@ -14,6 +14,7 @@ import { monogramFor } from "@/lib/ui/monogram";
 import { formatRelative } from "@/lib/ui/relative-time";
 import { parseApiDate } from "@/lib/ui/api-date";
 import { useTenantVocabulary } from "@/hooks/use-tenant-vocabulary";
+import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
 import {
   SURVEY_STATUS_META,
   surveyStatusKey,
@@ -60,6 +61,28 @@ export default function AziendePage() {
     return map;
   }, [aziende]);
 
+  // Plan usage, shown next to the heading. A consultant is metered on client
+  // companies, a direct tenant on its own sedi — the same rows, a different
+  // ceiling (INV-4).
+  const { entitlements } = useEntitlementsContext();
+  const isDirect = entitlements?.account_type === "direct";
+  const unitsUsed = entitlements?.usage.active_companies ?? aziende.length;
+  const unitsTotal = isDirect
+    ? (entitlements?.max_sites ?? null)
+    : (entitlements?.usage.max_companies ?? null);
+  /**
+   * Creating a company is never blocked for a consultant: the contract meters
+   * *active* companies at generation time, so a studio may register a prospect
+   * it has not started documenting. A direct tenant's sedi are a hard count, so
+   * that one does block — but only once the backend actually enforces.
+   */
+  const siteLimitReached =
+    entitlements !== null &&
+    entitlements.enforced &&
+    isDirect &&
+    entitlements.max_sites !== null &&
+    aziende.length >= entitlements.max_sites;
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return aziende.filter((a) => {
@@ -81,7 +104,21 @@ export default function AziendePage() {
     <div className="space-y-8">
       <div className="flex items-start justify-between gap-6">
         <div>
-          <h1 className="type-h1">{vocab.companiesTitle}</h1>
+          <div className="flex flex-wrap items-baseline gap-3">
+            <h1 className="type-h1">{vocab.companiesTitle}</h1>
+            {entitlements && (
+              <Link
+                href="/billing"
+                className="rounded-full border border-[#e5edf5] bg-[#f6f9fc] px-2.5 py-0.5 text-[11.5px] font-semibold text-[#273951] transition-colors hover:border-primary/40 hover:text-primary"
+                title="Incluse nel tuo piano"
+              >
+                <span className="tnum">
+                  {unitsUsed} / {unitsTotal === null ? "∞" : unitsTotal}
+                </span>{" "}
+                {vocab.activeCompanies.toLowerCase()}
+              </Link>
+            )}
+          </div>
           <p className="type-body mt-2">
             {vocab.listLead}
             {aziende.length > 0 && (
@@ -93,16 +130,35 @@ export default function AziendePage() {
             )}
           </p>
         </div>
-        {isAdmin && (
-          <Link
-            href="/aziende/new"
-            className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white shadow-stripe-ambient transition-colors hover:bg-[#1b5594]"
-          >
-            <Plus className="h-4 w-4" strokeWidth={2} />
-            Nuova Azienda
-          </Link>
-        )}
+        {isAdmin &&
+          (siteLimitReached ? (
+            <span
+              className="inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-md border border-[#e5edf5] bg-[#f6f9fc] px-4 text-sm font-medium text-[#94a3b8]"
+              title="Hai raggiunto il numero di sedi incluse nel piano"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2} />
+              {vocab.addCompany}
+            </span>
+          ) : (
+            <Link
+              href="/aziende/new"
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white shadow-stripe-ambient transition-colors hover:bg-[#1b5594]"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2} />
+              Nuova Azienda
+            </Link>
+          ))}
       </div>
+
+      {siteLimitReached && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Hai registrato tutte le sedi incluse nel piano.{" "}
+          <Link href="/billing" className="font-semibold underline underline-offset-2">
+            Aggiorna il piano
+          </Link>{" "}
+          per aggiungerne altre.
+        </div>
+      )}
 
       {aziende.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
@@ -152,7 +208,7 @@ export default function AziendePage() {
         <div className="rounded-md border border-[#e5edf5] bg-white p-14 text-center shadow-stripe-ambient">
           <Building2 className="mx-auto mb-4 h-10 w-10 text-[#c2c6d2]" strokeWidth={1.5} />
           <p className="type-body">Nessuna azienda registrata</p>
-          {isAdmin && (
+          {isAdmin && !siteLimitReached && (
             <Link
               href="/aziende/new"
               className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white shadow-stripe-ambient transition-colors hover:bg-[#1b5594]"

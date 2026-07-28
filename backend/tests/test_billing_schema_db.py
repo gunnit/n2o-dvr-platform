@@ -102,14 +102,34 @@ def test_account_type_defaults_to_consultant_server_side():
     assert _in_one_loop(body) == "consultant"
 
 
-def test_resolver_soft_fails_for_org_without_subscription():
+def test_resolver_reports_an_org_without_subscription_as_unsubscribed():
+    """An org with no `subscriptions` row has never bought anything (MB-6.1).
+
+    This assertion was inverted until MB-6.1: the resolver used to hand such an
+    org the fully permissive `A_FOUNDING` fallback, which was the INV-1 safety
+    net for a *paying* tenant whose row went missing. Self-serve signup then
+    made "no subscription row" the normal state of every new direct tenant, so
+    the safety net silently became the product's default — unlimited everything,
+    for free, for anyone who registered.
+
+    `_unsubscribed_entitlements` is now distinct from the data-gap fallback:
+    not active, no plan, one seat. What makes that safe is migration
+    `e7f8a9b0c1d2`, which gave every pre-existing org a real `A_FOUNDING`
+    subscription — without it, `ENTITLEMENTS_ENFORCE=true` would 402 the live
+    tenant (INV-1).
+    """
     async def body(s, org_id):
         return await resolve_entitlements(org_id, s)
 
     ent = _in_one_loop(body)
-    assert ent.plan_code == "A_FOUNDING"
-    assert ent.allowed_doc_types is None
-    assert ent.credits_unmetered
+    assert ent.plan_code is None
+    assert ent.status == "none"
+    assert not ent.is_active
+    assert not ent.subscribed
+    assert ent.seats == 1
+    # Not the permissive fallback: that one reports itself active with a
+    # 2**31-1 seat count, and confusing the two is how the paywall leaks.
+    assert not ent.credits_unmetered
 
 
 # --- the plan catalogue drives everything (INV-4) --------------------------
