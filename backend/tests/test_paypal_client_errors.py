@@ -1,11 +1,19 @@
 """Every failure out of ``paypal_client`` must arrive as ``PayPalError``.
 
-Written after a production incident: `POST /billing/credits/checkout` answered
-**500** for a week because the configured client id and secret were the *live*
-merchant's while ``PAYPAL_ENV=sandbox``. The OAuth call 401'd,
-``resp.raise_for_status()`` raised ``httpx.HTTPStatusError``, and every endpoint
-in ``app.api.v1.billing`` catches only ``PayPalError`` — so the exception went
-all the way out as an unhandled server error.
+Written after a production incident on 2026-07-28: `POST
+/billing/credits/checkout` answered **500** because the configured client id and
+secret were the *live* merchant's while ``PAYPAL_ENV=sandbox``. The OAuth call
+401'd, ``resp.raise_for_status()`` raised ``httpx.HTTPStatusError``, and every
+endpoint in ``app.api.v1.billing`` catches only ``PayPalError`` — so the
+exception went all the way out as an unhandled server error.
+
+The window was short — credit packs shipped at 21:36 UTC and this landed at
+22:51, and the only requests inside it were diagnostic probes — but the defect
+was never specific to credit packs. `get_access_token` is on the path of every
+PayPal call, so `/subscribe`, `/cancel` and `/revise` would each have done the
+same the moment a plan became checkoutable. It surfaced on the credit path first
+only because that is the one endpoint whose PayPal call was not already
+short-circuited by a `409` for an unprovisioned plan.
 
 Two things went wrong, and both are pinned here:
 
@@ -13,7 +21,9 @@ Two things went wrong, and both are pinned here:
   message the endpoint was written to return;
 * ``checkout_credits`` writes a ``pending`` row in ``credit_purchases`` *before*
   calling PayPal and abandons it in the ``PayPalError`` handler — which never
-  ran, so every attempt stranded a row.
+  ran, so every attempt stranded a row. Confirmed against production either side
+  of the fix: the pre-fix attempt is still ``pending``, the post-fix one went to
+  ``failed``.
 
 The tests drive the real ``httpx`` code path through a mock transport rather
 than stubbing ``get_access_token``, because the bug lived precisely in the gap
