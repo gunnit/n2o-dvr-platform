@@ -340,8 +340,23 @@ function PlanPicker({
             >
               support@dvr-sicurezza.it
             </a>{" "}
-            e attiviamo il piano per te. Nel frattempo puoi continuare a usare la
-            piattaforma senza limitazioni.
+            e attiviamo il piano per te.
+            {/* This sentence used to promise "puoi continuare a usare la
+                piattaforma senza limitazioni" unconditionally. That was written
+                during the shadow window and became false the moment
+                ENTITLEMENTS_ENFORCE went on: an unsubscribed tenant is refused
+                document generation and azienda creation. Telling someone they
+                are unrestricted while the server 402s them is the worst
+                possible combination, so the claim now follows `enforced`. */}
+            {ent.enforced ? (
+              <>
+                {" "}
+                Nel frattempo puoi consultare e scaricare i documenti già
+                generati, ma non crearne di nuovi.
+              </>
+            ) : (
+              <> Nel frattempo puoi continuare a usare la piattaforma senza limitazioni.</>
+            )}
           </p>
         </CardContent>
       </Card>

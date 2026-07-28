@@ -149,7 +149,17 @@ def ensure_site_slot(
     )
 
 
-def ensure_subscription_active(ent: Entitlements, org_id: uuid.UUID | None = None) -> None:
+_SUBSCRIPTION_DENIAL_DEFAULT = (
+    "Puoi consultare e scaricare i documenti esistenti, ma non generarne di nuovi."
+)
+
+
+def ensure_subscription_active(
+    ent: Entitlements,
+    org_id: uuid.UUID | None = None,
+    *,
+    blocked_action: str | None = None,
+) -> None:
     """Gate write operations for a lapsed subscription (MB-4.5).
 
     ``past_due`` deliberately still passes: PayPal retries a failed payment over
@@ -157,6 +167,12 @@ def ensure_subscription_active(ent: Entitlements, org_id: uuid.UUID | None = Non
     download paths
     must never call this — a canceled tenant keeps access to documents it
     already generated, which D.Lgs. 81/2008 retention requires.
+
+    ``blocked_action`` names what the caller was refused. The default speaks
+    about generating documents, which is where this gate started; once it also
+    guarded azienda creation, that default surfaced "non generarne di nuovi" on
+    a form where the user was creating a *company*, and a denial that describes
+    the wrong action reads as a bug rather than a paywall.
     """
     if ent.is_active:
         return
@@ -167,6 +183,6 @@ def ensure_subscription_active(ent: Entitlements, org_id: uuid.UUID | None = Non
         detail_log=ent.status,
         detail_user=(
             "Il tuo abbonamento non è attivo. "
-            "Puoi consultare e scaricare i documenti esistenti, ma non generarne di nuovi."
+            + (blocked_action or _SUBSCRIPTION_DENIAL_DEFAULT)
         ),
     )

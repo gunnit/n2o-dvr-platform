@@ -66,10 +66,21 @@ export default function AziendePage() {
   // ceiling (INV-4).
   const { entitlements } = useEntitlementsContext();
   const isDirect = entitlements?.account_type === "direct";
-  const unitsUsed = entitlements?.usage.active_companies ?? aziende.length;
+  // A direct tenant's meter is the *row count* — `_ensure_can_add_azienda`
+  // counts `aziende` rows against `max_sites`, so the pill has to count the
+  // same thing or it contradicts the 402. `usage.active_companies` is the Model
+  // A meter (companies with a document this period) and reads as 0 for a direct
+  // tenant that owns two sedi, which is simply the wrong number here.
+  const unitsUsed = isDirect
+    ? aziende.length
+    : (entitlements?.usage.active_companies ?? aziende.length);
   const unitsTotal = isDirect
     ? (entitlements?.max_sites ?? null)
     : (entitlements?.usage.max_companies ?? null);
+  // An unsubscribed tenant has every limit null, which rendered as "∞" — while
+  // the server refuses to create even the first one. Show the state instead of
+  // a ceiling nobody holds.
+  const showUsagePill = entitlements !== null && entitlements.subscribed;
   /**
    * Creating a company is never blocked for a consultant: the contract meters
    * *active* companies at generation time, so a studio may register a prospect
@@ -106,7 +117,7 @@ export default function AziendePage() {
         <div>
           <div className="flex flex-wrap items-baseline gap-3">
             <h1 className="type-h1">{vocab.companiesTitle}</h1>
-            {entitlements && (
+            {showUsagePill ? (
               <Link
                 href="/billing"
                 className="rounded-full border border-[#e5edf5] bg-[#f6f9fc] px-2.5 py-0.5 text-[11.5px] font-semibold text-[#273951] transition-colors hover:border-primary/40 hover:text-primary"
@@ -117,7 +128,14 @@ export default function AziendePage() {
                 </span>{" "}
                 {vocab.activeCompanies.toLowerCase()}
               </Link>
-            )}
+            ) : entitlements && !entitlements.subscribed ? (
+              <Link
+                href="/billing"
+                className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-[11.5px] font-semibold text-amber-900 transition-colors hover:border-amber-400"
+              >
+                Nessun piano attivo
+              </Link>
+            ) : null}
           </div>
           <p className="type-body mt-2">
             {vocab.listLead}

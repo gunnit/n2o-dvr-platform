@@ -106,8 +106,17 @@ async def _ensure_can_add_azienda(
     start new work. `past_due` deliberately passes — PayPal retries for days
     and a customer must not lose their tooling mid-dunning.
     """
-    ensure_subscription_active(ent, org_id)
-    if ent.account_type != ACCOUNT_TYPE_DIRECT:
+    is_direct = ent.account_type == ACCOUNT_TYPE_DIRECT
+    ensure_subscription_active(
+        ent,
+        org_id,
+        blocked_action=(
+            "Attiva un piano per registrare una nuova sede."
+            if is_direct
+            else "Attiva un piano per registrare un nuovo cliente."
+        ),
+    )
+    if not is_direct:
         return
     current_sites = await db.scalar(
         select(func.count()).select_from(Azienda).where(Azienda.organization_id == org_id)
