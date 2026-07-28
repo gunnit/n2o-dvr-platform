@@ -94,6 +94,87 @@ These bit us the first time; don't undo them:
 | **SDS extraction runs inline on FastAPI** (`backend/app/api/v1/sostanze_chimiche.py:172`, `BackgroundTasks`), not on Celery. | Concurrent users may see slower API responses during batch SDS uploads. | Small teams won't notice. |
 | **Unused `backend/Dockerfile`.** The Render blueprint uses `runtime: python`, not Docker. | None. | Delete or fix alongside a future Docker migration. |
 
+## 4b. Turning on PayPal checkout (the one remaining go-live step)
+
+The public price list at `/prezzi` sends "Attiva Solo" / "Attiva Studio" through
+`/register?piano=…` → `/billing?piano=…` → `POST /api/v1/billing/subscribe` →
+PayPal. **Every part of that chain is deployed and works** — verified against
+sandbox on 2026-07-28: `create_subscription` returned `I-V0SEF0F77J9A`,
+`APPROVAL_PENDING`, with a valid approval link.
+
+It is nonetheless **inert in production**, and deliberately so. `GET
+/api/v1/billing/plans` returns `[]` there, because `list_purchasable()` filters
+on `is_checkoutable` (`paypal_plan_id IS NOT NULL AND price_year_cents > 0`) and
+no production plan row has a `paypal_plan_id` yet. Customers see "Nessun piano
+acquistabile online al momento" with a mailto, not a broken button.
+
+Three things must happen, in this order, to switch it on. **All three need the
+live PayPal credentials, so a human has to run them** — they cannot be done from
+a coding session that must not handle API keys.
+
+1. **Set the live credentials on `n2o-dvr-api` and `n2o-dvr-worker`** (Render
+   dashboard → Environment; they are `sync: false` in `render.yaml` precisely so
+   they never land in git):
+
+   | Key | Value |
+   |---|---|
+   | `PAYPAL_ENV` | `live` |
+   | `PAYPAL_CLIENT_ID` | from the **live** REST app, not the sandbox one |
+   | `PAYPAL_CLIENT_SECRET` | ditto |
+   | `FRONTEND_URL` | `https://dvr-sicurezza.it` — a wrong value strands the customer on a dead page mid-purchase |
+
+   Confirm they work before going further:
+
+```bash
+PYTHONPATH=. python -m scripts.paypal_check
+```
+
+2. **Create the products and plans on the live merchant account**, writing
+   `paypal_plan_id` back onto the `plans` table. `--live` is a required
+   acknowledgement when `PAYPAL_ENV=live`; run the dry run first and read it.
+
+```bash
+PYTHONPATH=. python -m scripts.paypal_setup --dry-run
+```
+
+```bash
+PYTHONPATH=. python -m scripts.paypal_setup --live
+```
+
+3. **Register the webhook listener** and put the id it prints into
+   `PAYPAL_WEBHOOK_ID`, then redeploy. Until this is set, signature verification
+   fails closed and **no subscription will ever activate** — the customer pays
+   and stays on the old plan.
+
+```bash
+PYTHONPATH=. python -m scripts.paypal_webhook_setup --url https://n2o-dvr-api.onrender.com --live
+```
+
+Then walk one real purchase end to end: `/prezzi` → "Attiva Solo" → register →
+PayPal approval → back to `/billing?esito=ok` → the plan flips to `active` once
+`BILLING.SUBSCRIPTION.ACTIVATED` lands.
+
+**Watch out for:**
+
+- `plans.paypal_plan_id` is **environment-specific.** Sandbox and live issue
+  different ids, so a database belongs to exactly one PayPal environment. Never
+  point a production database at sandbox ids "just to test" — run sandbox
+  against a scratch database instead.
+- `A_FOUNDING` deliberately gets no PayPal plan (€0 grandfather row). Anything
+  reading `paypal_plan_id` must tolerate `NULL` for it.
+- Model B plans (`B_BASE`, `B_PLUS`, `B_MULTISEDE`) are seeded `active=false`
+  and are **lead-only on the price list** — their CTA is a mailto, not checkout.
+  Activating them needs the eligibility gate, the ATECO risk table and the DdL
+  consent copy (MB-5.2 / 5.3 / 5.7), none of which exist yet.
+- One-time onboarding fees (Studio €1.500, Network €3.500, and the Model B
+  first-year uplifts) are **not** charged by the subscription — the catalogue
+  holds no fee data and `paypal_setup.py` emits no plan-level `setup_fee` on
+  purpose, since that would recur on every subscription. Invoice them
+  separately. `/prezzi` says so on the card and under the add-on grid.
+- `ENTITLEMENTS_ENFORCE` is still `false`. Checkout works without it; what it
+  changes is whether limits actually *bite*. Flip it only after reviewing a few
+  days of `WOULD_402` shadow logs (GATE 2 in the monetization build plan).
+
 ## 5. Troubleshooting
 
 | Symptom | Likely cause |
@@ -102,7 +183,10 @@ These bit us the first time; don't undo them:
 | Pre-deploy fails: `ModuleNotFoundError: No module named 'app'` | `PYTHONPATH=.` missing on `preDeployCommand`. See §3. |
 | Pre-deploy fails: `No module named 'psycopg2'` | `env.py` not using `_normalize_async_url()`. See §3. |
 | Pre-deploy fails: `Multiple head revisions are present for given argument 'head'` | Parallel migration branches. Run `PYTHONPATH=. alembic merge -m "merge" <head1> <head2>` locally + commit. |
-| Next.js build fails: `useSearchParams() should be wrapped in a suspense boundary` | Any page reading `useSearchParams` must be wrapped in `<Suspense>` (client component). Currently only `/login` does this — fixed in `frontend/src/app/(auth)/login/page.tsx`. |
+| Next.js build fails: `useSearchParams() should be wrapped in a suspense boundary` | Any page reading `useSearchParams` must be wrapped in `<Suspense>` (client component). `/login`, `/register` and `/billing` all do this. |
+| `/billing` shows "Nessun piano acquistabile online" | Expected until §4b is done — no `paypal_plan_id` on the plan rows. |
+| Customer paid on PayPal but the plan never activated | `PAYPAL_WEBHOOK_ID` unset or wrong, so signature verification fails closed. See §4b step 3. |
+| Landing scroll animation frozen in an automated browser | Not a bug: the fascicolo stack is driven by `requestAnimationFrame`, which is paused while `document.visibilityState === "hidden"`. Verify the geometry with `node frontend/scripts/check-stack-geometry.mjs` instead. |
 | Frontend returns 502 for ~2 min after deploy | Normal Render cold-start; uvicorn/next is binding the port. |
 | Generated .docx is blank / missing cover page | `templates/` didn't get copied during build. Check API build log. |
 | "Conferma firma" returns 404 | Expected — US-1.6 signature feature not implemented. See §4. |

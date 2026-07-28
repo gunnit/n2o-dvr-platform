@@ -51,6 +51,10 @@ function BillingPageInner() {
   // NOT active yet — the webhook decides that — so we refresh rather than
   // announce success we cannot vouch for.
   const esito = params.get("esito");
+  // Carried from the public price list through signup. A hint for the UI only:
+  // `/billing/subscribe` re-checks that the plan exists, is checkoutable and
+  // belongs to this tenant's channel before PayPal is called (INV-5, INV-9).
+  const piano = params.get("piano");
   useEffect(() => {
     if (esito === "ok") {
       toast.success(
@@ -88,7 +92,9 @@ function BillingPageInner() {
         <>
           <CurrentPlanCard ent={entitlements} />
           <UsageCard ent={entitlements} />
-          {isAdmin && <PlanPicker ent={entitlements} onChanged={refresh} />}
+          {isAdmin && (
+            <PlanPicker ent={entitlements} onChanged={refresh} preselected={piano} />
+          )}
           {!isAdmin && (
             <p className="text-sm text-muted-foreground">
               Solo un amministratore dell&apos;organizzazione può modificare
@@ -249,7 +255,16 @@ function Meter({
   );
 }
 
-function PlanPicker({ ent, onChanged }: { ent: Entitlements; onChanged: () => void }) {
+function PlanPicker({
+  ent,
+  onChanged,
+  preselected,
+}: {
+  ent: Entitlements;
+  onChanged: () => void;
+  /** `?piano=` from the public price list, or null. */
+  preselected?: string | null;
+}) {
   const { plans, loading } = usePlans();
   const { apiFetch } = useApi();
   const [busy, setBusy] = useState<string | null>(null);
@@ -305,12 +320,22 @@ function PlanPicker({ ent, onChanged }: { ent: Entitlements; onChanged: () => vo
     return (
       <Card>
         <CardContent className="pt-6 text-sm text-muted-foreground">
-          Nessun piano acquistabile online al momento. Contatta il supporto per
-          un preventivo.
+          Nessun piano acquistabile online al momento. Scrivi a{" "}
+          <a className="text-primary hover:underline" href="mailto:support@dvr-sicurezza.it">
+            support@dvr-sicurezza.it
+          </a>{" "}
+          e attiviamo il piano per te.
         </CardContent>
       </Card>
     );
   }
+
+  // Only honour `?piano=` when it names a plan actually on offer and not the
+  // one already in force — otherwise the banner would promise something the
+  // picker below cannot deliver.
+  const wanted = plans.find(
+    (p) => p.plan_code === preselected && p.plan_code !== ent.plan_code
+  );
 
   return (
     <Card>
@@ -318,15 +343,32 @@ function PlanPicker({ ent, onChanged }: { ent: Entitlements; onChanged: () => vo
         <CardTitle>Piani disponibili</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {wanted && (
+          <div className="flex gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+            <CreditCard className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <p>
+              Hai scelto il piano <strong>{wanted.display_name}</strong> a{" "}
+              {formatEuro(wanted.price_year_cents)} all&apos;anno, IVA esclusa.
+              Completa l&apos;attivazione qui sotto: verrai portato su PayPal per
+              approvare l&apos;abbonamento.
+            </p>
+          </div>
+        )}
+
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {plans.map((plan) => {
             const current = plan.plan_code === ent.plan_code;
+            const highlighted = wanted?.plan_code === plan.plan_code;
             return (
               <div
                 key={plan.plan_code}
                 className={
                   "flex flex-col rounded-lg border p-4 " +
-                  (current ? "border-emerald-500 bg-emerald-50/40 dark:bg-emerald-950/20" : "")
+                  (current
+                    ? "border-emerald-500 bg-emerald-50/40 dark:bg-emerald-950/20"
+                    : highlighted
+                      ? "border-primary ring-1 ring-primary/30"
+                      : "")
                 }
               >
                 <div className="flex items-center justify-between">
@@ -352,7 +394,11 @@ function PlanPicker({ ent, onChanged }: { ent: Entitlements; onChanged: () => vo
                   onClick={() => void start(plan)}
                 >
                   {busy === plan.plan_code && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {current ? "Piano attuale" : "Passa a questo piano"}
+                  {current
+                    ? "Piano attuale"
+                    : highlighted
+                      ? "Attiva questo piano"
+                      : "Passa a questo piano"}
                 </Button>
               </div>
             );

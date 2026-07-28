@@ -252,6 +252,8 @@ Run against a database seeded to the exact production shape (6 orgs / 16 aziende
 | 4 | MB-4.4 cancel/revise subscription endpoint | DONE | `POST /billing/{cancel,revise}` |
 | 4 | MB-4.5 dunning → read-only downgrade | DONE | `ensure_subscription_active` at both generate endpoints + `_enqueue_generation` |
 | 4 | MB-4.6 FE: entitlements hook + usage UI + billing page | DONE | `/billing` page, `use-entitlements.ts`, `lib/billing.ts`, sidebar entry |
+| 4 | MB-4.7 public acquisition surface (added 2026-07-28) | DONE | New landing `/` + price list `/prezzi` (`components/landing/*`). Funnel: `/prezzi` → `/register?piano=` → `/billing?piano=` → `subscribe`. Only `A_SOLO`/`A_STUDIO` are self-serve; Network/Enterprise and **all** Model B plans are mailto leads (onboarding fees are invoiced separately, and Model B is blocked on MB-5.2/5.3/5.7). `?piano=` is a UI hint only — re-validated in `/billing/subscribe` |
+| 4 | MB-4.2/4.3 sandbox verification (2026-07-28) | DONE | `create_subscription` → `I-V0SEF0F77J9A` `APPROVAL_PENDING` + valid approval link. Production still returns `[]` from `/billing/plans` (no `paypal_plan_id`); go-live runbook in `DEPLOY.md` §4b |
 | **GATE 4 / REVENUE GATE** | Model A self-serve GA; sell to ≥1 non-founding studio before Phase 5 | — | |
 | 5 Model B | MB-5.1 seed B plans (POS/HACCP per OPEN-DECISION-1) | TODO | |
 | 5 | MB-5.2 `data/ateco_rischio.py` risk table | TODO | |

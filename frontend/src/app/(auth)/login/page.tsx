@@ -14,6 +14,9 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const justRegistered = searchParams.get("registered") === "1";
+  // Set when the visitor reached login from the public price list. Sends them to
+  // checkout with the plan preselected instead of the dashboard.
+  const piano = searchParams.get("piano");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -35,7 +38,7 @@ function LoginForm() {
     if (result?.error) {
       setError("Credenziali non valide");
     } else {
-      router.push("/dashboard");
+      router.push(piano ? `/billing?piano=${encodeURIComponent(piano)}` : "/dashboard");
     }
   }
 
@@ -118,7 +121,10 @@ function LoginForm() {
 
         <p className="mt-6 text-center text-[13px] text-[#64748d]">
           Non hai un account?{" "}
-          <Link href="/register" className="font-medium text-primary hover:underline">
+          <Link
+            href={piano ? `/register?piano=${encodeURIComponent(piano)}` : "/register"}
+            className="font-medium text-primary hover:underline"
+          >
             Registrati
           </Link>
         </p>
