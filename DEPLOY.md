@@ -112,21 +112,43 @@ Three things must happen, in this order, to switch it on. **All three need the
 live PayPal credentials, so a human has to run them** — they cannot be done from
 a coding session that must not handle API keys.
 
-1. **Set the live credentials on `n2o-dvr-api` and `n2o-dvr-worker`** (Render
-   dashboard → Environment; they are `sync: false` in `render.yaml` precisely so
-   they never land in git):
+1. **Set the live credentials on `n2o-dvr-api` only** (Render dashboard →
+   Environment). Two keys, both `sync: false` in `render.yaml` precisely so they
+   never land in git:
 
    | Key | Value |
    |---|---|
-   | `PAYPAL_ENV` | `live` |
    | `PAYPAL_CLIENT_ID` | from the **live** REST app, not the sandbox one |
    | `PAYPAL_CLIENT_SECRET` | ditto |
-   | `FRONTEND_URL` | `https://dvr-sicurezza.it` — a wrong value strands the customer on a dead page mid-purchase |
 
-   Confirm they work before going further:
+   `PAYPAL_ENV` (`live`) and `FRONTEND_URL` (`https://dvr-sicurezza.it`) are
+   already pinned in `render.yaml` — do **not** override them in the dashboard,
+   a blueprint sync would revert the edit.
+
+   **The worker needs none of these.** `n2o-dvr-worker` imports only
+   `billing.metering.record_activation_for_azienda`, which writes usage counters
+   to Postgres; nothing on the Celery path calls PayPal. `paypal_client` is
+   imported by `api/v1/billing.py` and `billing/lifecycle.py`, both of which run
+   on the API service.
+
+   Confirm the credentials work before going further:
 
 ```bash
 PYTHONPATH=. python -m scripts.paypal_check
+```
+
+   **Run steps 1–3's commands from a Render shell on `n2o-dvr-api`**, not from a
+   laptop. That instance already holds `DATABASE_URL` and the PayPal secrets, so
+   nothing sensitive has to be copied anywhere:
+
+```bash
+ssh srv-d7glpedckfvc73fvagk0@ssh.frankfurt.render.com
+```
+
+   then, in that shell, for every command below:
+
+```bash
+cd /opt/render/project/src/backend && export PYTHONPATH=.
 ```
 
 2. **Create the products and plans on the live merchant account**, writing

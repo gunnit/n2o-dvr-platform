@@ -40,8 +40,15 @@ services:
       # --- Billing (monetization Phase 4) ---------------------------------
       # PAYPAL_ENV picks the API host, so a sandbox credential shipped to
       # production fails to authenticate instead of quietly charging nobody.
+      #
+      # This is a production-only blueprint, so the value is pinned here rather
+      # than left to the dashboard: a blueprint sync overwrites dashboard edits
+      # for any key that is not `sync: false`, and silently reverting a live
+      # merchant to sandbox would strand every real subscription — PayPal would
+      # stop recognising the ids we hold. Sandbox work belongs on a scratch
+      # database, never on this one (plan ids are environment-specific).
       - key: PAYPAL_ENV
-        value: sandbox
+        value: live
       - key: PAYPAL_CLIENT_ID
         sync: false
       - key: PAYPAL_CLIENT_SECRET
