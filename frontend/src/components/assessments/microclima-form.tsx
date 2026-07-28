@@ -477,7 +477,13 @@ export function MicroclimaPmvForm({
                 : "—"}
             </Badge>
             {error && (
-              <span className="text-[11px] text-destructive">{error}</span>
+              // Inline rather than a FormError box: this sits next to the
+              // result Badge in a status row, not under a submit button. It
+              // still needs announcing — the calculation silently not having
+              // happened is exactly what an operator must not miss.
+              <span role="alert" className="text-[11px] text-destructive">
+                {error}
+              </span>
             )}
           </div>
         </CardContent>

@@ -1,3 +1,4 @@
+import { throwApiError } from "@/lib/api-errors";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface FetchOptions extends RequestInit {
@@ -17,8 +18,7 @@ export async function api<T>(path: string, options: FetchOptions = {}): Promise<
   });
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || `API error: ${res.status}`);
+    await throwApiError(res);
   }
 
   if (res.status === 204) return undefined as T;

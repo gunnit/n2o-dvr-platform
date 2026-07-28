@@ -142,7 +142,11 @@ export function DescriptionHistory({
             </div>
           )}
           {error && (
-            <p className="px-2 py-1 text-xs text-destructive">{error}</p>
+            // A load failure inside a dropdown list; a bordered alert panel
+            // would not fit the popover. role=alert so it is still announced.
+            <p role="alert" className="px-2 py-1 text-xs text-destructive">
+              {error}
+            </p>
           )}
           {!loading && !error && revisions.length === 0 && (
             <p className="px-2 py-3 text-center text-xs text-muted-foreground">

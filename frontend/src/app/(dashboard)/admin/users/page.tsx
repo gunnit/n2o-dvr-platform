@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/table";
 import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
+import { FormError } from "@/components/ui/form-error";
 
 interface UserRow {
   id: string;
@@ -410,7 +411,7 @@ function AddUserDialog({
               ))}
             </select>
           </div>
-          {err && <p className="text-sm text-destructive">{err}</p>}
+          <FormError>{err}</FormError>
           <DialogFooter>
             <Button
               type="button"
@@ -506,7 +507,7 @@ function EditUserDialog({
               ))}
             </select>
           </div>
-          {err && <p className="text-sm text-destructive">{err}</p>}
+          <FormError>{err}</FormError>
           <DialogFooter>
             <Button
               type="button"
@@ -601,7 +602,7 @@ function ResetPasswordDialog({
                 required
               />
             </div>
-            {err && <p className="text-sm text-destructive">{err}</p>}
+            <FormError>{err}</FormError>
             <DialogFooter>
               <Button
                 type="button"

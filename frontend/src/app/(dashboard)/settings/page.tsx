@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApi } from "@/hooks/use-api";
+import { FormError } from "@/components/ui/form-error";
 
 interface MeResponse {
   id: string;
@@ -163,7 +164,7 @@ function ProfileCard() {
         {loading ? (
           <p className="type-body">Caricamento…</p>
         ) : error ? (
-          <p className="text-sm text-destructive">{error}</p>
+          <FormError>{error}</FormError>
         ) : me ? (
           <form onSubmit={submit} className="space-y-5">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -328,7 +329,7 @@ function PasswordCard() {
               )}
             </div>
           </div>
-          {err && <p className="text-sm text-destructive">{err}</p>}
+          <FormError>{err}</FormError>
           <div className="flex justify-end">
             <Button
               type="submit"

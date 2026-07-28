@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { SurveyWizard } from "@/components/survey/survey-wizard";
 import type { SurveyData } from "@/components/survey/survey-wizard";
 import type { Azienda } from "@/types";
+import { FormError } from "@/components/ui/form-error";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -120,7 +121,7 @@ export default function SurveyAziendaPage() {
           </p>
         </div>
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center">
-          <p className="text-sm text-destructive">{error}</p>
+          <FormError>{error}</FormError>
         </div>
       </div>
     );

@@ -25,6 +25,7 @@ import {
   type StressResult,
 } from "@/components/assessments/stress-checklist";
 import type { Azienda } from "@/types";
+import { throwApiError } from "@/lib/api-errors";
 
 // Inline copy of the library type. The orchestrator wires the canonical
 // definition into `frontend/src/types/index.ts`; keeping this declared
@@ -546,8 +547,7 @@ export default function StressAssessmentPage() {
         },
       );
       if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.detail || `Errore ${res.status}`);
+        await throwApiError(res);
       }
       const data = (await res.json()) as { suggestion: string };
 
@@ -621,8 +621,7 @@ export default function StressAssessmentPage() {
         },
       );
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail || `API error ${res.status}`);
+        await throwApiError(res);
       }
       const data = (await res.json()) as {
         punteggio_totale: number | null;

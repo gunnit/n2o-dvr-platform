@@ -33,7 +33,7 @@ import { Label } from "@/components/ui/label";
 import { MatchesPanel } from "@/components/assessments/gestanti/matches-panel";
 import { RelocationDialog } from "@/components/assessments/gestanti/relocation-dialog";
 import { WorkerSelector } from "@/components/assessments/gestanti/worker-selector";
-import { parseApiError } from "@/lib/api-errors";
+import { parseApiError, throwApiError } from "@/lib/api-errors";
 import type {
   CrossReferenceResponse,
   FemaleWorker,
@@ -214,8 +214,7 @@ export default function GestantiAssessmentPage() {
           },
         );
         if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body.detail || `Errore ${res.status}`);
+          await throwApiError(res);
         }
         const data = (await res.json()) as CrossReferenceResponse;
         setMatchData(data);
@@ -278,8 +277,7 @@ export default function GestantiAssessmentPage() {
           },
         );
         if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body.detail || `Errore ${res.status}`);
+          await throwApiError(res);
         }
         // Success: re-run the cross-reference so the decision badge is reflected.
         await runCrossReference(matchData.worker_id);

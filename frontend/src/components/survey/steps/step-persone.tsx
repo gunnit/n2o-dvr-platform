@@ -25,6 +25,7 @@ import {
 import { Pencil, Plus, Trash2, Users } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import type { Ambiente, AttrezzaturaSpecialeCode, Persona } from "@/types";
+import { FormError } from "@/components/ui/form-error";
 
 interface StepPersoneProps {
   aziendaId: string;
@@ -828,7 +829,7 @@ export function StepPersone({
           )}
 
           {saveError && (
-            <p className="text-sm text-destructive">{saveError}</p>
+            <FormError>{saveError}</FormError>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={closeModal} disabled={saving}>

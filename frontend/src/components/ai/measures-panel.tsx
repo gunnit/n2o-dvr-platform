@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { useApi } from "@/hooks/use-api";
 import { AIBadge } from "./ai-badge";
 import { AIContent } from "./ai-filter-context";
+import { FormError } from "@/components/ui/form-error";
 
 /**
  * AI improvement measures panel (US-2.6).
@@ -378,7 +379,7 @@ export function MeasuresPanel({
             {libraryLoading && <Loader2 className="h-3 w-3 animate-spin" />}
           </p>
           {libraryError && (
-            <p className="text-xs text-destructive">{libraryError}</p>
+            <FormError className="px-3 py-2">{libraryError}</FormError>
           )}
           {availableLibrary.map((entry) => (
             <div

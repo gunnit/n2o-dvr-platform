@@ -19,6 +19,8 @@ import {
   type AziendaFieldErrors,
 } from "@/lib/validators/azienda";
 import type { Azienda } from "@/types";
+import { FormError } from "@/components/ui/form-error";
+import { throwApiError } from "@/lib/api-errors";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -262,8 +264,7 @@ export default function EditAziendaPage() {
       });
 
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail || `Errore: ${res.status}`);
+        await throwApiError(res);
       }
 
       toast.success("Azienda aggiornata");
@@ -614,7 +615,7 @@ export default function EditAziendaPage() {
               </div>
             </div>
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            <FormError>{error}</FormError>
             <div className="flex gap-3 border-t border-[#e5edf5] pt-6">
               <Button type="submit" disabled={saving}>
                 {saving ? "Salvataggio..." : "Salva modifiche"}
