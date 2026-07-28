@@ -279,3 +279,89 @@ body {
 .dark-section :where(a, button):focus-visible {
   outline-color: #a5c8ff;
 }
+
+/* -----------------------------------------------------------------------
+   Login / auth split screen
+   The cinematic panel leans on slow ambient motion; every class below is
+   decorative only and stays behind a reduced-motion guard.
+   ----------------------------------------------------------------------- */
+
+@keyframes auth-ken {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.09);
+  }
+}
+
+/* Indeterminate bar: a short segment travelling left to right */
+@keyframes auth-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+@keyframes auth-shake {
+  10%,
+  90% {
+    transform: translateX(-1px);
+  }
+  20%,
+  80% {
+    transform: translateX(2px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-4px);
+  }
+  40%,
+  60% {
+    transform: translateX(4px);
+  }
+}
+
+@keyframes auth-draw {
+  from {
+    stroke-dashoffset: 30;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes auth-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .auth-ken {
+    animation: auth-ken 30s ease-in-out infinite alternate;
+  }
+  .auth-sweep {
+    animation: auth-sweep 1.2s linear infinite;
+  }
+  .auth-sweep-slow {
+    animation: auth-sweep 1.6s ease-in-out infinite;
+  }
+  .auth-shake {
+    animation: auth-shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+  }
+  .auth-draw {
+    animation: auth-draw 0.55s cubic-bezier(0.16, 1, 0.3, 1) 120ms backwards;
+  }
+  .auth-pop {
+    animation: auth-pop 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+}
