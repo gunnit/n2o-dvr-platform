@@ -65,7 +65,7 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
             ("Azienda", azienda.ragione_sociale or ""),
             ("Data valutazione", generated_at.strftime("%d/%m/%Y")),
             ("Lavoratrici in stato di gravidanza/allattamento notificate", str(len(gestanti))),
-            ("Riferimento normativo", "D.Lgs. 151/2001 (artt. 7, 11, 12; Allegati A-B-C), mod. D.Lgs. 105/2022 - Testo Unico maternita e paternita"),
+            ("Riferimento normativo", "D.Lgs. 151/2001 (artt. 7, 11, 12; Allegati A-B-C), mod. D.Lgs. 105/2022 - Testo Unico maternità e paternità"),
         ])
 
         add_heading(doc, "Inquadramento normativo", level=2)
@@ -148,10 +148,4 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
         return filepath
 
     async def _next_version(self) -> int:
-        stmt = (
-            select(func.coalesce(func.max(DocumentoGenerato.versione), 0))
-            .where(DocumentoGenerato.azienda_id == self.azienda_id)
-            .where(DocumentoGenerato.tipo_documento.in_([TIPO_DOC, "ALLEGATO_GESTANTI"]))
-        )
-        r = await self.db.execute(stmt)
-        return (r.scalar() or 0) + 1
+        return await self.resolve_version([TIPO_DOC, "ALLEGATO_GESTANTI"])

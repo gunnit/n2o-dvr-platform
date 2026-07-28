@@ -22,6 +22,8 @@ import {
 import type { Azienda } from "@/types";
 import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
+import { parseApiDate } from "@/lib/ui/api-date";
+import { useTenantVocabulary } from "@/hooks/use-tenant-vocabulary";
 import { SurveillanceAlerts } from "@/components/dashboard/surveillance-alerts";
 
 // ---------------------------------------------------------------------------
@@ -120,7 +122,8 @@ function pickAccent(seed: string): AccentKey {
 }
 
 function formatShortIt(iso: string): string {
-  const d = new Date(iso);
+  const d = parseApiDate(iso);
+  if (!d) return "";
   const m = d
     .toLocaleDateString("it-IT", { month: "short" })
     .replace(".", "")
@@ -129,7 +132,11 @@ function formatShortIt(iso: string): string {
 }
 
 function formatRelativeIt(iso: string): string {
-  const delta = Math.round((Date.now() - new Date(iso).getTime()) / 3600_000);
+  // The API sends naive UTC; `new Date(iso)` would read it as local and put
+  // every fresh record hours in the past (P2-2).
+  const d = parseApiDate(iso);
+  if (!d) return "";
+  const delta = Math.round((Date.now() - d.getTime()) / 3600_000);
   if (delta < 1) return "poco fa";
   if (delta < 24) return `${delta}h fa`;
   const days = Math.floor(delta / 24);
@@ -288,6 +295,9 @@ type FilterKey = "all" | "active" | "draft";
 export default function DashboardPage() {
   const { apiFetch, isAuthenticated } = useApi();
   const { data: session } = useSession();
+  // A direct tenant documents its own company, not a portfolio of clients —
+  // "Clienti attivi" is the wrong noun for a datore di lavoro (P2-1).
+  const vocab = useTenantVocabulary();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const role = (session?.user as any)?.role as string | undefined;
   const isAdmin = role === "admin";
@@ -464,7 +474,7 @@ export default function DashboardPage() {
               className="inline-flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-[13px] font-semibold text-white shadow-stripe-ambient transition-colors hover:bg-[#1b5594]"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-              Aggiungi cliente
+              {vocab.addCompany}
             </Link>
           )}
         </div>
@@ -482,7 +492,7 @@ export default function DashboardPage() {
           */}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <KpiTile
-              label="Clienti attivi"
+              label={vocab.activeCompanies}
               value={stats.total}
               accent="primary"
               icon={Building2}
@@ -490,7 +500,7 @@ export default function DashboardPage() {
                 stats.total > 0 ? (
                   <>portafoglio gestito</>
                 ) : (
-                  <>nessun cliente</>
+                  <>{vocab.noCompanies}</>
                 )
               }
               pipeline={stats}
@@ -562,7 +572,7 @@ export default function DashboardPage() {
             <section className="overflow-hidden rounded-md border border-[#e5edf5] bg-white shadow-stripe-ambient">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e5edf5] px-4 py-3.5">
                 <h2 className="flex items-center gap-2 font-heading text-[15px] font-semibold text-[#061b31]">
-                  Aziende Clienti
+                  {vocab.companiesHeading}
                   <span className="rounded-full bg-[#f0f4fa] px-2 py-0.5 text-[11.5px] font-bold text-[#64748d]">
                     {aziende.length}
                   </span>
@@ -716,6 +726,7 @@ export default function DashboardPage() {
 // ---------------------------------------------------------------------------
 
 function QuickActionsPanel() {
+  const vocab = useTenantVocabulary();
   const actions: Array<{
     label: string;
     sub: string;
@@ -725,7 +736,7 @@ function QuickActionsPanel() {
   }> = [
     {
       label: "Nuova azienda",
-      sub: "registra cliente",
+      sub: vocab.addCompanyHint,
       href: "/aziende/new",
       accent: "primary",
       icon: Plus,

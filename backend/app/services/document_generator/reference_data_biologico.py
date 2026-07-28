@@ -54,7 +54,7 @@ ASILO_MISURE = [
     "Aerazione frequente degli ambienti (almeno 4 volte/giorno)",
     "Sanificazione quotidiana di giochi, superfici e servizi igienici",
     "Lavaggio frequente delle mani per educatori e bambini",
-    "Isolamento dei bambini con sintomi infettivi fino a idoneita al rientro",
+    "Isolamento dei bambini con sintomi infettivi fino a idoneità al rientro",
     "Gestione biancheria sporca in contenitori dedicati",
     "Piano vaccinale del personale aggiornato",
     "Segnalazione casi di malattie infettive all'ASL",
@@ -99,7 +99,7 @@ DENTISTI_DPI = [
     "Copricapo",
 ]
 DENTISTI_PROTOCOLLO = (
-    "Sorveglianza sanitaria con periodicita annuale: profilo sierologico HBV/HCV/HIV, Quantiferon "
+    "Sorveglianza sanitaria con periodicità annuale: profilo sierologico HBV/HCV/HIV, Quantiferon "
     "per TBC, verifica vaccinazioni (epatite B obbligatoria, antinfluenzale raccomandata, "
     "tetano). Registro esposizioni accidentali. Protocollo post-esposizione attivato entro 1 ora "
     "dall'evento con test di base, eventuale profilassi ARV e monitoraggio a 3/6/12 mesi."
@@ -197,7 +197,7 @@ def classify_biologico(settore: str, risposte: list[dict]) -> dict:
 
     Algorithm:
       - For each checklist item, if the operator answered NO, add its
-        criticita weight (alta=3, media=2, bassa=1) to `no_weight`.
+        criticità weight (alta=3, media=2, bassa=1) to `no_weight`.
       - If the answer is NA, exclude the item from `max_weight` (denominator).
       - If the answer is SI or missing, include it in `max_weight` but not
         in `no_weight`.

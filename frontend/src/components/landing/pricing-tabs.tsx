@@ -426,10 +426,10 @@ export function PricingTabs({ signedIn }: { signedIn: boolean }) {
                   A chi sono pensati
                 </p>
                 <p className="mt-2.5 text-[14px] leading-[1.6] text-[#64748d]">
-                  Imprese che documentano la propria sicurezza, entro le soglie
-                  dimensionali e di rischio di ciascun piano. Restano fuori il
-                  POS del cantiere temporaneo o mobile e il manuale HACCP: non
-                  sono inclusi in nessun piano diretto e passano da uno studio
+                  Imprese che documentano la propria sicurezza, entro i limiti
+                  di sedi e addetti di ciascun piano. Restano fuori il POS del
+                  cantiere temporaneo o mobile e il manuale HACCP: non sono
+                  inclusi in nessun piano diretto e passano da uno studio
                   partner, che mantiene il cliente. Se la tua impresa rientra in
                   questi casi{" "}
                   <a

@@ -85,6 +85,10 @@ async def _run_generation(document_id: uuid.UUID) -> None:
                 doc.azienda_id,
                 db,
                 options=doc.options,
+                # The row already carries the revision number the API assigned.
+                # Letting the generator re-derive it made it count this very
+                # row and stamp one too many (P1-2).
+                version=doc.versione,
             )
             output_path = await generator.generate()
 

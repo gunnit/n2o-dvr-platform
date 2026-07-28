@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/use-api";
 import type { Azienda } from "@/types";
+import { FieldError } from "@/components/ui/form-error";
 import {
   validatePartitaIva as runPartitaIvaValidator,
   validateCodiceAteco as runAtecoValidator,
@@ -45,10 +46,10 @@ interface ValidationErrors {
 }
 
 const ZONE_SISMICHE = [
-  { value: 1, label: "Zona 1 - Alta pericolosita" },
-  { value: 2, label: "Zona 2 - Media pericolosita" },
-  { value: 3, label: "Zona 3 - Bassa pericolosita" },
-  { value: 4, label: "Zona 4 - Molto bassa pericolosita" },
+  { value: 1, label: "Zona 1 - Alta pericolosità" },
+  { value: 2, label: "Zona 2 - Media pericolosità" },
+  { value: 3, label: "Zona 3 - Bassa pericolosità" },
+  { value: 4, label: "Zona 4 - Molto bassa pericolosità" },
 ];
 
 export function StepAzienda({
@@ -160,10 +161,10 @@ export function StepAzienda({
               onBlur={(e) => validateRagioneSociale(e.target.value)}
               placeholder="Es. Mario Rossi S.r.l."
               className={errors.ragione_sociale ? "border-destructive" : ""}
+              aria-invalid={!!errors.ragione_sociale || undefined}
+              aria-describedby={errors.ragione_sociale ? "ragione_sociale-error" : undefined}
             />
-            {errors.ragione_sociale && (
-              <p className="text-xs text-destructive">{errors.ragione_sociale}</p>
-            )}
+            <FieldError id="ragione_sociale-error">{errors.ragione_sociale}</FieldError>
           </div>
 
           {/* Partita IVA */}
@@ -178,15 +179,15 @@ export function StepAzienda({
               onBlur={(e) => validatePartitaIva(e.target.value)}
               placeholder="Es. 12345678901"
               className={errors.partita_iva ? "border-destructive" : ""}
+              aria-invalid={!!errors.partita_iva || undefined}
+              aria-describedby={errors.partita_iva ? "partita_iva-error" : undefined}
             />
-            {errors.partita_iva && (
-              <p className="text-xs text-destructive">{errors.partita_iva}</p>
-            )}
+            <FieldError id="partita_iva-error">{errors.partita_iva}</FieldError>
           </div>
 
-          {/* Attivita */}
+          {/* Attività */}
           <div className="space-y-2">
-            <Label htmlFor="attivita">Attivita</Label>
+            <Label htmlFor="attivita">Attività</Label>
             <Input
               id="attivita"
               value={data.attivita ?? ""}
@@ -207,10 +208,10 @@ export function StepAzienda({
               onBlur={(e) => validateCodiceAteco(e.target.value)}
               placeholder="Es. 56.10.11"
               className={errors.codice_ateco ? "border-destructive" : ""}
+              aria-invalid={!!errors.codice_ateco || undefined}
+              aria-describedby={errors.codice_ateco ? "codice_ateco-error" : undefined}
             />
-            {errors.codice_ateco && (
-              <p className="text-xs text-destructive">{errors.codice_ateco}</p>
-            )}
+            <FieldError id="codice_ateco-error">{errors.codice_ateco}</FieldError>
           </div>
 
           {/* Sede Legale */}
@@ -231,7 +232,7 @@ export function StepAzienda({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="sede_legale_citta">Citta</Label>
+                <Label htmlFor="sede_legale_citta">Città</Label>
                 <Input
                   id="sede_legale_citta"
                   value={data.sede_legale_citta ?? ""}
@@ -263,7 +264,7 @@ export function StepAzienda({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="sede_operativa_citta">Citta</Label>
+                <Label htmlFor="sede_operativa_citta">Città</Label>
                 <Input
                   id="sede_operativa_citta"
                   value={data.sede_operativa_citta ?? ""}

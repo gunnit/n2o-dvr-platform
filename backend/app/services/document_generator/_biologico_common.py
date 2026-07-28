@@ -47,7 +47,7 @@ async def build_biologico_document(
     ])
 
     add_heading(doc, "Inquadramento", level=2)
-    add_paragraph(doc, "La valutazione segue il Titolo X (artt. 266-286) del D.Lgs. 81/2008 e classifica gli agenti biologici nei gruppi da 1 a 4 dell'Allegato XLVI in base a patogenicita, contagiosita e disponibilita di terapia/profilassi; le misure di contenimento e la segnaletica di rischio biologico sono definite agli Allegati XLIV e XLV.")
+    add_paragraph(doc, "La valutazione segue il Titolo X (artt. 266-286) del D.Lgs. 81/2008 e classifica gli agenti biologici nei gruppi da 1 a 4 dell'Allegato XLVI in base a patogenicità, contagiosità e disponibilità di terapia/profilassi; le misure di contenimento e la segnaletica di rischio biologico sono definite agli Allegati XLIV e XLV.")
 
     add_heading(doc, "Agenti biologici identificati", level=2)
     agenti = (row.agenti_identificati if row and row.agenti_identificati else None) or agenti_default
@@ -73,7 +73,7 @@ async def build_biologico_document(
     add_heading(doc, "Esito valutazione", level=2)
     add_kv_table(doc, [
         ("Livello di rischio complessivo", (row.livello_rischio if row else "MEDIO") or "MEDIO"),
-        ("Periodicita revisione", "Annuale o in caso di modifiche organizzative rilevanti"),
+        ("Periodicità revisione", "Annuale o in caso di modifiche organizzative rilevanti"),
     ])
 
     version = await _next_version(gen, tipo_doc, tipo_aliases)
@@ -85,10 +85,4 @@ async def build_biologico_document(
 
 
 async def _next_version(gen: BaseDocumentGenerator, tipo_doc: str, aliases: list[str]) -> int:
-    stmt = (
-        select(func.coalesce(func.max(DocumentoGenerato.versione), 0))
-        .where(DocumentoGenerato.azienda_id == gen.azienda_id)
-        .where(DocumentoGenerato.tipo_documento.in_([tipo_doc] + aliases))
-    )
-    r = await gen.db.execute(stmt)
-    return (r.scalar() or 0) + 1
+    return await gen.resolve_version([tipo_doc] + aliases)

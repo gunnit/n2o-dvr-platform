@@ -26,6 +26,7 @@ from app.billing.constants import (
     ACCOUNT_TYPE_CONSULTANT,
     ACTIVE_STATUSES,
     FOUNDING_PLAN_CODE,
+    STATUS_NONE,
     normalize_doc_type,
 )
 from app.db.session import get_db
@@ -46,7 +47,9 @@ class Entitlements:
     """
 
     account_type: str
-    plan_code: str
+    # None = this organization owns no subscription row (never bought anything).
+    # Callers must not treat it as a plan lookup key; see `subscribed`.
+    plan_code: str | None
     # None = all 17 document types (every Model A plan).
     allowed_doc_types: frozenset[str] | None
     seats: int
@@ -85,6 +88,16 @@ class Entitlements:
         return self.status in ACTIVE_STATUSES
 
     @property
+    def subscribed(self) -> bool:
+        """Whether this org owns a subscription row at all.
+
+        ``False`` means "has never bought", not "lapsed" — a canceled tenant is
+        subscribed but not :attr:`is_active`. The UI needs the distinction to
+        choose between "attiva un piano" and "rinnova".
+        """
+        return self.status != STATUS_NONE
+
+    @property
     def credits_unmetered(self) -> bool:
         return self.ai_credits_year is None
 
@@ -102,17 +115,21 @@ class Entitlements:
         return self.features.get(name, default)
 
 
-def _fallback_entitlements(account_type: str) -> Entitlements:
-    """The INV-1 safety net: an org with no resolvable subscription.
+def _data_gap_entitlements(account_type: str) -> Entitlements:
+    """The INV-1 safety net: the organization row itself cannot be read.
 
     Deliberately **fully permissive** — every limit ``None``, no doc-type
-    restriction. This is a data-integrity gap (MB-1.3 should have given every
-    org a subscription row), and the correct failure mode for a gap is to let
-    the customer keep working while we get paged, never to 402 a paying tenant.
+    restriction, reported as active. The correct failure mode for a data gap is
+    to let the customer keep working while we get paged, never to 402 a paying
+    tenant over our own bookkeeping.
 
     Note this is more permissive than the *seeded* ``A_FOUNDING`` row, which has
     finite seats/companies/credits. Reusing those finite numbers here would mean
     a data gap could still block someone, which is exactly what INV-1 forbids.
+
+    This is **not** the path for "signed up, hasn't paid" — that is
+    :func:`_unsubscribed_entitlements`. Conflating the two is what made every
+    new signup look like an active founding partner (MB-6.1).
     """
     return Entitlements(
         account_type=account_type,
@@ -124,6 +141,40 @@ def _fallback_entitlements(account_type: str) -> Entitlements:
         ai_credits_year=None,
         features={},
         status="active",
+    )
+
+
+def _unsubscribed_entitlements(account_type: str) -> Entitlements:
+    """A real organization that has never bought a plan.
+
+    The normal state of a fresh self-serve signup between ``POST /auth/register``
+    and the ``BILLING.SUBSCRIPTION.ACTIVATED`` webhook — so it must read
+    honestly rather than borrow the founding partner's rights:
+
+    * ``plan_code`` is ``None`` — the UI renders "nessun piano attivo" and a
+      call to action, instead of an internal code the customer never bought.
+    * ``status`` is :data:`STATUS_NONE`, so :attr:`is_active` is ``False`` and
+      ``ensure_subscription_active`` is the single gate that speaks for this
+      case. Under shadow mode it logs ``WOULD_402 reason=subscription``, which
+      is exactly the evidence GATE 2 needs and which the old permissive
+      fallback silently withheld.
+    * ``seats`` is 1 — the admin who signed up. Every other limit stays ``None``
+      because the subscription gate already covers the case; duplicating the
+      refusal across four gates would just make the shadow log noisier.
+
+    Safe to be non-active only because migration ``e7f8a9b0c1d2`` gave every
+    pre-existing organization an explicit ``A_FOUNDING`` row (INV-1).
+    """
+    return Entitlements(
+        account_type=account_type,
+        plan_code=None,
+        allowed_doc_types=None,
+        seats=1,
+        max_companies=None,
+        max_sites=None,
+        ai_credits_year=None,
+        features={},
+        status=STATUS_NONE,
     )
 
 
@@ -152,22 +203,32 @@ async def resolve_entitlements(org_id: uuid.UUID, db: AsyncSession) -> Entitleme
 
     if row is None:
         # No such organization. Callers reach this through an authenticated
-        # user, so this means the org was deleted mid-session.
+        # user, so this means the org was deleted mid-session — a genuine data
+        # gap, and INV-1 says a gap must not cost anyone their access.
         logger.warning("entitlements: organization %s not found; using permissive fallback", org_id)
-        return _fallback_entitlements(ACCOUNT_TYPE_CONSULTANT)
+        return _data_gap_entitlements(ACCOUNT_TYPE_CONSULTANT)
 
     account_type, subscription, plan = row
     account_type = account_type or ACCOUNT_TYPE_CONSULTANT
 
-    if subscription is None or plan is None:
+    if subscription is None:
+        # Expected, not exceptional: every self-serve signup lives here until
+        # its first ACTIVATED webhook. Reported honestly rather than granted
+        # the founding partner's rights (MB-6.1). Logged at debug because on
+        # the direct channel this is the single most common state there is.
+        logger.debug("entitlements: org %s has no subscription yet (never purchased)", org_id)
+        return _unsubscribed_entitlements(account_type)
+
+    if plan is None:
+        # A subscription pointing at a plan_code that no longer resolves. The
+        # customer *did* buy something, so this is our bookkeeping failing, not
+        # their entitlement lapsing — soft-fail permissively and page someone.
         logger.warning(
-            "entitlements: org %s has no resolvable subscription (subscription=%s, plan=%s); "
-            "using permissive fallback — every org should own a subscription row after MB-1.3",
+            "entitlements: org %s has subscription on unknown plan %s; using permissive fallback",
             org_id,
-            getattr(subscription, "plan_code", None),
-            None if plan is None else plan.plan_code,
+            subscription.plan_code,
         )
-        return _fallback_entitlements(account_type)
+        return _data_gap_entitlements(account_type)
 
     allowed = plan.allowed_doc_types
     return Entitlements(

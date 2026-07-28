@@ -52,8 +52,8 @@ class DuvriGenerator(BaseDocumentGenerator):
         ])
 
         add_heading(doc, "Oggetto del documento", level=2)
-        add_paragraph(doc, "Il presente DUVRI individua le misure di prevenzione e protezione necessarie ad eliminare o ridurre al minimo i rischi derivanti dalle interferenze tra le attivita del committente e quelle dell'impresa appaltatrice.")
-        add_paragraph(doc, "Ai sensi dell'art. 26 comma 3-bis del D.Lgs. 81/2008 (introdotto dal D.Lgs. 106/2009), l'obbligo di redazione del DUVRI non si applica ai servizi di natura intellettuale, alle mere forniture di materiali o attrezzature, nonche ai lavori o servizi la cui durata non superi i cinque uomini-giorno, salvo che comportino rischi derivanti da agenti cancerogeni, biologici, atmosfere esplosive o dai rischi particolari di cui all'Allegato XI.")
+        add_paragraph(doc, "Il presente DUVRI individua le misure di prevenzione e protezione necessarie ad eliminare o ridurre al minimo i rischi derivanti dalle interferenze tra le attività del committente e quelle dell'impresa appaltatrice.")
+        add_paragraph(doc, "Ai sensi dell'art. 26 comma 3-bis del D.Lgs. 81/2008 (introdotto dal D.Lgs. 106/2009), l'obbligo di redazione del DUVRI non si applica ai servizi di natura intellettuale, alle mere forniture di materiali o attrezzature, nonché ai lavori o servizi la cui durata non superi i cinque uomini-giorno, salvo che comportino rischi derivanti da agenti cancerogeni, biologici, atmosfere esplosive o dai rischi particolari di cui all'Allegato XI.")
 
         if not duvri_rows:
             add_paragraph(doc, "Non risultano appalti attivi al momento della valutazione.", italic=True)
@@ -71,7 +71,7 @@ class DuvriGenerator(BaseDocumentGenerator):
 
             attrezz = d.attrezzature_appaltatore or []
             if attrezz:
-                add_heading(doc, "Attrezzature / attivita appaltatore", level=3)
+                add_heading(doc, "Attrezzature / attività appaltatore", level=3)
                 rows = [
                     [a.get("tipo", ""), a.get("descrizione", "") or ""]
                     for a in attrezz
@@ -105,10 +105,4 @@ class DuvriGenerator(BaseDocumentGenerator):
         return filepath
 
     async def _next_version(self) -> int:
-        stmt = (
-            select(func.coalesce(func.max(DocumentoGenerato.versione), 0))
-            .where(DocumentoGenerato.azienda_id == self.azienda_id)
-            .where(DocumentoGenerato.tipo_documento.in_([TIPO_DOC, "DUVRI"]))
-        )
-        r = await self.db.execute(stmt)
-        return (r.scalar() or 0) + 1
+        return await self.resolve_version([TIPO_DOC, "DUVRI"])

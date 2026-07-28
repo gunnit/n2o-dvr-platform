@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -158,14 +158,52 @@ async def save_survey_step(
     return {"message": f"Step {step_number} saved", "survey_status": azienda.survey_status}
 
 
+async def _survey_completeness_errors(azienda_id: uuid.UUID, db: AsyncSession) -> list[str]:
+    """What is still missing before this sopralluogo can be called complete.
+
+    The wizard already blocks "Avanti" on these, but that check lives in the
+    browser and this endpoint is one POST away from anyone holding a token. A
+    survey marked complete with no ambienti and no lavoratori generates a DVR
+    with an empty Parte III — a document that is worse than no document,
+    because it looks like a real assessment.
+    """
+    missing: list[str] = []
+
+    ambienti = await db.scalar(
+        select(func.count()).select_from(Ambiente).where(Ambiente.azienda_id == azienda_id)
+    )
+    if not ambienti:
+        missing.append("almeno un ambiente di lavoro")
+
+    persone = await db.scalar(
+        select(func.count()).select_from(Persona).where(Persona.azienda_id == azienda_id)
+    )
+    if not persone:
+        missing.append("almeno un lavoratore")
+
+    return missing
+
+
 @router.post("/complete", response_model=SurveyCompleteResponse)
 async def complete_survey(
     azienda_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
     db: AsyncSession = Depends(get_db),
 ):
-    """Mark the survey as completed."""
+    """Mark the survey as completed.
+
+    Refuses an empty sopralluogo (P1-4): the precondition used to exist only in
+    the wizard, so the API would happily flag a survey with nothing in it as
+    completed and let document generation proceed from there.
+    """
     azienda = await _get_azienda(azienda_id, org_id, db)
+
+    missing = await _survey_completeness_errors(azienda_id, db)
+    if missing:
+        raise BadRequestError(
+            "Sopralluogo incompleto: manca " + ", ".join(missing) + "."
+        )
+
     azienda.survey_status = "completed"
     await db.commit()
 
@@ -186,8 +224,20 @@ async def sign_survey(
 
     US-1.6 AC3: once signed the survey moves to status "firmato". The wizard
     gates navigation on this status.
+
+    Signing carries more weight than completing — it is the client's
+    attestation that what was surveyed is what is there — so it applies the
+    same completeness precondition (P1-4).
     """
     azienda = await _get_azienda(azienda_id, org_id, db)
+
+    missing = await _survey_completeness_errors(azienda_id, db)
+    if missing:
+        raise BadRequestError(
+            "Non è possibile firmare un sopralluogo incompleto: manca "
+            + ", ".join(missing)
+            + "."
+        )
 
     # Strip the "data:image/png;base64," prefix if present.
     raw = body.signature_data_url

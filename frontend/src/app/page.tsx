@@ -553,10 +553,12 @@ export default async function Home() {
 
             <Reveal>
               <p className="mt-[26px] max-w-[80ch] text-[13.5px] leading-[1.6] text-[#64748d]">
-                I piani diretti sono riservati alle imprese sotto le soglie
-                dimensionali e di rischio previste. Cantieri, classi ATECO ad
-                alto rischio e organici superiori vengono indirizzati a uno
-                studio partner.
+                I piani diretti sono pensati per le imprese che documentano la
+                propria sicurezza, entro i limiti di sedi e addetti di ciascun
+                piano. Il POS del cantiere temporaneo o mobile e il manuale
+                HACCP non sono inclusi in nessun piano diretto: se la tua
+                attività li richiede ti mettiamo in contatto con uno studio
+                partner.
               </p>
             </Reveal>
           </div>

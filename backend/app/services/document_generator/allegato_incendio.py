@@ -26,7 +26,7 @@ TIPO_DOC = "allegato_incendio"
 # measures keyed by the area's livello_rischio so an inspector sees a
 # concrete plan, not generic boilerplate.
 PREVENTION_CATEGORIES: list[tuple[str, str]] = [
-    ("1. Ridurre la probabilita di insorgenza di un incendio",
+    ("1. Ridurre la probabilità di insorgenza di un incendio",
      "Controllo periodico degli impianti elettrici, separazione materiali infiammabili, divieti di fumo, manutenzione apparecchiature."),
     ("2. Garantire l'esodo delle persone in sicurezza",
      "Vie di fuga sgombre e segnalate, porte tagliafuoco verificate, illuminazione di emergenza, punto di raccolta esterno."),
@@ -51,12 +51,12 @@ LIVELLO_SPECIFIC_MEASURES: dict[str, list[str]] = {
     "MEDIO": [
         "Esercitazione antincendio almeno annuale con scenari multipli (esodo, primo intervento).",
         "Verifica estintori semestrale; impianto rivelazione + allarme periodicamente testato.",
-        "Addetti antincendio formazione 8 ore (livello 2-FOR) + idoneita tecnica per gli ambienti soggetti a CPI.",
+        "Addetti antincendio formazione 8 ore (livello 2-FOR) + idoneità tecnica per gli ambienti soggetti a CPI.",
     ],
     "ALTO": [
         "Esercitazione antincendio semestrale; coinvolgimento VV.F. nei piani di emergenza complessi.",
         "Sistema di rivelazione automatica e spegnimento (sprinkler / aerosol) dove tecnicamente fattibile.",
-        "Addetti antincendio formazione 16 ore (livello 3-FOR) + idoneita tecnica obbligatoria; CPI in corso di validita.",
+        "Addetti antincendio formazione 16 ore (livello 3-FOR) + idoneità tecnica obbligatoria; CPI in corso di validità.",
         "Coordinamento con il responsabile CPI per aggiornamenti periodici.",
     ],
 }
@@ -88,13 +88,13 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
         add_kv_table(doc, [
             ("Azienda", azienda.ragione_sociale or ""),
             ("Data valutazione", generated_at.strftime("%d/%m/%Y")),
-            ("Riferimento normativo", "D.M. 03/09/2021 (criteri di valutazione del rischio incendio) e D.M. 02/09/2021 (gestione emergenze e formazione); attivita soggette ex D.P.R. 151/2011"),
+            ("Riferimento normativo", "D.M. 03/09/2021 (criteri di valutazione del rischio incendio) e D.M. 02/09/2021 (gestione emergenze e formazione); attività soggette ex D.P.R. 151/2011"),
         ])
 
         add_heading(doc, "Metodologia di valutazione", level=2)
         add_paragraph(doc, "Il rischio incendio e valutato combinando tre indicatori, ciascuno in scala 1-3:")
         add_data_table(doc, ["Codice", "Indicatore", "Scala 1-3"], [
-            ["INF", "Infiammabilita e carico d'incendio", "1=basso; 2=medio; 3=alto"],
+            ["INF", "Infiammabilità e carico d'incendio", "1=basso; 2=medio; 3=alto"],
             ["SI",  "Sorgenti di ignizione presenti", "1=assenti/rare; 2=discrete; 3=numerose"],
             ["PI",  "Presenza di persone e loro esodo", "1=semplice; 2=medio; 3=complesso"],
         ])
@@ -192,10 +192,4 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
         return filepath
 
     async def _next_version(self) -> int:
-        stmt = (
-            select(func.coalesce(func.max(DocumentoGenerato.versione), 0))
-            .where(DocumentoGenerato.azienda_id == self.azienda_id)
-            .where(DocumentoGenerato.tipo_documento.in_([TIPO_DOC, "ALLEGATO_INCENDIO"]))
-        )
-        r = await self.db.execute(stmt)
-        return (r.scalar() or 0) + 1
+        return await self.resolve_version([TIPO_DOC, "ALLEGATO_INCENDIO"])

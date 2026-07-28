@@ -75,7 +75,7 @@ class AllegatoMicroclimaSeveroGenerator(BaseDocumentGenerator):
         ])
 
         add_heading(doc, "Metodologia", level=2)
-        add_paragraph(doc, "L'indice PHS (Predicted Heat Strain) stima la sudorazione totale (sw_tot in g/h), la temperatura rettale prevista (t_re) e la durata massima di esposizione accettabile con il 50% di probabilita di rientrare nei limiti di perdita idrica (dlim_loss50 in minuti).")
+        add_paragraph(doc, "L'indice PHS (Predicted Heat Strain) stima la sudorazione totale (sw_tot in g/h), la temperatura rettale prevista (t_re) e la durata massima di esposizione accettabile con il 50% di probabilità di rientrare nei limiti di perdita idrica (dlim_loss50 in minuti).")
 
         add_heading(doc, "Soglie di azione", level=2)
         add_data_table(doc, ["d_lim_loss50", "Classificazione"], [
@@ -120,10 +120,4 @@ class AllegatoMicroclimaSeveroGenerator(BaseDocumentGenerator):
         return filepath
 
     async def _next_version(self) -> int:
-        stmt = (
-            select(func.coalesce(func.max(DocumentoGenerato.versione), 0))
-            .where(DocumentoGenerato.azienda_id == self.azienda_id)
-            .where(DocumentoGenerato.tipo_documento.in_([TIPO_DOC, "ALLEGATO_MICROCLIMA_SEVERO"]))
-        )
-        r = await self.db.execute(stmt)
-        return (r.scalar() or 0) + 1
+        return await self.resolve_version([TIPO_DOC, "ALLEGATO_MICROCLIMA_SEVERO"])

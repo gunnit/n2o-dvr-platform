@@ -11,6 +11,7 @@ import { MetaCell } from "@/components/cards/MetaCell";
 import { AtecoPill } from "@/components/cards/AtecoPill";
 import { monogramFor } from "@/lib/ui/monogram";
 import { formatRelative } from "@/lib/ui/relative-time";
+import { parseApiDate } from "@/lib/ui/api-date";
 import {
   SURVEY_STATUS_META,
   surveyStatusKey,
@@ -152,7 +153,7 @@ export default function SurveyPage() {
             const city =
               azienda.sede_operativa_citta || azienda.sede_legale_citta || null;
             const createdLabel = azienda.created_at
-              ? new Date(azienda.created_at).toLocaleDateString("it-IT", {
+              ? (parseApiDate(azienda.created_at) ?? new Date(0)).toLocaleDateString("it-IT", {
                   day: "2-digit",
                   month: "short",
                   year: "numeric",

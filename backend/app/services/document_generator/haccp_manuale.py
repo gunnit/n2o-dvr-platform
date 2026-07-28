@@ -4,7 +4,7 @@ The HACCP.docx template carries the comprehensive regulatory corpus
 (definizioni, riferimenti legislativi, attrezzature, SSOP, SOP 01..N,
 botulino procedures, allergeni) — ~1350 paragraphs, ~290 headings,
 20 tables. This generator's job is azienda-specific *customization*
-appended after the template body: cover header, attivita/CCPs/forms
+appended after the template body: cover header, attività/CCPs/forms
 table, supplier protocol references, monitoring schedule, sign-off.
 """
 
@@ -51,8 +51,8 @@ SOP_INDEX: list[tuple[str, str]] = [
     ("SOP 14", "Igiene del personale"),
     ("SOP 15", "Formazione del personale"),
     ("SOP 16", "Gestione allergeni (Reg. UE 1169/2011)"),
-    ("SOP 17", "Tracciabilita e rintracciabilita (Reg. CE 178/2002)"),
-    ("SOP 18", "Gestione non conformita e azioni correttive"),
+    ("SOP 17", "Tracciabilita e rintracciabilità (Reg. CE 178/2002)"),
+    ("SOP 18", "Gestione non conformità e azioni correttive"),
     ("SOP 19", "Verifica e revisione del piano HACCP"),
     ("SOP 20", "Botulino - controllo conserve e sottovuoto"),
     ("SOP 21", "Listeria - controllo prodotti pronti al consumo (RTE)"),
@@ -82,7 +82,7 @@ class HaccpManualeGenerator(BaseDocumentGenerator):
             ("Azienda", azienda.ragione_sociale or ""),
             ("Sede operativa", format_sede(azienda, "legale")),
             ("P.IVA", azienda.partita_iva or "—"),
-            ("Tipologia attivita", (config.tipologia_attivita if config else "—") or "—"),
+            ("Tipologia attività", (config.tipologia_attivita if config else "—") or "—"),
             ("Numero pasti/giorno", str(config.numero_pasti_giorno) if (config and config.numero_pasti_giorno) else "—"),
             ("Responsabile HACCP", (config.responsabile_haccp if config else "—") or "—"),
             ("Data emissione", generated_at.strftime("%d/%m/%Y")),
@@ -134,16 +134,16 @@ class HaccpManualeGenerator(BaseDocumentGenerator):
         add_data_table(doc, ["Codice", "Titolo"], [[code, title] for code, title in SOP_INDEX])
 
         add_heading(doc, "Procedure di monitoraggio", level=2)
-        add_paragraph(doc, "Ogni CCP e monitorato mediante le schede di autocontrollo SA-01 ÷ SA-16 (allegate), compilate secondo la frequenza indicata in ciascuna scheda. Le registrazioni sono archiviate per almeno 12 mesi e disponibili alle Autorita di controllo (ASL, NAS, USMAF).")
+        add_paragraph(doc, "Ogni CCP e monitorato mediante le schede di autocontrollo SA-01 ÷ SA-16 (allegate), compilate secondo la frequenza indicata in ciascuna scheda. Le registrazioni sono archiviate per almeno 12 mesi e disponibili alle Autorità di controllo (ASL, NAS, USMAF).")
 
-        add_heading(doc, "Gestione delle non conformita", level=2)
-        add_paragraph(doc, "In caso di superamento dei limiti critici, l'alimento viene isolato e identificato. Se non recuperabile, viene smaltito con registrazione sulla scheda SA-13 (gestione non conformita). L'azione correttiva viene comunicata al responsabile HACCP e, se l'alimento e gia stato distribuito, si attiva la procedura di richiamo/ritiro (Reg. CE 178/2002 art. 19).")
+        add_heading(doc, "Gestione delle non conformità", level=2)
+        add_paragraph(doc, "In caso di superamento dei limiti critici, l'alimento viene isolato e identificato. Se non recuperabile, viene smaltito con registrazione sulla scheda SA-13 (gestione non conformità). L'azione correttiva viene comunicata al responsabile HACCP e, se l'alimento e già stato distribuito, si attiva la procedura di richiamo/ritiro (Reg. CE 178/2002 art. 19).")
 
         add_heading(doc, "Formazione del personale", level=2)
-        add_paragraph(doc, "Tutti gli operatori del settore alimentare (O.S.A.) ricevono formazione HACCP ai sensi dell'art. 4 Reg. CE 852/2004 all'assunzione, con aggiornamento biennale. Per gli addetti alla manipolazione di alimenti deperibili e prevista formazione specifica annuale (Accordo Stato-Regioni 27/01/2010).")
+        add_paragraph(doc, "Tutti gli operatori del settore alimentare (O.S.A.) ricevono formazione HACCP ai sensi dell'art. 4 Reg. CE 852/2004 all'assunzione, con aggiornamento biennale. Per gli addetti alla manipolazione di alimenti deperibili è prevista formazione specifica annuale (Accordo Stato-Regioni 27/01/2010).")
 
         add_heading(doc, "Verifica e revisione del piano", level=2)
-        add_paragraph(doc, "Il piano HACCP e oggetto di verifica almeno annuale da parte del Responsabile HACCP, e di revisione straordinaria in caso di: variazione attivita/menu, nuova attrezzatura, non conformita ripetute, modifiche normative, segnalazioni delle Autorita di controllo.")
+        add_paragraph(doc, "Il piano HACCP e oggetto di verifica almeno annuale da parte del Responsabile HACCP, e di revisione straordinaria in caso di: variazione attività/menu, nuova attrezzatura, non conformità ripetute, modifiche normative, segnalazioni delle Autorità di controllo.")
 
         add_heading(doc, "Schede di autocontrollo allegate", level=2)
         if forms:
@@ -166,10 +166,4 @@ class HaccpManualeGenerator(BaseDocumentGenerator):
         return filepath
 
     async def _next_version(self) -> int:
-        stmt = (
-            select(func.coalesce(func.max(DocumentoGenerato.versione), 0))
-            .where(DocumentoGenerato.azienda_id == self.azienda_id)
-            .where(DocumentoGenerato.tipo_documento.in_([TIPO_DOC, "HACCP"]))
-        )
-        r = await self.db.execute(stmt)
-        return (r.scalar() or 0) + 1
+        return await self.resolve_version([TIPO_DOC, "HACCP"])

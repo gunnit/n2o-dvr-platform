@@ -6,11 +6,19 @@
 // Italian VAT number: exactly 11 digits.
 export const PARTITA_IVA_REGEX = /^\d{11}$/;
 
-// ATECO classification code. The wizard historically required the
-// fully qualified XX.YY.ZZ form; we keep that format as the canonical
-// one (matches every example in the templates and the placeholder
-// "Es. 56.10.11").
-export const ATECO_REGEX = /^\d{2}\.\d{2}\.\d{2}$/;
+// ATECO classification code.
+//
+// Mirrors `_CODICE_ATECO_RE` in `backend/app/schemas/azienda.py`, which is the
+// authority — the API re-validates every write, so a stricter rule here can
+// only reject input the server would have accepted.
+//
+// It used to be `^\d{2}\.\d{2}\.\d{2}$`, i.e. the fully qualified six-digit
+// form only. Real ATECO codes are legitimately shorter at the intermediate
+// levels (`45.20` divisione, `45.20.1` categoria), so the registry lookup
+// behind "Compila con AI" returned values — `19.20.1` for ENI — that this
+// form then refused to save. The survey wizard meanwhile carried a third,
+// different regex of its own. One rule, defined here.
+export const ATECO_REGEX = /^\d{2}\.\d{2}(\.\d{1,2})?$/;
 
 // Personal codice fiscale (titolare ditta individuale): 16 alphanumeric chars.
 // Companies that aren't ditta individuale can have an 11-digit CF that equals
@@ -40,7 +48,10 @@ export function validateCodiceAteco(value: string | null | undefined): string | 
   const trimmed = value.trim();
   if (trimmed === "") return undefined;
   if (!ATECO_REGEX.test(trimmed)) {
-    return "Formato non valido (es. 56.10.11)";
+    // Name the accepted shapes rather than a single example: the previous
+    // message showed "es. 56.10.11" while silently rejecting 56.10, which
+    // reads as though the value were wrong rather than the rule.
+    return "Formato non valido: usa XX.XX, XX.XX.X o XX.XX.XX (es. 45.20, 45.20.1, 56.10.11)";
   }
   return undefined;
 }

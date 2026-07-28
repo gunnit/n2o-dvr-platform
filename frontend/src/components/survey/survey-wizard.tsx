@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { validateCodiceAteco } from "@/lib/validators/azienda";
 import {
   Building2,
   Users,
@@ -339,11 +340,14 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             field: "codice_ateco",
             message: "Codice ATECO: campo obbligatorio (formato NN.NN o NN.NN.NN)",
           });
-        } else if (!/^\d{2}\.\d{2}(\.\d{2})?$/.test(a.codice_ateco.trim())) {
-          errors.push({
-            field: "codice_ateco",
-            message: "Codice ATECO: formato richiesto NN.NN o NN.NN.NN",
-          });
+        } else {
+          // Shared with /aziende/new and mirrored from the backend schema —
+          // three copies of this rule used to disagree about whether 45.20.1
+          // was valid (P1-3).
+          const atecoErr = validateCodiceAteco(a.codice_ateco);
+          if (atecoErr) {
+            errors.push({ field: "codice_ateco", message: `Codice ATECO: ${atecoErr}` });
+          }
         }
       } else if (step === 1) {
         if (data.ambienti.length === 0) {
@@ -375,7 +379,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
           !a.partita_iva ||
           !/^\d{11}$/.test(a.partita_iva.trim()) ||
           !a.codice_ateco ||
-          !/^\d{2}\.\d{2}(\.\d{2})?$/.test(a.codice_ateco.trim())
+          validateCodiceAteco(a.codice_ateco) !== undefined
         ) {
           errors.push({
             message: "Completa i dati azienda prima di firmare",
@@ -906,8 +910,11 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
                   <span className="font-heading text-2xl font-black text-primary-container">
                     {progressPct}%
                   </span>
+                  {/* Name what the number counts. It measures the *required*
+                      steps, so it reads 25% on step 1 of 7 and looks broken
+                      next to "Passo 1 di 7" unless it says so (P3-5). */}
                   <span className="text-[9px] font-bold uppercase text-slate-400">
-                    Progresso
+                    Passi obbligatori
                   </span>
                 </div>
               </div>

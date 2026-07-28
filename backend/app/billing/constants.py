@@ -70,8 +70,14 @@ PLAN_CODES: frozenset[str] = frozenset(
     }
 )
 
-# The grandfather plan. Used as the INV-1 soft-fail when an org somehow has no
-# subscription row: never lock anyone out of the live tenant over a data gap.
+# The grandfather plan. Every organization that predates billing sits on this
+# row (MB-1.3, backfilled by migration `e7f8a9b0c1d2`), and it is also the
+# INV-1 soft-fail for an org whose *organization* row cannot be read at all.
+#
+# It is deliberately NOT the answer for "this tenant has never bought anything".
+# Before MB-6.1 those two cases collapsed onto each other, so every self-serve
+# signup was reported as an active founding partner with unlimited everything.
+# See `STATUS_NONE`.
 FOUNDING_PLAN_CODE = "A_FOUNDING"
 
 # `Organization.account_type` values.
@@ -91,3 +97,16 @@ SUBSCRIPTION_STATUSES: frozenset[str] = frozenset(
 # allows several attempts before it gives up); the read-only downgrade is
 # MB-4.5.
 ACTIVE_STATUSES: frozenset[str] = frozenset({"trialing", "active", "past_due"})
+
+# Resolver-only sentinel: the organization owns no `subscriptions` row because
+# it has never bought anything. NOT a value `subscriptions.status` may hold —
+# it describes the absence of the row, so it is deliberately absent from
+# SUBSCRIPTION_STATUSES (a webhook writing it would fail validation) and from
+# ACTIVE_STATUSES (an unsubscribed tenant is not active).
+#
+# Every organization that existed before MB-6.1 was given a real A_FOUNDING row
+# by migration `e7f8a9b0c1d2`, so no established tenant can land here. That
+# backfill is what makes it safe for this state to be non-active: without it,
+# flipping ENTITLEMENTS_ENFORCE would have locked out the live N2O tenant
+# (INV-1).
+STATUS_NONE = "none"

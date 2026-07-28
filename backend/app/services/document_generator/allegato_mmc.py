@@ -95,7 +95,7 @@ _DEFAULT_MEASURES_BY_ZONE = {
         "Intervento immediato richiesto. Adottare ausili meccanici per la "
         "movimentazione, ridisegnare la postazione (altezza, distanza, angoli), "
         "ridurre frequenza e durata della movimentazione, rotazione delle mansioni. "
-        "Sorveglianza sanitaria con periodicita ravvicinata. Verifica efficacia "
+        "Sorveglianza sanitaria con periodicità ravvicinata. Verifica efficacia "
         "delle misure entro 6 mesi."
     ),
 }
@@ -142,13 +142,7 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
     # ------------------------------------------------------------------
 
     async def _next_version(self) -> int:
-        stmt = (
-            select(func.coalesce(func.max(DocumentoGenerato.versione), 0))
-            .where(DocumentoGenerato.azienda_id == self.azienda_id)
-            .where(DocumentoGenerato.tipo_documento.in_([TIPO_DOC, "ALLEGATO_MMC"]))
-        )
-        r = await self.db.execute(stmt)
-        return (r.scalar() or 0) + 1
+        return await self.resolve_version([TIPO_DOC, "ALLEGATO_MMC"])
 
     # ------------------------------------------------------------------
     # Style setup
@@ -330,16 +324,16 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         add_heading(doc, "Anagrafica Aziendale", level=1)
         rows: list[tuple[str, str]] = [
             ("Azienda", azienda.ragione_sociale or "—"),
-            ("Attivita / Codice ATECO", getattr(azienda, "codice_ateco", "") or "—"),
+            ("Attività / Codice ATECO", getattr(azienda, "codice_ateco", "") or "—"),
             ("Partita IVA", getattr(azienda, "partita_iva", "") or "—"),
             ("Codice Fiscale", getattr(azienda, "codice_fiscale", "") or "—"),
             ("Sede Legale - Via", azienda.sede_legale_via or "—"),
-            ("Sede Legale - Citta", format_comune(
+            ("Sede Legale - Città", format_comune(
                 getattr(azienda, "cap_legale", None),
                 azienda.sede_legale_citta,
                 getattr(azienda, "provincia_legale", None))),
             ("Sede Operativa - Via", getattr(azienda, "sede_operativa_via", "") or "—"),
-            ("Sede Operativa - Citta", format_comune(
+            ("Sede Operativa - Città", format_comune(
                 getattr(azienda, "cap_operativa", None),
                 getattr(azienda, "sede_operativa_citta", None),
                 getattr(azienda, "provincia_operativa", None))),
@@ -360,7 +354,7 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
             page_break(doc)
             return
 
-        headers = ["Nominativo", "Mansione", "Sesso", "Fascia eta", "Tipologia contrattuale"]
+        headers = ["Nominativo", "Mansione", "Sesso", "Fascia età", "Tipologia contrattuale"]
         rows = []
         for p in persone:
             rows.append([
@@ -413,7 +407,7 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         add_paragraph(doc, "IR = P / PLR", bold=True)
         add_paragraph(
             doc,
-            "Soglie di accettabilita: IR <= 0,75 = VERDE (rischio trascurabile); "
+            "Soglie di accettabilità: IR <= 0,75 = VERDE (rischio trascurabile); "
             "0,75 < IR <= 1,00 = GIALLO (sorveglianza sanitaria); "
             "IR > 1,00 = ROSSO (riprogettazione del compito).",
             italic=True,
@@ -512,7 +506,7 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         if not mmc_rows:
             add_paragraph(
                 doc,
-                "Nessuna attivita di movimentazione manuale dei carichi e' stata "
+                "Nessuna attività di movimentazione manuale dei carichi e' stata "
                 "valutata per questa azienda.",
                 italic=True,
             )
@@ -878,7 +872,7 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
             doc,
             "Le misure di prevenzione e protezione individuate nel Programma di "
             "Attuazione saranno adottate secondo il cronoprogramma concordato e "
-            "verificate periodicamente. La presente valutazione sara aggiornata in "
+            "verificate periodicamente. La presente valutazione sarà aggiornata in "
             "occasione di modifiche significative del processo lavorativo, "
             "dell'organizzazione del lavoro o di insorgenza di patologie correlate.",
         )

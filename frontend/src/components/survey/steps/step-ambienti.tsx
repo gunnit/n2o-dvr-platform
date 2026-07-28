@@ -914,10 +914,10 @@ export function StepAmbienti({
                   </div>
                 </div>
 
-                {/* Descrizione Attivita */}
+                {/* Descrizione Attività */}
                 <div className="space-y-2">
                   <Label htmlFor={`amb-desc-${index}`}>
-                    Descrizione Attivita
+                    Descrizione Attività
                   </Label>
                   <textarea
                     id={`amb-desc-${index}`}
@@ -929,7 +929,7 @@ export function StepAmbienti({
                       })
                     }
                     rows={2}
-                    placeholder="Descrivi le attivita svolte in questo ambiente..."
+                    placeholder="Descrivi le attività svolte in questo ambiente..."
                     className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                   />
                 </div>

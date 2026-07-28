@@ -27,9 +27,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           Buffer.from(data.access_token.split(".")[1], "base64").toString()
         );
 
+        // The token deliberately carries no display name, so fetch the profile
+        // once at sign-in. Without it `session.user.name` stayed undefined and
+        // every screen fell back to the raw email — "Marco Bianchi" showed up
+        // as `ai+dvrtest…@niuexa.ai` with the initials "AN" (P3-1).
+        //
+        // Best-effort: a failure here must not cost the user their login, it
+        // only costs a nicer name.
+        let fullName: string | undefined;
+        try {
+          const me = await fetch(`${API_URL}/api/v1/auth/me`, {
+            headers: { Authorization: `Bearer ${data.access_token}` },
+          });
+          if (me.ok) fullName = (await me.json()).full_name || undefined;
+        } catch {
+          // ignore — falls back to the email
+        }
+
         return {
           id: payload.sub,
           email: credentials?.email as string,
+          name: fullName,
           accessToken: data.access_token,
           role: payload.role,
           organizationId: payload.org,

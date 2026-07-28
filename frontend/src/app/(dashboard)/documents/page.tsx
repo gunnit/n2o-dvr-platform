@@ -37,6 +37,7 @@ import { VersionHistory } from "@/components/documents/version-history";
 import type { Azienda, DocumentoGenerato } from "@/types";
 import { apiCall, downloadFile } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
+import { useTenantVocabulary } from "@/hooks/use-tenant-vocabulary";
 
 const complexityColors: Record<string, string> = {
   Alta: "bg-[rgba(186,26,26,0.1)] text-[#ba1a1a] border border-[rgba(186,26,26,0.3)]",
@@ -102,6 +103,7 @@ const statusConfig: Record<string, { color: string; label: string; icon: typeof 
 };
 
 export default function DocumentsPage() {
+  const vocab = useTenantVocabulary();
   const [aziende, setAziende] = useState<Azienda[]>([]);
   const [selectedAziendaId, setSelectedAziendaId] = useState<string>("");
   const [documenti, setDocumenti] = useState<DocumentoGenerato[]>([]);
@@ -300,7 +302,7 @@ export default function DocumentsPage() {
         <div>
           <h1 className="type-h1">Documenti</h1>
           <p className="type-body mt-2">
-            Genera i documenti di sicurezza per le aziende clienti
+            {vocab.documentsLead}
           </p>
         </div>
         {selectedAziendaId && (

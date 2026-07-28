@@ -73,7 +73,7 @@ class AllegatoMicroclimaGenerator(BaseDocumentGenerator):
         ])
 
         add_heading(doc, "Metodologia", level=2)
-        add_paragraph(doc, "La norma UNI EN ISO 7730 definisce il comfort termico mediante gli indici PMV (Predicted Mean Vote, scala -3..+3) e PPD (Predicted Percentage of Dissatisfied). I parametri considerati sono: temperatura dell'aria (tdb), temperatura radiante media (tr), velocita dell'aria (var), umidita relativa (RH), metabolismo (met) e isolamento del vestiario (clo).")
+        add_paragraph(doc, "La norma UNI EN ISO 7730 definisce il comfort termico mediante gli indici PMV (Predicted Mean Vote, scala -3..+3) e PPD (Predicted Percentage of Dissatisfied). I parametri considerati sono: temperatura dell'aria (tdb), temperatura radiante media (tr), velocità dell'aria (var), umidità relativa (RH), metabolismo (met) e isolamento del vestiario (clo).")
 
         add_data_table(doc, ["Categoria", "PPD", "Giudizio"], [
             ["A", "< 6%", "Eccellente comfort"],
@@ -105,7 +105,7 @@ class AllegatoMicroclimaGenerator(BaseDocumentGenerator):
             add_data_table(doc, ["Ambiente", "t_aria (C)", "t_rad (C)", "v_aria (m/s)", "RH %", "met", "clo", "PMV", "PPD", "Categoria"], rows)
 
         add_heading(doc, "Misure correttive suggerite", level=2)
-        add_paragraph(doc, "Per ambienti con PPD >= 15%: adeguare il sistema di climatizzazione, rivedere l'isolamento del vestiario, introdurre schermature solari o umidificatori, verificare la velocita dell'aria nelle postazioni.")
+        add_paragraph(doc, "Per ambienti con PPD >= 15%: adeguare il sistema di climatizzazione, rivedere l'isolamento del vestiario, introdurre schermature solari o umidificatori, verificare la velocità dell'aria nelle postazioni.")
 
         version = await self._next_version()
         output_dir = self._get_output_dir()
@@ -115,10 +115,4 @@ class AllegatoMicroclimaGenerator(BaseDocumentGenerator):
         return filepath
 
     async def _next_version(self) -> int:
-        stmt = (
-            select(func.coalesce(func.max(DocumentoGenerato.versione), 0))
-            .where(DocumentoGenerato.azienda_id == self.azienda_id)
-            .where(DocumentoGenerato.tipo_documento.in_([TIPO_DOC, "ALLEGATO_MICROCLIMA"]))
-        )
-        r = await self.db.execute(stmt)
-        return (r.scalar() or 0) + 1
+        return await self.resolve_version([TIPO_DOC, "ALLEGATO_MICROCLIMA"])

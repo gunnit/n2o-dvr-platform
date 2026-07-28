@@ -17,6 +17,9 @@ import {
   validateCodiceFiscaleDitta,
   type AziendaFieldErrors,
 } from "@/lib/validators/azienda";
+import { useTenantVocabulary } from "@/hooks/use-tenant-vocabulary";
+import { throwApiError } from "@/lib/api-errors";
+import { FieldError, FormError } from "@/components/ui/form-error";
 import type {
   AziendaAutofillFieldMeta,
   AziendaAutofillResponse,
@@ -173,6 +176,7 @@ export default function NewAziendaPage() {
   const { data: session, status } = useSession();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const role = (session?.user as any)?.role as string | undefined;
+  const vocab = useTenantVocabulary();
   const [form, setForm] = useState<AziendaFormState>(EMPTY_FORM);
   const [aiMeta, setAiMeta] = useState<AiMeta>({});
   const [aiLoading, setAiLoading] = useState(false);
@@ -210,10 +214,10 @@ export default function NewAziendaPage() {
   useEffect(() => {
     if (status === "loading") return;
     if (role && role !== "admin") {
-      toast.error("Solo gli amministratori possono creare nuovi clienti");
+      toast.error(vocab.adminOnlyCreate);
       router.replace("/dashboard");
     }
-  }, [role, status, router]);
+  }, [role, status, router, vocab]);
 
   function setField<K extends keyof AziendaFormState>(name: K, value: string) {
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -356,8 +360,7 @@ export default function NewAziendaPage() {
         body: JSON.stringify({ partita_iva: piva }),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail || `Errore: ${res.status}`);
+        await throwApiError(res);
       }
       const data: AziendaAutofillResponse = await res.json();
 
@@ -540,8 +543,7 @@ export default function NewAziendaPage() {
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.detail || `Errore: ${res.status}`);
+        await throwApiError(res);
       }
       router.push("/aziende");
     } catch (err) {
@@ -558,7 +560,7 @@ export default function NewAziendaPage() {
       <div>
         <h1 className="type-h1">Nuova Azienda</h1>
         <p className="type-body mt-2">
-          Registra una nuova azienda cliente. Inserisci la P.IVA e usa{" "}
+          {vocab.newCompanyLead} Inserisci la P.IVA e usa{" "}
           <span className="inline-flex items-center gap-1 font-medium text-primary">
             <Sparkles className="h-3.5 w-3.5" strokeWidth={2.5} />
             Compila con AI
@@ -587,10 +589,14 @@ export default function NewAziendaPage() {
                   value={form.ragione_sociale}
                   onChange={(e) => setField("ragione_sociale", e.target.value)}
                   required
+                  aria-invalid={!!fieldErrors.ragione_sociale || undefined}
+                  aria-describedby={
+                    fieldErrors.ragione_sociale ? "ragione_sociale-error" : undefined
+                  }
                 />
-                {fieldErrors.ragione_sociale && (
-                  <p className="text-xs text-destructive">{fieldErrors.ragione_sociale}</p>
-                )}
+                <FieldError id="ragione_sociale-error">
+                  {fieldErrors.ragione_sociale}
+                </FieldError>
               </div>
 
               <div className="space-y-2 sm:col-span-2">
@@ -611,6 +617,10 @@ export default function NewAziendaPage() {
                     }}
                     inputMode="numeric"
                     className={`flex-1 ${fieldErrors.partita_iva ? "border-destructive" : ""}`}
+                    aria-invalid={!!fieldErrors.partita_iva || undefined}
+                    aria-describedby={
+                      fieldErrors.partita_iva ? "partita_iva-error" : undefined
+                    }
                   />
                   <Button
                     type="button"
@@ -632,8 +642,27 @@ export default function NewAziendaPage() {
                     {aiLoading ? "Cerco..." : "Compila con AI"}
                   </Button>
                 </div>
-                {fieldErrors.partita_iva && (
-                  <p className="text-xs text-destructive">{fieldErrors.partita_iva}</p>
+                <FieldError id="partita_iva-error">{fieldErrors.partita_iva}</FieldError>
+                {/* The registry lookup routinely takes 25–30 seconds. With only
+                    a spinner and "Cerco..." to go on, an operator on a site
+                    visit concludes it has hung and reloads — losing the form
+                    (P2-6). Say how long it takes and what it is doing. */}
+                {aiLoading && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="flex items-start gap-2 rounded-md border border-[#e5edf5] bg-[#f6f9fc] px-3 py-2"
+                  >
+                    <Loader2
+                      className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 animate-spin text-primary"
+                      strokeWidth={2}
+                    />
+                    <p className="text-xs text-[#64748d]">
+                      Interrogazione dei registri pubblici in corso — di norma
+                      richiede fino a 30 secondi. Puoi lasciare la pagina aperta:
+                      i campi si compilano da soli appena la ricerca finisce.
+                    </p>
+                  </div>
                 )}
                 {existingAzienda && (
                   <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
@@ -755,10 +784,12 @@ export default function NewAziendaPage() {
                   onChange={(e) => setField("codice_ateco", e.target.value)}
                   onBlur={(e) => validateField("codice_ateco", e.target.value)}
                   className={fieldErrors.codice_ateco ? "border-destructive" : ""}
+                  aria-invalid={!!fieldErrors.codice_ateco || undefined}
+                  aria-describedby={
+                    fieldErrors.codice_ateco ? "codice_ateco-error" : undefined
+                  }
                 />
-                {fieldErrors.codice_ateco && (
-                  <p className="text-xs text-destructive">{fieldErrors.codice_ateco}</p>
-                )}
+                <FieldError id="codice_ateco-error">{fieldErrors.codice_ateco}</FieldError>
               </div>
             </div>
 
@@ -1296,7 +1327,7 @@ export default function NewAziendaPage() {
               </div>
             </div>
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            <FormError>{error}</FormError>
             <div className="flex gap-3 border-t border-[#e5edf5] pt-6">
               <Button type="submit" disabled={loading}>
                 {loading ? "Salvataggio..." : "Salva Azienda"}

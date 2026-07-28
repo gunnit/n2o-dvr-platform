@@ -47,30 +47,30 @@ from app.services.risk_calculator import calculate_risk_index
 _DEFINIZIONI_ROWS: list[tuple[str, str]] = [
     ("LAVORATORE (LAV)",
      "Persona che, indipendentemente dalla tipologia contrattuale, svolge "
-     "un'attivita lavorativa nell'ambito dell'organizzazione di un datore "
+     "un'attività lavorativa nell'ambito dell'organizzazione di un datore "
      "di lavoro pubblico o privato, con o senza retribuzione."),
     ("DATORE DI LAVORO (DL)",
      "Soggetto titolare del rapporto di lavoro con il lavoratore o, "
-     "comunque, il soggetto che ha la responsabilita dell'organizzazione "
-     "stessa o dell'unita produttiva."),
+     "comunque, il soggetto che ha la responsabilità dell'organizzazione "
+     "stessa o dell'unità produttiva."),
     ("AZIENDA",
      "Il complesso della struttura organizzata dal datore di lavoro "
      "pubblico o privato."),
     ("DIRIGENTE",
      "Persona che attua le direttive del datore di lavoro organizzando "
-     "l'attivita lavorativa e vigilando su di essa."),
+     "l'attività lavorativa e vigilando su di essa."),
     ("PREPOSTO",
      "Persona che, in ragione delle competenze professionali e nei limiti "
      "di poteri gerarchici e funzionali adeguati alla natura dell'incarico "
-     "conferitogli, sovrintende alla attivita lavorativa."),
+     "conferitogli, sovrintende alla attività lavorativa."),
     ("RSPP",
      "Responsabile del Servizio di Prevenzione e Protezione — persona "
      "designata dal datore di lavoro, in possesso di attitudini e "
-     "capacita adeguate, a cui il datore di lavoro si avvale per "
+     "capacità adeguate, a cui il datore di lavoro si avvale per "
      "organizzare il servizio di prevenzione e protezione."),
     ("ASPP",
      "Addetto del Servizio di Prevenzione e Protezione — persona in "
-     "possesso di attitudini e capacita adeguate che supporta il RSPP "
+     "possesso di attitudini e capacità adeguate che supporta il RSPP "
      "nell'organizzazione del servizio."),
     ("RLS",
      "Rappresentante dei Lavoratori per la Sicurezza — persona eletta o "
@@ -84,46 +84,46 @@ _DEFINIZIONI_ROWS: list[tuple[str, str]] = [
     ("VALUTAZIONE DEI RISCHI",
      "Valutazione globale e documentata di tutti i rischi per la salute "
      "e la sicurezza dei lavoratori presenti nell'ambito "
-     "dell'organizzazione in cui essi prestano la propria attivita."),
+     "dell'organizzazione in cui essi prestano la propria attività."),
     ("PERICOLO",
-     "Proprieta o qualita intrinseca di un determinato fattore avente "
+     "Proprieta o qualità intrinseca di un determinato fattore avente "
      "il potenziale di causare danni."),
     ("RISCHIO",
-     "Probabilita di raggiungimento del livello potenziale di danno "
+     "Probabilità di raggiungimento del livello potenziale di danno "
      "nelle condizioni di impiego o di esposizione a un determinato "
      "fattore o agente oppure alla loro combinazione."),
-    ("PROBABILITA (P)",
-     "Frequenza con cui un evento dannoso puo verificarsi, valutata "
+    ("PROBABILITÀ (P)",
+     "Frequenza con cui un evento dannoso può verificarsi, valutata "
      "su scala 1-4 (Bassa, Medio-Bassa, Medio-Alta, Elevata)."),
     ("DANNO (D)",
-     "Entita del danno atteso per il lavoratore esposto, valutata su "
+     "Entità del danno atteso per il lavoratore esposto, valutata su "
      "scala 1-4 (Trascurabile, Modesto, Notevole, Ingente)."),
     ("INDICE DI RISCHIO (I)",
      "Calcolato come I = 2*D + P; range 3-12; livelli ACCETTABILE, "
      "MODESTO, GRAVE, GRAVISSIMO."),
-    ("UNITA PRODUTTIVA",
+    ("UNITÀ PRODUTTIVA",
      "Stabilimento o struttura finalizzati alla produzione di beni "
      "o all'erogazione di servizi, dotati di autonomia finanziaria e "
      "tecnico-funzionale."),
     ("DPI",
      "Dispositivo di Protezione Individuale — qualsiasi attrezzatura "
      "destinata ad essere indossata e tenuta dal lavoratore allo scopo "
-     "di proteggerlo contro uno o piu rischi."),
+     "di proteggerlo contro uno o più rischi."),
     ("SORVEGLIANZA SANITARIA",
      "Insieme degli atti medici finalizzati alla tutela dello stato di "
      "salute e sicurezza dei lavoratori, in relazione all'ambiente di "
-     "lavoro, ai fattori di rischio professionali e alle modalita di "
-     "svolgimento dell'attivita lavorativa."),
+     "lavoro, ai fattori di rischio professionali e alle modalità di "
+     "svolgimento dell'attività lavorativa."),
     ("FORMAZIONE",
      "Processo educativo attraverso il quale trasferire ai lavoratori "
      "conoscenze e procedure utili alla acquisizione di competenze "
      "per lo svolgimento in sicurezza dei rispettivi compiti."),
     ("INFORMAZIONE",
-     "Complesso delle attivita dirette a fornire conoscenze utili alla "
+     "Complesso delle attività dirette a fornire conoscenze utili alla "
      "identificazione, alla riduzione e alla gestione dei rischi "
      "nell'ambiente di lavoro."),
     ("ADDESTRAMENTO",
-     "Complesso delle attivita dirette a fare apprendere ai lavoratori "
+     "Complesso delle attività dirette a fare apprendere ai lavoratori "
      "l'uso corretto di attrezzature, macchine, impianti, sostanze, "
      "dispositivi, anche di protezione individuale, e le procedure di lavoro."),
     ("AGENTE",
@@ -132,7 +132,7 @@ _DEFINIZIONI_ROWS: list[tuple[str, str]] = [
     ("NORMA TECNICA",
      "Specifica tecnica, approvata e pubblicata da un'organizzazione "
      "internazionale, da un organismo europeo o nazionale di "
-     "normalizzazione, la cui osservanza non e obbligatoria."),
+     "normalizzazione, la cui osservanza non è obbligatoria."),
     ("BUONA PRASSI",
      "Soluzioni organizzative o procedurali coerenti con la normativa "
      "vigente e con le norme di buona tecnica, adottate volontariamente e "
@@ -143,7 +143,7 @@ _DEFINIZIONI_ROWS: list[tuple[str, str]] = [
     ("MODELLO DI ORGANIZZAZIONE E GESTIONE",
      "Modello organizzativo e gestionale per la definizione e "
      "attuazione di una politica aziendale per la salute e sicurezza."),
-    ("RESPONSABILITA SOCIALE",
+    ("RESPONSABILITÀ SOCIALE",
      "Integrazione volontaria delle preoccupazioni sociali ed "
      "ecologiche delle aziende nelle loro operazioni commerciali e nei "
      "loro rapporti con le parti interessate."),
@@ -152,35 +152,35 @@ _DEFINIZIONI_ROWS: list[tuple[str, str]] = [
 # Parte II — P/D criteria lookup tables (Template Tables 21 and 22).
 _PROBABILITA_CRITERI_ROWS = [
     ("4", "ELEVATA",
-     "Esiste correlazione diretta tra mancanza rilevata e possibilita "
-     "che l'evento dannoso si verifichi; si sono gia verificati casi "
+     "Esiste correlazione diretta tra mancanza rilevata e possibilità "
+     "che l'evento dannoso si verifichi; si sono già verificati casi "
      "analoghi in azienda o in realta simili."),
     ("3", "MEDIO ALTA",
-     "La mancanza rilevata puo provocare un danno, anche se non "
+     "La mancanza rilevata può provocare un danno, anche se non "
      "direttamente, seppur in modo automatico; sono noti rari episodi "
      "in azienda o in realta simili."),
     ("2", "MEDIO BASSA",
-     "La mancanza rilevata puo provocare un danno in circostanze "
+     "La mancanza rilevata può provocare un danno in circostanze "
      "particolari; non sono noti episodi in azienda."),
     ("1", "BASSA",
-     "La mancanza rilevata puo provocare un danno solo in circostanze "
-     "eccezionali e in concomitanza con piu eventi sfavorevoli; non "
+     "La mancanza rilevata può provocare un danno solo in circostanze "
+     "eccezionali e in concomitanza con più eventi sfavorevoli; non "
      "sono noti episodi nel settore."),
 ]
 
 _DANNO_CRITERI_ROWS = [
     ("4", "INGENTE",
      "Infortunio o episodio di esposizione con effetti letali o "
-     "invalidita totale permanente."),
+     "invalidità totale permanente."),
     ("3", "NOTEVOLE",
      "Infortunio o episodio di esposizione acuta con effetti di "
-     "invalidita parziale permanente; patologie gravi a effetti "
+     "invalidità parziale permanente; patologie gravi a effetti "
      "progressivi."),
     ("2", "MODESTO",
-     "Infortunio o episodio di esposizione acuta con inabilita "
+     "Infortunio o episodio di esposizione acuta con inabilità "
      "temporanea reversibile."),
     ("1", "TRASCURABILE",
-     "Infortunio o episodio di esposizione acuta con inabilita "
+     "Infortunio o episodio di esposizione acuta con inabilità "
      "reversibile di rapida guarigione."),
 ]
 
@@ -229,7 +229,7 @@ class _ProceduralSection:
 # ---------------------------------------------------------------------------
 _MISURA_TEMPLATE_DEFAULT: dict[str, str] = {
     "procedura": (
-        "Verifica dell'efficacia delle misure di prevenzione gia in atto, "
+        "Verifica dell'efficacia delle misure di prevenzione già in atto, "
         "definizione di procedura operativa dedicata e formazione "
         "specifica dei lavoratori esposti."
     ),
@@ -242,7 +242,7 @@ _MISURA_TEMPLATE_DEFAULT: dict[str, str] = {
 _MISURA_TEMPLATE_BY_CATEGORIA: dict[str, dict[str, str]] = {
     "Strutture": {
         "procedura": (
-            "Sopralluogo tecnico per verifica conformita ai requisiti "
+            "Sopralluogo tecnico per verifica conformità ai requisiti "
             "di sicurezza dei luoghi di lavoro (Allegato IV D.Lgs. 81/08); "
             "interventi edili o impiantistici sui non-conformi; "
             "verifica dell'efficacia tramite controllo programmato."
@@ -256,7 +256,7 @@ _MISURA_TEMPLATE_BY_CATEGORIA: dict[str, dict[str, str]] = {
     "Macchine": {
         "procedura": (
             "Verifica della marcatura CE e dei manuali d'uso; controllo "
-            "della funzionalita di protezioni fisse, mobili e di emergenza; "
+            "della funzionalità di protezioni fisse, mobili e di emergenza; "
             "manutenzione periodica programmata e registrata."
         ),
         "risorse": (
@@ -352,7 +352,7 @@ _MISURA_TEMPLATE_BY_CATEGORIA: dict[str, dict[str, str]] = {
         "procedura": (
             "Indagine sui rischi psicosociali (carichi mentali, conflitti, "
             "molestie); definizione di canali di segnalazione e di un "
-            "comitato per i casi piu complessi; formazione su gestione "
+            "comitato per i casi più complessi; formazione su gestione "
             "dello stress."
         ),
         "risorse": (
@@ -450,15 +450,15 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
         heading="4.2 Gestione Leggi e Regolamenti",
         body=(
             "Il RSPP, in collaborazione con il Datore di Lavoro, ha la "
-            "responsabilita di mantenere aggiornata la mappa delle leggi e "
-            "dei regolamenti applicabili all'attivita aziendale e di "
+            "responsabilità di mantenere aggiornata la mappa delle leggi e "
+            "dei regolamenti applicabili all'attività aziendale e di "
             "garantirne la diffusione presso i soggetti interessati.",
         ),
         bullets=(
             "ricerca delle leggi e regolamenti applicabili e identificazione "
-            "di quelli relativi alle attivita aziendali",
+            "di quelli relativi alle attività aziendali",
             "valutazione delle ricadute operative e organizzative delle "
-            "novita normative",
+            "novità normative",
             "diffusione interna e archiviazione delle versioni vigenti",
         ),
     ),
@@ -483,14 +483,14 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
         docs=(
             "Lettera di nomina del MC",
             "Protocollo di sorveglianza sanitaria",
-            "Giudizi di idoneita alla mansione",
+            "Giudizi di idoneità alla mansione",
         ),
     ),
     _ProceduralSection(
         heading="4.4 Gestione Informazione, Formazione ed Addestramento",
         body=(
             "Il Datore di Lavoro, in collaborazione con il RSPP e previa "
-            "consultazione del RLS, programma le attivita di informazione, "
+            "consultazione del RLS, programma le attività di informazione, "
             "formazione ed addestramento ai sensi degli artt. 36 e 37 del "
             "D.Lgs. 81/2008 e dell'Accordo Stato-Regioni 21/12/2011 "
             "(rep. atti 221/CSR) e successivi aggiornamenti.",
@@ -520,7 +520,7 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
             "Il Datore di Lavoro, direttamente o tramite il RSPP, indice "
             "la riunione periodica ai sensi dell'art. 35 del D.Lgs. "
             "81/2008. La riunione si tiene almeno una volta all'anno per "
-            "le aziende con piu di 15 lavoratori, ed in occasione di "
+            "le aziende con più di 15 lavoratori, ed in occasione di "
             "significative variazioni delle condizioni di esposizione al "
             "rischio.",
             "Della riunione e redatto verbale tenuto a disposizione dei "
@@ -577,7 +577,7 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
         ),
         bullets=(
             "scelta dei DPI in funzione dei rischi specifici della "
-            "mansione e in conformita al Reg. UE 2016/425",
+            "mansione e in conformità al Reg. UE 2016/425",
             "consegna registrata su modulo nominativo (tipologia, codice, "
             "data di consegna, scadenza)",
             "addestramento all'uso corretto, alla manutenzione e alla "
@@ -596,7 +596,7 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
         heading="4.9 Gestione Infrastrutture",
         body=(
             "Per tutte le macchine, attrezzature, impianti e infrastrutture "
-            "presenti in azienda sono definite le responsabilita di "
+            "presenti in azienda sono definite le responsabilità di "
             "manutenzione ordinaria, straordinaria e di verifica "
             "periodica obbligatoria (D.M. 11/04/2011, all. VII D.Lgs. "
             "81/2008).",
@@ -613,7 +613,7 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
             "L'azienda individua e tutela i lavoratori appartenenti a "
             "gruppi particolarmente sensibili al rischio: lavoratrici "
             "gestanti, puerpere o in periodo di allattamento (D.Lgs. "
-            "151/2001), minori (D.Lgs. 345/1999), lavoratori con disabilita, "
+            "151/2001), minori (D.Lgs. 345/1999), lavoratori con disabilità, "
             "lavoratori con specifiche prescrizioni del Medico Competente.",
             "Per ciascuna categoria sono adottate misure di prevenzione e "
             "protezione differenziate, riportate negli specifici allegati "
@@ -625,7 +625,7 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
         heading="4.11 Gestione Acquisti",
         body=(
             "Ogni acquisto di macchine, attrezzature, sostanze chimiche, "
-            "DPI e arredi e preceduto dalla verifica della conformita ai "
+            "DPI e arredi e preceduto dalla verifica della conformità ai "
             "requisiti di sicurezza e salute previsti dalla normativa "
             "vigente. Il RSPP e coinvolto nella definizione dei capitolati "
             "tecnici e nella valutazione preventiva dei rischi introdotti.",
@@ -647,7 +647,7 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
             "dell'opera.",
         ),
         docs=(
-            "Verifica idoneita tecnico-professionale",
+            "Verifica idoneità tecnico-professionale",
             "D.U.V.R.I.",
             "Contratti d'appalto",
         ),
@@ -663,17 +663,17 @@ _METODOLOGIA_INTRO_1 = (
     "La presente valutazione dei rischi e redatta ai sensi dell'art. 28 del "
     "D.Lgs. 9 aprile 2008, n. 81 e s.m.i., che impone al Datore di Lavoro la "
     "valutazione di tutti i rischi per la sicurezza e la salute dei lavoratori, "
-    "tenendo conto della specificita delle mansioni, delle attrezzature e degli "
+    "tenendo conto della specificità delle mansioni, delle attrezzature e degli "
     "ambienti di lavoro."
 )
 
 _METODOLOGIA_INTRO_2 = (
     "Il metodo adottato si fonda sulla stima dell'Indice di Rischio (I) "
     "calcolato attraverso la formula I = 2*D + P, dove P rappresenta la "
-    "Probabilita di accadimento dell'evento dannoso (scala 1-4) e D il Danno "
+    "Probabilità di accadimento dell'evento dannoso (scala 1-4) e D il Danno "
     "atteso per il lavoratore esposto (scala 1-4). L'indice risultante, "
     "compreso nell'intervallo 3-12, e associato a un livello di rischio e a "
-    "una relativa priorita di intervento. L'impianto metodologico e coerente "
+    "una relativa priorità di intervento. L'impianto metodologico e coerente "
     "con i principi di valutazione del rischio della norma UNI EN ISO 14121-1."
 )
 
@@ -698,6 +698,18 @@ _RISK_COLORS = {
 _HEADER_BG = RGBColor(0x1A, 0x23, 0x7E)           # Dark blue for table headers
 _HEADER_TEXT = RGBColor(0xFF, 0xFF, 0xFF)          # White text on headers
 _LIGHT_GRAY = RGBColor(0xF5, 0xF5, 0xF5)          # Alternating row background
+
+
+def _revision_label(version: int) -> str:
+    """`DocumentoGenerato.versione` (1-based) → the printed revision ("00").
+
+    The database counts emissions from 1; a DVR numbers them from 0, because
+    revision zero *is* the first issue. Both the cover page and the Storico
+    Revisioni table go through here so they cannot drift apart — they did, and
+    a first-ever DVR carried "Revisione 02" on the cover above a table that
+    said "00 — Emissione" (P1-2).
+    """
+    return f"{max(0, version - 1):02d}"
 
 
 class DVRMasterGenerator(BaseDocumentGenerator):
@@ -729,7 +741,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         self._add_cover_page(doc, azienda, data["generated_at"], version)
         toc_anchors = self._add_table_of_contents(doc)
         self._add_premessa(doc)
-        self._add_pre_parte_i(doc, azienda, data["generated_at"])
+        self._add_pre_parte_i(doc, azienda, data["generated_at"], version)
         self._add_part_i(
             doc,
             azienda,
@@ -1023,18 +1035,16 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         return seeded
 
     async def _get_next_version(self) -> int:
-        """Determine the next version number for this azienda's DVR."""
-        from sqlalchemy import func, select
-        from app.models.documento_generato import DocumentoGenerato
+        """The revision number to stamp on this DVR.
 
-        stmt = (
-            select(func.coalesce(func.max(DocumentoGenerato.versione), 0))
-            .where(DocumentoGenerato.azienda_id == self.azienda_id)
-            .where(DocumentoGenerato.tipo_documento == "dvr_master")
-        )
-        result = await self.db.execute(stmt)
-        current_max = result.scalar()
-        return current_max + 1
+        Delegates to the base helper so the cover page, the file name and the
+        ``documenti_generati`` row cannot disagree — they used to: this method
+        recomputed ``max(versione) + 1`` *after* the API had already inserted
+        the pending row, so a first-ever DVR came out as ``Revisione 02`` and
+        ``…_v2.docx`` while the row said ``1`` and the document's own Storico
+        Revisioni table said ``00 — Emissione`` (P1-2).
+        """
+        return await self.resolve_version(["dvr_master", "DVR_MASTER"])
 
     # ------------------------------------------------------------------
     # Document styles setup
@@ -1044,7 +1054,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         """Configure document-wide styles and defaults.
 
         Pagination hardening (user feedback 2026-05-12 — "Impaginazzioe
-        dovrebbe rispettare piu le tabelle ei capitoli"):
+        dovrebbe rispettare più le tabelle ei capitoli"):
           - All heading styles get `keepNext` and `keepLines` set on the
             style itself so an H1/H2/H3 never sits orphaned at the bottom
             of a page without at least one following content line and
@@ -1194,12 +1204,12 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             doc.add_paragraph("")
 
         # Date and version block — single centered paragraph with both bits.
-        # Format the version with a 2-digit pad (Rev. 01) to mirror the
-        # convention Luca uses on the master template.
+        # 2-digit pad (Rev. 00) to mirror the convention Luca uses on the master
+        # template, where the first emission is revision *zero*.
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = p.add_run(
-            f"Revisione {version:02d} — {generated_at.strftime('%d/%m/%Y')}"
+            f"Revisione {_revision_label(version)} — {generated_at.strftime('%d/%m/%Y')}"
         )
         run.font.size = Pt(12)
         run.bold = True
@@ -1404,24 +1414,24 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             "lettera a) del D.Lgs. 9 aprile 2008, n. 81 e s.m.i., relativo "
             "alla valutazione di tutti i rischi per la salute e la "
             "sicurezza dei lavoratori, e dall'art. 28 dello stesso decreto, "
-            "che ne disciplina l'oggetto e le modalita di redazione.",
-            "La valutazione dei rischi e stata effettuata in collaborazione "
+            "che ne disciplina l'oggetto e le modalità di redazione.",
+            "La valutazione dei rischi è stata effettuata in collaborazione "
             "con il Responsabile del Servizio di Prevenzione e Protezione "
             "(RSPP), con il Medico Competente — ove la sorveglianza "
             "sanitaria sia richiesta dalla normativa o dalla valutazione "
             "stessa — e previa consultazione del Rappresentante dei "
             "Lavoratori per la Sicurezza (RLS).",
-            "L'analisi prende in considerazione la natura dell'attivita, "
+            "L'analisi prende in considerazione la natura dell'attività, "
             "i luoghi di lavoro, le mansioni svolte, le attrezzature "
             "impiegate, le sostanze e i preparati pericolosi utilizzati, "
-            "nonche le caratteristiche dei lavoratori, con particolare "
-            "attenzione ai gruppi piu sensibili al rischio quali "
+            "nonché le caratteristiche dei lavoratori, con particolare "
+            "attenzione ai gruppi più sensibili al rischio quali "
             "lavoratrici gestanti, minori, lavoratori con prescrizioni "
             "del Medico Competente e lavoratori notturni.",
-            "Il documento e conservato presso l'unita produttiva alla "
+            "Il documento è conservato presso l'unità produttiva alla "
             "quale si riferisce e reso disponibile per la consultazione "
             "ai soggetti previsti dall'art. 18 e dagli artt. 50 e 47 del "
-            "D.Lgs. 81/2008. La sua rielaborazione e prevista nei casi "
+            "D.Lgs. 81/2008. La sua rielaborazione è prevista nei casi "
             "stabiliti dall'art. 29, comma 3 — modifiche significative "
             "del processo produttivo o dell'organizzazione del lavoro, "
             "infortuni significativi, evoluzione della tecnica, esiti "
@@ -1430,7 +1440,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             "Le misure di prevenzione e protezione attuate sono descritte, "
             "per ogni ambiente di lavoro, nella Parte III. Il programma "
             "delle misure di miglioramento di cui all'art. 28, comma 2, "
-            "lettera c) e riportato in Parte IV §4.1.",
+            "lettera c) è riportato in Parte IV §4.1.",
         ):
             p = doc.add_paragraph()
             run = p.add_run(body)
@@ -1445,15 +1455,14 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     # ------------------------------------------------------------------
 
     def _add_pre_parte_i(
-        self, doc: Document, azienda, generated_at: datetime
+        self, doc: Document, azienda, generated_at: datetime, version: int
     ) -> None:
         """Render the front-matter block that appears before Parte I.
 
         Tables 0, 1, 2 from DVR_TEMPLATE_MAPPING.md — azienda identity,
-        revision history, and a stamped-signature placeholder. The revision
-        row uses the azienda's own DVR version (next-version - 1 because
-        ``_get_next_version`` is called later; for the front page we reflect
-        the current emission).
+        revision history, and a stamped-signature placeholder. ``version`` is
+        the same number the cover page prints, passed down so the two cannot
+        contradict each other (see :func:`_revision_label`).
         """
         p = doc.add_paragraph()
         run = p.add_run(
@@ -1468,25 +1477,28 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         doc.add_paragraph("")
 
         doc.add_heading("Storico Revisioni", level=3)
-        self._add_revision_history_table(doc, generated_at)
+        self._add_revision_history_table(doc, generated_at, version)
         doc.add_paragraph("")
 
         self._add_timbro_firma_table(doc)
         doc.add_page_break()
 
     def _add_revision_history_table(
-        self, doc: Document, generated_at: datetime
+        self, doc: Document, generated_at: datetime, version: int
     ) -> None:
         """Template Table 1 — Rev./Motivazione/Data (7×3 DYNAMIC).
 
-        Emits a single row for the current emission. Real clients will have
-        this backed by the ``DocumentoGenerato`` version log in a later
-        iteration; for now it's a truthful single-entry record.
+        Emits a single row for the current emission, numbered from the same
+        source as the cover page. It used to be hardcoded to "00 — Emissione",
+        so a regenerated DVR claimed to be a first issue no matter how many
+        times it had been reissued.
         """
         headers = ["Rev.", "Motivazione", "Data"]
         rows = [[
-            "00",
-            "Emissione",
+            _revision_label(version),
+            # Art. 29 c.3 is what makes a DVR get reissued, so name it rather
+            # than repeating "Emissione" for a revision that isn't one.
+            "Emissione" if version <= 1 else "Aggiornamento ex art. 29 c.3",
             generated_at.strftime("%d/%m/%Y"),
         ]]
         self._add_data_table(doc, headers, rows)
@@ -1535,7 +1547,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
           11  Addetti Antincendio
           12  Ambienti + N.Lavoratori
           13  Attrezzature / Marcatura CE / Verifiche
-          14  Sostanze chimiche / Produttore / Attivita
+          14  Sostanze chimiche / Produttore / Attività
           15–17 Static hazard library (Sicurezza / Salute / Trasversali)
         """
         # Each Parte starts on a fresh page so the section break is
@@ -1605,7 +1617,9 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 return
             anagrafica_rows.append((label, formatter(value)))
 
-        _add_optional("Attivita", getattr(azienda, "attivita", None))
+        # The label is prose and takes the accent; the attribute name is schema
+        # and must not (P1-1).
+        _add_optional("Attività", getattr(azienda, "attivita", None))
         _add_optional("Codice ATECO", getattr(azienda, "codice_ateco", None))
         _add_optional("Partita IVA", getattr(azienda, "partita_iva", None))
         _add_optional("Codice Fiscale", getattr(azienda, "codice_fiscale", None))
@@ -1908,7 +1922,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 "Lavabi con acqua corrente e dispenser per il lavaggio "
                 "delle mani.",
                 "Spogliatoi con armadietti individuali a doppio scomparto "
-                "ove l'attivita comporti l'uso di indumenti da lavoro.",
+                "ove l'attività comporti l'uso di indumenti da lavoro.",
                 "Locale di riposo/refezione adeguato quando i lavoratori "
                 "consumano i pasti in azienda.",
             ):
@@ -1946,8 +1960,8 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             "Nota: la colonna \"N. Lavoratori\" conteggia ciascun addetto "
             "una volta per ogni ambiente in cui opera; preposti, addetti "
             "alle emergenze e personale con mansioni trasversali "
-            "compaiono pertanto in piu righe. Il totale dei dipendenti "
-            "in forza all'azienda e riportato in §1.1."
+            "compaiono pertanto in più righe. Il totale dei dipendenti "
+            "in forza all'azienda è riportato in §1.1."
         )
         run.font.italic = True
         run.font.size = Pt(8)
@@ -2031,7 +2045,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         headers = [
             "Sostanza / Prodotto",
             "Produttore / Distributore",
-            "Attivita / Uso",
+            "Attività / Uso",
             "Destinazione d'uso",
             "Stato",
             "Pittogrammi GHS",
@@ -2134,15 +2148,15 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         """Add Part II: activity description and risk methodology.
 
         Renders four sub-sections:
-          2.1 Descrizione dell'Attivita (from azienda fields, with placeholder
+          2.1 Descrizione dell'Attività (from azienda fields, with placeholder
               fallback when the survey field is empty).
           2.2 Metodologia di Valutazione dei Rischi (static boilerplate with
               a color-coded risk-level lookup table).
-          2.3 Scala di Probabilita (P).
+          2.3 Scala di Probabilità (P).
           2.4 Scala del Danno (D).
         """
         h = doc.add_heading(
-            "PARTE II — DESCRIZIONE DELL'ATTIVITA E METODOLOGIA DI VALUTAZIONE",
+            "PARTE II — DESCRIZIONE DELL'ATTIVITÀ E METODOLOGIA DI VALUTAZIONE",
             level=1,
         )
         h.paragraph_format.page_break_before = True
@@ -2152,7 +2166,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         doc.add_paragraph("")
 
         # 2.1 — Activity description
-        doc.add_heading("2.1 Descrizione dell'Attivita", level=2)
+        doc.add_heading("2.1 Descrizione dell'Attività", level=2)
 
         descrizione = (azienda.descrizione_attivita or "").strip()
         if descrizione:
@@ -2168,7 +2182,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         else:
             p = doc.add_paragraph()
             run = p.add_run(
-                "[Descrizione dell'attivita da compilare durante la revisione]"
+                "[Descrizione dell'attività da compilare durante la revisione]"
             )
             run.font.size = Pt(10)
             run.font.italic = True
@@ -2270,7 +2284,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         doc.add_paragraph("")
 
         # Template Table 21 — Scala di Probabilita (P) with full criteria column
-        doc.add_heading("2.4 Scala di Probabilita (P)", level=2)
+        doc.add_heading("2.4 Scala di Probabilità (P)", level=2)
         self._add_data_table(
             doc,
             headers=["P", "Livello", "Criteri"],
@@ -2871,7 +2885,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             if pending == 0:
                 doc.add_paragraph(
                     f"Stato formazione attuale: tutti i {total} lavoratori "
-                    "hanno completato la formazione piu recente."
+                    "hanno completato la formazione più recente."
                 )
             else:
                 noun = "lavoratore" if pending == 1 else "lavoratori"
@@ -3344,9 +3358,9 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         )
         p = doc.add_paragraph()
         run = p.add_run(
-            "Il programma di miglioramento e definito sulla base delle "
-            "criticita emerse dalla valutazione dei rischi. Le misure sono "
-            "ordinate per priorita in funzione del livello di rischio: "
+            "Il programma di miglioramento è definito sulla base delle "
+            "criticità emerse dalla valutazione dei rischi. Le misure sono "
+            "ordinate per priorità in funzione del livello di rischio: "
             "rischi GRAVISSIMI (I >= 9) richiedono intervento immediato, "
             "rischi GRAVI (I = 7-8) entro sei mesi, rischi MODESTI o "
             "ACCETTABILI sono pianificati nel ciclo annuale di revisione."
@@ -3386,8 +3400,8 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         """Render the per-mansione Sorveglianza Sanitaria protocol table,
         aggregating per-persona DPI + rischi flags up to mansione (union).
 
-        4 columns: Mansione | Rischi specifici | DPI assegnati | Periodicita'
-        (compilata dal Medico Competente). Periodicita' is left as a
+        4 columns: Mansione | Rischi specifici | DPI assegnati | Periodicità'
+        (compilata dal Medico Competente). Periodicità' is left as a
         placeholder because the actual cadence is a medical decision the
         MC must make per mansione (art. 41 D.Lgs. 81/2008) — we render the
         scaffold so the MC has a structured form to fill, not invented
@@ -3439,7 +3453,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             "Mansione",
             "Rischi specifici",
             "DPI assegnati",
-            "Periodicita' (compilata dal MC)",
+            "Periodicità' (compilata dal MC)",
         ]
 
         rows: list[list[str]] = []
@@ -3463,7 +3477,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         # Footnote clarifying authority for the periodicita' column.
         note = doc.add_paragraph()
         nrun = note.add_run(
-            "Nota: la periodicita' della sorveglianza sanitaria e i "
+            "Nota: la periodicità' della sorveglianza sanitaria e i "
             "protocolli specifici sono definiti dal Medico Competente in "
             "sede di nomina e di prima visita, ai sensi dell'art. 41 "
             "D.Lgs. 81/2008."
@@ -3570,11 +3584,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         for clause in (
             "che il procedimento di valutazione dei rischi ex art. 17, "
-            "comma 1, lettera a) del D.Lgs. 81/2008 e s.m.i. e stato "
+            "comma 1, lettera a) del D.Lgs. 81/2008 e s.m.i. è stato "
             "effettuato in collaborazione con il RSPP, il Medico "
             "Competente (ove nominato) e previa consultazione del RLS;",
             "che la valutazione e tutti i suoi aggiornamenti sono "
-            "documentati nel presente DVR, conservato presso l'unita "
+            "documentati nel presente DVR, conservato presso l'unità "
             "produttiva e reso disponibile per la consultazione ai "
             "soggetti previsti dalla legge;",
             "di aver individuato e descritto le misure di prevenzione e "
@@ -3769,7 +3783,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         (e.g. ``Via Verona 1/A, 20063 Cernusco sul Naviglio (MI)``). Every
         component is optional — missing parts are skipped without leaving
         stray separators or an orphan ``(PROV)``. Audit F-301 (2026-05-31):
-        previously only ``via`` + ``citta`` were emitted, silently dropping
+        previously only ``via`` + ``città`` were emitted, silently dropping
         the CAP and province that are present on the azienda row.
         """
         citta_seg = (citta or "").strip()

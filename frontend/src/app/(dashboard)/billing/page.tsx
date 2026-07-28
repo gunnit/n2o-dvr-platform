@@ -8,6 +8,7 @@ import { AlertTriangle, CheckCircle2, CreditCard, Loader2, Users, Zap } from "lu
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PLAN_DISPLAY_NAMES } from "@/components/landing/pricing-data";
 import { useApi } from "@/hooks/use-api";
 import { useEntitlements, usePlans } from "@/hooks/use-entitlements";
 import {
@@ -20,6 +21,7 @@ import {
   formatEuro,
   formatLimit,
   formatPeriodEnd,
+  formatSeats,
 } from "@/lib/billing";
 
 /**
@@ -91,7 +93,10 @@ function BillingPageInner() {
       {entitlements && (
         <>
           <CurrentPlanCard ent={entitlements} />
-          <UsageCard ent={entitlements} />
+          {/* Consumption against a plan the tenant does not hold is not a
+              meaningful reading — the meters would show "0 / ∞" and claim
+              "nessun limite su questo piano" for a plan that isn't there. */}
+          {entitlements.subscribed && <UsageCard ent={entitlements} />}
           {isAdmin && (
             <PlanPicker ent={entitlements} onChanged={refresh} preselected={piano} />
           )}
@@ -130,30 +135,53 @@ function CurrentPlanCard({ ent }: { ent: Entitlements }) {
         </span>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-2xl font-semibold">{ent.plan_code}</p>
-        <dl className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
-          <Row label="Utenti inclusi" value={String(ent.seats)} />
-          {/* A consultant plan meters client companies; a direct plan meters the
-              tenant's own sedi. `max_companies` is null on every B plan, so
-              showing that row to a direct tenant would read "illimitato". */}
-          {ent.account_type === "direct" ? (
-            <Row label="Sedi incluse" value={formatLimit(ent.max_sites)} />
-          ) : (
-            <Row label="Aziende attive" value={formatLimit(ent.max_companies)} />
-          )}
-          <Row
-            label="Crediti AI / anno"
-            value={ent.ai_credits_year === null ? "illimitati" : String(ent.ai_credits_year)}
-          />
-          <Row
-            label="Tipi di documento"
-            value={
-              ent.allowed_doc_types === null
-                ? "tutti"
-                : `${ent.allowed_doc_types.length} inclusi`
-            }
-          />
-        </dl>
+        <p className="text-2xl font-semibold">
+          {ent.subscribed ? ent.plan_code : "Nessun piano attivo"}
+        </p>
+
+        {/* A tenant that has never purchased has no plan limits to report —
+            listing "illimitato" against every row would describe rights it does
+            not hold. Show what it means instead. */}
+        {!ent.subscribed ? (
+          <Notice tone="warn">
+            Non hai ancora attivato un abbonamento.{" "}
+            {ent.enforced ? (
+              <>
+                Attiva un piano qui sotto per generare i documenti.
+              </>
+            ) : (
+              <>
+                Puoi già usare la piattaforma: durante questa fase nessuna
+                operazione viene bloccata. Attiva un piano qui sotto per mettere
+                in regola l&apos;abbonamento.
+              </>
+            )}
+          </Notice>
+        ) : (
+          <dl className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
+            <Row label="Utenti inclusi" value={formatSeats(ent.seats)} />
+            {/* A consultant plan meters client companies; a direct plan meters the
+                tenant's own sedi. `max_companies` is null on every B plan, so
+                showing that row to a direct tenant would read "illimitato". */}
+            {ent.account_type === "direct" ? (
+              <Row label="Sedi incluse" value={formatLimit(ent.max_sites)} />
+            ) : (
+              <Row label="Aziende attive" value={formatLimit(ent.max_companies)} />
+            )}
+            <Row
+              label="Crediti AI / anno"
+              value={ent.ai_credits_year === null ? "illimitati" : String(ent.ai_credits_year)}
+            />
+            <Row
+              label="Tipi di documento"
+              value={
+                ent.allowed_doc_types === null
+                  ? "tutti"
+                  : `${ent.allowed_doc_types.length} inclusi`
+              }
+            />
+          </dl>
+        )}
         {until && (
           <p className="text-sm text-muted-foreground">
             Periodo corrente fino al <strong>{until}</strong>.
@@ -331,14 +359,44 @@ function PlanPicker({
 
   if (loading) return null;
   if (plans.length === 0) {
+    // The customer may have arrived here straight from "Attiva Base" on the
+    // public price list. Dropping that intent silently — which is what a bare
+    // "nessun piano disponibile" does — reads as if the click did nothing.
+    // Name the plan back to them and hand over a route that still works.
+    const chosen = PLAN_DISPLAY_NAMES[preselected ?? ""];
+    const subject = encodeURIComponent(
+      chosen
+        ? `Attivazione piano ${chosen} — N2O DVR`
+        : "Attivazione abbonamento — N2O DVR"
+    );
     return (
       <Card>
-        <CardContent className="pt-6 text-sm text-muted-foreground">
-          Nessun piano acquistabile online al momento. Scrivi a{" "}
-          <a className="text-primary hover:underline" href="mailto:support@dvr-sicurezza.it">
-            support@dvr-sicurezza.it
-          </a>{" "}
-          e attiviamo il piano per te.
+        <CardHeader>
+          <CardTitle>
+            {chosen ? `Attivazione del piano ${chosen}` : "Attivazione abbonamento"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          {chosen ? (
+            <p>
+              Hai scelto il piano <strong className="text-foreground">{chosen}</strong>. Il
+              pagamento online non è al momento attivo su questo ambiente, quindi
+              non possiamo portarti su PayPal.
+            </p>
+          ) : (
+            <p>Il pagamento online non è al momento attivo su questo ambiente.</p>
+          )}
+          <p>
+            Scrivici a{" "}
+            <a
+              className="text-primary hover:underline"
+              href={`mailto:support@dvr-sicurezza.it?subject=${subject}`}
+            >
+              support@dvr-sicurezza.it
+            </a>{" "}
+            e attiviamo il piano per te. Nel frattempo puoi continuare a usare la
+            piattaforma senza limitazioni.
+          </p>
         </CardContent>
       </Card>
     );
@@ -433,7 +491,9 @@ function PlanPicker({
           l&apos;attivazione è confermata solo dopo la conferma di PayPal.
         </p>
 
-        {ent.status !== "canceled" && (
+        {/* Nothing to disdire when there is no subscription — and `canceled`
+            already has none live either. */}
+        {ent.subscribed && ent.status !== "canceled" && (
           <div className="border-t pt-4">
             <Button variant="outline" disabled={busy !== null} onClick={() => void cancel()}>
               {busy === "cancel" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

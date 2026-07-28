@@ -16,6 +16,7 @@ def get_generator_for(
     azienda_id: uuid.UUID,
     db: AsyncSession,
     options: dict | None = None,
+    version: int | None = None,
 ) -> BaseDocumentGenerator:
     """Return a generator instance for the given tipo_documento string.
 
@@ -29,77 +30,82 @@ def get_generator_for(
     The optional ``options`` dict is forwarded to the generator so per-run
     config (e.g. HACCP forms ``selected_codes``) can flow from the API
     request through the Celery task into the generator (US-4.4).
+
+    ``version`` is the ``DocumentoGenerato.versione`` this run is producing.
+    Pass it whenever a row exists: without it a generator has to infer the
+    revision number from the table, and the row it is currently filling in is
+    already there to be counted (see ``BaseDocumentGenerator.resolve_version``).
     """
     t = (tipo_documento or "").upper().replace("-", "_")
 
     if t == "DVR_MASTER":
         from app.services.document_generator.dvr_master import DVRMasterGenerator
-        return DVRMasterGenerator(azienda_id, db)
+        return DVRMasterGenerator(azienda_id, db, version=version)
 
     if t == "ALLEGATO_MMC":
         from app.services.document_generator.allegato_mmc import AllegatoMmcGenerator
-        return AllegatoMmcGenerator(azienda_id, db)
+        return AllegatoMmcGenerator(azienda_id, db, version=version)
 
     if t == "ALLEGATO_VDT":
         from app.services.document_generator.allegato_vdt import AllegatoVdtGenerator
-        return AllegatoVdtGenerator(azienda_id, db)
+        return AllegatoVdtGenerator(azienda_id, db, version=version)
 
     if t == "ALLEGATO_STRESS":
         from app.services.document_generator.allegato_stress import AllegatoStressGenerator
-        return AllegatoStressGenerator(azienda_id, db)
+        return AllegatoStressGenerator(azienda_id, db, version=version)
 
     if t == "ALLEGATO_GESTANTI":
         from app.services.document_generator.allegato_gestanti import AllegatoGestantiGenerator
-        return AllegatoGestantiGenerator(azienda_id, db)
+        return AllegatoGestantiGenerator(azienda_id, db, version=version)
 
     if t == "ALLEGATO_INCENDIO":
         from app.services.document_generator.allegato_incendio import AllegatoIncendioGenerator
-        return AllegatoIncendioGenerator(azienda_id, db)
+        return AllegatoIncendioGenerator(azienda_id, db, version=version)
 
     if t == "ALLEGATO_MICROCLIMA":
         from app.services.document_generator.allegato_microclima import AllegatoMicroclimaGenerator
-        return AllegatoMicroclimaGenerator(azienda_id, db)
+        return AllegatoMicroclimaGenerator(azienda_id, db, version=version)
 
     if t == "ALLEGATO_MICROCLIMA_SEVERO":
         from app.services.document_generator.allegato_microclima_severo import AllegatoMicroclimaSeveroGenerator
-        return AllegatoMicroclimaSeveroGenerator(azienda_id, db)
+        return AllegatoMicroclimaSeveroGenerator(azienda_id, db, version=version)
 
     if t == "ALLEGATO_BIOLOGICO_ALIMENTARE":
         from app.services.document_generator.allegato_biologico_alimentare import AllegatoBiologicoAlimentareGenerator
-        return AllegatoBiologicoAlimentareGenerator(azienda_id, db)
+        return AllegatoBiologicoAlimentareGenerator(azienda_id, db, version=version)
 
     if t == "ALLEGATO_BIOLOGICO_ASILO":
         from app.services.document_generator.allegato_biologico_asilo import AllegatoBiologicoAsiloGenerator
-        return AllegatoBiologicoAsiloGenerator(azienda_id, db)
+        return AllegatoBiologicoAsiloGenerator(azienda_id, db, version=version)
 
     if t == "ALLEGATO_BIOLOGICO_DENTISTI":
         from app.services.document_generator.allegato_biologico_dentisti import AllegatoBiologicoDentistiGenerator
-        return AllegatoBiologicoDentistiGenerator(azienda_id, db)
+        return AllegatoBiologicoDentistiGenerator(azienda_id, db, version=version)
 
     if t == "PEE_AZIENDA":
         from app.services.document_generator.pee_azienda import PeeAziendaGenerator
-        return PeeAziendaGenerator(azienda_id, db)
+        return PeeAziendaGenerator(azienda_id, db, version=version)
 
     if t == "PEE_COMUNE":
         from app.services.document_generator.pee_comune import PeeComuneGenerator
-        return PeeComuneGenerator(azienda_id, db)
+        return PeeComuneGenerator(azienda_id, db, version=version)
 
     if t == "HACCP":
         from app.services.document_generator.haccp_manuale import HaccpManualeGenerator
-        return HaccpManualeGenerator(azienda_id, db)
+        return HaccpManualeGenerator(azienda_id, db, version=version)
 
     if t == "HACCP_FORMS":
         from app.services.document_generator.haccp_forms import HaccpFormsGenerator
         # US-4.4: subset selection comes via options.selected_codes.
-        return HaccpFormsGenerator(azienda_id, db, options=options)
+        return HaccpFormsGenerator(azienda_id, db, options=options, version=version)
 
     if t == "DUVRI":
         from app.services.document_generator.duvri import DuvriGenerator
-        return DuvriGenerator(azienda_id, db)
+        return DuvriGenerator(azienda_id, db, version=version)
 
     if t == "POS":
         from app.services.document_generator.pos import PosGenerator
-        return PosGenerator(azienda_id, db)
+        return PosGenerator(azienda_id, db, version=version)
 
     raise ValueError(f"Unknown tipo_documento: {tipo_documento}")
 

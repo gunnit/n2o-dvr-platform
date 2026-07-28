@@ -24,6 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useApi } from "@/hooks/use-api";
+import { parseApiDate } from "@/lib/ui/api-date";
 
 /**
  * Admin backup status panel (US-5.4).
@@ -136,7 +137,7 @@ export default function BackupsSettingsPage() {
 
   const failureWithinDay =
     status?.last_failure_at &&
-    Date.now() - new Date(status.last_failure_at).getTime() < 24 * 60 * 60 * 1000;
+    Date.now() - (parseApiDate(status.last_failure_at)?.getTime() ?? 0) < 24 * 60 * 60 * 1000;
 
   return (
     <div className="space-y-6">

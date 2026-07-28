@@ -322,7 +322,7 @@ export function StepRiepilogo({
               value={azienda.ragione_sociale}
               showWhenEmpty
             />
-            <DetailRow label="Attivita" value={azienda.attivita} />
+            <DetailRow label="Attività" value={azienda.attivita} />
             <DetailRow label="Codice ATECO" value={azienda.codice_ateco} />
             <DetailRow
               label="Sede Legale"

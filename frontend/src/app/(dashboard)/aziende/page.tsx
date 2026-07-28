@@ -12,6 +12,8 @@ import { MetaCell } from "@/components/cards/MetaCell";
 import { AtecoPill } from "@/components/cards/AtecoPill";
 import { monogramFor } from "@/lib/ui/monogram";
 import { formatRelative } from "@/lib/ui/relative-time";
+import { parseApiDate } from "@/lib/ui/api-date";
+import { useTenantVocabulary } from "@/hooks/use-tenant-vocabulary";
 import {
   SURVEY_STATUS_META,
   surveyStatusKey,
@@ -35,6 +37,7 @@ export default function AziendePage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const role = (session?.user as any)?.role as string | undefined;
   const isAdmin = role === "admin";
+  const vocab = useTenantVocabulary();
   const [aziende, setAziende] = useState<Azienda[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -78,9 +81,9 @@ export default function AziendePage() {
     <div className="space-y-8">
       <div className="flex items-start justify-between gap-6">
         <div>
-          <h1 className="type-h1">Aziende</h1>
+          <h1 className="type-h1">{vocab.companiesTitle}</h1>
           <p className="type-body mt-2">
-            Gestione clienti
+            {vocab.listLead}
             {aziende.length > 0 && (
               <>
                 {" · "}
@@ -170,7 +173,7 @@ export default function AziendePage() {
             const city =
               azienda.sede_operativa_citta || azienda.sede_legale_citta || null;
             const createdLabel = azienda.created_at
-              ? new Date(azienda.created_at).toLocaleDateString("it-IT", {
+              ? (parseApiDate(azienda.created_at) ?? new Date(0)).toLocaleDateString("it-IT", {
                   day: "2-digit",
                   month: "short",
                   year: "numeric",

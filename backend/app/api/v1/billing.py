@@ -63,9 +63,14 @@ class UsageOut(BaseModel):
 
 class EntitlementsOut(BaseModel):
     account_type: str
-    plan_code: str
+    # None = the org has never bought a plan. The UI must render a call to
+    # action, not a plan code the customer does not hold (MB-6.1).
+    plan_code: str | None
     status: str
     is_active: bool
+    # False = never purchased. Distinct from `is_active`, which is also false
+    # for a lapsed subscription — "attiva un piano" vs "rinnova".
+    subscribed: bool
     # None = all 17 document types.
     allowed_doc_types: list[str] | None
     seats: int
@@ -112,6 +117,7 @@ async def _entitlements_out(
         plan_code=ent.plan_code,
         status=ent.status,
         is_active=ent.is_active,
+        subscribed=ent.subscribed,
         allowed_doc_types=(
             None if ent.allowed_doc_types is None else sorted(ent.allowed_doc_types)
         ),

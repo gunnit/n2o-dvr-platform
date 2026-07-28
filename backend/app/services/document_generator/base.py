@@ -10,7 +10,7 @@ import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -37,6 +37,7 @@ class BaseDocumentGenerator(ABC):
         azienda_id: uuid.UUID,
         db_session: AsyncSession,
         options: dict | None = None,
+        version: int | None = None,
     ):
         """Initialize the generator.
 
@@ -45,6 +46,9 @@ class BaseDocumentGenerator(ABC):
             db_session: Async SQLAlchemy session for database access.
             options: Optional per-generation config (e.g. HACCP forms
                 ``selected_codes``). ``None`` when not supplied.
+            version: The revision number this run is producing — i.e. the
+                ``versione`` already assigned to the ``DocumentoGenerato`` row
+                the Celery task is filling in. See :meth:`resolve_version`.
         """
         self.azienda_id = azienda_id
         self.db = db_session
@@ -52,11 +56,41 @@ class BaseDocumentGenerator(ABC):
         # DocumentoGenerato.options JSONB column. Generators that don't need
         # per-run config can simply ignore this attribute.
         self.options: dict = options or {}
+        self.version: int | None = version
         # Consultancy branding (logo + letterhead). Defaults to the N2O
         # fallback so generators have a usable value even before load_data()
         # runs — and so the DB-free test harness (which patches load_data)
         # produces unchanged output. Populated per-org in load_data().
         self.branding: Branding = Branding.default()
+
+    async def resolve_version(self, tipo_aliases: list[str]) -> int:
+        """The revision number to stamp on this document.
+
+        Prefer the number the caller already assigned. ``POST /documents/generate``
+        computes ``next_version`` and inserts the ``DocumentoGenerato`` row
+        *before* enqueuing the Celery task, so by the time a generator ran, a
+        ``SELECT max(versione) + 1`` counted that pending row and returned one
+        more than the truth: the first DVR of a brand-new azienda was written
+        out as ``Revisione 02`` / ``_v2.docx`` while the row said ``1`` and the
+        document's own Storico Revisioni table said ``00 — Emissione``.
+
+        The fallback is only for callers that construct a generator directly —
+        ``scripts/verify_all_generators.py`` and the tests — which have no row.
+        It excludes rows that never produced a file, so a pending or failed
+        attempt does not consume a revision number either.
+        """
+        if self.version is not None:
+            return self.version
+
+        from app.models.documento_generato import DocumentoGenerato
+
+        stmt = (
+            select(func.coalesce(func.max(DocumentoGenerato.versione), 0))
+            .where(DocumentoGenerato.azienda_id == self.azienda_id)
+            .where(DocumentoGenerato.tipo_documento.in_(tipo_aliases))
+            .where(DocumentoGenerato.status == "completed")
+        )
+        return ((await self.db.execute(stmt)).scalar() or 0) + 1
 
     @abstractmethod
     async def generate(self) -> str:

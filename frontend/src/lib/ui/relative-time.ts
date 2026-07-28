@@ -1,9 +1,14 @@
+import { parseApiDate } from "@/lib/ui/api-date";
+
 export function formatRelative(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
+  // Parsed as UTC when the API omits the offset, which it does everywhere —
+  // otherwise "adesso" renders as "2 ore fa" in CEST (P2-2).
+  const d = parseApiDate(iso);
+  if (!d) return "";
   const diffMs = Date.now() - d.getTime();
   const mins = Math.round(diffMs / 60_000);
+  // Clock skew between the server and the browser can put a just-created
+  // record a few seconds in the future; "fra 1 minuto" would be nonsense.
   if (mins < 1) return "adesso";
   if (mins < 60) return `${mins} min fa`;
   const hrs = Math.round(mins / 60);

@@ -3,8 +3,10 @@
 The resolver decides whether a paying customer may generate a legally-required
 document, so its two failure modes matter more than its happy path:
 
-* it must never raise — an org with no subscription row gets a permissive
-  fallback, not a 500 or a 402 (INV-1);
+* it must never raise — an org whose billing rows cannot be read gets a
+  permissive fallback, not a 500 or a 402 (INV-1). Distinct from an org that
+  has simply never bought anything, which resolves to the honest *unsubscribed*
+  state (MB-6.1);
 * it must never trust the caller's casing — the wire form of
   ``tipo_documento`` is lowercase while the dispatcher registry is uppercase.
 
@@ -183,27 +185,47 @@ def test_null_features_becomes_an_empty_dict():
 # --- INV-1: never lock anyone out -----------------------------------------
 
 
-def test_org_without_subscription_gets_permissive_fallback(caplog):
-    with caplog.at_level(logging.WARNING):
-        ent = _resolve(("consultant", None, None))
+def test_org_without_subscription_is_unsubscribed_not_founding():
+    """MB-6.1: "never bought" must not be reported as the founding partner plan.
 
-    assert ent.plan_code == "A_FOUNDING"
-    assert ent.account_type == "consultant"
-    # Fully permissive: a data gap must not 402 a paying tenant.
-    assert ent.allowed_doc_types is None
-    assert ent.max_companies is None
-    assert ent.max_sites is None
-    assert ent.credits_unmetered is True
-    assert ent.is_active
-    assert all(ent.allows_doc_type(t) for t in ALL_DOC_TYPES)
-    # ...but loudly, so the missing row gets fixed.
-    assert any("no resolvable subscription" in r.getMessage() for r in caplog.records)
+    Before the split, a fresh self-serve signup — which owns no subscription row
+    by design — resolved to A_FOUNDING/active/unlimited, so the UI told an
+    unpaid tenant it held an active plan and the doc-type guardrail evaporated.
+    """
+    ent = _resolve(("consultant", None, None))
+
+    assert ent.plan_code is None
+    assert ent.status == "none"
+    assert ent.subscribed is False
+    assert ent.is_active is False
+    assert ent.seats == 1
 
 
-def test_fallback_preserves_account_type():
+def test_unsubscribed_preserves_account_type():
     ent = _resolve(("direct", None, None))
     assert ent.account_type == "direct"
+    assert ent.plan_code is None
+    assert ent.subscribed is False
+
+
+def test_subscription_on_unknown_plan_gets_permissive_fallback(caplog):
+    """A purchase we can no longer resolve is *our* bug, so soft-fail (INV-1)."""
+
+    class _Sub:
+        plan_code = "A_GONE"
+
+    with caplog.at_level(logging.WARNING):
+        ent = _resolve(("consultant", _Sub(), None))
+
     assert ent.plan_code == "A_FOUNDING"
+    assert ent.subscribed is True
+    assert ent.is_active
+    assert ent.allowed_doc_types is None
+    assert ent.max_companies is None
+    assert ent.credits_unmetered is True
+    assert all(ent.allows_doc_type(t) for t in ALL_DOC_TYPES)
+    # ...but loudly, so the dangling row gets fixed.
+    assert any("unknown plan" in r.getMessage() for r in caplog.records)
 
 
 def test_missing_organization_does_not_raise(caplog):

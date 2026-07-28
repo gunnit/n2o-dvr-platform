@@ -20,9 +20,16 @@ export type Usage = {
 
 export type Entitlements = {
   account_type: string;
-  plan_code: string;
-  status: "trialing" | "active" | "past_due" | "canceled";
+  /** null = never purchased a plan. Render a call to action, not a code. */
+  plan_code: string | null;
+  /** `none` = no subscription row at all; the other four mirror the DB. */
+  status: "none" | "trialing" | "active" | "past_due" | "canceled";
   is_active: boolean;
+  /**
+   * False = never bought anything. Distinct from `is_active`, which is also
+   * false once a subscription lapses — "attiva un piano" vs "rinnova".
+   */
+  subscribed: boolean;
   /** null = all 17 document types. */
   allowed_doc_types: string[] | null;
   seats: number;
@@ -69,6 +76,7 @@ export function formatLimit(value: number | null): string {
 }
 
 export const STATUS_LABELS: Record<Entitlements["status"], string> = {
+  none: "Nessun piano attivo",
   trialing: "In attivazione",
   active: "Attivo",
   past_due: "Pagamento in sospeso",
@@ -81,11 +89,25 @@ export const STATUS_LABELS: Record<Entitlements["status"], string> = {
  * them they are cut off when they are not causes support calls.
  */
 export const STATUS_TONE: Record<Entitlements["status"], "ok" | "warn" | "bad"> = {
+  // Neutral-warning, not error: a tenant who has just signed up has done
+  // nothing wrong, and while ENTITLEMENTS_ENFORCE is off nothing is blocked.
+  none: "warn",
   trialing: "warn",
   active: "ok",
   past_due: "warn",
   canceled: "bad",
 };
+
+/**
+ * Seat counts come from the plan catalogue, except in the INV-1 data-gap
+ * fallback which reports `2**31-1` to mean "do not block anybody". That
+ * sentinel must never reach the customer as a literal.
+ */
+const UNLIMITED_SEATS_SENTINEL = 2 ** 31 - 1;
+
+export function formatSeats(seats: number): string {
+  return seats >= UNLIMITED_SEATS_SENTINEL ? "illimitati" : String(seats);
+}
 
 export function creditsPercent(usage: Usage): number | null {
   if (usage.ai_credits_allowance === null || usage.ai_credits_allowance === 0) return null;

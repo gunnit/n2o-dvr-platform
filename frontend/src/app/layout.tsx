@@ -16,7 +16,14 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "N2O DVR - Sicurezza sul Lavoro",
+  // `template` lets each route segment name itself in the tab and in browser
+  // history. Without it every application page — registration, dashboard,
+  // documents, sopralluogo — shared the single title below, so a user with
+  // several tabs open could not tell them apart (P3-6).
+  title: {
+    default: "N2O DVR - Sicurezza sul Lavoro",
+    template: "%s | N2O DVR",
+  },
   description: "Piattaforma di automazione documentale per la sicurezza sul lavoro",
 };
 

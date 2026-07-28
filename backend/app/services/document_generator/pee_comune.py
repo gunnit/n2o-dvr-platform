@@ -91,7 +91,7 @@ class PeeComuneGenerator(BaseDocumentGenerator):
             ])
 
         add_heading(doc, "Procedure comuni multi-tenant", level=2)
-        add_paragraph(doc, "In caso di attivazione dell'allarme generale dell'edificio, tutte le aziende interrompono le attivita, attivano il proprio coordinatore locale e procedono all'evacuazione verso il punto di raccolta condominiale.")
+        add_paragraph(doc, "In caso di attivazione dell'allarme generale dell'edificio, tutte le aziende interrompono le attività, attivano il proprio coordinatore locale e procedono all'evacuazione verso il punto di raccolta condominiale.")
 
         # Planimetria (US-4.1 AC3): embed the uploaded floor plan if one exists,
         # otherwise a placeholder. Condominial buildings tend to share a single
@@ -132,10 +132,4 @@ class PeeComuneGenerator(BaseDocumentGenerator):
         return filepath
 
     async def _next_version(self) -> int:
-        stmt = (
-            select(func.coalesce(func.max(DocumentoGenerato.versione), 0))
-            .where(DocumentoGenerato.azienda_id == self.azienda_id)
-            .where(DocumentoGenerato.tipo_documento.in_([TIPO_DOC, "PEE_COMUNE"]))
-        )
-        r = await self.db.execute(stmt)
-        return (r.scalar() or 0) + 1
+        return await self.resolve_version([TIPO_DOC, "PEE_COMUNE"])

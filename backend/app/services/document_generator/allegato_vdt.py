@@ -62,7 +62,7 @@ _EXPOSURE_COLORS = {
 }
 
 _CHECKLIST_ITEMS: list[tuple[str, str]] = [
-    ("schermo_conforme", "Schermo conforme (leggibilita, stabilita, regolazioni)"),
+    ("schermo_conforme", "Schermo conforme (leggibilità, stabilità, regolazioni)"),
     ("tastiera_separata", "Tastiera separata e inclinabile"),
     ("sedile_regolabile", "Sedile a 5 razze, altezza/schienale regolabili"),
     ("poggiapiedi_disponibile", "Poggiapiedi disponibile su richiesta"),
@@ -117,13 +117,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
     # ------------------------------------------------------------------
 
     async def _next_version(self) -> int:
-        stmt = (
-            select(func.coalesce(func.max(DocumentoGenerato.versione), 0))
-            .where(DocumentoGenerato.azienda_id == self.azienda_id)
-            .where(DocumentoGenerato.tipo_documento.in_([TIPO_DOC, "ALLEGATO_VDT"]))
-        )
-        r = await self.db.execute(stmt)
-        return (r.scalar() or 0) + 1
+        return await self.resolve_version([TIPO_DOC, "ALLEGATO_VDT"])
 
     # ------------------------------------------------------------------
     # Style setup
@@ -274,7 +268,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
     def _add_introduzione(self, doc) -> None:
         add_heading(doc, "Introduzione", level=1)
         for txt in [
-            "L'utilizzo del videoterminale, soprattutto se prolungato, puo' provocare "
+            "L'utilizzo del videoterminale, soprattutto se prolungato, può' provocare "
             "disturbi all'apparato muscolo-scheletrico, all'apparato visivo e fenomeni "
             "di affaticamento fisico o mentale. La rilevanza di tali disturbi e' "
             "strettamente correlata alla durata dell'esposizione e alle caratteristiche "
@@ -287,7 +281,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
             "La presente valutazione classifica ciascuna postazione e ciascun "
             "lavoratore in funzione del tempo di utilizzo settimanale; per i "
             "lavoratori esposti viene predisposto il programma di sorveglianza "
-            "sanitaria oculistica ai sensi dell'art. 176 (periodicita' "
+            "sanitaria oculistica ai sensi dell'art. 176 (periodicità' "
             "quinquennale, biennale per gli over 50 o con prescrizioni).",
         ]:
             add_paragraph(doc, txt)
@@ -301,16 +295,16 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         add_heading(doc, "Anagrafica Aziendale", level=1)
         rows: list[tuple[str, str]] = [
             ("Azienda", azienda.ragione_sociale or "—"),
-            ("Attivita / Codice ATECO", getattr(azienda, "codice_ateco", "") or "—"),
+            ("Attività / Codice ATECO", getattr(azienda, "codice_ateco", "") or "—"),
             ("Partita IVA", getattr(azienda, "partita_iva", "") or "—"),
             ("Codice Fiscale", getattr(azienda, "codice_fiscale", "") or "—"),
             ("Sede Legale - Via", azienda.sede_legale_via or "—"),
-            ("Sede Legale - Citta", format_comune(
+            ("Sede Legale - Città", format_comune(
                 getattr(azienda, "cap_legale", None),
                 azienda.sede_legale_citta,
                 getattr(azienda, "provincia_legale", None))),
             ("Sede Operativa - Via", getattr(azienda, "sede_operativa_via", "") or "—"),
-            ("Sede Operativa - Citta", format_comune(
+            ("Sede Operativa - Città", format_comune(
                 getattr(azienda, "cap_operativa", None),
                 getattr(azienda, "sede_operativa_citta", None),
                 getattr(azienda, "provincia_operativa", None))),
@@ -331,7 +325,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
             page_break(doc)
             return
 
-        headers = ["Nominativo", "Mansione", "Sesso", "Fascia eta", "Tipologia contrattuale"]
+        headers = ["Nominativo", "Mansione", "Sesso", "Fascia età", "Tipologia contrattuale"]
         rows = []
         for p in persone:
             rows.append([
@@ -406,8 +400,8 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         add_paragraph(
             doc,
             "Determinato da: cattiva organizzazione del lavoro (operazioni monotone "
-            "ripetitive); cattive condizioni ambientali (temperatura, umidita', "
-            "velocita' dell'aria); rumore ambientale che disturba l'attenzione; "
+            "ripetitive); cattive condizioni ambientali (temperatura, umidità', "
+            "velocità' dell'aria); rumore ambientale che disturba l'attenzione; "
             "software non adeguato.",
         )
         page_break(doc)
@@ -423,19 +417,19 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         add_paragraph(
             doc,
             "La postazione VDT deve essere allestita con attrezzature moderne e "
-            "ergonomiche: monitor orientabile e inclinabile, con luminosita' e "
+            "ergonomiche: monitor orientabile e inclinabile, con luminosità' e "
             "contrasto regolabili e privi di sfarfallii; tastiera indipendente, "
             "spostabile, di basso spessore e inclinabile, con tasti dotati di "
             "superficie opaca; mouse posizionato accanto alla tastiera con spazio "
             "sufficiente all'appoggio del polso. Software di facile uso, adeguato "
-            "alla mansione, con velocita' di risposta congrua.",
+            "alla mansione, con velocità' di risposta congrua.",
         )
 
         add_heading(doc, "Condizioni ambientali", level=2)
         add_paragraph(
             doc,
             "Temperatura raccomandata 18-22 °C in inverno e 24-26 °C in estate; "
-            "umidita' relativa 40-60%; assenza di correnti d'aria fastidiose. "
+            "umidità' relativa 40-60%; assenza di correnti d'aria fastidiose. "
             "Illuminazione 300-500 lux, priva di abbagliamenti diretti o riflessi "
             "sullo schermo. Rumore ambientale tale da non disturbare l'attenzione "
             "ne' la comunicazione verbale.",
@@ -454,7 +448,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         add_heading(doc, "Piano di lavoro, sedia, poggiapiedi", level=2)
         add_paragraph(
             doc,
-            "Piano di lavoro stabile, di profondita' adeguata e altezza regolabile "
+            "Piano di lavoro stabile, di profondità' adeguata e altezza regolabile "
             "(70-80 cm). Sedia a 5 razze con sedile e schienale regolabili in "
             "altezza e inclinazione. Poggiapiedi disponibile su richiesta del "
             "lavoratore quando l'altezza del piano di lavoro non consente l'appoggio "
@@ -602,17 +596,17 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         for attr, label in _CHECKLIST_ITEMS:
             ok = bool(getattr(r, attr, False))
             check_rows.append([label, "SI" if ok else "NO"])
-        add_data_table(doc, ["Requisito", "Conformita"], check_rows)
+        add_data_table(doc, ["Requisito", "Conformità"], check_rows)
 
         # Surveillance summary (only meaningful when esposto)
         if esposto:
             add_paragraph(doc, "")
             add_paragraph(doc, "Sorveglianza sanitaria oculistica", bold=True, size=10)
             surv_rows = [
-                ("Idoneita visiva", r.idoneita_visiva or "—"),
-                ("Periodicita", r.periodicita_sorveglianza or "—"),
+                ("Idoneità visiva", r.idoneita_visiva or "—"),
+                ("Periodicità", r.periodicita_sorveglianza or "—"),
                 (
-                    "Eta >= 50 anni",
+                    "Età >= 50 anni",
                     "SI" if r.eta_50_plus else "NO",
                 ),
                 (
@@ -710,11 +704,11 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
             "Ai sensi dell'art. 175 del D.Lgs. 81/2008, il lavoratore esposto ha "
             "diritto a una pausa di 15 minuti ogni 120 minuti di applicazione "
             "continuativa al videoterminale. La pausa e' considerata a tutti gli "
-            "effetti tempo di lavoro e non puo' essere accumulata a inizio o fine "
+            "effetti tempo di lavoro e non può' essere accumulata a inizio o fine "
             "turno.",
         )
 
-        add_heading(doc, "Muoversi di piu'", level=2)
+        add_heading(doc, "Muoversi di più'", level=2)
         add_paragraph(
             doc,
             "Alternare la posizione seduta con brevi pause attive: alzarsi, fare "
@@ -763,9 +757,9 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
             f"munite di videoterminali per almeno {int(VDT_EXPOSURE_THRESHOLD_HOURS)} "
             "ore settimanali sono sottoposti a sorveglianza sanitaria oculistica "
             "ai sensi dell'art. 176 del D.Lgs. 81/2008, integrando i protocolli "
-            "predisposti dal Medico Competente. La periodicita' standard e' "
-            "quinquennale; e' biennale per i lavoratori di eta' pari o superiore "
-            "a 50 anni e per quelli con prescrizioni o idoneita' parziale.",
+            "predisposti dal Medico Competente. La periodicità' standard e' "
+            "quinquennale; e' biennale per i lavoratori di età' pari o superiore "
+            "a 50 anni e per quelli con prescrizioni o idoneità' parziale.",
         )
         add_paragraph(
             doc,
@@ -797,7 +791,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
             ])
         add_data_table(
             doc,
-            ["Lavoratore", "Periodicita", "Ultima visita", "Prossima visita"],
+            ["Lavoratore", "Periodicità", "Ultima visita", "Prossima visita"],
             rows,
         )
         page_break(doc)
@@ -840,7 +834,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
             doc,
             "Le misure di prevenzione e protezione individuate nel Programma di "
             "Attuazione saranno adottate secondo il cronoprogramma concordato e "
-            "verificate periodicamente. La presente valutazione sara' aggiornata "
+            "verificate periodicamente. La presente valutazione sarà' aggiornata "
             "in occasione di modifiche significative del processo lavorativo o "
             "dell'organizzazione del lavoro.",
         )

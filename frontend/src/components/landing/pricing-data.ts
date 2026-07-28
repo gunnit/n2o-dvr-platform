@@ -113,7 +113,7 @@ export const PLANS: Record<Audience, PricingPlan[]> = {
       audience: "Micro impresa fino a 15 addetti, rischio basso o medio",
       price: "€490",
       priceNote: "all'anno, IVA esclusa",
-      setupNote: "Primo anno €690, setup guidato incluso",
+      setupNote: "+ €200 di setup guidato una tantum, fatturato a parte",
       features: [
         "1 sede, 2 utenti",
         "DVR + MMC, VDT, stress, gestanti, incendio",
@@ -127,10 +127,10 @@ export const PLANS: Record<Audience, PricingPlan[]> = {
     {
       planCode: "B_PLUS",
       name: "Plus",
-      audience: "PMI da 15 a 50 addetti",
+      audience: "PMI da 16 a 50 addetti",
       price: "€990",
       priceNote: "all'anno, IVA esclusa",
-      setupNote: "Primo anno €1.290, setup guidato incluso",
+      setupNote: "+ €300 di setup guidato una tantum, fatturato a parte",
       features: [
         "3 sedi, 5 utenti",
         "Tutto Base + microclima, biologico, PEE, DUVRI",
@@ -145,10 +145,10 @@ export const PLANS: Record<Audience, PricingPlan[]> = {
     {
       planCode: "B_MULTISEDE",
       name: "Multi-sede",
-      audience: "Da 10 a 249 addetti su più unità locali",
+      audience: "Da 51 a 249 addetti su più unità locali",
       price: "€2.400",
       priceNote: "all'anno, IVA esclusa",
-      setupNote: "Primo anno €2.900, setup guidato incluso",
+      setupNote: "+ €500 di setup guidato una tantum, fatturato a parte",
       features: [
         "10 sedi, 15 utenti",
         "Tutto Plus + PEE per strutture pubbliche",
@@ -201,7 +201,10 @@ export const COMPARISON: Record<Audience, ComparisonTable> = {
     highlight: 1,
     rows: [
       ["Prezzo annuo", "€490", "€990", "€2.400"],
-      ["Primo anno con setup guidato", "€690", "€1.290", "€2.900"],
+      // Invoiced separately from the subscription, exactly like the
+      // consultants' onboarding fee. It used to be presented as a higher
+      // "primo anno" price, which PayPal was never going to charge (P2-3).
+      ["Setup guidato una tantum", "€200", "€300", "€500"],
       ["Sedi e unità locali", "1", "3", "10"],
       ["Utenti", "2", "5", "15"],
       ["Tipi di documento inclusi", "6", "13", "14"],
@@ -248,3 +251,16 @@ export const ADDONS: Record<Audience, AddOn[]> = {
 };
 
 export const SUPPORT_EMAIL = "support@dvr-sicurezza.it";
+
+/**
+ * `plan_code` → human name, derived from the list above rather than repeated.
+ *
+ * `/billing` needs it for the one case where the API cannot supply a name: when
+ * `GET /billing/plans` comes back empty (no PayPal plan ids provisioned) it
+ * still has to tell the customer *which* plan they clicked on the way in.
+ */
+export const PLAN_DISPLAY_NAMES: Record<string, string> = Object.fromEntries(
+  Object.values(PLANS)
+    .flat()
+    .map((p) => [p.planCode, p.name])
+);
