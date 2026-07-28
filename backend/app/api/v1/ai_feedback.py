@@ -19,7 +19,8 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.dependencies import get_current_user, require_role
+from app.core.permissions import ADMIN_TOOLS
+from app.dependencies import get_current_user, require_capability
 from app.models.ai_feedback import AiFeedback
 from app.models.azienda import Azienda
 from app.models.user import User
@@ -151,7 +152,7 @@ async def record_feedback(
 
 @router.get("/admin/summary", response_model=FeedbackSummary)
 async def get_feedback_summary(
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(require_capability(ADMIN_TOOLS)),
     db: AsyncSession = Depends(get_db),
 ) -> FeedbackSummary:
     """Per-entity-type counts of thumbs_down / thumbs_up.
@@ -201,7 +202,7 @@ async def get_recent_feedback(
         description="Filter by signal kind. Default is thumbs_down so the panel surfaces rejections.",
     ),
     limit: int = Query(default=50, ge=1, le=200),
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(require_capability(ADMIN_TOOLS)),
     db: AsyncSession = Depends(get_db),
 ) -> list[RecentFeedbackRow]:
     """Recent feedback entries with joined azienda + user labels.

@@ -25,6 +25,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useApi } from "@/hooks/use-api";
 import { parseApiDate } from "@/lib/ui/api-date";
+import { usePermissions } from "@/hooks/use-permissions";
+import { ADMIN_TOOLS } from "@/lib/permissions";
 
 /**
  * Admin backup status panel (US-5.4).
@@ -100,6 +102,7 @@ function ActionBadge({ action }: { action: string }) {
 export default function BackupsSettingsPage() {
   const { apiFetch } = useApi();
   const { data: session, status: sessionStatus } = useSession();
+  const { can } = usePermissions();
   const router = useRouter();
 
   const [status, setStatus] = useState<BackupStatus | null>(null);
@@ -110,11 +113,12 @@ export default function BackupsSettingsPage() {
   // them with 403 — this is purely a UX shortcut.
   useEffect(() => {
     if (sessionStatus !== "authenticated") return;
-    const role = (session?.user as { role?: string } | undefined)?.role;
-    if (role !== "admin") {
+    // Capability, not role: the redirect and the API's 403 now answer to the
+    // same rule in `lib/permissions` / `core/permissions.py`.
+    if (!can(ADMIN_TOOLS)) {
       router.replace("/dashboard");
     }
-  }, [session, sessionStatus, router]);
+  }, [can, session, sessionStatus, router]);
 
   const load = useCallback(async () => {
     setLoading(true);

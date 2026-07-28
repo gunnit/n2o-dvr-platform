@@ -50,6 +50,26 @@ class UserResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class MeResponse(UserResponse):
+    """`/auth/me`, extended with everything the shell needs to render itself.
+
+    The frontend builds its navigation from `capabilities` rather than from a
+    second copy of the role matrix: two tables of the same rules drift, and the
+    one that drifts is always the one the customer sees. `role_label` is here
+    for the same reason — `operatore_ufficio` is an internal identifier and used
+    to be printed verbatim under the user's name in the sidebar.
+
+    Cosmetic only. Every capability is re-checked server-side on the endpoint
+    that needs it, so a stale session can hide a button but never grant one.
+    """
+
+    role_label: str
+    capabilities: list[str]
+    #: 'consultant' | 'direct' — decides the tenant's vocabulary and which
+    #: sections of the product are meaningful for it.
+    account_type: str
+
+
 class ProfileUpdateRequest(BaseModel):
     full_name: str = Field(min_length=1)
 

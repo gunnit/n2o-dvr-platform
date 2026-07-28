@@ -32,16 +32,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // every screen fell back to the raw email — "Marco Bianchi" showed up
         // as `ai+dvrtest…@niuexa.ai` with the initials "AN" (P3-1).
         //
-        // Best-effort: a failure here must not cost the user their login, it
-        // only costs a nicer name.
+        // The same call now also returns the capability set the shell renders
+        // its navigation from, so there is one round trip rather than two.
+        //
+        // Best-effort: a failure here must not cost the user their login. It
+        // costs a nicer name, and `capabilitiesOf` falls back to a role-derived
+        // set — which is safe, because every capability is re-checked
+        // server-side on the endpoint that needs it.
         let fullName: string | undefined;
+        let capabilities: string[] | undefined;
+        let roleLabel: string | undefined;
         try {
           const me = await fetch(`${API_URL}/api/v1/auth/me`, {
             headers: { Authorization: `Bearer ${data.access_token}` },
           });
-          if (me.ok) fullName = (await me.json()).full_name || undefined;
+          if (me.ok) {
+            const profile = await me.json();
+            fullName = profile.full_name || undefined;
+            capabilities = Array.isArray(profile.capabilities)
+              ? profile.capabilities
+              : undefined;
+            roleLabel = profile.role_label || undefined;
+          }
         } catch {
-          // ignore — falls back to the email
+          // ignore — falls back to the email and to role-derived capabilities
         }
 
         return {
@@ -50,6 +64,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: fullName,
           accessToken: data.access_token,
           role: payload.role,
+          roleLabel,
+          // What this person may do inside the organization — a different
+          // question from what the organization bought, which stays in
+          // `/billing/entitlements`. Cosmetic: it decides which nav entries and
+          // buttons render, never whether an action succeeds.
+          capabilities,
           organizationId: payload.org,
           // 'consultant' | 'direct'. Absent on tokens issued before the direct
           // channel shipped, so treat undefined as 'consultant'. This decides
@@ -68,6 +88,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const u = user as any;
         token.accessToken = u.accessToken;
         token.role = u.role;
+        token.roleLabel = u.roleLabel;
+        token.capabilities = u.capabilities;
         token.organizationId = u.organizationId;
         token.accountType = u.accountType;
       }
@@ -78,6 +100,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       (session as any).accessToken = token.accessToken;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (session.user as any).role = token.role;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (session.user as any).roleLabel = token.roleLabel;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (session.user as any).capabilities = token.capabilities;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (session.user as any).organizationId = token.organizationId;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSession } from "next-auth/react";
 import { Building2, MapPin, Plus, Search, CalendarPlus } from "lucide-react";
 import type { Azienda } from "@/types";
 import { useApi } from "@/hooks/use-api";
@@ -23,6 +22,8 @@ import {
   type SurveyStatusKey,
   type SurveyStatusBucket,
 } from "@/lib/ui/status-map";
+import { usePermissions } from "@/hooks/use-permissions";
+import { AZIENDE_CREATE } from "@/lib/permissions";
 
 const FILTERS: { id: SurveyStatusBucket; label: string }[] = [
   { id: "all", label: "Tutte" },
@@ -34,10 +35,10 @@ const FILTERS: { id: SurveyStatusBucket; label: string }[] = [
 
 export default function AziendePage() {
   const { apiFetch, isAuthenticated } = useApi();
-  const { data: session } = useSession();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const role = (session?.user as any)?.role as string | undefined;
-  const isAdmin = role === "admin";
+  // "May I add one?" is a capability, not a role: the check moves with the
+  // matrix in `lib/permissions` instead of being re-guessed at each button.
+  const { can } = usePermissions();
+  const canCreate = can(AZIENDE_CREATE);
   const vocab = useTenantVocabulary();
   const [aziende, setAziende] = useState<Azienda[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,7 +149,7 @@ export default function AziendePage() {
             )}
           </p>
         </div>
-        {isAdmin &&
+        {canCreate &&
           (siteLimitReached ? (
             <span
               className="inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-md border border-[#e5edf5] bg-[#f6f9fc] px-4 text-sm font-medium text-[#94a3b8]"
@@ -226,7 +227,7 @@ export default function AziendePage() {
         <div className="rounded-md border border-[#e5edf5] bg-white p-14 text-center shadow-stripe-ambient">
           <Building2 className="mx-auto mb-4 h-10 w-10 text-[#c2c6d2]" strokeWidth={1.5} />
           <p className="type-body">Nessuna azienda registrata</p>
-          {isAdmin && !siteLimitReached && (
+          {canCreate && !siteLimitReached && (
             <Link
               href="/aziende/new"
               className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white shadow-stripe-ambient transition-colors hover:bg-[#1b5594]"

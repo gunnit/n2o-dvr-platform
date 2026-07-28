@@ -15,6 +15,7 @@ from app.billing.gates import ensure_site_slot, ensure_subscription_active
 from app.billing.metering import metered
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.db.session import get_db
+from app.core.permissions import AZIENDE_CREATE, AZIENDE_DELETE, has_capability
 from app.dependencies import get_current_org, get_current_user
 from app.models.azienda import Azienda
 from app.models.description_revision import (
@@ -87,11 +88,17 @@ class SectorSummaryResponse(BaseModel):
 router = APIRouter(prefix="/aziende", tags=["aziende"])
 
 
-def _require_admin(user: User) -> None:
-    if user.role != "admin":
+def _require_capability(user: User, capability: str, action: str) -> None:
+    """403 when the person's role does not cover `action`.
+
+    Distinct from the plan gates below, which answer 402: this one is about who
+    the operator is, not what the organization bought, and topping up credits
+    would not change the answer. See `app.core.permissions`.
+    """
+    if not has_capability(user.role, capability):
         raise HTTPException(
             status_code=403,
-            detail="Solo gli amministratori possono creare clienti",
+            detail=f"Solo gli amministratori possono {action}",
         )
 
 
@@ -255,7 +262,7 @@ async def autofill_azienda(
     Privacy: VIES + Serper + Firecrawl + AI consolidator only see public
     web data — same posture as the visura snippet flow. No PII is sent.
     """
-    _require_admin(user)
+    _require_capability(user, AZIENDE_CREATE, "registrare nuovi clienti")
     piva = (body.partita_iva or "").strip()
     if not piva.isdigit() or len(piva) != 11:
         raise BadRequestError("Partita IVA deve essere di 11 cifre")
@@ -281,7 +288,7 @@ async def create_azienda(
     ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
-    _require_admin(user)
+    _require_capability(user, AZIENDE_CREATE, "creare clienti")
     # MB-6.3 — the two channels meter this row differently, and the difference
     # is the sold contract, not a preference:
     #
@@ -409,7 +416,7 @@ async def delete_azienda(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _require_admin(user)
+    _require_capability(user, AZIENDE_DELETE, "eliminare clienti")
     result = await db.execute(
         select(Azienda).where(
             Azienda.id == azienda_id, Azienda.organization_id == user.organization_id

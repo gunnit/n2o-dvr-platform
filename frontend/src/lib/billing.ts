@@ -7,6 +7,14 @@
  * renders what the API already decided.
  */
 
+/** One row of "where did this period's credits go". */
+export type UsageKind = {
+  /** 'reasoning' | 'vision' | 'sds' | 'visura' — see CREDIT_KIND_LABELS. */
+  kind: string;
+  actions: number;
+  credits: number;
+};
+
 export type Usage = {
   ai_credits_used: number;
   ai_credits_included: number | null;
@@ -16,7 +24,28 @@ export type Usage = {
   ai_credits_remaining: number | null;
   active_companies: number;
   max_companies: number | null;
+  /** Ordered by credits descending. Empty until the tenant spends something. */
+  by_kind?: UsageKind[];
 };
+
+/**
+ * What each metered AI action is, in the operator's words.
+ *
+ * The wire values are the backend's `CREDIT_WEIGHTS` keys. An unknown kind
+ * falls through to the raw string rather than being dropped: a new action type
+ * showing up unlabelled is a cosmetic bug, whereas silently omitting it from
+ * the breakdown makes the numbers not add up.
+ */
+export const CREDIT_KIND_LABELS: Record<string, string> = {
+  reasoning: "Suggerimenti AI (rischi, misure, DPI)",
+  vision: "Riconoscimento attrezzature da foto",
+  sds: "Estrazione schede di sicurezza",
+  visura: "Visura camerale / Registro Imprese",
+};
+
+export function creditKindLabel(kind: string): string {
+  return CREDIT_KIND_LABELS[kind] ?? kind;
+}
 
 export type Entitlements = {
   account_type: string;
@@ -58,6 +87,38 @@ export type Plan = {
   max_sites: number | null;
   ai_credits_year: number | null;
   features: Record<string, unknown>;
+};
+
+/** An AI credit top-up on offer. Mirrors `backend/app/billing/credit_packs.py`. */
+export type CreditPack = {
+  pack_code: string;
+  display_name: string;
+  credits: number;
+  price_cents: number;
+  description: string;
+  /** Cents per credit — the bulk discount, already computed server-side. */
+  price_per_credit_cents: number;
+  recommended: boolean;
+};
+
+/** A top-up receipt. `pending` means checkout was started but never paid. */
+export type CreditPurchase = {
+  id: string;
+  pack_code: string;
+  display_name: string;
+  credits: number;
+  amount_cents: number;
+  currency: string;
+  status: "pending" | "completed" | "failed";
+  period_start: string;
+  created_at: string;
+  completed_at: string | null;
+};
+
+export const PURCHASE_STATUS_LABELS: Record<CreditPurchase["status"], string> = {
+  pending: "In attesa di pagamento",
+  completed: "Completato",
+  failed: "Non completato",
 };
 
 /** 149000 → "€ 1.490" — annual list price, IVA esclusa. */
@@ -124,4 +185,51 @@ export function formatPeriodEnd(iso: string | null): string | null {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   return d.toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
+}
+
+/** "28 lug 2026, 14:32" — for receipts, where the time distinguishes retries. */
+export function formatDateTime(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("it-IT", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** 1240 → "1.240". Thousands separators make four-digit balances readable. */
+export function formatNumber(value: number): string {
+  return new Intl.NumberFormat("it-IT").format(value);
+}
+
+/**
+ * How worried the credit tracker should look.
+ *
+ * Thresholds match the meters everywhere else — amber at 75%, red at 90% — and
+ * exist so an operator learns about the ceiling before they hit it rather than
+ * as a 402 halfway through a batch.
+ */
+export type MeterTone = "ok" | "warn" | "bad";
+
+export function meterTone(percent: number | null): MeterTone {
+  if (percent === null) return "ok";
+  if (percent >= 90) return "bad";
+  if (percent >= 75) return "warn";
+  return "ok";
+}
+
+/**
+ * Whether the tenant should be nudged to top up.
+ *
+ * Only ever true for a metered plan that is actually running out — pooled
+ * (Enterprise) plans have no ceiling, and a tenant at 10% does not need to be
+ * sold anything.
+ */
+export function shouldSuggestTopUp(usage: Usage): boolean {
+  const percent = creditsPercent(usage);
+  return percent !== null && percent >= 75;
 }

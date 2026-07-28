@@ -19,7 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.db.session import get_db
-from app.dependencies import get_current_org, require_role
+from app.core.permissions import ORG_MANAGE
+from app.dependencies import get_current_org, require_capability
 from app.models.organization import Organization
 from app.models.user import User
 from app.schemas.organization import (
@@ -88,7 +89,7 @@ async def get_branding(
 @router.put("/me/branding", response_model=OrganizationBrandingResponse)
 async def update_branding(
     body: OrganizationBrandingUpdate,
-    admin: User = Depends(require_role("admin")),
+    admin: User = Depends(require_capability(ORG_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     org = await _get_org(admin.organization_id, db)
@@ -114,7 +115,7 @@ async def update_branding(
 @router.post("/me/branding/logo", response_model=OrganizationBrandingResponse)
 async def upload_logo(
     file: UploadFile = File(...),
-    admin: User = Depends(require_role("admin")),
+    admin: User = Depends(require_capability(ORG_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     org = await _get_org(admin.organization_id, db)
@@ -154,7 +155,7 @@ async def get_logo(
 
 @router.delete("/me/branding/logo", response_model=OrganizationBrandingResponse)
 async def delete_logo(
-    admin: User = Depends(require_role("admin")),
+    admin: User = Depends(require_capability(ORG_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     org = await _get_org(admin.organization_id, db)

@@ -1,27 +1,39 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { CheckCircle2, CreditCard, Loader2, Users, Zap } from "lucide-react";
+import {
+  Building2,
+  CheckCircle2,
+  CreditCard,
+  FileText,
+  Loader2,
+  MapPin,
+  Users,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PLAN_DISPLAY_NAMES } from "@/components/landing/pricing-data";
 import { Meter, Notice, StatusPill, planDisplayName } from "@/components/billing/billing-ui";
+import { CreditTracker } from "@/components/billing/credit-tracker";
+import { CreditPacksPanel } from "@/components/billing/credit-packs-panel";
 import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
 import { useApi } from "@/hooks/use-api";
-import { usePlans } from "@/hooks/use-entitlements";
+import { useCreditPacks, usePlans } from "@/hooks/use-entitlements";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useTenantVocabulary } from "@/hooks/use-tenant-vocabulary";
+import { BILLING_MANAGE } from "@/lib/permissions";
 import {
   type Entitlements,
   type Plan,
   companiesPercent,
-  creditsPercent,
   formatEuro,
   formatLimit,
+  formatNumber,
   formatPeriodEnd,
   formatSeats,
+  shouldSuggestTopUp,
 } from "@/lib/billing";
 
 /**
@@ -44,11 +56,12 @@ export default function BillingPage() {
 }
 
 function BillingPageInner() {
-  const { data: session } = useSession();
-  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
+  const { can } = usePermissions();
+  const canManage = can(BILLING_MANAGE);
   // Shared with the sidebar badge and the dashboard card — one fetch per shell,
   // and `refresh()` after a PayPal return updates all of them at once.
   const { entitlements, loading, error, refresh } = useEntitlementsContext();
+  const { packs, purchases, refresh: refreshPacks } = useCreditPacks();
   const params = useSearchParams();
 
   // PayPal bounces the customer back here after approval. The subscription is
@@ -59,6 +72,7 @@ function BillingPageInner() {
   // `/billing/subscribe` re-checks that the plan exists, is checkoutable and
   // belongs to this tenant's channel before PayPal is called (INV-5, INV-9).
   const piano = params.get("piano");
+
   useEffect(() => {
     if (esito === "ok") {
       toast.success(
@@ -70,11 +84,15 @@ function BillingPageInner() {
     if (esito === "annullato") toast.info("Pagamento annullato. Nessun addebito effettuato.");
   }, [esito, refresh]);
 
+  useCreditReturn({ onSettled: () => Promise.all([refresh(), refreshPacks()]) });
+
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="type-h1">Abbonamento</h1>
-        <p className="type-body mt-2">Piano, consumi e fatturazione</p>
+        <h1 className="type-h1">Abbonamento e crediti</h1>
+        <p className="type-body mt-2">
+          Il tuo piano, quanto hai consumato e come aggiungere crediti AI
+        </p>
       </div>
 
       {loading && (
@@ -84,28 +102,52 @@ function BillingPageInner() {
       )}
 
       {error && !loading && (
-        <Card>
-          <CardContent className="pt-6 text-sm text-muted-foreground">
-            Non è stato possibile caricare i dati dell&apos;abbonamento. Questo non
-            limita in alcun modo il tuo lavoro.
-          </CardContent>
-        </Card>
+        <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
+          Non è stato possibile caricare i dati dell&apos;abbonamento. Questo non
+          limita in alcun modo il tuo lavoro.
+        </div>
       )}
 
       {entitlements && (
         <>
-          <CurrentPlanCard ent={entitlements} />
+          <PlanSummary ent={entitlements} />
+
           {/* Consumption against a plan the tenant does not hold is not a
               meaningful reading — the meters would show "0 / ∞" and claim
               "nessun limite su questo piano" for a plan that isn't there. */}
-          {entitlements.subscribed && <UsageCard ent={entitlements} />}
-          {isAdmin && (
-            <PlanPicker ent={entitlements} onChanged={refresh} preselected={piano} />
+          {entitlements.subscribed && (
+            <>
+              <CreditTracker
+                ent={entitlements}
+                action={
+                  canManage && shouldSuggestTopUp(entitlements.usage) ? (
+                    <a
+                      href="#crediti"
+                      className="inline-flex h-9 items-center justify-center rounded-md border border-input px-4 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+                    >
+                      Aggiungi crediti
+                    </a>
+                  ) : undefined
+                }
+              />
+              <PlanLimits ent={entitlements} />
+              <div id="crediti" className="scroll-mt-24">
+                <CreditPacksPanel
+                  ent={entitlements}
+                  packs={packs}
+                  purchases={purchases}
+                  canBuy={canManage}
+                />
+              </div>
+            </>
           )}
-          {!isAdmin && (
+
+          {canManage ? (
+            <PlanPicker ent={entitlements} onChanged={refresh} preselected={piano} />
+          ) : (
             <p className="text-sm text-muted-foreground">
               Solo un amministratore dell&apos;organizzazione può modificare
-              l&apos;abbonamento.
+              l&apos;abbonamento o acquistare crediti.
             </p>
           )}
         </>
@@ -114,72 +156,116 @@ function BillingPageInner() {
   );
 }
 
-function CurrentPlanCard({ ent }: { ent: Entitlements }) {
-  const until = formatPeriodEnd(ent.period_end);
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2">
-          <CreditCard className="h-5 w-5" /> Piano attuale
-        </CardTitle>
-        <StatusPill status={ent.status} />
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {/* `plan_code` is an internal identifier: the customer bought "Studio",
-            not "A_STUDIO". */}
-        <p className="text-2xl font-semibold">
-          {ent.subscribed ? planDisplayName(ent) : "Nessun piano attivo"}
-        </p>
+/**
+ * Finish a credit purchase when PayPal returns the customer to `/billing`.
+ *
+ * PayPal appends its own `token` (the order id) to our return URL, so the whole
+ * capture is driven from what is already in the address bar — no state has to
+ * survive the redirect, which is what makes this robust against a customer who
+ * completes payment in a different tab.
+ *
+ * The webhook is doing the same thing concurrently. Both call
+ * `/credits/capture`, the row-status guard decides which one actually grants,
+ * and the toast is worded so it reads correctly either way: `granted: false`
+ * means "someone else banked it a second ago", not "nothing happened".
+ *
+ * Guarded by a ref rather than by state: React 19 Strict Mode runs effects
+ * twice in development, and a duplicate capture would be a second POST against
+ * a payment endpoint.
+ */
+function useCreditReturn({ onSettled }: { onSettled: () => Promise<unknown> }) {
+  const params = useSearchParams();
+  const { apiFetch } = useApi();
+  const handled = useRef<string | null>(null);
 
+  const crediti = params.get("crediti");
+  const orderId = params.get("token");
+
+  useEffect(() => {
+    if (!crediti || !orderId) return;
+    if (handled.current === orderId) return;
+    handled.current = orderId;
+
+    if (crediti === "annullato") {
+      toast.info("Acquisto annullato. Nessun addebito effettuato.");
+      void apiFetch("/api/v1/billing/credits/abandon", {
+        method: "POST",
+        body: JSON.stringify({ paypal_order_id: orderId }),
+      }).catch(() => {
+        // Housekeeping only — the purchase stays `pending` and simply reads as
+        // an unfinished attempt in the history. Nothing to tell the user.
+      });
+      return;
+    }
+
+    void (async () => {
+      try {
+        const res = await apiFetch<{ granted: boolean; credits: number }>(
+          "/api/v1/billing/credits/capture",
+          { method: "POST", body: JSON.stringify({ paypal_order_id: orderId }) }
+        );
+        toast.success(
+          res.granted
+            ? `${formatNumber(res.credits)} crediti aggiunti al tuo piano.`
+            : "Pagamento già registrato: i crediti sono sul tuo piano."
+        );
+      } catch (e) {
+        toast.error(
+          e instanceof Error
+            ? e.message
+            : "Non è stato possibile completare il pagamento."
+        );
+      } finally {
+        // Refresh either way: the webhook may have granted the credits even on
+        // the path where our own capture call errored.
+        await onSettled();
+      }
+    })();
+  }, [crediti, orderId, apiFetch, onSettled]);
+}
+
+/** The plan headline: what you are on, whether it is live, and until when. */
+function PlanSummary({ ent }: { ent: Entitlements }) {
+  const until = formatPeriodEnd(ent.period_end);
+
+  return (
+    <div className="rounded-lg border bg-card">
+      <div className="flex flex-wrap items-start justify-between gap-4 p-6">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <CreditCard className="h-4 w-4" strokeWidth={1.75} />
+          </span>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Piano attuale
+            </p>
+            {/* `plan_code` is an internal identifier: the customer bought
+                "Studio", not "A_STUDIO". */}
+            <p className="font-heading text-2xl font-semibold">
+              {ent.subscribed ? planDisplayName(ent) : "Nessun piano attivo"}
+            </p>
+            {until && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                Periodo corrente fino al <strong>{until}</strong>.
+              </p>
+            )}
+          </div>
+        </div>
+        <StatusPill status={ent.status} />
+      </div>
+
+      <div className="space-y-3 px-6 pb-6">
         {/* A tenant that has never purchased has no plan limits to report —
             listing "illimitato" against every row would describe rights it does
             not hold. Show what it means instead. */}
-        {!ent.subscribed ? (
+        {!ent.subscribed && (
           <Notice tone="warn">
             Non hai ancora attivato un abbonamento.{" "}
-            {ent.enforced ? (
-              <>
-                Attiva un piano qui sotto per generare i documenti.
-              </>
-            ) : (
-              <>
-                Puoi già usare la piattaforma: durante questa fase nessuna
-                operazione viene bloccata. Attiva un piano qui sotto per mettere
-                in regola l&apos;abbonamento.
-              </>
-            )}
+            {ent.enforced
+              ? "Attiva un piano qui sotto per generare i documenti."
+              : "Puoi già usare la piattaforma: durante questa fase nessuna operazione viene bloccata. Attiva un piano qui sotto per mettere in regola l'abbonamento."}
           </Notice>
-        ) : (
-          <dl className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
-            <Row label="Utenti inclusi" value={formatSeats(ent.seats)} />
-            {/* A consultant plan meters client companies; a direct plan meters the
-                tenant's own sedi. `max_companies` is null on every B plan, so
-                showing that row to a direct tenant would read "illimitato". */}
-            {ent.account_type === "direct" ? (
-              <Row label="Sedi incluse" value={formatLimit(ent.max_sites)} />
-            ) : (
-              <Row label="Aziende attive" value={formatLimit(ent.max_companies)} />
-            )}
-            <Row
-              label="Crediti AI / anno"
-              value={ent.ai_credits_year === null ? "illimitati" : String(ent.ai_credits_year)}
-            />
-            <Row
-              label="Tipi di documento"
-              value={
-                ent.allowed_doc_types === null
-                  ? "tutti"
-                  : `${ent.allowed_doc_types.length} inclusi`
-              }
-            />
-          </dl>
         )}
-        {until && (
-          <p className="text-sm text-muted-foreground">
-            Periodo corrente fino al <strong>{until}</strong>.
-          </p>
-        )}
-
         {ent.status === "past_due" && (
           <Notice tone="warn">
             Un pagamento non è andato a buon fine. PayPal riproverà nei prossimi
@@ -198,48 +284,107 @@ function CurrentPlanCard({ ent }: { ent: Entitlements }) {
             I limiti sono attualmente indicativi: nessuna operazione viene bloccata.
           </p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
-function UsageCard({ ent }: { ent: Entitlements }) {
-  const credits = creditsPercent(ent.usage);
-  const companies = companiesPercent(ent.usage);
+/**
+ * Everything the plan caps apart from credits, metered against actual use.
+ *
+ * The two channels cap different things and always have: a consultant plan sells
+ * *active client companies*, a direct plan sells *sedi*. Rendering the other
+ * channel's row is how "illimitato aziende attive" ended up on a Base plan that
+ * never promised any.
+ */
+function PlanLimits({ ent }: { ent: Entitlements }) {
+  const vocabulary = useTenantVocabulary();
+  const isDirect = ent.account_type === "direct";
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Consumi del periodo</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <Meter
-          icon={<Zap className="h-4 w-4" />}
-          label="Crediti AI"
-          used={ent.usage.ai_credits_used}
-          total={ent.usage.ai_credits_allowance}
-          percent={credits}
-          extra={
-            ent.usage.ai_credits_overage > 0
-              ? `include ${ent.usage.ai_credits_overage} crediti extra acquistati`
-              : undefined
-          }
-        />
-        {/* The active-company meter is a Model A concept: it counts how many
-            *client* companies a studio touched this period. A direct tenant
-            documents one company — its own — so the meter would always read
-            "1 / ∞" and mean nothing. Sedi are the direct-channel limit, but
-            nothing meters them yet, so we show no bar rather than a fake one. */}
-        {ent.account_type !== "direct" && (
+    <div className="rounded-lg border bg-card">
+      <div className="border-b p-6">
+        <h2 className="font-heading text-[15px] font-medium">Limiti del piano</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Quanto del piano stai usando, oltre ai crediti AI.
+        </p>
+      </div>
+      <div className="grid gap-6 p-6 sm:grid-cols-2">
+        {isDirect ? (
+          // Nothing meters sedi yet, so this is a stated ceiling rather than a
+          // reading. A bar at an invented denominator would look like data.
+          <LimitRow
+            icon={<MapPin className="h-4 w-4" />}
+            label="Sedi incluse"
+            value={formatLimit(ent.max_sites)}
+          />
+        ) : (
           <Meter
-            icon={<Users className="h-4 w-4" />}
-            label="Aziende attive"
+            icon={<Building2 className="h-4 w-4" />}
+            label={vocabulary.activeCompanies}
             used={ent.usage.active_companies}
             total={ent.usage.max_companies}
-            percent={companies}
+            percent={companiesPercent(ent.usage)}
           />
         )}
-      </CardContent>
-    </Card>
+
+        {/* Seats are counted server-side as "rows in `users`", so there is no
+            separate usage figure to read here — the ceiling is the fact. */}
+        <LimitRow
+          icon={<Users className="h-4 w-4" />}
+          label="Utenti inclusi"
+          value={formatSeats(ent.seats)}
+        />
+        <LimitRow
+          icon={<FileText className="h-4 w-4" />}
+          label="Tipi di documento"
+          value={
+            ent.allowed_doc_types === null
+              ? "tutti e 17"
+              : `${ent.allowed_doc_types.length} inclusi`
+          }
+          hint={
+            ent.allowed_doc_types === null
+              ? undefined
+              : "I tipi non inclusi restano visibili ma bloccati."
+          }
+        />
+        <LimitRow
+          icon={<CreditCard className="h-4 w-4" />}
+          label="Crediti AI inclusi / anno"
+          value={
+            ent.ai_credits_year === null
+              ? "illimitati"
+              : formatNumber(ent.ai_credits_year)
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+function LimitRow({
+  icon,
+  label,
+  value,
+  hint,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="flex items-center gap-2 font-medium">
+          {icon}
+          {label}
+        </span>
+        <span className="tabular-nums text-muted-foreground">{value}</span>
+      </div>
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
   );
 }
 
@@ -316,13 +461,13 @@ function PlanPicker({
         : "Attivazione abbonamento — N2O DVR"
     );
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>
+      <div className="rounded-lg border bg-card">
+        <div className="border-b p-6">
+          <h2 className="font-heading text-[15px] font-medium">
             {chosen ? `Attivazione del piano ${chosen}` : "Attivazione abbonamento"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          </h2>
+        </div>
+        <div className="space-y-3 p-6 text-sm text-muted-foreground">
           {chosen ? (
             <p>
               Hai scelto il piano <strong className="text-foreground">{chosen}</strong>. Il
@@ -358,8 +503,8 @@ function PlanPicker({
               <> Nel frattempo puoi continuare a usare la piattaforma senza limitazioni.</>
             )}
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
@@ -371,11 +516,17 @@ function PlanPicker({
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Piani disponibili</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="rounded-lg border bg-card">
+      <div className="border-b p-6">
+        <h2 className="font-heading text-[15px] font-medium">
+          {ent.subscribed ? "Cambia piano" : "Piani disponibili"}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Prezzi annuali, IVA esclusa. Il pagamento avviene tramite PayPal e
+          l&apos;attivazione è confermata solo dopo la conferma di PayPal.
+        </p>
+      </div>
+      <div className="space-y-4 p-6">
         {wanted && (
           <div className="flex gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
             <CreditCard className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -427,7 +578,7 @@ function PlanPicker({
                   <li>
                     {plan.ai_credits_year === null
                       ? "Crediti AI illimitati"
-                      : `${plan.ai_credits_year} crediti AI`}
+                      : `${formatNumber(plan.ai_credits_year)} crediti AI`}
                   </li>
                 </ul>
                 <Button
@@ -447,11 +598,6 @@ function PlanPicker({
           })}
         </div>
 
-        <p className="text-xs text-muted-foreground">
-          I prezzi sono annuali e IVA esclusa. Il pagamento avviene tramite PayPal;
-          l&apos;attivazione è confermata solo dopo la conferma di PayPal.
-        </p>
-
         {/* Nothing to disdire when there is no subscription — and `canceled`
             already has none live either. */}
         {ent.subscribed && ent.status !== "canceled" && (
@@ -466,16 +612,7 @@ function PlanPicker({
             </p>
           </div>
         )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-4 sm:block">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-medium">{value}</dd>
+      </div>
     </div>
   );
 }

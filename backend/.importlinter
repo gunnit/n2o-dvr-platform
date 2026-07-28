@@ -59,6 +59,7 @@ forbidden_modules =
     app.models.usage_counter
     app.models.ai_usage_event
     app.models.active_company_period
+    app.models.credit_purchase
 allow_indirect_imports = True
 
 ; The Celery worker records usage (MB-2.3) but must go through
@@ -75,6 +76,7 @@ forbidden_modules =
     app.models.usage_counter
     app.models.ai_usage_event
     app.models.active_company_period
+    app.models.credit_purchase
 allow_indirect_imports = True
 
 ; --- Privacy -------------------------------------------------------------

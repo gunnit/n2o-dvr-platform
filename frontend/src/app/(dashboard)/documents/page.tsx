@@ -42,6 +42,8 @@ import { cn } from "@/lib/utils";
 import { useTenantVocabulary } from "@/hooks/use-tenant-vocabulary";
 import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
 import { isDocTypeGated } from "@/hooks/use-entitlements";
+import { usePermissions } from "@/hooks/use-permissions";
+import { DOCUMENTS_GENERATE } from "@/lib/permissions";
 
 const complexityColors: Record<string, string> = {
   Alta: "bg-[rgba(186,26,26,0.1)] text-[#ba1a1a] border border-[rgba(186,26,26,0.3)]",
@@ -112,6 +114,11 @@ export default function DocumentsPage() {
   // cannot be sure (no entitlements loaded, backend still in shadow mode), and
   // the backend's 402 remains the only authority (INV-5).
   const { entitlements } = useEntitlementsContext();
+  // The *other* visibility axis: a field operator collects the data, an
+  // office operator finalises it. Reading and downloading stay open to both —
+  // only the act of producing a new version is role-gated.
+  const { can } = usePermissions();
+  const canGenerate = can(DOCUMENTS_GENERATE);
   const [aziende, setAziende] = useState<Azienda[]>([]);
   const [selectedAziendaId, setSelectedAziendaId] = useState<string>("");
   const [documenti, setDocumenti] = useState<DocumentoGenerato[]>([]);
@@ -335,7 +342,7 @@ export default function DocumentsPage() {
             {vocab.documentsLead}
           </p>
         </div>
-        {selectedAziendaId && (
+        {selectedAziendaId && canGenerate && (
           <button
             type="button"
             onClick={handleGenerateAll}
@@ -587,6 +594,10 @@ export default function DocumentsPage() {
                           )}
 
                           <div className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-[#eef2f7] pt-3">
+                            {/* Hidden, not disabled: a greyed-out "Genera" on
+                                every card invites a field operator to keep
+                                clicking. The download actions below stay. */}
+                            {canGenerate && (
                             <Button
                               size="sm"
                               variant={isReady ? "outline" : "default"}
@@ -616,6 +627,7 @@ export default function DocumentsPage() {
                                   ? "Riprova"
                                   : "Genera"}
                             </Button>
+                            )}
                             {/* Download/editor actions gate on status only:
                                 the download endpoint serves the DB
                                 file_content, and rows minted by

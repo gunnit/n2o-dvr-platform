@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.billing.constants import ACCOUNT_TYPE_CONSULTANT, ACCOUNT_TYPE_DIRECT
+from app.core.permissions import capabilities_for, role_label
 from app.core.security import create_access_token, hash_password, verify_password
 from app.data.ddl_consent import ACCEPTED_CONSENT_VERSIONS
 from app.db.session import get_db
@@ -14,6 +15,7 @@ from app.models.user import User
 from app.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
+    MeResponse,
     ProfileUpdateRequest,
     RegisterDirectRequest,
     RegisterRequest,
@@ -141,9 +143,31 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     return TokenResponse(access_token=_token_for(user, account_type))
 
 
-@router.get("/me", response_model=UserResponse)
-async def me(user: User = Depends(get_current_user)):
-    return user
+@router.get("/me", response_model=MeResponse)
+async def me(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """The signed-in user, plus what they may do and which channel they are on.
+
+    NextAuth calls this once at sign-in and stores the result in the session, so
+    it is on the login critical path — hence the single scalar select for
+    `account_type` rather than walking the `Organization` relationship, which
+    would drag the white-label logo bytes along with it.
+    """
+    account_type = (
+        await db.execute(
+            select(Organization.account_type).where(Organization.id == user.organization_id)
+        )
+    ).scalar_one_or_none() or ACCOUNT_TYPE_CONSULTANT
+
+    return MeResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        role=user.role,
+        organization_id=user.organization_id,
+        role_label=role_label(user.role),
+        capabilities=sorted(capabilities_for(user.role)),
+        account_type=account_type,
+    )
 
 
 @router.patch("/me", response_model=UserResponse)

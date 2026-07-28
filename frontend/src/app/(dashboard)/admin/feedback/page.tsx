@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/table";
 import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
+import { usePermissions } from "@/hooks/use-permissions";
+import { ADMIN_TOOLS } from "@/lib/permissions";
 
 type FeedbackType = "bug" | "idea" | "observation";
 type FeedbackStatus = "nuovo" | "in_revisione" | "risolto" | "non_fara";
@@ -126,6 +128,7 @@ function TypeBadge({ type }: { type: FeedbackType }) {
 export default function AdminFeedbackPage() {
   const { apiFetch } = useApi();
   const { data: session, status: sessionStatus } = useSession();
+  const { can } = usePermissions();
   const router = useRouter();
 
   const [rows, setRows] = useState<FeedbackRow[]>([]);
@@ -137,11 +140,12 @@ export default function AdminFeedbackPage() {
 
   useEffect(() => {
     if (sessionStatus !== "authenticated") return;
-    const role = (session?.user as { role?: string } | undefined)?.role;
-    if (role !== "admin") {
+    // Capability, not role: the redirect and the API's 403 now answer to the
+    // same rule in `lib/permissions` / `core/permissions.py`.
+    if (!can(ADMIN_TOOLS)) {
       router.replace("/dashboard");
     }
-  }, [session, sessionStatus, router]);
+  }, [can, session, sessionStatus, router]);
 
   const load = useCallback(async () => {
     setLoading(true);

@@ -10,14 +10,20 @@ from app.billing.entitlements import Entitlements, get_entitlements
 from app.billing.gates import ensure_seat_available
 from app.core.security import hash_password
 from app.db.session import get_db
-from app.dependencies import require_role
+from app.core.permissions import (
+    ALLOWED_ROLES,
+    ROLE_DESCRIPTIONS,
+    USERS_MANAGE,
+    capabilities_for,
+    role_label,
+)
+from app.dependencies import require_capability
 from app.models.azienda import Azienda
 from app.models.documento_generato import DocumentoGenerato
 from app.models.user import User
 
 router = APIRouter(prefix="/users", tags=["users"])
 
-ALLOWED_ROLES = {"admin", "operatore_ufficio", "operatore_campo"}
 
 
 class UserOut(BaseModel):
@@ -43,6 +49,15 @@ class UserUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=1)
 
 
+class RoleOut(BaseModel):
+    """One assignable role, as the user-management screen renders it."""
+
+    role: str
+    label: str
+    description: str
+    capabilities: list[str]
+
+
 class UserStatsRow(BaseModel):
     user_id: uuid.UUID
     full_name: str
@@ -60,9 +75,31 @@ def _validate_role(role: str) -> None:
         )
 
 
+@router.get("/roles", response_model=list[RoleOut])
+async def list_roles(_admin: User = Depends(require_capability(USERS_MANAGE))):
+    """The assignable roles, in ascending order of privilege.
+
+    Served rather than hardcoded in the frontend so the "chi può fare cosa"
+    table on the user-management screen is generated from the same matrix the
+    server enforces — the alternative is a marketing description of permissions
+    that quietly stops being true.
+    """
+    return [
+        RoleOut(
+            role=role,
+            label=role_label(role),
+            description=ROLE_DESCRIPTIONS.get(role, ""),
+            capabilities=sorted(capabilities_for(role)),
+        )
+        # Ascending privilege: the matrix guarantees the three nest, so sorting
+        # by capability count is a faithful ordering rather than a guess.
+        for role in sorted(ALLOWED_ROLES, key=lambda r: len(capabilities_for(r)))
+    ]
+
+
 @router.get("", response_model=list[UserOut])
 async def list_users(
-    admin: User = Depends(require_role("admin")),
+    admin: User = Depends(require_capability(USERS_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -76,7 +113,7 @@ async def list_users(
 @router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def create_user(
     body: UserCreate,
-    admin: User = Depends(require_role("admin")),
+    admin: User = Depends(require_capability(USERS_MANAGE)),
     ent: Entitlements = Depends(get_entitlements),
     db: AsyncSession = Depends(get_db),
 ):
@@ -113,7 +150,7 @@ async def create_user(
 
 @router.get("/stats", response_model=list[UserStatsRow])
 async def user_stats(
-    admin: User = Depends(require_role("admin")),
+    admin: User = Depends(require_capability(USERS_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     aziende_counts = (
@@ -168,7 +205,7 @@ async def user_stats(
 async def update_user(
     user_id: uuid.UUID,
     body: UserUpdate,
-    admin: User = Depends(require_role("admin")),
+    admin: User = Depends(require_capability(USERS_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(

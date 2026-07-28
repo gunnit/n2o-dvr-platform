@@ -275,6 +275,143 @@ def approval_link(resource: dict[str, Any]) -> str | None:
     return None
 
 
+# --- Orders (one-time payments — AI credit packs) --------------------------
+#
+# A pack is a single charge, not a recurring one, so it uses Orders v2 rather
+# than the Subscriptions API above. That also means no PayPal-side catalogue to
+# provision: the price travels in the request, so a pack is sellable the moment
+# `credit_packs.py` lists it — no equivalent of `DEPLOY.md` §4b-bis.
+
+
+async def create_order(
+    *,
+    amount_cents: int,
+    currency: str,
+    description: str,
+    custom_id: str,
+    reference_id: str,
+    return_url: str,
+    cancel_url: str,
+    brand_name: str,
+    request_id: str | None = None,
+) -> dict[str, Any]:
+    """Create a one-time order and return PayPal's resource (incl. approve link).
+
+    ``custom_id`` carries our ``organization_id`` so a webhook can be mapped back
+    to a tenant, exactly as it does for subscriptions. ``reference_id`` carries
+    our ``credit_purchases.id``, which is what the capture path reconciles
+    against — the order id alone would not tell us *which* pending purchase row
+    a stray webhook belongs to.
+
+    ``PayPal-Request-Id`` makes the create idempotent at PayPal's end: a retried
+    call returns the same order instead of opening a second one the customer
+    could pay twice.
+    """
+    body = {
+        "intent": "CAPTURE",
+        "purchase_units": [
+            {
+                "reference_id": reference_id,
+                "custom_id": custom_id,
+                "description": description[:127],
+                "amount": {
+                    "currency_code": currency,
+                    # PayPal wants a decimal string; our prices are integer cents.
+                    "value": f"{amount_cents / 100:.2f}",
+                },
+            }
+        ],
+        "payment_source": {
+            "paypal": {
+                "experience_context": {
+                    "brand_name": brand_name,
+                    "locale": "it-IT",
+                    "shipping_preference": "NO_SHIPPING",
+                    # "Pay Now" rather than "Continue": the amount is final and
+                    # there is no review step of ours after approval.
+                    "user_action": "PAY_NOW",
+                    "return_url": return_url,
+                    "cancel_url": cancel_url,
+                }
+            }
+        },
+    }
+    headers = {"PayPal-Request-Id": request_id} if request_id else None
+    return await _json("POST", "/v2/checkout/orders", json=body, headers=headers)
+
+
+class PayPalOrderNotApproved(RuntimeError):
+    """The customer has not (or no longer) approved this order.
+
+    Distinct from :class:`PayPalError` because it is not a failure of ours: the
+    normal cause is a customer who abandoned the PayPal window and came back, and
+    the honest response is "nothing was charged", not "payment provider error".
+    """
+
+
+async def capture_order(order_id: str) -> dict[str, Any]:
+    """Take the money for an approved order.
+
+    Idempotent at PayPal's end for the case that matters: capturing an
+    already-captured order returns 422 ``ORDER_ALREADY_CAPTURED``, which we
+    resolve by re-reading the order so the caller still gets a completed
+    resource. The grant is guarded by our own row status either way, so a double
+    capture cannot double-credit — this only stops a harmless replay from
+    surfacing as an error to the customer.
+    """
+    resp = await request("POST", f"/v2/checkout/orders/{order_id}/capture", json={})
+    if resp.status_code < 300:
+        return resp.json()
+
+    text = resp.text or ""
+    if resp.status_code == 422 and "ORDER_ALREADY_CAPTURED" in text:
+        log.info("paypal: order %s was already captured — re-reading it", order_id)
+        existing = await get_order(order_id)
+        if existing is not None:
+            return existing
+    if resp.status_code == 422 and (
+        "ORDER_NOT_APPROVED" in text or "PAYER_ACTION_REQUIRED" in text
+    ):
+        raise PayPalOrderNotApproved(order_id)
+    raise PayPalError("POST", f"/v2/checkout/orders/{order_id}/capture", resp.status_code, text)
+
+
+async def get_order(order_id: str) -> dict[str, Any] | None:
+    """Fetch an order. ``None`` if PayPal no longer knows it."""
+    resp = await request("GET", f"/v2/checkout/orders/{order_id}")
+    if resp.status_code == 404:
+        return None
+    if resp.status_code >= 300:
+        raise PayPalError("GET", f"/v2/checkout/orders/{order_id}", resp.status_code, resp.text)
+    return resp.json()
+
+
+def order_is_paid(resource: dict[str, Any]) -> bool:
+    """Whether an order resource represents money actually taken.
+
+    ``COMPLETED`` on the order is the top-level answer, but an order can also
+    read ``APPROVED`` at the top while carrying a completed capture underneath
+    when the read races the capture — checking both avoids refusing to grant
+    credits for a payment that demonstrably went through.
+    """
+    if (resource.get("status") or "").upper() == "COMPLETED":
+        return True
+    for unit in resource.get("purchase_units") or []:
+        for capture in (unit.get("payments") or {}).get("captures") or []:
+            if (capture.get("status") or "").upper() == "COMPLETED":
+                return True
+    return False
+
+
+def order_reference_id(resource: dict[str, Any]) -> str | None:
+    """Our ``credit_purchases.id``, as stamped at creation."""
+    for unit in resource.get("purchase_units") or []:
+        reference = unit.get("reference_id")
+        if reference:
+            return str(reference)
+    return None
+
+
 # --- Webhook verification --------------------------------------------------
 
 # PayPal signs with a cert it hosts. We forward the URL for PayPal to check, but
