@@ -3,6 +3,13 @@
     python -m scripts.paypal_setup --dry-run    # report what would change
     python -m scripts.paypal_setup              # apply (sandbox)
     python -m scripts.paypal_setup --live       # apply against PAYPAL_ENV=live
+    python -m scripts.paypal_setup --bind-only  # write back existing ids only
+
+``--bind-only`` is the deploy-path subset: it resolves plan ids that already
+exist at PayPal, writes them onto ``plans.paypal_plan_id``, and creates nothing.
+It runs from ``preDeployCommand`` so the id binding cannot silently go missing —
+see :func:`bind`. Provisioning a merchant for the first time is still the full
+run above, because that creates commercial objects.
 
 Creates one Product ("N2O DVR Platform") and one annual billing Plan per
 sellable row of ``app.billing.plan_catalogue``, then writes each PayPal plan id
@@ -285,6 +292,110 @@ async def _reconcile(
     return actions
 
 
+async def bind() -> int:
+    """Write back plan ids that already exist at PayPal. Creates nothing.
+
+    The deploy-path half of this script, and deliberately a different function
+    rather than a flag threaded through :func:`sync` — the safety argument here
+    is "no code path in it can write to PayPal", and that has to be readable at
+    a glance rather than traced through branches.
+
+    It exists because of how production broke on 2026-07-28: the sandbox
+    merchant held all seven plans, the ``plans`` table held all seven rows, and
+    the *join between them* was missing, so `GET /billing/plans` returned `[]`
+    and both signup funnels became dead ends nobody could pay their way out of.
+    Nothing about that needed a human decision — the ids existed and simply had
+    not been copied — so a deploy now reconciles it.
+
+    **Always exits 0.** It runs in `preDeployCommand`, so a raised exception
+    would abort a production deploy over a reconcile that is advisory by
+    construction. Unconfigured credentials, a merchant that has never been
+    provisioned, an unreachable PayPal — all are logged and skipped. The one
+    thing that *should* still fail a deploy is an import error, which would mean
+    the app's own billing package is broken; that is why nothing here is
+    wrapped in a shell ``|| true``.
+
+    What it will not do, all of which stay in :func:`sync`: create a product,
+    create a plan, change a price, or activate one. Those are commercial acts
+    against a merchant account and belong to a human running DEPLOY.md §4b.
+    """
+    if not paypal_client.is_configured():
+        log.info("bind: PayPal is not configured — nothing to bind")
+        return 0
+
+    log.info("bind: env=%s base=%s", settings.PAYPAL_ENV, settings.PAYPAL_API_BASE)
+
+    try:
+        # dry_run=True is what makes this read-only: `ensure_product` reports a
+        # missing product instead of creating one.
+        product_id = await ensure_product(dry_run=True)
+
+        remote_by_name: dict[str, dict[str, Any]] = {}
+        if product_id:
+            for p in await _list_all(f"/v1/billing/plans?product_id={product_id}", "plans"):
+                remote_by_name.setdefault(p["name"], p)
+
+        bound: list[str] = []
+        intact: list[str] = []
+        unresolved: list[str] = []
+
+        async with async_session_factory() as session:
+            rows = {p.plan_code: p for p in (await session.execute(select(Plan))).scalars()}
+
+            for plan in sellable_plans():
+                code = plan["plan_code"]
+                row = rows.get(code)
+                if row is None:
+                    # No row to bind to. `seed_plans` owns that, not this.
+                    unresolved.append(code)
+                    continue
+
+                remote: dict[str, Any] | None = None
+                if row.paypal_plan_id:
+                    remote = await _fetch_plan(row.paypal_plan_id)
+                    if remote is not None:
+                        intact.append(code)
+                        continue
+                    # A stored id PayPal does not recognise is the signature of
+                    # a database pointed at the other environment (§4b-bis), so
+                    # fall through and re-resolve rather than trusting it.
+                    log.warning(
+                        "bind: %s stored paypal_plan_id %s is unknown in %s — re-resolving",
+                        code, row.paypal_plan_id, settings.PAYPAL_ENV,
+                    )
+
+                remote = remote_by_name.get(plan_name(plan))
+                if remote is None:
+                    unresolved.append(code)
+                    continue
+
+                log.info("bind: %s paypal_plan_id %r -> %r", code, row.paypal_plan_id, remote["id"])
+                row.paypal_plan_id = remote["id"]
+                bound.append(code)
+
+            if bound:
+                await session.commit()
+    except Exception:
+        log.exception("bind: reconcile failed — leaving plan ids as they are")
+        return 0
+
+    if unresolved:
+        # Not a failure of this run: the merchant catalogue has never been
+        # provisioned for these, which only the full script can do.
+        log.error(
+            "bind: %d plan(s) still have no PayPal counterpart in %s (%s). "
+            "GET /billing/plans will omit them and POST /billing/subscribe will "
+            "answer 409. Run `python -m scripts.paypal_setup` — see DEPLOY.md 4b.",
+            len(unresolved), settings.PAYPAL_ENV, ", ".join(unresolved),
+        )
+
+    log.info(
+        "bind: %d newly bound, %d already correct, %d unresolved",
+        len(bound), len(intact), len(unresolved),
+    )
+    return 0
+
+
 async def sync(
     dry_run: bool = False,
     update_pricing: bool = False,
@@ -392,7 +503,21 @@ def main() -> int:
         action="store_true",
         help="required acknowledgement when PAYPAL_ENV=live",
     )
+    parser.add_argument(
+        "--bind-only",
+        action="store_true",
+        help=(
+            "write back plan ids that already exist at PayPal and nothing else; "
+            "never creates, reprices or activates. Safe on the deploy path."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.bind_only:
+        # No `--live` acknowledgement: binding creates nothing, so there is no
+        # commercial act to acknowledge. Re-binding is in fact exactly what a
+        # sandbox→live switch needs (§4b-bis step 3) once the live plans exist.
+        return asyncio.run(bind())
 
     # A live run creates real, customer-visible commercial objects. Make it a
     # deliberate act rather than whatever PAYPAL_ENV happened to be exported.

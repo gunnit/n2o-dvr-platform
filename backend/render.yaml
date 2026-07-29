@@ -17,7 +17,21 @@ services:
     # The repo keeps them at the root — rootDir is backend/, so ../templates
     # resolves to the repo's templates/ dir. See docx_utils._resolve_templates_dir.
     buildCommand: cp -r ../templates ./templates && pip install -r requirements.txt
-    preDeployCommand: PYTHONPATH=. alembic upgrade head
+    # Migrations, then the plan-id reconcile. `--bind-only` resolves PayPal plan
+    # ids that already exist and writes them onto plans.paypal_plan_id; it never
+    # creates, reprices or activates anything, and always exits 0 — so it cannot
+    # abort a deploy over a reconcile that is advisory by construction. Chained
+    # with && rather than ; on purpose: a failed migration must still stop here.
+    #
+    # It is on the deploy path because of how production broke on 2026-07-28.
+    # The sandbox merchant held all 7 plans and the `plans` table held all 7
+    # rows, but nothing joined them, so `GET /billing/plans` returned [] and
+    # both signup funnels became dead ends that ENTITLEMENTS_ENFORCE=true then
+    # 402'd on every write. Nothing about binding those ids needs a human, so a
+    # deploy now does it. First-time provisioning of a merchant account is still
+    # `python -m scripts.paypal_setup` by hand — that one creates commercial
+    # objects. DEPLOY.md 4b.
+    preDeployCommand: PYTHONPATH=. alembic upgrade head && PYTHONPATH=. python -m scripts.paypal_setup --bind-only
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL

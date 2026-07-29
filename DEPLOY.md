@@ -130,6 +130,17 @@ Three things must happen, in this order, to switch it on. **Step 1 needs the
 PayPal credentials, so a human has to run it** — it cannot be done from a coding
 session, which must not handle API keys.
 
+> **State as of 2026-07-29.** Step 3 is **done**: the listener is registered
+> (`2RF36111EN427364T`) and set on `n2o-dvr-api`. Steps 1 and 2 are outstanding,
+> and 2 cannot start until 1 lands, because `paypal_setup.py` authenticates with
+> whatever credentials the process it runs in holds.
+>
+> Step 2 has to run **on the box**, not from a laptop: `n2o-dvr-db` has an empty
+> `ipAllowList`, so Render drops external connections (they TLS-handshake and
+> then close mid-operation, which reads like a network flake rather than a
+> refusal). Adding an allowlist entry to run one script is not worth it — you are
+> already in the dashboard for step 1, and the shell is one click from there.
+
 1. **Replace the credentials on `n2o-dvr-api` with the sandbox pair.**
    ⚠️ **Confirmed wrong as of 2026-07-29** — this is no longer a "check whether".
    The keys set on the service are non-empty but do not authenticate: production
@@ -198,6 +209,20 @@ cd /opt/render/project/src/backend && export PYTHONPATH=.
    it is only a required acknowledgement when `PAYPAL_ENV=live`. Run the dry run
    first and read it.
 
+   > **Since 2026-07-29 a deploy does this by itself.** `preDeployCommand` runs
+   > `scripts/paypal_setup.py --bind-only` after the migrations: it resolves plan
+   > ids that already exist at PayPal, writes them onto `plans.paypal_plan_id`,
+   > and creates nothing. So once step 1 lands, the *next* deploy binds the ids
+   > whether or not anyone remembers to. Running it by hand below is still worth
+   > it when you want it bound **now** rather than at the next deploy.
+   >
+   > `--bind-only` issues GETs exclusively and always exits 0 — an unreachable
+   > PayPal, an unprovisioned merchant or a database that is not up yet are
+   > logged and skipped, never a failed deploy (`tests/test_paypal_bind.py`
+   > pins both properties). It is **not** a substitute for the full run on a
+   > merchant account that has never been provisioned: creating a product or a
+   > plan is a commercial act and stays manual.
+
 ```bash
 PYTHONPATH=. python -m scripts.paypal_setup --dry-run
 ```
@@ -213,11 +238,16 @@ PYTHONPATH=. python -m scripts.paypal_setup
 curl -s https://n2o-dvr-api.onrender.com/api/v1/billing/plans -H "Authorization: Bearer $TOKEN" | head -c 400
 ```
 
-3. **Register the webhook listener** and put the id it prints into
-   `PAYPAL_WEBHOOK_ID`, then redeploy. Until this is set, signature verification
-   fails closed and **no subscription will ever activate** — the customer pays
-   and stays on the old plan. This is the failure that costs the most, because
-   it happens *after* the money moves.
+3. ~~**Register the webhook listener**~~ — **done 2026-07-29.** The listener is
+   `2RF36111EN427364T` → `https://n2o-dvr-api.onrender.com/api/v1/billing/webhook`,
+   subscribed to all ten events in `scripts/paypal_webhook_setup.EVENT_TYPES`,
+   and `PAYPAL_WEBHOOK_ID` is set on `n2o-dvr-api`. The endpoint answers 401 to
+   an unsigned POST, which is the correct fail-closed behaviour.
+
+   Kept here because it is the failure that costs the most — until the id is set,
+   signature verification fails closed and **no subscription ever activates**:
+   the customer pays and stays on the old plan, *after* the money moves. If the
+   listener is ever lost, or the API origin changes, re-run:
 
 ```bash
 PYTHONPATH=. python -m scripts.paypal_webhook_setup --url https://n2o-dvr-api.onrender.com
@@ -226,6 +256,9 @@ PYTHONPATH=. python -m scripts.paypal_webhook_setup --url https://n2o-dvr-api.on
 ```bash
 PYTHONPATH=. python -m scripts.paypal_webhook_setup --list
 ```
+
+   It is idempotent — an existing listener on the same URL is re-pointed in
+   place rather than duplicated, so re-running is safe.
 
 Then walk one real purchase end to end, **once per channel** — the two funnels
 provision different account types and only the matching price list is offered:
