@@ -23,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.billing import paypal_client
+from app.models.organization import Organization
 from app.models.plan import Plan
 from app.models.subscription import Subscription
 
@@ -85,6 +86,19 @@ async def plan_code_for_paypal_plan(paypal_plan_id: str | None, db: AsyncSession
             select(Plan.plan_code).where(Plan.paypal_plan_id == paypal_plan_id)
         )
     ).scalar_one_or_none()
+
+
+async def _organization_exists(org_id: uuid.UUID, db: AsyncSession) -> bool:
+    """Whether the tenant a PayPal event points at is still real.
+
+    ``custom_id`` is a UUID we stamped at checkout, and a tenant can be deleted
+    between approving a subscription and its webhook landing. Checked before
+    inserting a ``subscriptions`` row so a dangling reference surfaces as a
+    logged no-op rather than as a foreign-key 500 PayPal retries forever.
+    """
+    return (
+        await db.execute(select(Organization.id).where(Organization.id == org_id))
+    ).scalar_one_or_none() is not None
 
 
 async def find_org_for_subscription(
@@ -156,6 +170,10 @@ async def apply_subscription_resource(
 ) -> str:
     """Reconcile one org's subscription row from PayPal's resource.
 
+    Creates the row when the tenant has none and PayPal reports the subscription
+    ACTIVE — that is the moment a self-serve signup becomes a customer, and no
+    other code path can do it (INV-2 keeps every write here).
+
     Returns a short human-readable outcome for the webhook ledger. Does not
     commit — the caller owns the transaction so the event claim and the state
     change land together.
@@ -171,20 +189,53 @@ async def apply_subscription_resource(
             select(Subscription).where(Subscription.organization_id == org_id)
         )
     ).scalar_one_or_none()
+    plan_code = await plan_code_for_paypal_plan(resource.get("plan_id"), db)
+    changes: list[str] = []
 
     if row is None:
-        # MB-1.3 gives every org a row; reaching here means a tenant created
-        # outside that path. Refuse rather than invent one: a subscription row
-        # with no grandfathered history is exactly the state INV-1 protects.
-        logger.error(
-            "billing: org %s has no subscription row; cannot apply PayPal %s",
-            org_id, subscription_id,
-        )
-        return "error: organization has no subscription row"
+        # A self-serve signup owns no subscription row until it pays for one:
+        # `/auth/register*` creates an organization and its first user, nothing
+        # more, and MB-1.3's backfill only ever ran for orgs that predate
+        # billing. So this path has to be able to *create* the row. Refusing
+        # meant the customer was charged, the plan never activated, and PayPal —
+        # which sees the webhook answer 200 — never retried.
+        #
+        # Only a subscription PayPal reports as ACTIVE may mint one, and only
+        # for a plan we recognise. `BILLING.SUBSCRIPTION.CREATED` arrives at
+        # APPROVAL_PENDING, which maps to `trialing` — an ACTIVE_STATUS — so
+        # creating a row from it would hand the full plan to someone who never
+        # finished paying.
+        if status != "active" or plan_code is None:
+            logger.info(
+                "billing: org %s has no subscription row; not creating one from "
+                "PayPal %s (status=%s, plan=%s)",
+                org_id, subscription_id, paypal_status, plan_code,
+            )
+            return (
+                f"ignored: no subscription row, and {paypal_status} is not an "
+                "activation one can be created from"
+            )
+        if not await _organization_exists(org_id, db):
+            # The foreign key would raise, the webhook would 500, and PayPal
+            # would retry forever against a tenant that is never coming back.
+            logger.error(
+                "billing: PayPal %s maps to organization %s, which does not exist",
+                subscription_id, org_id,
+            )
+            return "error: no such organization"
 
-    plan_code = await plan_code_for_paypal_plan(resource.get("plan_id"), db)
+        row = Subscription(organization_id=org_id, plan_code=plan_code, status=status)
+        db.add(row)
+        # Flushed so the INSERT is ordered before anything later in this
+        # transaction reads `subscriptions` — the caller owns the commit.
+        await db.flush()
+        changes.append(f"created on {plan_code}")
+        logger.info(
+            "billing: created a subscription row for org %s from PayPal %s (%s)",
+            org_id, subscription_id, plan_code,
+        )
+
     start, end = period_bounds(resource)
-    changes: list[str] = []
 
     # Only a subscription that actually reached ACTIVE may move the customer's
     # plan. An abandoned approval for a bigger plan must never upgrade someone

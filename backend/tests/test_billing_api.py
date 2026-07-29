@@ -54,29 +54,44 @@ PAYPAL_PLAN_ID = "P-PYTESTPLAN000000000001"
 
 
 class Tenant:
-    def __init__(self, org_id, user_id, azienda_id, token):
+    def __init__(self, org_id, user_id, azienda_id, token, email):
         self.org_id = org_id
         self.user_id = user_id
         self.azienda_id = azienda_id
+        self.email = email
         self.headers = {"Authorization": f"Bearer {token}"}
 
 
-async def _provision(session, *, status: str = "active", paypal_sub: str | None = None) -> Tenant:
+async def _provision(
+    session,
+    *,
+    status: str = "active",
+    paypal_sub: str | None = None,
+    account_type: str = "consultant",
+    subscribed: bool = True,
+) -> Tenant:
+    """One tenant, ready to make requests.
+
+    ``subscribed=False`` leaves out the ``subscriptions`` row, which is the
+    state of every self-serve signup between registering and its first payment —
+    the case the webhook has to be able to activate.
+    """
     from app.core.security import create_access_token, hash_password
 
     org_id, user_id, azienda_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     suffix = str(org_id)[:8]
+    email = f"bill-{suffix}@example.com"
 
     await session.execute(
-        text("INSERT INTO organizations (id, name) VALUES (:i, :n)"),
-        {"i": org_id, "n": f"pytest-bill-{suffix}"},
+        text("INSERT INTO organizations (id, name, account_type) VALUES (:i, :n, :a)"),
+        {"i": org_id, "n": f"pytest-bill-{suffix}", "a": account_type},
     )
     await session.execute(
         text(
             "INSERT INTO users (id, organization_id, email, full_name, hashed_password, role) "
             "VALUES (:i, :o, :e, 'Test Admin', :p, 'admin')"
         ),
-        {"i": user_id, "o": org_id, "e": f"bill-{suffix}@example.com",
+        {"i": user_id, "o": org_id, "e": email,
          "p": hash_password("pytest-Passw0rd!")},
     )
     await session.execute(
@@ -98,26 +113,35 @@ async def _provision(session, *, status: str = "active", paypal_sub: str | None 
         {"c": PLAN_CODE, "pp": PAYPAL_PLAN_ID},
     )
     now = datetime.now(timezone.utc)
-    await session.execute(
-        text(
-            """
-            INSERT INTO subscriptions (id, organization_id, plan_code, status,
-                                       paypal_subscription_id,
-                                       current_period_start, current_period_end)
-            VALUES (:i, :o, :p, :st, :ps, :s, :e)
-            """
-        ),
-        {"i": uuid.uuid4(), "o": org_id, "p": PLAN_CODE, "st": status, "ps": paypal_sub,
-         "s": now - timedelta(days=1), "e": now + timedelta(days=364)},
-    )
+    if subscribed:
+        await session.execute(
+            text(
+                """
+                INSERT INTO subscriptions (id, organization_id, plan_code, status,
+                                           paypal_subscription_id,
+                                           current_period_start, current_period_end)
+                VALUES (:i, :o, :p, :st, :ps, :s, :e)
+                """
+            ),
+            {"i": uuid.uuid4(), "o": org_id, "p": PLAN_CODE, "st": status, "ps": paypal_sub,
+             "s": now - timedelta(days=1), "e": now + timedelta(days=364)},
+        )
     await session.commit()
     token = create_access_token({"sub": str(user_id), "org": str(org_id), "role": "admin"})
-    return Tenant(org_id, user_id, azienda_id, token)
+    return Tenant(org_id, user_id, azienda_id, token, email)
 
 
 def _run(body, *, enforce: bool = False, status: str = "active",
-         paypal_sub: str | None = None, patches: dict | None = None):
-    """Provision a tenant, run `body(client, tenant, factory)`, then clean up."""
+         paypal_sub: str | None = None, patches: dict | None = None,
+         account_type: str = "consultant", subscribed: bool = True,
+         platform_admin: bool = False):
+    """Provision a tenant, run `body(client, tenant, factory)`, then clean up.
+
+    ``platform_admin`` puts the tenant's own user on
+    ``settings.PLATFORM_ADMIN_EMAILS``, which is the only thing that opens the
+    cross-tenant admin endpoint. Off by default *on purpose*: a test that
+    accidentally reaches that endpoint should get the 403 a customer would.
+    """
     from httpx import ASGITransport, AsyncClient
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -131,6 +155,7 @@ def _run(body, *, enforce: bool = False, status: str = "active",
         engine = create_async_engine(_URL)
         factory = async_sessionmaker(engine, expire_on_commit=False)
         original_enforce = settings.ENTITLEMENTS_ENFORCE
+        original_admins = settings.PLATFORM_ADMIN_EMAILS
         settings.ENTITLEMENTS_ENFORCE = enforce
         saved = {name: getattr(paypal_client, name) for name in (patches or {})}
         for name, value in (patches or {}).items():
@@ -138,13 +163,19 @@ def _run(body, *, enforce: bool = False, status: str = "active",
         tenant = None
         try:
             async with factory() as s:
-                tenant = await _provision(s, status=status, paypal_sub=paypal_sub)
+                tenant = await _provision(
+                    s, status=status, paypal_sub=paypal_sub,
+                    account_type=account_type, subscribed=subscribed,
+                )
+            if platform_admin:
+                settings.PLATFORM_ADMIN_EMAILS = tenant.email
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
                 return await body(client, tenant, factory)
         finally:
             settings.ENTITLEMENTS_ENFORCE = original_enforce
+            settings.PLATFORM_ADMIN_EMAILS = original_admins
             for name, value in saved.items():
                 setattr(paypal_client, name, value)
             if tenant is not None:
@@ -178,7 +209,13 @@ def _run(body, *, enforce: bool = False, status: str = "active",
     return asyncio.run(run())
 
 
-async def _status_of(factory, org_id) -> tuple[str, str]:
+async def _status_of(factory, org_id) -> tuple[str | None, str | None]:
+    """The org's (status, plan_code), or ``(None, None)`` when it owns no row.
+
+    The no-row case is a real answer, not a missing one: it is where every
+    self-serve signup sits until it pays, so a test asserting that an
+    unapproved subscription granted *nothing* has to be able to see it.
+    """
     async with factory() as s:
         row = (
             await s.execute(
@@ -186,7 +223,7 @@ async def _status_of(factory, org_id) -> tuple[str, str]:
                 {"o": org_id},
             )
         ).first()
-    return row[0], row[1]
+    return (None, None) if row is None else (row[0], row[1])
 
 
 # --- MB-3.3 entitlements ---------------------------------------------------
@@ -296,6 +333,35 @@ def test_subscribe_refuses_a_plan_with_no_paypal_id():
     assert _run(body, patches=_CONFIGURED).status_code == 409
 
 
+def test_subscribe_refuses_the_other_channel():
+    """A direct company must not buy a consultant plan (INV-9)."""
+
+    async def body(client, t, factory):
+        return await client.post(
+            "/api/v1/billing/subscribe", json={"plan_code": PLAN_CODE}, headers=t.headers
+        )
+
+    assert _run(body, account_type="direct", patches=_CONFIGURED).status_code == 403
+
+
+def test_revise_refuses_the_other_channel():
+    """The same guardrail on the *change plan* path, which never had it.
+
+    Without it a direct tenant could revise onto the consultant catalogue and
+    the ACTIVATED webhook would write that plan_code — B_MULTISEDE (€2.400) onto
+    A_SOLO (€1.490) is cheaper *and* unlocks POS and HACCP, the two documents
+    the channel guardrail exists to keep with the consultant.
+    """
+
+    async def body(client, t, factory):
+        return await client.post(
+            "/api/v1/billing/revise", json={"plan_code": PLAN_CODE}, headers=t.headers
+        )
+
+    resp = _run(body, account_type="direct", paypal_sub="I-PYTESTREVISE", patches=_CONFIGURED)
+    assert resp.status_code == 403, resp.text
+
+
 def test_cancel_without_a_paypal_subscription_is_a_409():
     async def body(client, t, factory):
         return await client.post("/api/v1/billing/cancel", json={}, headers=t.headers)
@@ -382,6 +448,59 @@ def test_activated_webhook_activates_the_subscription():
     assert resp.status_code == 200, resp.text
     assert status == "active"
     assert plan_code == PLAN_CODE
+
+
+def _activation_webhook(paypal_status: str = "ACTIVE"):
+    """A verified ACTIVATED event whose PayPal resource reports ``paypal_status``."""
+
+    async def body(client, t, factory):
+        async def fake_get(sub_id):
+            return _paypal_resource(sub_id, t.org_id, paypal_status)
+
+        from app.billing import paypal_client
+
+        paypal_client.get_subscription = fake_get
+        resp = await client.post(
+            "/api/v1/billing/webhook",
+            content=_event("BILLING.SUBSCRIPTION.ACTIVATED", "I-PYTEST1"),
+            headers={"content-type": "application/json"},
+        )
+        return resp, await _status_of(factory, t.org_id)
+
+    return body
+
+
+def test_activation_creates_the_row_for_a_tenant_that_never_had_one():
+    """The self-serve signup path.
+
+    `/auth/register*` creates an organization and a user and nothing else, so a
+    customer who pays has no `subscriptions` row for the webhook to update.
+    Refusing to create one meant they were charged and never activated — and
+    because the webhook still answered 200, PayPal never retried.
+    """
+    resp, (status, plan_code) = _run(
+        _activation_webhook(),
+        subscribed=False,
+        patches={"verify_webhook_signature": _ok_verify, "get_subscription": None},
+    )
+    assert resp.status_code == 200, resp.text
+    assert status == "active" and plan_code == PLAN_CODE
+
+
+def test_an_unapproved_subscription_creates_nothing():
+    """APPROVAL_PENDING maps to `trialing`, which *grants access*.
+
+    So the row may only be minted from a subscription PayPal reports ACTIVE:
+    otherwise starting a checkout and walking away would hand out the full plan
+    to someone who never paid.
+    """
+    resp, (status, plan_code) = _run(
+        _activation_webhook("APPROVAL_PENDING"),
+        subscribed=False,
+        patches={"verify_webhook_signature": _ok_verify, "get_subscription": None},
+    )
+    assert resp.status_code == 200, resp.text
+    assert (status, plan_code) == (None, None)
 
 
 def test_suspended_webhook_moves_to_past_due_not_canceled():
@@ -543,6 +662,19 @@ def test_past_due_subscription_can_still_generate():
 # --- MB-3.1 admin -----------------------------------------------------------
 
 
+def _set_plan(*, plan_code=PLAN_CODE, status="active", org_id=None):
+    """A `_run` body that POSTs the admin plan endpoint. Defaults to own org."""
+
+    async def body(client, tenant, factory):
+        return await client.post(
+            f"/api/v1/billing/admin/organizations/{org_id or tenant.org_id}/plan",
+            json={"plan_code": plan_code, "status": status, "months": 12},
+            headers=tenant.headers,
+        )
+
+    return body
+
+
 def test_admin_can_set_a_plan_by_hand():
     async def body(client, t, factory):
         resp = await client.post(
@@ -552,17 +684,34 @@ def test_admin_can_set_a_plan_by_hand():
         )
         return resp, await _status_of(factory, t.org_id)
 
-    resp, (status, plan_code) = _run(body, status="canceled")
+    resp, (status, plan_code) = _run(body, status="canceled", platform_admin=True)
     assert resp.status_code == 200, resp.text
     assert status == "active" and plan_code == PLAN_CODE
 
 
 def test_admin_set_plan_rejects_a_bad_status():
-    async def body(client, t, factory):
-        return await client.post(
-            f"/api/v1/billing/admin/organizations/{t.org_id}/plan",
-            json={"plan_code": PLAN_CODE, "status": "gratis", "months": 12},
-            headers=t.headers,
-        )
+    assert _run(_set_plan(status="gratis"), platform_admin=True).status_code == 422
 
-    assert _run(body).status_code == 422
+
+def test_a_tenant_admin_cannot_grant_itself_a_plan():
+    """The paywall bypass this endpoint used to be.
+
+    It is guarded on platform staff, not on `billing:manage` — which every
+    self-serve signup's first user holds. Guarded on the capability, any
+    customer could POST their own organization id and take a plan for free, or
+    name someone else's id and cancel their subscription.
+    """
+    resp = _run(_set_plan(), status="canceled")
+    assert resp.status_code == 403, resp.text
+
+
+def test_admin_set_plan_refuses_the_other_channel():
+    """INV-9 binds staff too: an invoice does not turn a company into a studio."""
+    resp = _run(_set_plan(), account_type="direct", platform_admin=True)
+    assert resp.status_code == 403, resp.text
+
+
+def test_admin_set_plan_404s_for_an_unknown_organization():
+    """A dangling id is 'no such tenant', not an integrity error dressed as 500."""
+    resp = _run(_set_plan(org_id=uuid.uuid4()), platform_admin=True)
+    assert resp.status_code == 404, resp.text

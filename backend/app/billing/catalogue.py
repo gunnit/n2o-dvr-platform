@@ -74,9 +74,3 @@ async def get_plan(plan_code: str, db: AsyncSession) -> PurchasablePlan | None:
         await db.execute(select(Plan).where(Plan.plan_code == plan_code))
     ).scalar_one_or_none()
     return None if plan is None else _to_purchasable(plan)
-
-
-async def plan_code_exists(plan_code: str, db: AsyncSession) -> bool:
-    return (
-        await db.execute(select(Plan.plan_code).where(Plan.plan_code == plan_code))
-    ).scalar_one_or_none() is not None

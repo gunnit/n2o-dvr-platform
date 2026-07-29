@@ -276,6 +276,39 @@ never do.
   ever restore a database from before that migration, turn this back off first
   or every existing tenant gets a 402.
 
+## 4c. `PLATFORM_ADMIN_EMAILS` — who may set a plan by hand
+
+`POST /billing/admin/organizations/{id}/plan` is how a deal actually closes
+today: bank transfer, then put the tenant on the plan. It is also the only
+endpoint that names an **organization by id** rather than acting on the caller's
+own, and it grants a plan for nothing.
+
+It used to be guarded on the `billing:manage` capability — which every self-serve
+signup's first user holds, because signing up makes you the admin of your own
+organization. That was a complete bypass of the paywall (verified against
+production on 2026-07-29: a tenant registered minutes earlier granted itself a
+paid plan, 200 OK, no payment) and, since the id is a path parameter, a way to
+cancel someone else's subscription.
+
+It is now gated on `settings.PLATFORM_ADMIN_EMAILS`, a comma-separated allowlist
+of N2O staff emails, matched case-insensitively against the signed-in user:
+
+```
+PLATFORM_ADMIN_EMAILS=luca@n2o.it,ai@niuexa.ai
+```
+
+Those are the two set in production as of 2026-07-29. The match is against the
+address a person **signs in with**, so an entry that names no real user account
+grants nothing — adding someone means checking their login email, not their
+letterhead.
+
+**It fails closed.** While the variable is empty every call gets 403, including
+yours — so set it on `n2o-dvr-api` before relying on manual provisioning, which
+while §4b is outstanding is the *only* way to sell anything. There is no role or
+database flag involved on purpose: a platform operator is not a thing that
+exists inside a tenant, and a column would need its own admin UI to be set
+safely.
+
 ## 4b-bis. Switching from sandbox to real money
 
 Not a one-line change. `plans.paypal_plan_id` is **environment-specific**, so the

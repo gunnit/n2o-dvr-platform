@@ -31,12 +31,17 @@ from app.billing import (
     metering,
     paypal_client,
 )
-from app.billing.constants import SUBSCRIPTION_STATUSES
-from app.billing.entitlements import Entitlements, get_entitlements, resolve_entitlements
+from app.billing.constants import ACCOUNT_TYPE_CONSULTANT, SUBSCRIPTION_STATUSES
+from app.billing.entitlements import (
+    Entitlements,
+    get_account_type,
+    get_entitlements,
+    resolve_entitlements,
+)
 from app.config import settings
 from app.db.session import get_db
 from app.core.permissions import BILLING_MANAGE, BILLING_READ
-from app.dependencies import get_current_org, require_capability
+from app.dependencies import get_current_org, require_capability, require_platform_admin
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -122,6 +127,34 @@ class SetPlanIn(BaseModel):
     plan_code: str = Field(min_length=1, max_length=32)
     status: str = "active"
     months: int = Field(default=12, ge=1, le=60)
+
+
+# --- The channel rule, written once (INV-9) ---------------------------------
+
+
+def _model_for(account_type: str) -> str:
+    """Which half of the catalogue this tenant may be put on.
+
+    Model A is sold to consultants, Model B direct to companies, and the
+    separation is the channel-conflict contract — a direct tenant on a Model A
+    plan gets POS and HACCP, the two documents the whole guardrail exists to
+    keep inside the consultant channel. Every path that can move an
+    organization's plan (`/subscribe`, `/revise`, the admin endpoint) has to ask
+    this, not just the first one anybody wrote a check into.
+
+    Anything that is not recognisably a consultant resolves to B — the smaller
+    catalogue — so a corrupt `account_type` withholds documents rather than
+    handing over the ones the guardrail is there to withhold.
+    """
+    return "A" if account_type == ACCOUNT_TYPE_CONSULTANT else "B"
+
+
+def _ensure_channel(plan_model: str, account_type: str) -> None:
+    if plan_model != _model_for(account_type):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Questo piano non è disponibile per il tuo tipo di account.",
+        )
 
 
 # --- MB-3.3 — what am I entitled to -----------------------------------------
@@ -508,13 +541,9 @@ async def subscribe(
     plan = await catalogue.get_plan(body.plan_code, db)
     if plan is None:
         raise HTTPException(status_code=404, detail="Piano non trovato.")
-    if plan.model != ("A" if ent.account_type == "consultant" else "B"):
-        # The channel-conflict guardrail (INV-9) applied to purchasing, not just
-        # to document types: a direct company must not buy a consultant plan.
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Questo piano non è disponibile per il tuo tipo di account.",
-        )
+    # The channel-conflict guardrail (INV-9) applied to purchasing, not just to
+    # document types: a direct company must not buy a consultant plan.
+    _ensure_channel(plan.model, ent.account_type)
     if not plan.is_checkoutable:
         # Either the Phase-4 setup script has not run, or this is A_FOUNDING.
         logger.error(
@@ -626,7 +655,14 @@ async def revise(
         )
 
     plan = await catalogue.get_plan(body.plan_code, db)
-    if plan is None or not plan.is_checkoutable:
+    if plan is None:
+        raise HTTPException(status_code=404, detail="Piano non disponibile.")
+    # INV-9 again, and it is not redundant with `/subscribe`: a revise moves the
+    # plan on a subscription that already exists, so without this a direct
+    # tenant could cross into the consultant catalogue — B_MULTISEDE (€2.400)
+    # onto A_SOLO (€1.490) is *cheaper* and unlocks POS and HACCP.
+    _ensure_channel(plan.model, ent.account_type)
+    if not plan.is_checkoutable:
         raise HTTPException(status_code=404, detail="Piano non disponibile.")
     if plan.plan_code == ent.plan_code:
         raise HTTPException(status_code=409, detail="Sei già su questo piano.")
@@ -818,21 +854,41 @@ async def paypal_webhook(request: Request, db: AsyncSession = Depends(get_db)) -
 async def admin_set_plan(
     organization_id: uuid.UUID,
     body: SetPlanIn,
-    _admin: User = Depends(require_capability(BILLING_MANAGE)),
+    _admin: User = Depends(require_platform_admin),
     db: AsyncSession = Depends(get_db),
 ) -> EntitlementsOut:
     """Put an organization on a plan without PayPal (invoice paid off-platform).
 
     How the first consultant deals actually close: bank transfer, then this.
     Also the enterprise path, where the price is negotiated per deal.
+
+    **Platform staff only**, and that is the whole security argument: this is the
+    one endpoint that names an organization by id instead of taking the caller's
+    own, and it grants a plan for free. Guarded on ``billing:manage`` it was a
+    complete bypass of the paywall — every self-serve signup's first user is an
+    admin, so any customer could POST their own organization id and take
+    A_ENTERPRISE, or cancel a competitor's subscription. See
+    :func:`app.dependencies.require_platform_admin`.
     """
     if body.status not in SUBSCRIPTION_STATUSES:
         raise HTTPException(
             status_code=422,
             detail=f"status must be one of {sorted(SUBSCRIPTION_STATUSES)}",
         )
-    if not await catalogue.plan_code_exists(body.plan_code, db):
+    plan = await catalogue.get_plan(body.plan_code, db)
+    if plan is None:
         raise HTTPException(status_code=404, detail="Piano non trovato.")
+
+    # Checked explicitly rather than left to the foreign key: `set_plan_manually`
+    # on an unknown id would raise an IntegrityError and answer 500, which reads
+    # as "the platform is broken" instead of "that organization does not exist".
+    account_type = await get_account_type(organization_id, db)
+    if account_type is None:
+        raise HTTPException(status_code=404, detail="Organizzazione non trovata.")
+    # INV-9 holds for staff too. An invoice does not make a direct company a
+    # consultant — if a tenant really belongs in the other channel, its
+    # `account_type` is what is wrong, and that is not fixed from here.
+    _ensure_channel(plan.model, account_type)
 
     now = datetime.now(timezone.utc)
     # Calendar-month arithmetic without a dependency: 30-day months are close

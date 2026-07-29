@@ -106,6 +106,13 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
     # Shown on PayPal's approval page. The tenant sees this while paying.
     PAYPAL_BRAND_NAME: str = "N2O DVR"
+    # Comma-separated emails of N2O staff who may administer *other* tenants —
+    # today, putting an organization on a plan after an invoice is paid off
+    # PayPal. Deliberately empty by default: a tenant admin holds
+    # `billing:manage` for their own organization, and that must never be enough
+    # to grant themselves a free plan or rewrite someone else's subscription.
+    # See `dependencies.require_platform_admin`.
+    PLATFORM_ADMIN_EMAILS: str = ""
 
     @property
     def PAYPAL_API_BASE(self) -> str:
@@ -113,6 +120,21 @@ class Settings(BaseSettings):
             "https://api-m.paypal.com"
             if self.PAYPAL_ENV == "live"
             else "https://api-m.sandbox.paypal.com"
+        )
+
+    @property
+    def platform_admin_emails(self) -> frozenset[str]:
+        """The allowlist, normalized for comparison.
+
+        Lowercased and stripped because the value is typed into a Render
+        environment field by hand, and an account that cannot be administered
+        because of a stray capital is indistinguishable from a break-in attempt
+        in the logs.
+        """
+        return frozenset(
+            part.strip().lower()
+            for part in self.PLATFORM_ADMIN_EMAILS.split(",")
+            if part.strip()
         )
 
     @property

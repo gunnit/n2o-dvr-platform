@@ -71,6 +71,18 @@ services:
       # frontend origin or they land on a dead page mid-purchase.
       - key: FRONTEND_URL
         value: https://dvr-sicurezza.it
+      # Comma-separated emails of the N2O staff who may run
+      # `POST /billing/admin/organizations/{id}/plan` — the endpoint that puts a
+      # tenant on a plan after an invoice is paid off PayPal. It names an
+      # organization by id, so it is the one place a request reaches across
+      # tenants, and it grants a plan for free.
+      #
+      # `sync: false` because it is the list of people who can do that, not a
+      # deploy detail, and because it is the only gate: while it is empty
+      # NOBODY can set a plan by hand — including us. Set it in the dashboard
+      # before relying on manual provisioning (DEPLOY.md §4c).
+      - key: PLATFORM_ADMIN_EMAILS
+        sync: false
       # The paywall (MB-2.6 / GATE 2). ON since 2026-07-28.
       #
       # What made it safe to flip: migration `e7f8a9b0c1d2` backfills an

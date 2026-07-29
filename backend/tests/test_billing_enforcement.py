@@ -212,6 +212,55 @@ def test_creating_an_azienda_is_gated():
     assert "ensure_site_slot(" in aziende, "the site limit is sold but unenforced"
 
 
+# --- cross-tenant endpoints ------------------------------------------------
+
+
+def test_every_cross_tenant_endpoint_is_platform_gated():
+    """An endpoint that names an ``organization_id`` needs platform authority.
+
+    Every other endpoint acts on `get_current_org()` — the caller's own tenant —
+    so the capability system is the whole answer. One that takes the id as a
+    path parameter is different in kind, and guarding it on `billing:manage`
+    made the admin plan endpoint a free-plan dispenser: signing up makes you the
+    admin of your own organization, so every customer held the capability, and
+    the id being a parameter meant they could also name someone else's.
+
+    Reads the decorators rather than calling them so a *new* cross-tenant
+    endpoint fails here on the day it is written.
+    """
+    offenders: list[str] = []
+    for path in _python_files(APP / "api"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        rel = str(path.relative_to(BACKEND)).replace("\\", "/")
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            routes = [
+                d.args[0].value
+                for d in node.decorator_list
+                if isinstance(d, ast.Call)
+                and d.args
+                and isinstance(d.args[0], ast.Constant)
+                and isinstance(d.args[0].value, str)
+            ]
+            if not any("{organization_id}" in r for r in routes):
+                continue
+            guards = {
+                n.func.id
+                for n in ast.walk(node)
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+            } | {
+                n.id for n in ast.walk(node) if isinstance(n, ast.Name)
+            }
+            if "require_platform_admin" not in guards:
+                offenders.append(f"{rel}:{node.lineno} {node.name}")
+
+    assert not offenders, (
+        "endpoint(s) take an organization_id without require_platform_admin — "
+        f"any tenant admin could act on any tenant: {offenders}"
+    )
+
+
 # --- INV-8: the seam holds -------------------------------------------------
 
 

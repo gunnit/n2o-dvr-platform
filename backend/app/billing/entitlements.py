@@ -265,6 +265,20 @@ async def resolve_entitlements(org_id: uuid.UUID, db: AsyncSession) -> Entitleme
     )
 
 
+async def get_account_type(org_id: uuid.UUID, db: AsyncSession) -> str | None:
+    """Which channel ``org_id`` belongs to, or ``None`` if there is no such org.
+
+    :func:`resolve_entitlements` deliberately cannot answer this: it soft-fails a
+    missing organization into the permissive fallback (INV-1), which reports
+    ``consultant``. That is right for a request whose own tenant vanished
+    mid-session and wrong for an administrator naming an organization by id —
+    there, "no such tenant" has to be distinguishable from "a consultant one".
+    """
+    return (
+        await db.execute(select(Organization.account_type).where(Organization.id == org_id))
+    ).scalar_one_or_none()
+
+
 async def get_entitlements(
     org_id: uuid.UUID = Depends(get_current_org),
     db: AsyncSession = Depends(get_db),

@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import Depends, HTTPException, status
@@ -5,6 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.permissions import capabilities_for, has_capability
 from app.core.security import decode_access_token
 from app.db.session import get_db
@@ -84,6 +86,35 @@ def require_capability(*capabilities: str):
         return user
 
     return _check
+
+
+async def require_platform_admin(user: User = Depends(get_current_user)) -> User:
+    """Gate an operation that reaches **across** tenants.
+
+    Distinct from every capability in ``app.core.permissions``, which answer
+    "what may this person do *inside their own organization*". ``billing:manage``
+    means "may commit **this** organization to a charge" and every self-serve
+    signup's first user holds it — so using it to guard an endpoint that takes
+    an arbitrary ``organization_id`` let any customer put themselves on any plan
+    for free, and rewrite other tenants' subscriptions besides.
+
+    Membership is a deploy-time allowlist rather than a role because there is no
+    such thing as a platform operator *inside* a tenant: the N2O staff who close
+    invoices are ordinary admins of the N2O organization. An empty allowlist
+    therefore denies everyone — the failure mode of missing configuration has to
+    be "nobody can", never "anybody can".
+    """
+    if user.email.strip().lower() not in settings.platform_admin_emails:
+        # Worth a line in the log: a request reaching here is either a
+        # misconfigured deploy or someone probing a cross-tenant endpoint.
+        logging.getLogger(__name__).warning(
+            "platform admin denied for %s (org %s)", user.email, user.organization_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Operazione riservata allo staff della piattaforma.",
+        )
+    return user
 
 
 async def get_current_capabilities(
