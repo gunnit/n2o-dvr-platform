@@ -15,10 +15,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.permissions import ASSESSMENTS_WRITE
 from app.data.niosh_cp import get_default_cp
 from app.data.niosh_factors import classify_ir, compute_plr
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.azienda import Azienda
 from app.models.mmc_valutazione import MmcValutazione
 from app.models.persona import Persona
@@ -165,7 +166,12 @@ async def list_mmc(
     return list(result.scalars().all())
 
 
-@router.post("", response_model=MmcValutazioneResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=MmcValutazioneResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def create_mmc(
     azienda_id: uuid.UUID,
     body: MmcValutazioneCreate,
@@ -277,7 +283,11 @@ def _build_patch_assignments(
     return assignments
 
 
-@router.patch("/{mmc_id}", response_model=MmcValutazioneResponse)
+@router.patch(
+    "/{mmc_id}",
+    response_model=MmcValutazioneResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def update_mmc(
     azienda_id: uuid.UUID,
     mmc_id: uuid.UUID,
@@ -308,7 +318,11 @@ async def update_mmc(
     return row
 
 
-@router.delete("/{mmc_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{mmc_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def delete_mmc(
     azienda_id: uuid.UUID,
     mmc_id: uuid.UUID,

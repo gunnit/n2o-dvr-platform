@@ -8,8 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.permissions import SURVEY_WRITE
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.ambiente import Ambiente
 from app.models.ambiente_foto import AmbienteFoto
 from app.models.azienda import Azienda
@@ -52,7 +53,12 @@ async def list_ambienti(
     return result.scalars().all()
 
 
-@router.post("", response_model=AmbienteResponse, status_code=201)
+@router.post(
+    "",
+    response_model=AmbienteResponse,
+    status_code=201,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def create_ambiente(
     azienda_id: uuid.UUID,
     body: AmbienteCreate,
@@ -95,7 +101,11 @@ async def get_ambiente(
     return ambiente
 
 
-@router.put("/{ambiente_id}", response_model=AmbienteResponse)
+@router.put(
+    "/{ambiente_id}",
+    response_model=AmbienteResponse,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def update_ambiente(
     azienda_id: uuid.UUID,
     ambiente_id: uuid.UUID,
@@ -119,7 +129,11 @@ async def update_ambiente(
     return ambiente
 
 
-@router.patch("/{ambiente_id}/ordine", response_model=AmbienteResponse)
+@router.patch(
+    "/{ambiente_id}/ordine",
+    response_model=AmbienteResponse,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def reorder_ambiente(
     azienda_id: uuid.UUID,
     ambiente_id: uuid.UUID,
@@ -150,7 +164,11 @@ async def reorder_ambiente(
     return ambiente
 
 
-@router.delete("/{ambiente_id}", status_code=204)
+@router.delete(
+    "/{ambiente_id}",
+    status_code=204,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def delete_ambiente(
     azienda_id: uuid.UUID,
     ambiente_id: uuid.UUID,
@@ -210,6 +228,7 @@ async def _get_ambiente_for_org(
     "/{ambiente_id}/foto",
     response_model=AmbienteFotoResponse,
     status_code=201,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
 )
 async def upload_ambiente_foto(
     azienda_id: uuid.UUID,
@@ -341,7 +360,11 @@ async def get_ambiente_foto_content(
     )
 
 
-@router.delete("/{ambiente_id}/foto/{foto_id}", status_code=204)
+@router.delete(
+    "/{ambiente_id}/foto/{foto_id}",
+    status_code=204,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def delete_ambiente_foto(
     azienda_id: uuid.UUID,
     ambiente_id: uuid.UUID,

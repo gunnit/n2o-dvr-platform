@@ -15,8 +15,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.permissions import ASSESSMENTS_WRITE
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.ambiente import Ambiente
 from app.models.azienda import Azienda
 from app.models.biologico_valutazione import BiologicoValutazione
@@ -92,7 +93,10 @@ async def list_biologico(
 
 
 @router.post(
-    "", response_model=BiologicoResponse, status_code=status.HTTP_201_CREATED
+    "",
+    response_model=BiologicoResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def upsert_biologico(
     azienda_id: uuid.UUID,
@@ -150,7 +154,11 @@ async def get_biologico(
     return row
 
 
-@router.patch("/{valutazione_id}", response_model=BiologicoResponse)
+@router.patch(
+    "/{valutazione_id}",
+    response_model=BiologicoResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def update_biologico(
     azienda_id: uuid.UUID,
     valutazione_id: uuid.UUID,
@@ -183,7 +191,11 @@ async def update_biologico(
     return row
 
 
-@router.delete("/{valutazione_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{valutazione_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def delete_biologico(
     azienda_id: uuid.UUID,
     valutazione_id: uuid.UUID,

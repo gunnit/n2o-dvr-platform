@@ -10,8 +10,9 @@ from app.config import settings
 from app.billing.entitlements import Entitlements, get_entitlements
 from app.billing.metering import spend_credits
 from app.core.exceptions import AIError, BadRequestError, NotFoundError
+from app.core.permissions import SURVEY_WRITE
 from app.db.session import async_session_factory, get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.azienda import Azienda
 from app.models.sostanza_chimica import SostanzaChimica
 from app.schemas.sostanza_chimica import (
@@ -57,7 +58,12 @@ async def list_sostanze_chimiche(
     return result.scalars().all()
 
 
-@router.post("", response_model=SostanzaChimicaResponse, status_code=201)
+@router.post(
+    "",
+    response_model=SostanzaChimicaResponse,
+    status_code=201,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def create_sostanza_chimica(
     azienda_id: uuid.UUID,
     body: SostanzaChimicaCreate,
@@ -81,6 +87,7 @@ async def create_sostanza_chimica(
     "/batch-upload",
     response_model=BatchUploadResponse,
     status_code=202,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
 )
 async def batch_upload_sds(
     azienda_id: uuid.UUID,
@@ -243,7 +250,11 @@ async def get_sostanza_chimica(
     return sostanza
 
 
-@router.put("/{sostanza_id}", response_model=SostanzaChimicaResponse)
+@router.put(
+    "/{sostanza_id}",
+    response_model=SostanzaChimicaResponse,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def update_sostanza_chimica(
     azienda_id: uuid.UUID,
     sostanza_id: uuid.UUID,
@@ -269,7 +280,11 @@ async def update_sostanza_chimica(
     return sostanza
 
 
-@router.patch("/{sostanza_id}/review", response_model=SostanzaChimicaResponse)
+@router.patch(
+    "/{sostanza_id}/review",
+    response_model=SostanzaChimicaResponse,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def mark_reviewed(
     azienda_id: uuid.UUID,
     sostanza_id: uuid.UUID,
@@ -293,7 +308,11 @@ async def mark_reviewed(
     return sostanza
 
 
-@router.delete("/{sostanza_id}", status_code=204)
+@router.delete(
+    "/{sostanza_id}",
+    status_code=204,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def delete_sostanza_chimica(
     azienda_id: uuid.UUID,
     sostanza_id: uuid.UUID,

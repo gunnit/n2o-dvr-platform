@@ -26,8 +26,9 @@ from sqlalchemy import distinct, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
+from app.core.permissions import ASSESSMENTS_WRITE
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.azienda import Azienda
 from app.models.stress_valutazione import StressValutazione
 from app.schemas.stress_valutazione import (
@@ -199,7 +200,11 @@ async def list_mansioni(
     return [r for r in result.scalars().all() if r is not None]
 
 
-@router.put("", response_model=StressValutazioneResponse)
+@router.put(
+    "",
+    response_model=StressValutazioneResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def upsert_valutazione(
     azienda_id: uuid.UUID,
     body: StressValutazioneUpsert,

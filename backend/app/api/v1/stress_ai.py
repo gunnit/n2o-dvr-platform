@@ -22,8 +22,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.billing.entitlements import Entitlements, get_entitlements
 from app.billing.metering import metered
 from app.core.exceptions import NotFoundError
+from app.core.permissions import ASSESSMENTS_WRITE
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.azienda import Azienda
 from app.services.ai.stress_misure_ai import suggest_stress_misure
 from app.services.stress_calculator import calculate_stress
@@ -64,7 +65,11 @@ async def _verify_azienda(
         raise NotFoundError("Azienda not found")
 
 
-@router.post("/ai-misure", response_model=StressAiMisureResponse)
+@router.post(
+    "/ai-misure",
+    response_model=StressAiMisureResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def ai_misure_correttive(
     azienda_id: uuid.UUID,
     body: StressAiMisureRequest,

@@ -30,6 +30,7 @@ from app.billing.entitlements import Entitlements, get_entitlements
 from app.billing.metering import metered
 from app.core.audit import log_audit
 from app.core.exceptions import AIError, BadRequestError, NotFoundError
+from app.core.permissions import ASSESSMENTS_WRITE
 from app.data.haccp_activity_types import (
     get_activity_type,
     get_default_ccps,
@@ -37,7 +38,7 @@ from app.data.haccp_activity_types import (
     merge_ccps,
 )
 from app.db.session import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_capability
 from app.models.azienda import Azienda
 from app.models.haccp_form import HaccpConfig
 from app.models.user import User
@@ -119,6 +120,7 @@ async def get_haccp_config(
 @router.put(
     "/aziende/{azienda_id}/haccp/config",
     response_model=HaccpConfigResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def upsert_haccp_config(
     azienda_id: uuid.UUID,
@@ -196,6 +198,7 @@ async def upsert_haccp_config(
 @router.post(
     "/aziende/{azienda_id}/haccp/config/regenerate-ccps",
     response_model=HaccpRegenerateCcpsResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def regenerate_ccps(
     azienda_id: uuid.UUID,
@@ -293,6 +296,7 @@ class HaccpSuggestCcpResponse(BaseModel):
 @router.post(
     "/aziende/{azienda_id}/haccp/suggest-ccp",
     response_model=HaccpSuggestCcpResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def suggest_ccp(
     azienda_id: uuid.UUID,

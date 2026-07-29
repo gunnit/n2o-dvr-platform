@@ -24,8 +24,9 @@ from pydantic import BaseModel as PydanticBaseModel
 from app.billing.entitlements import Entitlements, get_entitlements
 from app.billing.metering import metered
 from app.core.exceptions import AIError, NotFoundError
+from app.core.permissions import ASSESSMENTS_WRITE
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.azienda import Azienda
 from app.models.pos import Pos
 from app.schemas.pos import (
@@ -120,7 +121,12 @@ async def list_pos(
     return list(result.scalars().all())
 
 
-@router.post("", response_model=PosResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=PosResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def create_pos(
     azienda_id: uuid.UUID,
     body: PosCreate,
@@ -147,7 +153,11 @@ async def get_pos(
     return await _get_pos(pos_id, azienda_id, db)
 
 
-@router.put("/{pos_id}", response_model=PosResponse)
+@router.put(
+    "/{pos_id}",
+    response_model=PosResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def update_pos(
     azienda_id: uuid.UUID,
     pos_id: uuid.UUID,
@@ -164,7 +174,11 @@ async def update_pos(
     return pos
 
 
-@router.delete("/{pos_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{pos_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def delete_pos(
     azienda_id: uuid.UUID,
     pos_id: uuid.UUID,
@@ -180,7 +194,11 @@ async def delete_pos(
 # --- DPI matrix sub-resource ---------------------------------------------
 
 
-@router.post("/{pos_id}/dpi-matrix", response_model=PosResponse)
+@router.post(
+    "/{pos_id}/dpi-matrix",
+    response_model=PosResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def update_dpi_matrix(
     azienda_id: uuid.UUID,
     pos_id: uuid.UUID,
@@ -219,7 +237,11 @@ async def update_dpi_matrix(
 # --- Phase-builder sub-resource (US-4.7) ---------------------------------
 
 
-@router.put("/{pos_id}/fasi", response_model=PosResponse)
+@router.put(
+    "/{pos_id}/fasi",
+    response_model=PosResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def update_phases(
     azienda_id: uuid.UUID,
     pos_id: uuid.UUID,
@@ -278,7 +300,11 @@ class PhaseSuggestResponse(PydanticBaseModel):
     dpi: list[str]
 
 
-@router.post("/meta/suggest-phase", response_model=PhaseSuggestResponse)
+@router.post(
+    "/meta/suggest-phase",
+    response_model=PhaseSuggestResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def suggest_phase_details(
     azienda_id: uuid.UUID,
     body: PhaseSuggestRequest,
@@ -343,7 +369,11 @@ class DpiMatrixSuggestResponse(PydanticBaseModel):
     matrix: dict[str, dict[str, list[str]]]
 
 
-@router.post("/meta/suggest-dpi-matrix", response_model=DpiMatrixSuggestResponse)
+@router.post(
+    "/meta/suggest-dpi-matrix",
+    response_model=DpiMatrixSuggestResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def suggest_dpi_matrix(
     azienda_id: uuid.UUID,
     body: DpiMatrixSuggestRequest,

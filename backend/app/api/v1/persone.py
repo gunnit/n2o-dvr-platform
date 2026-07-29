@@ -8,8 +8,9 @@ from sqlalchemy.orm import selectinload
 from app.billing.entitlements import Entitlements, get_entitlements
 from app.billing.metering import metered
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.permissions import SURVEY_WRITE
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.ambiente import Ambiente
 from app.models.attrezzatura import Attrezzatura
 from app.models.azienda import Azienda
@@ -77,7 +78,12 @@ async def list_persone(
     return list(result.scalars().all())
 
 
-@router.post("", response_model=PersonaResponse, status_code=201)
+@router.post(
+    "",
+    response_model=PersonaResponse,
+    status_code=201,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def create_persona(
     azienda_id: uuid.UUID,
     body: PersonaCreate,
@@ -118,7 +124,11 @@ async def get_persona(
     return persona
 
 
-@router.put("/{persona_id}", response_model=PersonaResponse)
+@router.put(
+    "/{persona_id}",
+    response_model=PersonaResponse,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def update_persona(
     azienda_id: uuid.UUID,
     persona_id: uuid.UUID,
@@ -144,7 +154,11 @@ async def update_persona(
     return reloaded
 
 
-@router.delete("/{persona_id}", status_code=204)
+@router.delete(
+    "/{persona_id}",
+    status_code=204,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def delete_persona(
     azienda_id: uuid.UUID,
     persona_id: uuid.UUID,
@@ -166,6 +180,7 @@ async def delete_persona(
 @router.post(
     "/{persona_id}/dpi-rischi/suggerisci",
     response_model=DpiRischiSuggerito,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
 )
 async def suggerisci_dpi_rischi(
     azienda_id: uuid.UUID,

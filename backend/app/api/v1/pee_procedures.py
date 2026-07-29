@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.permissions import ASSESSMENTS_WRITE
 from app.data.pee_procedures import (
     EVENT_CODES,
     PROCEDURE_LETTERS,
@@ -28,7 +29,7 @@ from app.data.pee_procedures import (
     merge_with_overrides,
 )
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.azienda import Azienda
 from app.models.pee_plan import PeePlan
 
@@ -238,6 +239,7 @@ async def list_procedures(
 @router.put(
     "/procedure/{evento}/{lettera}",
     response_model=ProceduraResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def save_procedure_override(
     azienda_id: uuid.UUID,
@@ -267,6 +269,7 @@ async def save_procedure_override(
 @router.delete(
     "/procedure/{evento}/{lettera}",
     response_model=ProceduraResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def reset_procedure(
     azienda_id: uuid.UUID,
@@ -341,7 +344,11 @@ async def get_pee_plan(
     return _plan_to_response(result.scalar_one_or_none())
 
 
-@router.put("/plan", response_model=PeePlanConfigResponse)
+@router.put(
+    "/plan",
+    response_model=PeePlanConfigResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def update_pee_plan(
     azienda_id: uuid.UUID,
     body: PeePlanConfigBody,

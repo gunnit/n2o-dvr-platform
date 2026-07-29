@@ -10,8 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.billing.entitlements import Entitlements, get_entitlements
 from app.billing.metering import metered
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.permissions import SURVEY_WRITE
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.ambiente import Ambiente
 from app.models.ambiente_foto import AmbienteFoto
 from app.models.attrezzatura import Attrezzatura
@@ -82,7 +83,12 @@ async def list_attrezzature(
     return result.scalars().all()
 
 
-@router.post("", response_model=AttrezzaturaResponse, status_code=201)
+@router.post(
+    "",
+    response_model=AttrezzaturaResponse,
+    status_code=201,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def create_attrezzatura(
     azienda_id: uuid.UUID,
     body: AttrezzaturaCreate,
@@ -117,7 +123,11 @@ async def get_attrezzatura(
     return attrezzatura
 
 
-@router.put("/{attrezzatura_id}", response_model=AttrezzaturaResponse)
+@router.put(
+    "/{attrezzatura_id}",
+    response_model=AttrezzaturaResponse,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def update_attrezzatura(
     azienda_id: uuid.UUID,
     attrezzatura_id: uuid.UUID,
@@ -150,6 +160,7 @@ async def update_attrezzatura(
 @router.post(
     "/suggerisci/{ambiente_id}",
     response_model=SuggestAttrezzatureResponse,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
 )
 async def suggerisci_attrezzature(
     azienda_id: uuid.UUID,
@@ -206,6 +217,7 @@ async def suggerisci_attrezzature(
 @router.post(
     "/estrai-foto/{ambiente_id}",
     response_model=ExtractAttrezzatureFromPhotosResponse,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
 )
 async def estrai_attrezzature_da_foto(
     azienda_id: uuid.UUID,
@@ -291,7 +303,11 @@ async def estrai_attrezzature_da_foto(
     )
 
 
-@router.delete("/{attrezzatura_id}", status_code=204)
+@router.delete(
+    "/{attrezzatura_id}",
+    status_code=204,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def delete_attrezzatura(
     azienda_id: uuid.UUID,
     attrezzatura_id: uuid.UUID,

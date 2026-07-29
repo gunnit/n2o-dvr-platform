@@ -21,8 +21,9 @@ from sqlalchemy.orm import selectinload
 from app.billing.entitlements import Entitlements, get_entitlements
 from app.billing.metering import refund_credits, spend_credits
 from app.core.exceptions import NotFoundError
+from app.core.permissions import ASSESSMENTS_WRITE
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.ambiente import Ambiente
 from app.models.azienda import Azienda
 from app.models.misura_miglioramento import MisuraMiglioramento
@@ -75,7 +76,10 @@ async def list_misure(
 
 
 @router.post(
-    "", response_model=MisuraMiglioramentoResponse, status_code=201
+    "",
+    response_model=MisuraMiglioramentoResponse,
+    status_code=201,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def create_misura(
     azienda_id: uuid.UUID,
@@ -95,7 +99,9 @@ async def create_misura(
 
 
 @router.put(
-    "/{misura_id}", response_model=MisuraMiglioramentoResponse
+    "/{misura_id}",
+    response_model=MisuraMiglioramentoResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def update_misura(
     azienda_id: uuid.UUID,
@@ -121,7 +127,11 @@ async def update_misura(
     return misura
 
 
-@router.delete("/{misura_id}", status_code=204)
+@router.delete(
+    "/{misura_id}",
+    status_code=204,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def delete_misura(
     azienda_id: uuid.UUID,
     misura_id: uuid.UUID,
@@ -159,6 +169,7 @@ _AI_CONCURRENCY = 5
 @router.post(
     "/genera-da-rischi",
     response_model=GeneraDaRischiResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def genera_da_rischi(
     azienda_id: uuid.UUID,

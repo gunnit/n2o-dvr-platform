@@ -14,13 +14,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.permissions import ASSESSMENTS_WRITE
 from app.data.dlgs_151_2001 import (
     INCOMPATIBLE_RISKS,
     find_matches_for_mansione,
     has_any_incompatible_risk,
 )
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.azienda import Azienda
 from app.models.gestanti_valutazione import GestantiValutazione
 from app.models.persona import Persona
@@ -108,6 +109,7 @@ def _index_existing_decisions(
 @router.post(
     "/aziende/{azienda_id}/gestanti/cross-reference",
     response_model=CrossReferenceResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def cross_reference(
     azienda_id: uuid.UUID,
@@ -195,6 +197,7 @@ async def cross_reference(
 @router.post(
     "/aziende/{azienda_id}/gestanti/{valutazione_id}/decision",
     response_model=DecisionResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def record_decision(
     azienda_id: uuid.UUID,
@@ -309,6 +312,7 @@ async def list_gestanti(
     "/aziende/{azienda_id}/gestanti",
     response_model=GestantiResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def create_gestanti(
     azienda_id: uuid.UUID,
@@ -373,6 +377,7 @@ async def get_gestanti(
 @router.patch(
     "/aziende/{azienda_id}/gestanti/{valutazione_id}",
     response_model=GestantiResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def update_gestanti(
     azienda_id: uuid.UUID,
@@ -402,6 +407,7 @@ async def update_gestanti(
 @router.delete(
     "/aziende/{azienda_id}/gestanti/{valutazione_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def delete_gestanti(
     azienda_id: uuid.UUID,

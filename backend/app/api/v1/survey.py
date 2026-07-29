@@ -9,8 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.permissions import SURVEY_WRITE
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.ambiente import Ambiente
 from app.models.attrezzatura import Attrezzatura
 from app.models.azienda import Azienda
@@ -109,7 +110,11 @@ _AZIENDA_STEP_FIELDS: dict[int, list[str]] = {
 }
 
 
-@router.put("/step/{step_number}", response_model=dict)
+@router.put(
+    "/step/{step_number}",
+    response_model=dict,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def save_survey_step(
     azienda_id: uuid.UUID,
     step_number: int,
@@ -184,7 +189,11 @@ async def _survey_completeness_errors(azienda_id: uuid.UUID, db: AsyncSession) -
     return missing
 
 
-@router.post("/complete", response_model=SurveyCompleteResponse)
+@router.post(
+    "/complete",
+    response_model=SurveyCompleteResponse,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def complete_survey(
     azienda_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
@@ -213,7 +222,11 @@ async def complete_survey(
     )
 
 
-@router.post("/sign", response_model=SurveySignResponse)
+@router.post(
+    "/sign",
+    response_model=SurveySignResponse,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def sign_survey(
     azienda_id: uuid.UUID,
     body: SurveySignRequest,
@@ -263,7 +276,11 @@ async def sign_survey(
     )
 
 
-@router.post("/revision", response_model=SurveyRevisionResponse)
+@router.post(
+    "/revision",
+    response_model=SurveyRevisionResponse,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def open_revision(
     azienda_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),

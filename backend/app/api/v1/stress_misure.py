@@ -18,8 +18,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.permissions import ASSESSMENTS_WRITE
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.azienda import Azienda
 from app.models.stress_misura_libreria import StressMisuraLibreria
 from app.schemas.stress_misura import (
@@ -71,7 +72,12 @@ async def list_misure(
     return result.scalars().all()
 
 
-@router.post("", response_model=StressMisuraLibreriaResponse, status_code=201)
+@router.post(
+    "",
+    response_model=StressMisuraLibreriaResponse,
+    status_code=201,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def create_misura(
     azienda_id: uuid.UUID,
     body: StressMisuraLibreriaCreate,
@@ -91,7 +97,11 @@ async def create_misura(
     return misura
 
 
-@router.put("/{misura_id}", response_model=StressMisuraLibreriaResponse)
+@router.put(
+    "/{misura_id}",
+    response_model=StressMisuraLibreriaResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def update_misura(
     azienda_id: uuid.UUID,
     misura_id: uuid.UUID,
@@ -116,7 +126,11 @@ async def update_misura(
     return misura
 
 
-@router.delete("/{misura_id}", status_code=204)
+@router.delete(
+    "/{misura_id}",
+    status_code=204,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def delete_misura(
     azienda_id: uuid.UUID,
     misura_id: uuid.UUID,

@@ -21,8 +21,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError
+from app.core.permissions import ASSESSMENTS_WRITE
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.ambiente import Ambiente
 from app.models.attrezzatura import Attrezzatura
 from app.models.azienda import Azienda
@@ -194,6 +195,7 @@ async def list_pericoli_for_rischio(
     "/ambienti/{ambiente_id}/rischi/{rischio_id}/pericoli",
     response_model=PericoloValutazioneResponse,
     status_code=201,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def create_pericolo_valutazione(
     azienda_id: uuid.UUID,
@@ -220,6 +222,7 @@ async def create_pericolo_valutazione(
 @router.put(
     "/ambienti/{ambiente_id}/rischi/{rischio_id}/pericoli/{pericolo_id}",
     response_model=PericoloValutazioneResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def update_pericolo_valutazione(
     azienda_id: uuid.UUID,
@@ -253,6 +256,7 @@ async def update_pericolo_valutazione(
 @router.delete(
     "/ambienti/{ambiente_id}/rischi/{rischio_id}/pericoli/{pericolo_id}",
     status_code=204,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def delete_pericolo_valutazione(
     azienda_id: uuid.UUID,
@@ -282,6 +286,7 @@ async def delete_pericolo_valutazione(
 @router.post(
     "/ambienti/{ambiente_id}/rischi/{rischio_id}/pericoli/batch",
     response_model=list[PericoloValutazioneResponse],
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def batch_upsert_pericoli(
     azienda_id: uuid.UUID,

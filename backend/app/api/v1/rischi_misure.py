@@ -18,8 +18,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
+from app.core.permissions import ASSESSMENTS_WRITE
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.azienda import Azienda
 from app.models.rischio_misura_libreria import RischioMisuraLibreria
 from app.schemas.rischio_misura import (
@@ -69,7 +70,10 @@ async def list_misure(
 
 
 @router.post(
-    "", response_model=RischioMisuraLibreriaResponse, status_code=201
+    "",
+    response_model=RischioMisuraLibreriaResponse,
+    status_code=201,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def create_misura(
     azienda_id: uuid.UUID,
@@ -96,7 +100,9 @@ async def create_misura(
 
 
 @router.patch(
-    "/{misura_id}", response_model=RischioMisuraLibreriaResponse
+    "/{misura_id}",
+    response_model=RischioMisuraLibreriaResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def update_misura(
     azienda_id: uuid.UUID,
@@ -125,7 +131,11 @@ async def update_misura(
     return misura
 
 
-@router.delete("/{misura_id}", status_code=204)
+@router.delete(
+    "/{misura_id}",
+    status_code=204,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def delete_misura(
     azienda_id: uuid.UUID,
     misura_id: uuid.UUID,

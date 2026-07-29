@@ -15,8 +15,8 @@ from app.billing.gates import ensure_site_slot, ensure_subscription_active
 from app.billing.metering import metered
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.db.session import get_db
-from app.core.permissions import AZIENDE_CREATE, AZIENDE_DELETE, has_capability
-from app.dependencies import get_current_org, get_current_user
+from app.core.permissions import AZIENDE_CREATE, AZIENDE_DELETE, SURVEY_WRITE, has_capability
+from app.dependencies import get_current_org, get_current_user, require_capability
 from app.models.azienda import Azienda
 from app.models.description_revision import (
     SOURCE_AI,
@@ -346,7 +346,11 @@ async def get_azienda(
     return azienda
 
 
-@router.put("/{azienda_id}", response_model=AziendaResponse)
+@router.put(
+    "/{azienda_id}",
+    response_model=AziendaResponse,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def update_azienda(
     azienda_id: uuid.UUID,
     body: AziendaUpdate,
@@ -430,7 +434,11 @@ async def delete_azienda(
     await db.commit()
 
 
-@router.post("/{azienda_id}/genera-descrizione", response_model=DescriptionResponse)
+@router.post(
+    "/{azienda_id}/genera-descrizione",
+    response_model=DescriptionResponse,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def genera_descrizione(
     azienda_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org),
@@ -496,7 +504,11 @@ async def genera_descrizione(
 _VISURA_MAX_BYTES = 10 * 1024 * 1024
 
 
-@router.post("/{azienda_id}/visura", response_model=VisuraUploadResponse)
+@router.post(
+    "/{azienda_id}/visura",
+    response_model=VisuraUploadResponse,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
 async def upload_visura(
     azienda_id: uuid.UUID,
     file: UploadFile = File(...),
@@ -623,6 +635,7 @@ async def list_description_revisions(
 @router.post(
     "/{azienda_id}/description-revisions/{revision_id}/restore",
     response_model=DescriptionRevisionRestoreResponse,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
 )
 async def restore_description_revision(
     azienda_id: uuid.UUID,

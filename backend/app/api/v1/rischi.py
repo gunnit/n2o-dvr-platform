@@ -8,8 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.billing.entitlements import Entitlements, get_entitlements
 from app.billing.metering import metered
 from app.core.exceptions import NotFoundError
+from app.core.permissions import ASSESSMENTS_WRITE
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.ambiente import Ambiente
 from app.models.attrezzatura import Attrezzatura
 from app.models.azienda import Azienda
@@ -70,6 +71,7 @@ class RischiBatchRequest(BaseModel):
 @router.post(
     "/ambienti/{ambiente_id}/rischi/batch",
     response_model=list[RischioResponse],
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def batch_upsert_rischi(
     azienda_id: uuid.UUID,
@@ -121,7 +123,12 @@ async def batch_upsert_rischi(
     return out
 
 
-@router.post("/ambienti/{ambiente_id}/rischi", response_model=RischioResponse, status_code=201)
+@router.post(
+    "/ambienti/{ambiente_id}/rischi",
+    response_model=RischioResponse,
+    status_code=201,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def create_rischio(
     azienda_id: uuid.UUID,
     ambiente_id: uuid.UUID,
@@ -143,7 +150,11 @@ async def create_rischio(
     return rischio
 
 
-@router.put("/ambienti/{ambiente_id}/rischi/{rischio_id}", response_model=RischioResponse)
+@router.put(
+    "/ambienti/{ambiente_id}/rischi/{rischio_id}",
+    response_model=RischioResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def update_rischio(
     azienda_id: uuid.UUID,
     ambiente_id: uuid.UUID,
@@ -174,6 +185,7 @@ async def update_rischio(
 @router.post(
     "/rischi/{rischio_id}/suggerisci-misure",
     response_model=SuggestMeasuresResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def suggerisci_misure(
     azienda_id: uuid.UUID,
@@ -211,6 +223,7 @@ async def suggerisci_misure(
 @router.post(
     "/ambienti/{ambiente_id}/rischi/suggerisci",
     response_model=SuggestRischiResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
 )
 async def suggerisci_rischi(
     azienda_id: uuid.UUID,

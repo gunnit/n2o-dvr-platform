@@ -21,8 +21,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.permissions import ASSESSMENTS_WRITE
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.azienda import Azienda
 from app.models.persona import Persona
 from app.models.vdt_valutazione import VdtValutazione
@@ -117,7 +118,12 @@ async def list_vdt(
     return list(result.scalars().all())
 
 
-@router.post("", response_model=VdtValutazioneResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=VdtValutazioneResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def create_vdt(
     azienda_id: uuid.UUID,
     body: VdtValutazioneCreate,
@@ -155,7 +161,11 @@ async def get_vdt(
     return row
 
 
-@router.patch("/{vdt_id}", response_model=VdtValutazioneResponse)
+@router.patch(
+    "/{vdt_id}",
+    response_model=VdtValutazioneResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def update_vdt(
     azienda_id: uuid.UUID,
     vdt_id: uuid.UUID,
@@ -196,7 +206,11 @@ async def update_vdt(
     return row
 
 
-@router.delete("/{vdt_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{vdt_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def delete_vdt(
     azienda_id: uuid.UUID,
     vdt_id: uuid.UUID,

@@ -18,13 +18,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.permissions import ASSESSMENTS_WRITE
 from app.data.duvri_interference_rules import (
     evaluate_rules,
     get_rule,
     list_equipment_types,
 )
 from app.db.session import get_db
-from app.dependencies import get_current_org
+from app.dependencies import get_current_org, require_capability
 from app.models.azienda import Azienda
 from app.models.duvri import Duvri
 from app.schemas.duvri import (
@@ -119,7 +120,12 @@ async def list_duvri(
     return [_serialize(d, azienda) for d in result.scalars().all()]
 
 
-@router.post("", response_model=DuvriResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=DuvriResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def create_duvri(
     azienda_id: uuid.UUID,
     body: DuvriCreate,
@@ -158,7 +164,11 @@ async def get_duvri(
     return _serialize(duvri, azienda)
 
 
-@router.patch("/{duvri_id}", response_model=DuvriResponse)
+@router.patch(
+    "/{duvri_id}",
+    response_model=DuvriResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def update_duvri(
     azienda_id: uuid.UUID,
     duvri_id: uuid.UUID,
@@ -245,7 +255,11 @@ async def analyze_interferences(
     )
 
 
-@router.post("/{duvri_id}/interferences/decision", response_model=DuvriResponse)
+@router.post(
+    "/{duvri_id}/interferences/decision",
+    response_model=DuvriResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def record_interference_decision(
     azienda_id: uuid.UUID,
     duvri_id: uuid.UUID,
@@ -326,7 +340,11 @@ async def equipment_types(
     return list_equipment_types()
 
 
-@router.delete("/{duvri_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{duvri_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
 async def delete_duvri(
     azienda_id: uuid.UUID,
     duvri_id: uuid.UUID,
