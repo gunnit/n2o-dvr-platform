@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Clock,
   Database,
+  History,
   Loader2,
   Mail,
   RefreshCw,
@@ -28,6 +29,7 @@ import { useApi } from "@/hooks/use-api";
 import { parseApiDate } from "@/lib/ui/api-date";
 import { usePermissions } from "@/hooks/use-permissions";
 import { ADMIN_TOOLS } from "@/lib/permissions";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /**
  * Admin backup status panel (US-5.4).
@@ -249,10 +251,11 @@ export default function BackupsSettingsPage() {
         </CardHeader>
         <CardContent>
           {!status || status.history.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Nessun evento di backup ancora registrato. Verrà popolato dopo la
-              prima esecuzione del job notturno.
-            </p>
+            <EmptyState
+              icon={History}
+              title="Nessun evento registrato"
+              body="La cronologia si popola dopo la prima esecuzione del job notturno."
+            />
           ) : (
             <div className="space-y-2">
               {status.history.map((evt) => (

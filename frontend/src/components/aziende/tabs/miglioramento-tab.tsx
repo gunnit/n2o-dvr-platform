@@ -43,6 +43,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useApi } from "@/hooks/use-api";
 import type { LivelloRischio } from "@/types";
 import { RISK_BAR, RISK_CHIP } from "@/lib/ui/risk";
+import { Select } from "@/components/ui/select";
 
 interface MiglioramentoTabProps {
   aziendaId: string;
@@ -631,15 +632,14 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                       {/* Priorità */}
                       <TableCell className="py-3 whitespace-normal">
                         {isEditing ? (
-                          <select
+                          <Select
                             value={editDraft.priorita}
                             onChange={(e) =>
                               setEditDraft((d) => ({
                                 ...d,
                                 priorita: e.target.value,
                               }))
-                            }
-                            className="h-9 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-2 text-[13px] text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                            } size="sm" className="text-[13px]"
                           >
                             <option value="">—</option>
                             {LIVELLO_OPTIONS.map((o) => (
@@ -647,7 +647,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                                 {o.label}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                         ) : (
                           <PriorityCell priorita={row.priorita} />
                         )}
@@ -749,15 +749,14 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                       {/* Responsabile */}
                       <TableCell className="py-3 whitespace-normal">
                         {isEditing ? (
-                          <select
+                          <Select
                             value={editDraft.responsabile}
                             onChange={(e) =>
                               setEditDraft((d) => ({
                                 ...d,
                                 responsabile: e.target.value,
                               }))
-                            }
-                            className="h-9 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-2 text-[13px] text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                            } size="sm" className="text-[13px]"
                           >
                             <option value="">—</option>
                             {RESPONSABILE_OPTIONS.map((o) => (
@@ -773,7 +772,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                                   {editDraft.responsabile}
                                 </option>
                               )}
-                          </select>
+                          </Select>
                         ) : row.responsabile ? (
                           <span className="block break-words text-[13px] text-[#273951]" title={row.responsabile}>
                             {row.responsabile}
@@ -952,7 +951,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="misura-responsabile">Responsabile</Label>
-                <select
+                <Select
                   id="misura-responsabile"
                   value={createDraft.responsabile}
                   onChange={(e) =>
@@ -961,7 +960,6 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                       responsabile: e.target.value,
                     }))
                   }
-                  className="h-10 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-3 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                 >
                   <option value="">—</option>
                   {RESPONSABILE_OPTIONS.map((o) => (
@@ -975,7 +973,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                         {createDraft.responsabile}
                       </option>
                     )}
-                </select>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="misura-scadenza">Scadenza</Label>
@@ -993,7 +991,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="misura-priorita">Priorità</Label>
-                <select
+                <Select
                   id="misura-priorita"
                   value={createDraft.priorita}
                   onChange={(e) =>
@@ -1002,7 +1000,6 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                       priorita: e.target.value,
                     }))
                   }
-                  className="h-10 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-3 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                 >
                   <option value="">—</option>
                   {LIVELLO_OPTIONS.map((o) => (
@@ -1010,7 +1007,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                       {o.label}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             </div>
           </div>
@@ -1118,7 +1115,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
                 <DialogTitle>Eliminare misura?</DialogTitle>
                 <DialogDescription>
                   La misura verrà rimossa dal Programma di Miglioramento.
-                  L&apos;operazione non puo&apos; essere annullata.
+                  L&apos;operazione non può essere annullata.
                 </DialogDescription>
               </div>
             </div>

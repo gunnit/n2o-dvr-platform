@@ -39,8 +39,8 @@ export const SURVEY_STATUS_META: Record<SurveyStatusKey, StatusMeta> = {
   },
   in_revisione: {
     label: "In revisione",
-    badge: "bg-[#f5f0ff] text-[#5b21b6] border border-[#e4d8ff]",
-    accent: "violet",
+    badge: "bg-[rgba(27,85,148,0.1)] text-[#1b5594] border border-[rgba(27,85,148,0.28)]",
+    accent: "sky",
   },
 };
 

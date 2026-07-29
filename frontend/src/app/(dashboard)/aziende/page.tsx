@@ -25,6 +25,7 @@ import {
 import { Callout } from "@/components/ui/callout";
 import { usePermissions } from "@/hooks/use-permissions";
 import { AZIENDE_CREATE } from "@/lib/permissions";
+import { FilterTabs } from "@/components/ui/filter-tabs";
 
 const FILTERS: { id: SurveyStatusBucket; label: string }[] = [
   { id: "all", label: "Tutte" },
@@ -194,31 +195,11 @@ export default function AziendePage() {
               className="h-9 w-full rounded-md border border-[#e5edf5] bg-white pl-9 pr-3 text-[13.5px] text-[#061b31] placeholder:text-[#94a3b8] focus:border-primary focus:outline-none focus:ring-2 focus:ring-[rgba(0,61,116,0.12)]"
             />
           </div>
-          {FILTERS.map((f) => {
-            const count = counts[f.id] ?? 0;
-            const active = activeFilter === f.id;
-            return (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setActiveFilter(f.id)}
-                className={`inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-[13px] font-medium transition-colors ${
-                  active
-                    ? "border-[#061b31] bg-[#061b31] text-white"
-                    : "border-[#e5edf5] bg-white text-[#273951] hover:border-[#d1d9e3]"
-                }`}
-              >
-                {f.label}
-                {count > 0 && (
-                  <span
-                    className={`tnum text-[11.5px] ${active ? "opacity-70" : "text-[#94a3b8]"}`}
-                  >
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+          <FilterTabs
+            tabs={FILTERS.map((f) => ({ ...f, count: counts[f.id] ?? 0 }))}
+            value={activeFilter}
+            onChange={setActiveFilter}
+          />
         </div>
       )}
 

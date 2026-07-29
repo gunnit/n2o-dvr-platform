@@ -21,6 +21,7 @@ import { AIContent } from "./ai-filter-context";
 import { FormError } from "@/components/ui/form-error";
 import { SCALE_CHIP, TONE_SURFACE } from "@/lib/ui/tones";
 import { cn } from "@/lib/utils";
+import { Select } from "@/components/ui/select";
 
 /**
  * AI improvement measures panel (US-2.6).
@@ -644,27 +645,25 @@ function EditForm({
         className="w-full rounded-md border border-input bg-transparent px-2 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
       />
       <div className="grid grid-cols-2 gap-2">
-        <select
+        <Select
           value={priorita}
-          onChange={(e) => setPriorita(e.target.value as Priorita)}
-          className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
+          onChange={(e) => setPriorita(e.target.value as Priorita)} size="sm" className="w-auto"
         >
           <option value="bassa">Priorita bassa</option>
           <option value="media">Priorita media</option>
           <option value="alta">Priorita alta</option>
           <option value="urgente">Priorita urgente</option>
-        </select>
-        <select
+        </Select>
+        <Select
           value={tipo}
-          onChange={(e) => setTipo(e.target.value as TipoMisura)}
-          className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
+          onChange={(e) => setTipo(e.target.value as TipoMisura)} size="sm" className="w-auto"
         >
           <option value="tecnica">Tecnica</option>
           <option value="organizzativa">Organizzativa</option>
           <option value="dpi">DPI</option>
           <option value="formazione">Formazione</option>
           <option value="sorveglianza_sanitaria">Sorv. sanitaria</option>
-        </select>
+        </Select>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <input

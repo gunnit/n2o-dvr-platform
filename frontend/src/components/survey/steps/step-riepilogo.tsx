@@ -531,10 +531,10 @@ export function StepRiepilogo({
                       {a.descrizione || "-"}
                     </TableCell>
                     <TableCell className="text-center">
-                      {a.marcatura_ce ? "Si" : "No"}
+                      {a.marcatura_ce ? "Sì" : "No"}
                     </TableCell>
                     <TableCell className="text-center">
-                      {a.verifiche_periodiche ? "Si" : "No"}
+                      {a.verifiche_periodiche ? "Sì" : "No"}
                     </TableCell>
                   </TableRow>
                 ))}

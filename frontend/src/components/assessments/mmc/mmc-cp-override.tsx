@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { MmcFormValues } from "./mmc-form";
+import { Select } from "@/components/ui/select";
 
 export function MmcCpOverride({
   form,
@@ -111,14 +112,13 @@ export function MmcCpOverride({
             <Label htmlFor="worker-sesso" className="text-xs">
               Sesso lavoratore
             </Label>
-            <select
-              id="worker-sesso"
-              className="h-9 rounded-md border bg-background px-2 text-sm"
+            <Select
+              id="worker-sesso" size="sm" className="w-auto"
               {...form.register("worker_sesso")}
             >
               <option value="M">Maschio</option>
               <option value="F">Femmina</option>
-            </select>
+            </Select>
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="worker-eta" className="text-xs">

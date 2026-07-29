@@ -17,6 +17,7 @@ import {
   type IncendioFormValues,
 } from "./incendio-form";
 import { IncendioMeasures } from "./incendio-measures";
+import { Select } from "@/components/ui/select";
 
 // ---------------------------------------------------------------------------
 // Parameter copy — Italian labels from REFERENCE_DATA.md section 4.1.
@@ -169,9 +170,8 @@ export function IncendioAreaCard({
                   >
                     Locale / Ambiente
                   </label>
-                  <select
+                  <Select
                     id={`areas.${index}.ambiente_select`}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                     value=""
                     onChange={(e) => {
                       const val = e.target.value;
@@ -196,7 +196,7 @@ export function IncendioAreaCard({
                       </option>
                     ))}
                     <option value="__altro__">Altro (inserisci manualmente)</option>
-                  </select>
+                  </Select>
                 </div>
               )}
               <div>

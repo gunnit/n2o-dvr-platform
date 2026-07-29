@@ -21,6 +21,7 @@ import {
 import { useTenantVocabulary } from "@/hooks/use-tenant-vocabulary";
 import { throwApiError } from "@/lib/api-errors";
 import { FieldError, FormError } from "@/components/ui/form-error";
+import { Select } from "@/components/ui/select";
 import type {
   AziendaAutofillFieldMeta,
   AziendaAutofillResponse,
@@ -719,7 +720,7 @@ export default function NewAziendaPage() {
                   <Label htmlFor="forma_giuridica">Forma Giuridica</Label>
                   {aiMeta.forma_giuridica && <AiBadge meta={aiMeta.forma_giuridica} />}
                 </div>
-                <select
+                <Select
                   id="forma_giuridica"
                   value={form.forma_giuridica}
                   onChange={(e) => {
@@ -743,7 +744,6 @@ export default function NewAziendaPage() {
                       return next;
                     });
                   }}
-                  className="h-10 w-full rounded-md border border-[#e5edf5] bg-white px-3 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                 >
                   <option value="">Seleziona...</option>
                   {FORMA_GIURIDICA_OPTIONS.map((fg) => (
@@ -751,7 +751,7 @@ export default function NewAziendaPage() {
                       {fg}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
 
               <div className="space-y-2 sm:col-span-2">
@@ -1272,7 +1272,7 @@ export default function NewAziendaPage() {
                   )}
                 </div>
                 <div className="flex gap-2">
-                  <select
+                  <Select
                     id="zona_sismica"
                     value={form.zona_sismica}
                     onChange={(e) => {
@@ -1282,14 +1282,13 @@ export default function NewAziendaPage() {
                         setSeismicLookup({ kind: "idle" });
                       }
                     }}
-                    className="h-10 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-3 py-2 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                   >
                     <option value="">Seleziona zona</option>
                     <option value="1">Zona 1 - Alta pericolosit&agrave;</option>
                     <option value="2">Zona 2 - Media pericolosit&agrave;</option>
                     <option value="3">Zona 3 - Bassa pericolosit&agrave;</option>
                     <option value="4">Zona 4 - Molto bassa pericolosit&agrave;</option>
-                  </select>
+                  </Select>
                   <Button
                     type="button"
                     variant="outline"

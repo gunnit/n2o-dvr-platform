@@ -265,31 +265,7 @@ export function StatTile({
   );
 }
 
-export function EmptyState({
-  icon: Icon,
-  title,
-  body,
-  action,
-}: {
-  icon?: ComponentType<{ className?: string; strokeWidth?: number }>;
-  title: string;
-  body?: string;
-  action?: ReactNode;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
-      {Icon && (
-        <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#f6f9fc]">
-          <Icon className="h-5 w-5 text-[#64748d]" strokeWidth={1.5} />
-        </span>
-      )}
-      <div className="space-y-1">
-        <p className="text-[14px] font-medium text-[#273951]">{title}</p>
-        {body && (
-          <p className="max-w-[420px] text-[13px] text-[#64748d]">{body}</p>
-        )}
-      </div>
-      {action}
-    </div>
-  );
-}
+// Moved to components/ui/empty-state.tsx so the page-level screens can reach
+// it too. Re-exported here because the seven azienda tabs already import it
+// from this module alongside Panel / InfoRow / StatTile.
+export { EmptyState } from "@/components/ui/empty-state";

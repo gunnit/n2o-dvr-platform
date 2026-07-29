@@ -20,6 +20,7 @@ import {
 } from "@/lib/codice-fiscale";
 import { parseApiError } from "@/lib/api-errors";
 import type { Azienda } from "@/types";
+import { Select } from "@/components/ui/select";
 
 interface PersonaOption {
   id: string;
@@ -599,14 +600,13 @@ export default function MmcAssessmentPage() {
           >
             Lavoratore valutato
           </label>
-          <select
+          <Select
             id="mmc-persona"
             value={selectedPersonaId}
             onChange={(e) => {
               setSelectedPersonaId(e.target.value);
               setFinalizeMessage(null);
-            }}
-            className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+            }} className="mt-1"
           >
             <option value="">— Nessun lavoratore (valutazione generica) —</option>
             {persone.map((p) => {
@@ -619,7 +619,7 @@ export default function MmcAssessmentPage() {
                 </option>
               );
             })}
-          </select>
+          </Select>
           {cfDerived && (
             <p className="mt-2 text-xs text-muted-foreground">
               (età {cfDerived.age}

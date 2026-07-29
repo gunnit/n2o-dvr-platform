@@ -26,6 +26,7 @@ import { Pencil, Plus, Trash2, Users } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import type { Ambiente, AttrezzaturaSpecialeCode, Persona } from "@/types";
 import { FormError } from "@/components/ui/form-error";
+import { Select } from "@/components/ui/select";
 
 interface StepPersoneProps {
   aziendaId: string;
@@ -627,15 +628,14 @@ export function StepPersone({
                   <Label htmlFor="persona-contratto">
                     Tipologia Contrattuale
                   </Label>
-                  <select
+                  <Select
                     id="persona-contratto"
                     value={editing.tipologia_contrattuale ?? ""}
                     onChange={(e) =>
                       updateEditing({
                         tipologia_contrattuale: e.target.value || null,
                       })
-                    }
-                    className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    } size="sm"
                   >
                     <option value="">Seleziona tipo</option>
                     {TIPOLOGIE_CONTRATTUALI.map((tipo) => (
@@ -643,30 +643,29 @@ export function StepPersone({
                         {tipo}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
 
                 <div className="min-w-0 space-y-2">
                   <Label htmlFor="persona-sesso">Sesso</Label>
-                  <select
+                  <Select
                     id="persona-sesso"
                     value={editing.sesso ?? ""}
                     onChange={(e) =>
                       updateEditing({
                         sesso: (e.target.value as "M" | "F") || null,
                       })
-                    }
-                    className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    } size="sm"
                   >
                     <option value="">Seleziona</option>
                     <option value="M">Maschio</option>
                     <option value="F">Femmina</option>
-                  </select>
+                  </Select>
                 </div>
 
                 <div className="min-w-0 space-y-2">
                   <Label htmlFor="persona-eta">Fascia Eta</Label>
-                  <select
+                  <Select
                     id="persona-eta"
                     value={editing.fascia_eta ?? ""}
                     onChange={(e) =>
@@ -674,13 +673,12 @@ export function StepPersone({
                         fascia_eta:
                           (e.target.value as ">18" | "15-18") || null,
                       })
-                    }
-                    className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    } size="sm"
                   >
                     <option value="">Seleziona</option>
                     <option value=">18">Maggiorenne (&gt;18)</option>
                     <option value="15-18">Minorenne (15-18)</option>
-                  </select>
+                  </Select>
                 </div>
               </div>
 

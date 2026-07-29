@@ -279,8 +279,8 @@ export default function PanoramicaTab({
       </Panel>
 
       {/* Dati Azienda */}
-      <Panel accent="violet">
-        <PanelHeader icon={Building2} title="Dati Azienda" accent="violet" />
+      <Panel accent="navy">
+        <PanelHeader icon={Building2} title="Dati Azienda" accent="navy" />
         <div className="grid gap-5 p-6 sm:grid-cols-2">
           <InfoRow
             label="Ragione Sociale"
@@ -319,7 +319,7 @@ export default function PanoramicaTab({
             }
             tnum
           />
-          <InfoRow label="Attivita'" value={azienda.attivita} />
+          <InfoRow label="Attività" value={azienda.attivita} />
           <InfoRow label="Orario di lavoro" value={azienda.orario_lavoro} />
           <InfoRow
             label="Metratura totale"

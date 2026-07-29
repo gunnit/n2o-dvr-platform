@@ -3,6 +3,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import type { FemaleWorker } from "./types";
+import { Select } from "@/components/ui/select";
 
 interface Props {
   workers: FemaleWorker[];
@@ -23,12 +24,11 @@ export function WorkerSelector({ workers, selectedId, onSelect, loading }: Props
         <Label htmlFor="worker-select" className="text-sm md:whitespace-nowrap">
           Lavoratrice da valutare
         </Label>
-        <select
+        <Select
           id="worker-select"
           disabled={loading || workers.length === 0}
           value={selectedId ?? ""}
-          onChange={(e) => onSelect(e.target.value)}
-          className="h-9 flex-1 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs disabled:cursor-not-allowed disabled:opacity-50"
+          onChange={(e) => onSelect(e.target.value)} size="sm" className="flex-1"
         >
           <option value="" disabled>
             {loading
@@ -43,7 +43,7 @@ export function WorkerSelector({ workers, selectedId, onSelect, loading }: Props
               {w.mansione ? ` — ${w.mansione}` : ""}
             </option>
           ))}
-        </select>
+        </Select>
         <span className="text-xs text-muted-foreground md:whitespace-nowrap">
           {workers.length} lavoratric{workers.length === 1 ? "e" : "i"}
         </span>

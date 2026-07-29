@@ -35,7 +35,9 @@ export const CATEGORY_META: Record<
   allegati: { label: "Allegati DVR", accent: "sky", rail: "bg-[#0ea5e9]" },
   emergenza: { label: "Piani di emergenza", accent: "amber", rail: "bg-[#d97706]" },
   haccp: { label: "HACCP — alimentare", accent: "emerald", rail: "bg-[#059669]" },
-  contratti: { label: "Appalti e cantieri", accent: "violet", rail: "bg-[#7c3aed]" },
+  // Slate rather than violet: the five category rails are a categorical
+  // palette, and violet is spoken for (`Tone.ai` in lib/ui/tones).
+  contratti: { label: "Appalti e cantieri", accent: "slate", rail: "bg-[#64748d]" },
 };
 
 export const documentTypes: DocType[] = [

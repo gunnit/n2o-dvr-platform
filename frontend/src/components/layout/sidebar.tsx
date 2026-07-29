@@ -321,10 +321,15 @@ function PlanTracker() {
             {planDisplayName(ent)}
           </span>
         </div>
+        {/* "Crediti AI 0 / 9000" beside an empty bar read as "no credits left",
+            the opposite of the truth. The label carries the direction now. */}
         <div className="mt-2 flex items-baseline justify-between gap-2 text-[11px]">
-          <span className="text-white/55">Crediti AI</span>
+          <span className="text-white/55">Crediti AI usati</span>
           <span className="tnum text-white/80">
-            {ent.usage.ai_credits_used} / {allowance === null ? "illimitati" : allowance}
+            {ent.usage.ai_credits_used.toLocaleString("it-IT")} /{" "}
+            {allowance === null
+              ? "illimitati"
+              : allowance.toLocaleString("it-IT")}
           </span>
         </div>
         {allowance !== null && (

@@ -51,6 +51,7 @@ import { formatSeats } from "@/lib/billing";
 import { type RoleDefinition, usePermissions, useRoles } from "@/hooks/use-permissions";
 import { USERS_MANAGE, roleLabel } from "@/lib/permissions";
 import { CAPABILITY_LABELS } from "@/lib/capability-labels";
+import { Select } from "@/components/ui/select";
 
 interface UserRow {
   id: string;
@@ -86,9 +87,11 @@ function formatDate(iso: string): string {
 }
 
 function RoleBadge({ role }: { role: string }) {
+  // Privilege ramp, not a semantic tone: neutral (campo) → info (ufficio) →
+  // brand (admin), matching the nesting the permission matrix enforces.
   const tone =
     role === "admin"
-      ? TONE_CHIP.ai
+      ? TONE_CHIP.brand
       : role === "operatore_ufficio"
         ? TONE_CHIP.info
         : TONE_CHIP.neutral;
@@ -541,18 +544,17 @@ function AddUserDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="role">Ruolo</Label>
-            <select
+            <Select
               id="role"
               value={role}
               onChange={(e) => setRole(e.target.value)}
-              className="h-10 w-full rounded-md border border-[#e5edf5] bg-white px-3 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
             >
               {ROLE_OPTIONS.map((r) => (
                 <option key={r.value} value={r.value}>
                   {r.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <FormError>{err}</FormError>
           <DialogFooter>
@@ -637,18 +639,17 @@ function EditUserDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="edit_role">Ruolo</Label>
-            <select
+            <Select
               id="edit_role"
               value={role}
               onChange={(e) => setRole(e.target.value)}
-              className="h-10 w-full rounded-md border border-[#e5edf5] bg-white px-3 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
             >
               {ROLE_OPTIONS.map((r) => (
                 <option key={r.value} value={r.value}>
                   {r.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <FormError>{err}</FormError>
           <DialogFooter>

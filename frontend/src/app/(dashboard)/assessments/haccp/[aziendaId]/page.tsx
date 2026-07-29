@@ -36,6 +36,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
+import { Select } from "@/components/ui/select";
 
 /**
  * HACCP config review (US-4.3).
@@ -503,7 +504,7 @@ export default function HaccpAssessmentPage() {
           HACCP — Configurazione & CCP
         </h1>
         <p className="text-sm text-muted-foreground">
-          Tipologia attivita, responsabile e punti critici di controllo per la
+          Tipologia attività, responsabile e punti critici di controllo per la
           generazione del manuale HACCP.
         </p>
       </div>
@@ -522,20 +523,19 @@ export default function HaccpAssessmentPage() {
       {/* Config card */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Configurazione attivita</CardTitle>
+          <CardTitle className="text-base">Configurazione attività</CardTitle>
           <CardDescription>
             Selezionando la tipologia si caricano i CCP standard per quella
-            tipologia di attivita alimentare.
+            tipologia di attività alimentare.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-2">
-            <Label htmlFor="tipologia">Tipologia attivita</Label>
-            <select
+            <Label htmlFor="tipologia">Tipologia attività</Label>
+            <Select
               id="tipologia"
               value={tipologia}
-              onChange={(e) => handleActivityChange(e.target.value)}
-              className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+              onChange={(e) => handleActivityChange(e.target.value)} size="sm"
             >
               <option value="">-- Seleziona --</option>
               {activityTypes.map((a) => (
@@ -543,7 +543,7 @@ export default function HaccpAssessmentPage() {
                   {a.nome} ({a.ccp_count} CCP)
                 </option>
               ))}
-            </select>
+            </Select>
             {selectedActivity && (
               <p className="text-xs text-muted-foreground">
                 {selectedActivity.descrizione}
@@ -632,7 +632,7 @@ export default function HaccpAssessmentPage() {
               <CardDescription>
                 {ccps.length > 0
                   ? `${ccps.length} CCP configurati. Modifica inline o aggiungi un CCP personalizzato.`
-                  : "Nessun CCP configurato. Seleziona una tipologia di attivita per caricare i default."}
+                  : "Nessun CCP configurato. Seleziona una tipologia di attività per caricare i default."}
               </CardDescription>
             </div>
             <div className="flex flex-shrink-0 gap-2">
@@ -956,12 +956,12 @@ export default function HaccpAssessmentPage() {
           <DialogHeader>
             <DialogTitle>
               {regenDialog.pendingSlug
-                ? "Tipologia attivita cambiata"
+                ? "Tipologia attività cambiata"
                 : "Rigenera CCP dai default"}
             </DialogTitle>
             <DialogDescription>
               {regenDialog.pendingSlug
-                ? "Hai modificato la tipologia di attivita. Le personalizzazioni ai CCP possono andare perse. Scegli come procedere:"
+                ? "Hai modificato la tipologia di attività. Le personalizzazioni ai CCP possono andare perse. Scegli come procedere:"
                 : "I CCP verranno rigenerati dal catalogo. Scegli se preservare le tue personalizzazioni:"}
             </DialogDescription>
           </DialogHeader>

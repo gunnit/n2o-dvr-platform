@@ -21,6 +21,7 @@ import {
 import type { Azienda } from "@/types";
 import { FormError } from "@/components/ui/form-error";
 import { throwApiError } from "@/lib/api-errors";
+import { Select } from "@/components/ui/select";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -360,11 +361,10 @@ export default function EditAziendaPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="forma_giuridica">Forma Giuridica</Label>
-                <select
+                <Select
                   id="forma_giuridica"
                   name="forma_giuridica"
                   defaultValue={azienda.forma_giuridica ?? ""}
-                  className="h-10 w-full rounded-md border border-[#e5edf5] bg-white px-3 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                 >
                   <option value="">Seleziona...</option>
                   {azienda.forma_giuridica &&
@@ -380,7 +380,7 @@ export default function EditAziendaPage() {
                       {fg}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="codice_ateco">Codice ATECO</Label>
@@ -570,10 +570,9 @@ export default function EditAziendaPage() {
                   )}
                 </div>
                 <div className="flex gap-2">
-                  <select
+                  <Select
                     id="zona_sismica"
                     name="zona_sismica"
-                    className="h-10 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-3 py-2 text-sm text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                     value={zonaSismicaValue}
                     onChange={(e) => {
                       setZonaSismicaValue(e.target.value);
@@ -589,7 +588,7 @@ export default function EditAziendaPage() {
                     <option value="4">
                       Zona 4 - Molto bassa pericolosit&agrave;
                     </option>
-                  </select>
+                  </Select>
                   <Button
                     type="button"
                     variant="outline"

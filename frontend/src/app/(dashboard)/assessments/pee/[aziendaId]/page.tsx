@@ -749,8 +749,8 @@ export default function PeeProceduresPage() {
               <strong>
                 {resetTarget?.titolo} — procedura {resetTarget?.lettera}
               </strong>{" "}
-              verra&apos; sostituito dal testo predefinito. L&apos;azione
-              riguarda solo questa azienda e non puo&apos; essere annullata.
+              verrà sostituito dal testo predefinito. L&apos;azione
+              riguarda solo questa azienda e non può essere annullata.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

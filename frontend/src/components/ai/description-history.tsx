@@ -94,7 +94,7 @@ export function DescriptionHistory({
   const handleRestore = async (rev: DescriptionRevision) => {
     if (
       !window.confirm(
-        "Ripristinare questa revisione? La descrizione corrente sara' sostituita ma resta nella cronologia."
+        "Ripristinare questa revisione? La descrizione corrente sarà sostituita ma resta nella cronologia."
       )
     )
       return;

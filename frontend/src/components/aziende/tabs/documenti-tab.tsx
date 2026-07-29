@@ -85,11 +85,11 @@ const CATEGORY_META: Record<
   {
     label: string;
     icon: typeof FileText;
-    accent: "navy" | "violet" | "sky";
+    accent: "navy" | "emerald" | "sky";
   }
 > = {
   master: { label: "DVR Master", icon: FileText, accent: "navy" },
-  allegati: { label: "Allegati DVR", icon: Paperclip, accent: "violet" },
+  allegati: { label: "Allegati DVR", icon: Paperclip, accent: "emerald" },
   complementari: { label: "Documenti Complementari", icon: Files, accent: "sky" },
 };
 

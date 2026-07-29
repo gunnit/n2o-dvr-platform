@@ -151,11 +151,11 @@ export default function RischiTab({
 
   if (total === 0) {
     return (
-      <Panel accent="violet">
+      <Panel accent="navy">
         <PanelHeader
           icon={ShieldAlert}
           title="Valutazioni del rischio"
-          accent="violet"
+          accent="navy"
         />
         <div className="space-y-4 p-6">
           <EmptyState
@@ -184,12 +184,12 @@ export default function RischiTab({
     (critici > 0 ? " · " + critici + " critici" : "");
 
   return (
-    <Panel accent="violet">
+    <Panel accent="navy">
       <PanelHeader
         icon={ShieldAlert}
         title="Valutazioni del rischio"
         subtitle={subtitle}
-        accent="violet"
+        accent="navy"
       />
 
       <div className="space-y-5 p-6">

@@ -28,6 +28,7 @@ import {
 import { useApi } from "@/hooks/use-api";
 import { AIBadge } from "@/components/ai/ai-badge";
 import { AIContent, AIFilterToggle } from "@/components/ai/ai-filter-context";
+import { Select } from "@/components/ui/select";
 import type {
   BatchStatusResponse,
   BatchUploadFileResult,
@@ -894,15 +895,14 @@ export function StepSostanze({
                       <Label htmlFor={`sost-stato-${index}`}>
                         Stato / Miscela
                       </Label>
-                      <select
+                      <Select
                         id={`sost-stato-${index}`}
                         value={sost.stato_miscela ?? ""}
                         onChange={(e) =>
                           updateSostanza(index, {
                             stato_miscela: e.target.value || null,
                           })
-                        }
-                        className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                        } size="sm"
                       >
                         <option value="">Seleziona stato</option>
                         {STATI_MISCELA.map((stato) => (
@@ -910,7 +910,7 @@ export function StepSostanze({
                             {stato.charAt(0).toUpperCase() + stato.slice(1)}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
 
                     <div className="space-y-2 sm:col-span-2">

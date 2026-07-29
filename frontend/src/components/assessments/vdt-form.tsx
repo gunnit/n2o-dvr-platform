@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 
 // ---------------------------------------------------------------------------
 // Domain — mirrors backend/app/services/vdt_calculator.py and
@@ -341,7 +342,7 @@ export function VdtForm({
                       >
                         Lavoratore
                       </Label>
-                      <select
+                      <Select
                         id={`${w.id}-persona`}
                         value={w.persona_id ?? ""}
                         onChange={(e) =>
@@ -350,8 +351,7 @@ export function VdtForm({
                             "persona_id",
                             e.target.value || null,
                           )
-                        }
-                        className="block w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+                        } size="sm"
                       >
                         <option value="">— Generica —</option>
                         {persone.map((p) => (
@@ -360,7 +360,7 @@ export function VdtForm({
                             {p.mansione ? ` — ${p.mansione}` : ""}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
 
                     <div className="min-w-[200px] flex-1 space-y-1">
@@ -511,7 +511,7 @@ export function VdtForm({
                               >
                                 Idoneità visiva
                               </Label>
-                              <select
+                              <Select
                                 id={`${w.id}-idoneita`}
                                 value={w.idoneita_visiva}
                                 onChange={(e) =>
@@ -520,8 +520,7 @@ export function VdtForm({
                                     "idoneita_visiva",
                                     e.target.value as VdtWorker["idoneita_visiva"],
                                   )
-                                }
-                                className="block w-full rounded-md border bg-background px-2 py-1.5 text-xs"
+                                } size="sm" className="text-xs"
                               >
                                 <option value="">—</option>
                                 <option value="idoneo">Idoneo</option>
@@ -529,7 +528,7 @@ export function VdtForm({
                                   Con prescrizioni
                                 </option>
                                 <option value="non idoneo">Non idoneo</option>
-                              </select>
+                              </Select>
                             </div>
 
                             <div className="space-y-1">

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/use-api";
 import type { Azienda } from "@/types";
 import { FieldError } from "@/components/ui/form-error";
+import { Select } from "@/components/ui/select";
 import {
   validatePartitaIva as runPartitaIvaValidator,
   validateCodiceAteco as runAtecoValidator,
@@ -327,7 +328,7 @@ export function StepAzienda({
                   </Badge>
                 )}
               </div>
-              <select
+              <Select
                 id="zona_sismica"
                 value={data.zona_sismica ?? ""}
                 onChange={(e) =>
@@ -337,8 +338,7 @@ export function StepAzienda({
                       : null,
                   })
                 }
-                disabled={lookup.kind === "found"}
-                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-70"
+                disabled={lookup.kind === "found"} size="sm"
               >
                 <option value="">Seleziona zona</option>
                 {ZONE_SISMICHE.map((z) => (
@@ -346,7 +346,7 @@ export function StepAzienda({
                     {z.label}
                   </option>
                 ))}
-              </select>
+              </Select>
               {lookup.kind === "found" && (
                 <Button
                   type="button"

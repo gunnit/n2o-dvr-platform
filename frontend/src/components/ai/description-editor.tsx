@@ -166,7 +166,7 @@ export function DescriptionEditor({
     <AIContent isAI={provenance === "ai"} className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <h4 className="text-sm font-medium">Descrizione attivita&apos;</h4>
+          <h4 className="text-sm font-medium">Descrizione attività</h4>
           {provenance === "ai" && <AIBadge provenance="ai" timestamp={lastGeneratedAt} />}
           {provenance === "edited" && (
             <AIBadge provenance="edited" timestamp={lastGeneratedAt} />
@@ -187,7 +187,7 @@ export function DescriptionEditor({
             disabled={isUploadingVisura || isGenerating}
             title={
               visuraAt
-                ? "Sostituisci la visura camerale gia' caricata"
+                ? "Sostituisci la visura camerale già caricata"
                 : "Carica una visura camerale per arricchire il prompt AI"
             }
           >
@@ -268,7 +268,7 @@ export function DescriptionEditor({
         </div>
       )}
       <p className="text-xs text-muted-foreground">
-        La descrizione generata e&apos; basata solo sui dati anagrafici, ATECO,
+        La descrizione generata è basata solo sui dati anagrafici, ATECO,
         ambienti, ruoli e (se presente) sull&apos;estratto della visura
         camerale con CF, email e telefoni redatti — nessun dato personale viene
         inviato all&apos;AI.

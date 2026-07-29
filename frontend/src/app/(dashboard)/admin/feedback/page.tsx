@@ -10,6 +10,7 @@ import {
   Lightbulb,
   Loader2,
   MessageCircle,
+  MessageSquare,
   RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,6 +37,9 @@ import { TONE_CHIP } from "@/lib/ui/tones";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
 import { ADMIN_TOOLS } from "@/lib/permissions";
+import { Select } from "@/components/ui/select";
+import { EmptyState } from "@/components/ui/empty-state";
+import { FilterTabs } from "@/components/ui/filter-tabs";
 
 type FeedbackType = "bug" | "idea" | "observation";
 type FeedbackStatus = "nuovo" | "in_revisione" | "risolto" | "non_fara";
@@ -215,34 +219,15 @@ export default function AdminFeedbackPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        {FILTERS.map((f) => {
-          const active = filter === f.value;
-          return (
-            <button
-              key={f.value}
-              type="button"
-              onClick={() => setFilter(f.value)}
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                active
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-[#e5edf5] bg-white text-[#334155] hover:bg-slate-50",
-              )}
-            >
-              {f.label}
-              <span
-                className={cn(
-                  "ml-1.5 rounded-full px-1.5 py-0.5 text-[10px]",
-                  active ? "bg-white/20" : "bg-slate-100 text-slate-600",
-                )}
-              >
-                {counts[f.value]}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <FilterTabs
+        tabs={FILTERS.map((f) => ({
+          id: f.value,
+          label: f.label,
+          count: counts[f.value],
+        }))}
+        value={filter}
+        onChange={setFilter}
+      />
 
       <Card>
         <CardHeader>
@@ -254,9 +239,17 @@ export default function AdminFeedbackPage() {
         </CardHeader>
         <CardContent>
           {filtered.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              {loading ? "Caricamento..." : "Nessuna segnalazione."}
-            </p>
+            loading ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Caricamento…
+              </p>
+            ) : (
+              <EmptyState
+                icon={MessageSquare}
+                title="Nessuna segnalazione"
+                body="Le segnalazioni inviate dagli utenti dalla voce “Segnala” compaiono qui."
+              />
+            )
           ) : (
             <Table className="table-fixed">
               <TableHeader>
@@ -360,7 +353,7 @@ export default function AdminFeedbackPage() {
                       </TableCell>
                       <TableCell className="py-3">
                         <div className="flex items-center gap-1.5">
-                          <select
+                          <Select
                             value={row.status}
                             disabled={savingId === row.id}
                             onChange={(e) =>
@@ -368,8 +361,7 @@ export default function AdminFeedbackPage() {
                                 row,
                                 e.target.value as FeedbackStatus,
                               )
-                            }
-                            className="h-8 w-full min-w-0 rounded-md border border-[#e5edf5] bg-white px-2 text-xs text-[#061b31] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                            } size="sm" className="h-8 text-xs"
                             aria-label={`Stato segnalazione: ${STATUS_LABEL[row.status]}`}
                           >
                             {STATUS_OPTIONS.map((s) => (
@@ -377,7 +369,7 @@ export default function AdminFeedbackPage() {
                                 {s.label}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                           {savingId === row.id && (
                             <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
                           )}

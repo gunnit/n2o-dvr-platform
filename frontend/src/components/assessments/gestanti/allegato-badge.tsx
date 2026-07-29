@@ -12,7 +12,7 @@ const LABEL: Record<Allegato, string> = {
 const TOOLTIP: Record<Allegato, string> = {
   A: "Lavori vietati: riallocazione o astensione anticipata obbligatoria.",
   B: "Lavori vietati salvo deroga con valutazione specifica del rischio.",
-  C: "Agenti e condizioni per cui e' richiesta valutazione specifica.",
+  C: "Agenti e condizioni per cui è richiesta valutazione specifica.",
 };
 
 // Base band colors (reuse the project palette: emerald/amber/rose).

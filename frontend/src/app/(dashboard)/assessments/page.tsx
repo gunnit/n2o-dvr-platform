@@ -28,6 +28,9 @@ import { Monogram, type AccentKey } from "@/components/cards/Monogram";
 import { cn } from "@/lib/utils";
 import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
 import { isDocTypeGated } from "@/hooks/use-entitlements";
+import { Select } from "@/components/ui/select";
+import { aziendaOptionLabel } from "@/lib/ui/azienda-label";
+import { EmptyStateCard } from "@/components/ui/empty-state";
 
 type AssessmentType = {
   slug: string;
@@ -84,7 +87,7 @@ const assessmentTypes: AssessmentType[] = [
     metodo: "Metodo INAIL",
     description: "Check-list 76 indicatori · analisi preliminare e approfondita.",
     icon: Brain,
-    accent: "violet",
+    accent: "slate",
   },
   {
     slug: "incendio",
@@ -214,20 +217,18 @@ export default function AssessmentsIndexPage() {
                 Nessuna azienda registrata. Aggiungi un&apos;azienda per iniziare.
               </p>
             ) : (
-              <select
+              <Select
                 id="azienda-select"
                 value={selectedAziendaId}
                 onChange={(e) => setSelectedAziendaId(e.target.value)}
-                className="h-10 w-full rounded-md border border-[#e5edf5] bg-white px-3 text-sm text-[#061b31] outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-[rgba(0,61,116,0.12)]"
               >
                 <option value="">— Seleziona un&apos;azienda —</option>
                 {aziende.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.ragione_sociale}
-                    {a.sede_operativa_citta ? ` · ${a.sede_operativa_citta}` : ""}
+                    {aziendaOptionLabel(a)}
                   </option>
                 ))}
-              </select>
+              </Select>
             )}
           </div>
           <div className="flex-1 space-y-1.5">
@@ -244,15 +245,11 @@ export default function AssessmentsIndexPage() {
       </div>
 
       {!selectedAziendaId ? (
-        <div className="rounded-md border border-[#e5edf5] bg-white p-14 text-center shadow-stripe-ambient">
-          <FlaskConical
-            className="mx-auto mb-4 h-10 w-10 text-[#c2c6d2]"
-            strokeWidth={1.5}
-          />
-          <p className="type-body">
-            Seleziona un&apos;azienda per accedere alle valutazioni.
-          </p>
-        </div>
+        <EmptyStateCard
+          icon={FlaskConical}
+          title="Nessuna azienda selezionata"
+          body="Scegli un cliente qui sopra per aprire le sue valutazioni specialistiche."
+        />
       ) : (
         <div className="space-y-4">
           {selectedAzienda && (

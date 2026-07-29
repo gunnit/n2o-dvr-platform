@@ -266,11 +266,11 @@ function computeSteps(
         },
   });
 
-  // 2. Descrizione attivita'
+  // 2. Descrizione attività
   steps.push({
     id: "descrizione",
     status: hasDescrizione ? "done" : "todo",
-    title: "Descrizione attivita'",
+    title: "Descrizione attività",
     detail: hasDescrizione
       ? "Compilata e pronta per il DVR."
       : "Genera con AI da visura camerale o scrivi manualmente.",
@@ -374,7 +374,7 @@ function computeSteps(
     };
   } else if (docsStale.length > 0) {
     docStatus = "warning";
-    docDetail = `${docsStale.length} ${docsStale.length === 1 ? "documento" : "documenti"} da rigenerare: il sopralluogo e' stato modificato dopo l'ultima generazione.`;
+    docDetail = `${docsStale.length} ${docsStale.length === 1 ? "documento" : "documenti"} da rigenerare: il sopralluogo è stato modificato dopo l'ultima generazione.`;
     docCta = { label: "Apri documenti", onClick: cb.onOpenDocumenti };
   } else {
     docStatus = "done";

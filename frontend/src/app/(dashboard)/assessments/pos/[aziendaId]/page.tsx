@@ -702,7 +702,7 @@ export default function PosDpiMatrixPage() {
               size="sm"
               onClick={suggestWithAI}
               disabled={!hasMatrix || aiRunning || regenRunning}
-              title="Compila i DPI delle celle vuote con AI (gpt-5.4-mini) in base a ruolo e lavorazione. Non sovrascrive le celle gia' impostate."
+              title="Compila i DPI delle celle vuote con AI (gpt-5.4-mini) in base a ruolo e lavorazione. Non sovrascrive le celle già impostate."
             >
               {aiRunning ? (
                 <>

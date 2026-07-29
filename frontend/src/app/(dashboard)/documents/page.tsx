@@ -45,6 +45,9 @@ import { useEntitlementsContext } from "@/components/billing/entitlements-provid
 import { isDocTypeGated } from "@/hooks/use-entitlements";
 import { usePermissions } from "@/hooks/use-permissions";
 import { DOCUMENTS_GENERATE } from "@/lib/permissions";
+import { Select } from "@/components/ui/select";
+import { aziendaOptionLabel } from "@/lib/ui/azienda-label";
+import { EmptyStateCard } from "@/components/ui/empty-state";
 
 const complexityColors: Record<string, string> = {
   Alta: "bg-[rgba(186,26,26,0.1)] text-[#ba1a1a] border border-[rgba(186,26,26,0.3)]",
@@ -371,45 +374,30 @@ export default function DocumentsPage() {
               Nessuna azienda registrata. Aggiungi un&apos;azienda per iniziare.
             </p>
           ) : (
-            <select
+            <Select
               id="azienda-select"
               value={selectedAziendaId}
               onChange={(e) => setSelectedAziendaId(e.target.value)}
-              className="w-full max-w-md rounded-xl border-none bg-surface-low px-4 py-3 text-sm outline-none transition-all focus:ring-2 focus:ring-primary-container"
+              className="max-w-md"
             >
-              <option value="">-- Seleziona un&apos;azienda --</option>
-              {aziende.map((a) => {
-                // #73 — show the full ragione sociale plus the sede (street +
-                // city), preferring the sede operativa and falling back to the
-                // sede legale, so two companies with the same name stay
-                // distinguishable in the picker.
-                const sede =
-                  [a.sede_operativa_via, a.sede_operativa_citta]
-                    .filter(Boolean)
-                    .join(", ") ||
-                  [a.sede_legale_via, a.sede_legale_citta]
-                    .filter(Boolean)
-                    .join(", ");
-                return (
-                  <option key={a.id} value={a.id}>
-                    {a.ragione_sociale}
-                    {sede ? ` — ${sede}` : ""}
-                  </option>
-                );
-              })}
-            </select>
+              <option value="">— Seleziona un&apos;azienda —</option>
+              {aziende.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {aziendaOptionLabel(a)}
+                </option>
+              ))}
+            </Select>
           )}
         </div>
       </div>
 
       {/* Document Grid */}
       {!selectedAziendaId ? (
-        <div className="flex flex-col items-center justify-center rounded-xl bg-white py-12 ambient-shadow">
-          <FileText className="mb-3 h-10 w-10 text-[#64748d] opacity-40" />
-          <p className="text-[#64748d]">
-            Seleziona un&apos;azienda per visualizzare e generare i documenti
-          </p>
-        </div>
+        <EmptyStateCard
+          icon={FileText}
+          title="Nessuna azienda selezionata"
+          body="Scegli un cliente qui sopra per vedere i documenti già pronti e generare quelli mancanti."
+        />
       ) : loadingDocs ? (
         <p className="text-muted-foreground">Caricamento documenti...</p>
       ) : (

@@ -113,7 +113,7 @@ function MatchRow({
             <Badge
               variant="secondary"
               className="bg-[rgba(245,158,11,0.18)] text-[#8a5c23]"
-              title="Questo rischio e' stato introdotto dopo l'ultima valutazione salvata per questa lavoratrice."
+              title="Questo rischio è stato introdotto dopo l'ultima valutazione salvata per questa lavoratrice."
             >
               Nuovo
             </Badge>

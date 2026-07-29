@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/sheet";
 import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /**
  * DUVRI list + create/edit screen (US-4.5).
@@ -474,10 +475,18 @@ export default function DuvriListPage() {
 
       {!loading && items.length === 0 && (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            <Building2 className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
-            Nessun DUVRI registrato. Clicca &quot;Aggiungi appaltatore&quot; per
-            iniziare.
+          <CardContent className="p-0">
+            <EmptyState
+              icon={Building2}
+              title="Nessun DUVRI registrato"
+              body="Serve un DUVRI per ogni contratto di appalto. I dati del committente sono già ereditati dall'azienda."
+              action={
+                <Button onClick={openCreate} variant="outline" size="sm">
+                  <Plus className="h-4 w-4" />
+                  Aggiungi appaltatore
+                </Button>
+              }
+            />
           </CardContent>
         </Card>
       )}
@@ -526,7 +535,7 @@ export default function DuvriListPage() {
                 <Callout tone="warn" dense>
                   <p className="font-semibold">Dati committente aggiornati</p>
                   <p>
-                    L&apos;azienda committente e&apos; stata modificata dopo
+                    L&apos;azienda committente è stata modificata dopo
                     l&apos;ultimo aggiornamento di questo DUVRI. Riapri e salva
                     per ricompilare gli automatismi.
                   </p>
@@ -702,9 +711,9 @@ export default function DuvriListPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Attrezzature / attivita appaltatore</Label>
+              <Label>Attrezzature / attività appaltatore</Label>
               <p className="text-xs text-muted-foreground">
-                Seleziona le attivita che l&apos;appaltatore portera&apos; sul
+                Seleziona le attività che l&apos;appaltatore porterà sul
                 sito. Useremo questa lista per suggerire le interferenze tipiche
                 tramite &quot;Analizza interferenze&quot; sulla card.
               </p>
@@ -842,7 +851,7 @@ export default function DuvriListPage() {
                 <p className="font-semibold">Nessuna attrezzatura selezionata</p>
                 <p>
                   Apri &quot;Modifica&quot; e seleziona almeno
-                  un&apos;attrezzatura/attivita per poter eseguire l&apos;analisi.
+                  un&apos;attrezzatura/attività per poter eseguire l&apos;analisi.
                 </p>
               </Callout>
             )}
@@ -969,7 +978,7 @@ export default function DuvriListPage() {
             <DialogTitle>Eliminare il DUVRI?</DialogTitle>
             <DialogDescription>
               Il DUVRI per <strong>{deleteTarget?.appaltatore_ragione_sociale}</strong>{" "}
-              verra&apos; eliminato definitivamente. L&apos;azione non puo&apos;
+              verrà eliminato definitivamente. L&apos;azione non può
               essere annullata.
             </DialogDescription>
           </DialogHeader>

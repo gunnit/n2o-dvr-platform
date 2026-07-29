@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Select } from "@/components/ui/select";
 
 import {
   DEFAULT_NIOSH,
@@ -278,12 +279,11 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
                   control={control}
                   name={`${base}.niosh.livello` as const}
                   render={({ field }) => (
-                    <select
+                    <Select
                       value={field.value ?? ""}
                       onChange={(e) =>
                         field.onChange(e.target.value || null)
                       }
-                      className="flex h-10 w-full rounded-md border bg-background px-3 text-sm"
                     >
                       <option value="">—</option>
                       {ZONA_NIOSH_VALUES.map((z) => (
@@ -291,7 +291,7 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
                           {z}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   )}
                 />
               </div>
@@ -342,12 +342,11 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
                   control={control}
                   name={`${base}.rumore.fascia` as const}
                   render={({ field }) => (
-                    <select
+                    <Select
                       value={field.value ?? ""}
                       onChange={(e) =>
                         field.onChange(e.target.value || null)
                       }
-                      className="flex h-10 w-full rounded-md border bg-background px-3 text-sm"
                     >
                       <option value="">—</option>
                       {FASCIA_RUMORE_VALUES.map((f) => (
@@ -355,7 +354,7 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
                           {f}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   )}
                 />
               </div>

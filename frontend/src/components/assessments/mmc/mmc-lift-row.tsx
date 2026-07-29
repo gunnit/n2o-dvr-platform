@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MmcFormValues, LiftResult } from "./mmc-form";
+import { Select } from "@/components/ui/select";
 
 interface Props {
   index: number;
@@ -211,18 +212,16 @@ export function MmcLiftRow({
           <Label htmlFor={`lift-${index}-presa`} className="text-xs">
             Qualità della presa
           </Label>
-          <select
+          <Select
             id={`lift-${index}-presa`}
-            className={cn(
-              "h-9 rounded-md border bg-background px-2 text-sm",
-              liftErrors?.presa && "border-[#c72a3a]",
-            )}
+            size="sm"
+            className={cn(liftErrors?.presa && "border-[#c72a3a]")}
             {...register(`lifts.${index}.presa` as const)}
           >
             <option value="buona">Buona</option>
             <option value="discreta">Discreta</option>
             <option value="scarsa">Scarsa</option>
-          </select>
+          </Select>
           <FieldError message={liftErrors?.presa?.message} />
         </div>
 
@@ -247,18 +246,16 @@ export function MmcLiftRow({
           <Label htmlFor={`lift-${index}-durata`} className="text-xs">
             Durata del compito
           </Label>
-          <select
+          <Select
             id={`lift-${index}-durata`}
-            className={cn(
-              "h-9 rounded-md border bg-background px-2 text-sm",
-              liftErrors?.durata && "border-[#c72a3a]",
-            )}
+            size="sm"
+            className={cn(liftErrors?.durata && "border-[#c72a3a]")}
             {...register(`lifts.${index}.durata` as const)}
           >
             <option value="breve">Breve (&lt;1h)</option>
             <option value="media">Media (1-2h)</option>
             <option value="lunga">Lunga (&gt;2h)</option>
-          </select>
+          </Select>
           <FieldError message={liftErrors?.durata?.message} />
         </div>
 

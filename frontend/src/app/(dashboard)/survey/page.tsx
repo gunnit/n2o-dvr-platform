@@ -12,6 +12,8 @@ import { AtecoPill } from "@/components/cards/AtecoPill";
 import { monogramFor } from "@/lib/ui/monogram";
 import { formatRelative } from "@/lib/ui/relative-time";
 import { parseApiDate } from "@/lib/ui/api-date";
+import { EmptyStateCard } from "@/components/ui/empty-state";
+import { FilterTabs } from "@/components/ui/filter-tabs";
 import {
   SURVEY_STATUS_META,
   surveyStatusKey,
@@ -100,51 +102,37 @@ export default function SurveyPage() {
               className="h-9 w-full rounded-md border border-[#e5edf5] bg-white pl-9 pr-3 text-[13.5px] text-[#061b31] placeholder:text-[#94a3b8] focus:border-primary focus:outline-none focus:ring-2 focus:ring-[rgba(0,61,116,0.12)]"
             />
           </div>
-          {FILTERS.map((f) => {
-            const count = counts[f.id] ?? 0;
-            const active = activeFilter === f.id;
-            return (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setActiveFilter(f.id)}
-                className={`inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-[13px] font-medium transition-colors ${
-                  active
-                    ? "border-[#061b31] bg-[#061b31] text-white"
-                    : "border-[#e5edf5] bg-white text-[#273951] hover:border-[#d1d9e3]"
-                }`}
-              >
-                {f.label}
-                {count > 0 && (
-                  <span
-                    className={`tnum text-[11.5px] ${active ? "opacity-70" : "text-[#94a3b8]"}`}
-                  >
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+          <FilterTabs
+            tabs={FILTERS.map((f) => ({ ...f, count: counts[f.id] ?? 0 }))}
+            value={activeFilter}
+            onChange={setActiveFilter}
+          />
         </div>
       )}
 
       {loading ? (
         <p className="type-body">Caricamento...</p>
       ) : aziende.length === 0 ? (
-        <div className="rounded-md border border-[#e5edf5] bg-white p-14 text-center shadow-stripe-ambient">
-          <ClipboardList
-            className="mx-auto mb-4 h-10 w-10 text-[#c2c6d2]"
-            strokeWidth={1.5}
-          />
-          <p className="type-body max-w-md mx-auto">
-            Nessuna azienda registrata. Aggiungi un&apos;azienda dalla pagina
-            Aziende per iniziare.
-          </p>
-        </div>
+        <EmptyStateCard
+          icon={ClipboardList}
+          title="Nessuna azienda registrata"
+          body="Un sopralluogo parte sempre da un cliente. Registrane uno per iniziare a raccogliere i dati."
+          action={
+            <Link
+              href="/aziende/new"
+              className="inline-flex h-9 items-center rounded-md border border-[#e5edf5] bg-white px-3 text-[13px] font-medium text-[#273951] transition-colors hover:border-[#d1d9e3]"
+            >
+              Aggiungi azienda
+            </Link>
+          }
+        />
       ) : filtered.length === 0 ? (
-        <div className="rounded-md border border-dashed border-[#e5edf5] bg-white p-10 text-center">
-          <p className="type-body">Nessun risultato per i filtri attivi.</p>
-        </div>
+        <EmptyStateCard
+          icon={Search}
+          title="Nessun risultato"
+          body="Nessuna azienda corrisponde alla ricerca o ai filtri attivi."
+          dashed
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filtered.map((azienda) => {

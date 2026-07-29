@@ -40,6 +40,7 @@ import type {
   RiskMatch,
 } from "@/components/assessments/gestanti/types";
 import type { Azienda, Persona } from "@/types";
+import { Select } from "@/components/ui/select";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -500,7 +501,7 @@ export default function GestantiAssessmentPage() {
         <CardContent className="space-y-4">
           <div className="grid gap-2">
             <Label htmlFor="stato">Stato</Label>
-            <select
+            <Select
               id="stato"
               value={stato}
               onChange={(e) => {
@@ -508,13 +509,12 @@ export default function GestantiAssessmentPage() {
                   e.target.value as "gestante" | "puerpera" | "allattamento",
                 );
                 markDirty();
-              }}
-              className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+              }} size="sm"
             >
               <option value="gestante">Gestante</option>
               <option value="puerpera">Puerpera (fino a 7 mesi)</option>
               <option value="allattamento">Allattamento</option>
-            </select>
+            </Select>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="grid gap-2">
@@ -602,7 +602,7 @@ export default function GestantiAssessmentPage() {
             stato di gravidanza, puerperio e durante l&apos;allattamento. Gli
             Allegati A, B e C individuano rispettivamente i lavori vietati,
             quelli vietati salvo deroga e gli agenti nocivi cui la lavoratrice
-            non puo&apos; essere esposta senza valutazione specifica.
+            non può essere esposta senza valutazione specifica.
           </p>
         </CardContent>
       </Card>

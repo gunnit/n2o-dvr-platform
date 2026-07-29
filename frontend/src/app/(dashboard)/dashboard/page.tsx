@@ -52,7 +52,7 @@ interface DashboardKpis {
   scadenze_imminenti: number;
 }
 
-type AccentKey = "primary" | "emerald" | "amber" | "violet" | "rose";
+type AccentKey = "primary" | "emerald" | "amber" | "sky" | "rose";
 
 // ---------------------------------------------------------------------------
 // Tokens / helpers
@@ -62,7 +62,7 @@ const ICON_TILE: Record<AccentKey, string> = {
   primary: "bg-[#eef4fb] text-primary",
   emerald: "bg-[rgba(21,190,83,0.15)] text-[#108c3d]",
   amber: "bg-[rgba(245,158,11,0.14)] text-[#9b6829]",
-  violet: "bg-[#f3eeff] text-[#7c3aed]",
+  sky: "bg-[#eef4ff] text-[#1b5594]",
   rose: "bg-[rgba(186,26,26,0.1)] text-[#ba1a1a]",
 };
 
@@ -72,7 +72,7 @@ const MONO_ACCENT: Record<AccentKey, string> = {
     "bg-[rgba(21,190,83,0.15)] text-[#108c3d] border-[rgba(21,190,83,0.3)]",
   amber:
     "bg-[rgba(245,158,11,0.14)] text-[#9b6829] border-[rgba(245,158,11,0.3)]",
-  violet: "bg-[#f3eeff] text-[#7c3aed] border-[rgba(124,58,237,0.18)]",
+  sky: "bg-[#eef4ff] text-[#1b5594] border-[rgba(27,85,148,0.18)]",
   rose: "bg-[rgba(186,26,26,0.1)] text-[#ba1a1a] border-[rgba(186,26,26,0.25)]",
 };
 
@@ -125,7 +125,7 @@ function initials(name: string): string {
 }
 
 function pickAccent(seed: string): AccentKey {
-  const palette: AccentKey[] = ["primary", "emerald", "amber", "violet", "rose"];
+  const palette: AccentKey[] = ["primary", "emerald", "amber", "sky", "rose"];
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return palette[h % palette.length];
@@ -200,7 +200,7 @@ function PipelineBar({
     val: number;
     color: string;
   }> = [
-    { key: "drafts", val: drafts, color: "#7c3aed" },
+    { key: "drafts", val: drafts, color: "#003d74" },
     { key: "inProgress", val: inProgress, color: "#9b6829" },
     { key: "completed", val: completed, color: "#108c3d" },
   ];
@@ -552,7 +552,7 @@ export default function DashboardPage() {
             <KpiTile
               label="Bozze"
               value={stats.drafts}
-              accent="violet"
+              accent="primary"
               icon={FileText}
               delta={
                 stats.drafts > 0 ? (
@@ -761,7 +761,7 @@ function QuickActionsPanel() {
       label: "Genera documenti",
       sub: "da sopralluogo",
       href: "/documents",
-      accent: "violet",
+      accent: "sky",
       icon: FilePlus2,
     },
   ];
@@ -848,7 +848,7 @@ function PlanUsagePanel() {
           <>
             <Meter
               icon={<Zap className="h-4 w-4" />}
-              label="Crediti AI"
+              label="Crediti AI usati"
               used={ent.usage.ai_credits_used}
               total={ent.usage.ai_credits_allowance}
               percent={creditsPercent(ent.usage)}

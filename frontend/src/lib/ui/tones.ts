@@ -23,11 +23,28 @@
  * composed from `TONE_SOLID`.
  */
 
-export type Tone = "neutral" | "info" | "success" | "warning" | "danger" | "ai";
+/**
+ * `ai` is *reserved*. Violet is how this app says "a model produced this, check
+ * it" — on the Suggerisci/Rigenera buttons, the AI-feedback panel and the
+ * generated-description card. It leaked into things that have nothing to do
+ * with the model (the Bozze KPI, the Dati Azienda panel, the Amministratore
+ * badge, the "in revisione" status), and every one of those made the real
+ * signal cheaper. Reach for `brand` or `info` when you want "important blue";
+ * only reach for `ai` when a model wrote the thing.
+ */
+export type Tone =
+  | "neutral"
+  | "brand"
+  | "info"
+  | "success"
+  | "warning"
+  | "danger"
+  | "ai";
 
 /** The pure hue for bars, dots and progress fills — no tint, no text duty. */
 export const TONE_SOLID: Record<Tone, string> = {
   neutral: "#64748d",
+  brand: "#003d74",
   info: "#1b5594",
   success: "#15be53",
   warning: "#f59e0b",
@@ -38,6 +55,7 @@ export const TONE_SOLID: Record<Tone, string> = {
 /** Callout / panel tier: ~5% wash under a hairline. */
 export const TONE_SURFACE: Record<Tone, string> = {
   neutral: "border-[#e5edf5] bg-[#f6f9fc] text-[#273951]",
+  brand: "border-[rgba(0,61,116,0.2)] bg-[rgba(0,61,116,0.04)] text-[#003d74]",
   info: "border-[rgba(27,85,148,0.24)] bg-[rgba(27,85,148,0.045)] text-[#1b5594]",
   success: "border-[rgba(16,140,61,0.26)] bg-[rgba(16,140,61,0.05)] text-[#0f7a37]",
   warning: "border-[rgba(155,104,41,0.26)] bg-[rgba(155,104,41,0.05)] text-[#8a5c23]",
@@ -86,6 +104,10 @@ export const BAND_RING = {
 /** Badge / pill tier: denser fill, darker label. */
 export const TONE_CHIP: Record<Tone, string> = {
   neutral: "border-[#e5edf5] bg-[#f6f9fc] text-[#273951]",
+  // Solid rather than tinted, unlike every other chip: `brand` and `info` are
+  // both navy, and at 10% tint an 11px label cannot tell #003d74 from #1b5594.
+  // Filling it is what makes "the strongest one" legible at badge size.
+  brand: "border-[#003d74] bg-[#003d74] text-white",
   info: "border-[rgba(27,85,148,0.28)] bg-[rgba(27,85,148,0.1)] text-[#1b5594]",
   success: "border-[rgba(16,140,61,0.3)] bg-[rgba(16,140,61,0.14)] text-[#0c6b2f]",
   warning: "border-[rgba(155,104,41,0.3)] bg-[rgba(155,104,41,0.12)] text-[#8a5c23]",

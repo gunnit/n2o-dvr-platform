@@ -66,7 +66,7 @@ export function DeleteAziendaDialog({
                   {ragioneSociale}
                 </span>{" "}
                 e tutti i dati collegati (persone, ambienti, attrezzature,
-                rischi, documenti). L&apos;operazione non puo&apos; essere
+                rischi, documenti). L&apos;operazione non può essere
                 annullata.
               </DialogDescription>
             </div>
