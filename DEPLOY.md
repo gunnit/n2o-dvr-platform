@@ -130,21 +130,38 @@ Three things must happen, in this order, to switch it on. **Step 1 needs the
 PayPal credentials, so a human has to run it** — it cannot be done from a coding
 session, which must not handle API keys.
 
-> **State as of 2026-07-29.** Step 3 is **done**: the listener is registered
-> (`2RF36111EN427364T`) and set on `n2o-dvr-api`. Steps 1 and 2 are outstanding,
-> and 2 cannot start until 1 lands, because `paypal_setup.py` authenticates with
-> whatever credentials the process it runs in holds.
+> ## ✅ All three steps are done (2026-07-29). Checkout is live in sandbox.
 >
-> Step 2 has to run **on the box**, not from a laptop: `n2o-dvr-db` has an empty
-> `ipAllowList`, so Render drops external connections (they TLS-handshake and
-> then close mid-operation, which reads like a network flake rather than a
-> refusal). Adding an allowlist entry to run one script is not worth it — you are
-> already in the dashboard for step 1, and the shell is one click from there.
+> | Step | State |
+> |---|---|
+> | 1. Credentials | Replaced with the sandbox pair. Verified in production: `POST /v1/oauth2/token → 200`, `app_id=APP-0BY2542729361932X`. |
+> | 2. Plan ids | All 7 bound by `--bind-only` during pre-deploy of `054f88b`: `bind: 7 newly bound, 0 already correct, 0 unresolved`. |
+> | 3. Webhook | Listener `2RF36111EN427364T`, all ten events, `PAYPAL_WEBHOOK_ID` set on `n2o-dvr-api`. |
+>
+> Verified end to end against production: `GET /billing/plans` returns 4 plans for
+> a consultant tenant and 3 for a direct one; `POST /billing/subscribe` returned
+> real approval links on both channels (`I-LLLL9DEJS5CF` for A_SOLO,
+> `I-B9WYV1M3LF1S` for B_BASE); a direct tenant asking for A_SOLO still gets 403
+> (INV-9). `/billing` renders the live picker with enabled buttons — the
+> "pagamento online non è attivo" fallback is gone.
+>
+> **Still unproven: activation.** Nobody has approved a subscription and watched
+> `BILLING.SUBSCRIPTION.ACTIVATED` flip a tenant to `active`. That needs the
+> sandbox *buyer* login in `credentials/paypal-sandbox.json`, so it is a human's
+> walk — see the per-channel table below.
+>
+> Two facts worth keeping, because they cost time to establish:
+> * `n2o-dvr-db` has an empty `ipAllowList`, so nothing outside Render can reach
+>   it — external connections TLS-handshake and then close mid-operation, which
+>   reads like a network flake rather than a refusal. Anything needing the
+>   database runs on the box, or on the deploy path.
+> * Render's `query_render_postgres` MCP tool cannot help either: it does not
+>   negotiate TLS (`FATAL: SSL/TLS required`) and is read-only regardless.
 
 1. **Replace the credentials on `n2o-dvr-api` with the sandbox pair.**
-   ⚠️ **Confirmed wrong as of 2026-07-29** — this is no longer a "check whether".
-   The keys set on the service are non-empty but do not authenticate: production
-   logs show
+   ✅ **Done 2026-07-29** — kept below because the failure it describes is silent
+   and will recur on the switch to live (§4b-bis). The keys were non-empty but
+   did not authenticate: production logs showed
 
    ```
    httpx.HTTPStatusError: Client error '401 Unauthorized' for url
