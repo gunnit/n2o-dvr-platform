@@ -242,7 +242,7 @@ export default function AziendePage() {
               <Link
                 key={azienda.id}
                 href={`/aziende/${azienda.id}`}
-                className="group flex flex-col gap-3.5 rounded-md border border-[#e5edf5] bg-white p-[18px] shadow-stripe-ambient transition-[box-shadow,transform,border-color] duration-200 hover:-translate-y-0.5 hover:border-[#d1d9e3] hover:shadow-stripe-elevated"
+                className="group flex min-w-0 flex-col gap-3.5 rounded-md border border-[#e5edf5] bg-white p-[18px] shadow-stripe-ambient transition-[box-shadow,transform,border-color] duration-200 hover:-translate-y-0.5 hover:border-[#d1d9e3] hover:shadow-stripe-elevated"
               >
                 <div className="flex items-start gap-3">
                   <Monogram accent={meta.accent}>{mono}</Monogram>

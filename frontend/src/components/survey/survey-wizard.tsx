@@ -988,15 +988,15 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
       </div>
 
       {/* Sticky footer action bar */}
-      <footer className="fixed bottom-0 left-64 right-0 z-40 flex h-16 items-center justify-between border-t border-slate-200/50 bg-white/90 px-8 backdrop-blur-md">
-        <div className="flex items-center gap-2">
-          <CloudUpload className="h-4 w-4 text-[#0f7a37]" strokeWidth={2} />
-          <span className="text-[11px] font-medium tracking-tight text-slate-400">
+      <footer className="fixed bottom-0 left-0 right-0 z-30 flex h-16 items-center justify-between gap-3 border-t border-slate-200/50 bg-white/90 px-4 backdrop-blur-md sm:px-6 lg:left-64 lg:px-8">
+        <div className="hidden items-center gap-2 sm:flex">
+          <CloudUpload className="h-4 w-4 shrink-0 text-[#0f7a37]" strokeWidth={2} />
+          <span className="whitespace-nowrap text-[11px] font-medium tracking-tight text-slate-400">
             Passo {currentStep + 1} di {STEPS.length}
             {saving ? " — salvataggio..." : " — bozza salvata"}
           </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:flex-none sm:gap-3">
           {!isSigned && currentStepErrors.length > 0 && (
             <div
               role="alert"
@@ -1015,7 +1015,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             type="button"
             onClick={goPrev}
             disabled={currentStep === 0 || isSigned}
-            className="flex items-center gap-2 rounded-lg border-2 border-slate-200 px-6 py-2 text-sm font-bold text-slate-500 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border-2 border-slate-200 px-4 py-2 text-sm font-bold text-slate-500 sm:px-6 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={2.5} />
             Indietro
@@ -1026,7 +1026,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
               onClick={goNext}
               disabled={nextDisabled}
               title={nextDisabled ? nextDisabledReason : undefined}
-              className="flex items-center gap-2 rounded-lg bg-primary-container px-8 py-2 text-sm font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-primary-container/30 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-primary-container px-5 py-2 text-sm font-bold text-white shadow-lg sm:px-8 transition-all hover:-translate-y-0.5 hover:shadow-primary-container/30 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Avanti
               <ChevronRight className="h-[18px] w-[18px]" strokeWidth={2.5} />
@@ -1040,7 +1040,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             // azienda page where documents and the firma badge live.
             <Link
               href={`/aziende/${aziendaId}`}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#15be53] px-8 py-2 text-sm font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-[#0c6b2f]"
+              className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-[#15be53] px-5 py-2 text-sm font-bold text-white shadow-lg sm:px-8 transition-all hover:-translate-y-0.5 hover:bg-[#0c6b2f]"
             >
               <Check className="h-4 w-4" strokeWidth={2.5} />
               Sopralluogo Completato
@@ -1054,7 +1054,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
                   ? `Prerequisiti mancanti: ${completionIssues.join(" • ")}`
                   : undefined
               }
-              className="rounded-lg bg-primary-container px-8 py-2 text-sm font-bold text-white shadow-lg hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+              className="shrink-0 whitespace-nowrap rounded-lg bg-primary-container px-5 py-2 text-sm font-bold text-white shadow-lg sm:px-8 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {saving ? "Salvataggio..." : "Completa Sopralluogo"}
               {!saving && <Check className="ml-1 h-4 w-4" />}

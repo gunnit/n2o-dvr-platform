@@ -164,8 +164,11 @@ export function DescriptionEditor({
 
   return (
     <AIContent isAI={provenance === "ai"} className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+      {/* Wraps, and the two action buttons wrap with it. Unwrapped, this row's
+          min-content was 587px — it was the widest item in the azienda grid, so
+          it set the floor for the whole page on a phone. */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h4 className="text-sm font-medium">Descrizione attività</h4>
           {provenance === "ai" && <AIBadge provenance="ai" timestamp={lastGeneratedAt} />}
           {provenance === "edited" && (

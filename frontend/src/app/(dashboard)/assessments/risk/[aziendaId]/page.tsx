@@ -71,13 +71,16 @@ export default function RiskAssessmentPage() {
   );
 
   return (
-    // The dashboard layout caps content at max-w-screen-xl. The editor's
-    // table needs more horizontal real estate, so we knock the cap off
-    // *for this page only* via negative-margin tricks scoped to the
-    // outermost wrapper. min-w-0 keeps long category names from blowing
-    // out the layout if the user shrinks the viewport.
-    <div className="-mx-4 min-w-0 space-y-6 lg:-mx-12 xl:-mx-20 2xl:-mx-32">
-      <div className="space-y-3 px-4 lg:px-12 xl:px-20 2xl:px-32">
+    // The editor's table wants more horizontal room than the layout's gutter
+    // leaves it, so this wrapper reclaims exactly that gutter — and no more.
+    //
+    // It used to pull further (-mx-12/-20/-32), which assumed slack that only
+    // exists above ~1536px: at 1440 the layout is already narrower than its own
+    // max-w-screen-xl cap, so the extra pull slid the content 48px off the right
+    // edge and underneath the fixed sidebar on the left. The table scrolls
+    // horizontally on its own, which is the honest way to be wider than the page.
+    <div className="-mx-4 min-w-0 space-y-6 sm:-mx-6 lg:-mx-8">
+      <div className="space-y-3 px-4 sm:px-6 lg:px-8">
         <Link
           href={`/aziende/${aziendaId}?tab=rischi`}
           className="-mb-1 inline-flex items-center gap-1.5 text-[13px] font-medium text-[#64748d] transition-colors hover:text-[#061b31]"
@@ -111,7 +114,7 @@ export default function RiskAssessmentPage() {
         </div>
       </div>
 
-      <div className="px-4 lg:px-12 xl:px-20 2xl:px-32">
+      <div className="px-4 sm:px-6 lg:px-8">
         {loading ? (
           <p className="text-sm text-muted-foreground">Caricamento…</p>
         ) : loadError ? (

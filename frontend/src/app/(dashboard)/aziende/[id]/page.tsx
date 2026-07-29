@@ -307,8 +307,10 @@ export default function AziendaDetailPage() {
         Aziende
       </Link>
 
-      {/* Header */}
-      <div className="flex items-start justify-between gap-6">
+      {/* Header. Stacks below `sm`: four action buttons and a ragione sociale
+          cannot share a row on a phone, and `shrink-0` on the button group used
+          to hold the whole page open at 596px. */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="type-h1 truncate">{azienda.ragione_sociale}</h1>
@@ -336,7 +338,7 @@ export default function AziendaDetailPage() {
             )}
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
           {isAdmin && (
             <>
               <button
@@ -427,9 +429,13 @@ export default function AziendaDetailPage() {
       {/* Tabs — order matches the survey wizard (M3): Ambienti precedes
            Persone. M5 keeps the active tab in sync with `?tab=`. */}
       <Tabs value={activeTab} onValueChange={handleTabChange}>
+        {/* Seven nowrap tabs need ~1050px and had nowhere to go, so they held
+            the whole document open at 1057px on a 390px phone. They scroll now.
+            `pb-1.5` because `overflow-x-auto` also clips the y-axis, and the
+            active tab's underline is positioned at `bottom-[-5px]`. */}
         <TabsList
           variant="line"
-          className="h-auto w-full justify-start gap-6 border-b border-[#e5edf5] pb-0"
+          className="h-auto w-full justify-start gap-6 overflow-x-auto border-b border-[#e5edf5] pb-1.5"
         >
           <TabsTrigger
             value="panoramica"

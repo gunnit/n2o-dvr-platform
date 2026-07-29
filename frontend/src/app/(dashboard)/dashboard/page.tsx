@@ -641,31 +641,42 @@ export default function DashboardPage() {
                       a.sede_operativa_citta ?? a.sede_legale_citta ?? "—";
                     return (
                       <li key={a.id}>
+                        {/* Six columns of meta do not fit a phone, so below `sm`
+                            the row is two stacked bands — identity, then meta —
+                            and the wrappers `contents` themselves away at `sm`
+                            so the six leaves rejoin the original grid. */}
                         <Link
                           href={`/aziende/${a.id}`}
-                          className="grid grid-cols-[auto_minmax(0,1.6fr)_0.9fr_0.8fr_0.9fr_auto] items-center gap-4 border-b border-[#e5edf5] px-4 py-3 transition-colors last:border-b-0 hover:bg-[#f6f9fc]"
+                          className="flex flex-col gap-2.5 border-b border-[#e5edf5] px-4 py-3 transition-colors last:border-b-0 hover:bg-[#f6f9fc] sm:grid sm:grid-cols-[auto_minmax(0,1.6fr)_0.9fr_0.8fr_0.9fr_auto] sm:items-center sm:gap-4"
                         >
-                          <Mono seed={a.ragione_sociale} accent={accent} />
-                          <div className="min-w-0">
-                            <div className="truncate text-[13.5px] font-semibold text-[#061b31]">
-                              {a.ragione_sociale}
+                          <div className="flex min-w-0 items-center gap-3 sm:contents">
+                            <Mono seed={a.ragione_sociale} accent={accent} />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-[13.5px] font-semibold text-[#061b31]">
+                                {a.ragione_sociale}
+                              </div>
+                              <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11.5px] text-[#64748d]">
+                                <MapPin
+                                  className="h-3 w-3 shrink-0 text-[#1b5594]"
+                                  strokeWidth={2}
+                                />
+                                <span className="truncate">{city}</span>
+                                {a.codice_ateco && (
+                                  <>
+                                    <span className="h-0.5 w-0.5 shrink-0 rounded-full bg-[#94a3b8]" />
+                                    <span className="font-mono text-[11px] font-medium text-[#273951]">
+                                      {a.codice_ateco}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
                             </div>
-                            <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11.5px] text-[#64748d]">
-                              <MapPin
-                                className="h-3 w-3 shrink-0 text-[#1b5594]"
-                                strokeWidth={2}
-                              />
-                              <span className="truncate">{city}</span>
-                              {a.codice_ateco && (
-                                <>
-                                  <span className="h-0.5 w-0.5 shrink-0 rounded-full bg-[#94a3b8]" />
-                                  <span className="font-mono text-[11px] font-medium text-[#273951]">
-                                    {a.codice_ateco}
-                                  </span>
-                                </>
-                              )}
-                            </div>
+                            <ChevronRight
+                              className="h-4 w-4 shrink-0 text-[#94a3b8] sm:hidden"
+                              strokeWidth={2}
+                            />
                           </div>
+                          <div className="grid grid-cols-[1fr_auto_auto] items-end gap-x-4 gap-y-1 sm:contents">
                           <div className="flex flex-col gap-1">
                             <div className="flex items-baseline justify-between text-[11px] text-[#64748d]">
                               <span>DVR</span>
@@ -704,8 +715,9 @@ export default function DashboardPage() {
                               {createdLabel}
                             </div>
                           </div>
+                          </div>
                           <ChevronRight
-                            className="h-4 w-4 text-[#94a3b8]"
+                            className="hidden h-4 w-4 text-[#94a3b8] sm:block"
                             strokeWidth={2}
                           />
                         </Link>

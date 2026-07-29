@@ -19,8 +19,10 @@ import {
   Settings,
   Shield,
   Users,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useNavDrawer } from "@/components/layout/nav-drawer";
 import { FeedbackDialog } from "@/components/feedback/feedback-dialog";
 import { planDisplayName } from "@/components/billing/billing-ui";
 import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
@@ -104,6 +106,7 @@ type SidebarUser = {
 
 export function Sidebar({ user }: { user: SidebarUser }) {
   const pathname = usePathname();
+  const { open, isDesktop, close } = useNavDrawer();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const { can, roleLabel } = usePermissions();
@@ -148,116 +151,153 @@ export function Sidebar({ user }: { user: SidebarUser }) {
     .join("");
 
   return (
-    <aside className="fixed left-0 top-0 z-50 flex h-screen w-64 flex-col bg-sidebar py-6 font-body text-[13px]">
-      <div className="mb-8 flex items-center gap-3 px-6">
-        {logoUrl ? (
-          <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-md bg-white p-1 ring-1 ring-white/10">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={logoUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
-          </div>
-        ) : (
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-white/10 ring-1 ring-white/10">
-            <Shield className="h-4 w-4 text-white" strokeWidth={1.75} />
-          </div>
+    <>
+      {/* Backdrop. Rendered always and faded, rather than mounted on open, so
+          the drawer's slide and the dim happen in one frame. */}
+      <div
+        aria-hidden
+        onClick={close}
+        className={cn(
+          "fixed inset-0 z-40 bg-[#061b31]/45 transition-opacity duration-200 lg:hidden",
+          open ? "opacity-100" : "pointer-events-none opacity-0",
         )}
-        <div>
-          <h1 className="font-heading text-[15px] font-medium tracking-tight text-white">
-            N2O DVR
-          </h1>
-          <p className="text-[11px] text-white/50">Sicurezza sul lavoro</p>
-        </div>
-      </div>
+      />
 
-      {/* min-h-0 + overflow-y-auto, not just flex-1: a flex item's implicit
-          min-height is its content, so without these the nav refuses to shrink
-          and shoves the plan badge and the user footer (with the only logout
-          control) off the bottom of the viewport on short screens. */}
-      <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3">
-        {navigation.map((item) => {
-          const isActive = pathname?.startsWith(item.href);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 transition-colors",
-                isActive
-                  ? "bg-white/10 font-medium text-white"
-                  : "text-white/65 hover:bg-white/5 hover:text-white"
-              )}
-            >
-              <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-              <span>{item.name}</span>
-            </Link>
-          );
-        })}
-
-        <button
-          type="button"
-          onClick={() => setFeedbackOpen(true)}
-          className="mt-2 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-white/65 transition-colors hover:bg-white/5 hover:text-white"
-        >
-          <MessageSquarePlus className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-          <span>Segnala</span>
-        </button>
-
-        {adminItems.length > 0 && (
-          <>
-            <div className="mt-6 mb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-white/40">
-              Amministrazione
+      <aside
+        // Off-screen is not merely invisible: without `inert` a keyboard user
+        // tabs from the hamburger straight into a menu that is not on screen.
+        // Desktop never gets it — there the sidebar is the layout.
+        inert={!isDesktop && !open}
+        aria-label="Navigazione principale"
+        className={cn(
+          "fixed left-0 top-0 z-50 flex h-screen w-64 flex-col bg-sidebar py-6 font-body text-[13px]",
+          "transition-transform duration-200 ease-out lg:translate-x-0 lg:transition-none",
+          open ? "translate-x-0 shadow-2xl" : "-translate-x-full",
+        )}
+      >
+        <div className="mb-8 flex items-center gap-3 px-6">
+          {logoUrl ? (
+            <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-md bg-white p-1 ring-1 ring-white/10">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={logoUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
             </div>
-            {adminItems.map((item) => {
-              const isActive = pathname?.startsWith(item.href);
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2 transition-colors",
-                    isActive
-                      ? "bg-white/10 font-medium text-white"
-                      : "text-white/65 hover:bg-white/5 hover:text-white"
-                  )}
-                >
-                  <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-                  <span>{item.name}</span>
-                </Link>
-              );
-            })}
-          </>
-        )}
-      </nav>
-
-      {/* The plan badge is itself a permissioned surface: a role that cannot
-          read billing has no use for a meter it can neither act on nor change. */}
-      {can(BILLING_READ) && <PlanTracker />}
-
-      <div className="mt-auto shrink-0 border-t border-white/10 px-4 pt-4">
-        <div className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-white/5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-medium text-white ring-1 ring-white/15">
-            {initials}
-          </div>
+          ) : (
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-white/10 ring-1 ring-white/10">
+              <Shield className="h-4 w-4 text-white" strokeWidth={1.75} />
+            </div>
+          )}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[12px] font-medium text-white">
-              {user.name ?? user.email ?? "Utente"}
-            </p>
-            {/* The human label, not the identifier: this line used to read
-                "operatore_ufficio" to the operator it described. */}
-            <p className="truncate text-[10px] text-white/50">{roleLabel}</p>
+            <h1 className="font-heading text-[15px] font-medium tracking-tight text-white">
+              N2O DVR
+            </h1>
+            <p className="text-[11px] text-white/50">Sicurezza sul lavoro</p>
           </div>
           <button
-            onClick={() => signOut()}
-            className="rounded-sm p-1 text-white/50 transition-colors hover:bg-white/10 hover:text-white"
-            aria-label="Esci"
+            type="button"
+            onClick={close}
+            aria-label="Chiudi il menu"
+            className="-mr-1 rounded-md p-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white lg:hidden"
           >
-            <LogOut className="h-3.5 w-3.5" strokeWidth={1.75} />
+            <X className="h-4 w-4" strokeWidth={2} />
           </button>
         </div>
-      </div>
-      <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
-    </aside>
+
+        {/* min-h-0 + overflow-y-auto, not just flex-1: a flex item's implicit
+            min-height is its content, so without these the nav refuses to shrink
+            and shoves the plan badge and the user footer (with the only logout
+            control) off the bottom of the viewport on short screens. */}
+        <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3">
+          {navigation.map((item) => {
+            const isActive = pathname?.startsWith(item.href);
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                onClick={close}
+                className={cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 transition-colors",
+                  isActive
+                    ? "bg-white/10 font-medium text-white"
+                    : "text-white/65 hover:bg-white/5 hover:text-white"
+                )}
+              >
+                <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                <span>{item.name}</span>
+              </Link>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={() => {
+              close();
+              setFeedbackOpen(true);
+            }}
+            className="mt-2 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-white/65 transition-colors hover:bg-white/5 hover:text-white"
+          >
+            <MessageSquarePlus className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+            <span>Segnala</span>
+          </button>
+
+          {adminItems.length > 0 && (
+            <>
+              <div className="mt-6 mb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-white/40">
+                Amministrazione
+              </div>
+              {adminItems.map((item) => {
+                const isActive = pathname?.startsWith(item.href);
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    onClick={close}
+                    className={cn(
+                      "flex items-center gap-3 rounded-md px-3 py-2 transition-colors",
+                      isActive
+                        ? "bg-white/10 font-medium text-white"
+                        : "text-white/65 hover:bg-white/5 hover:text-white"
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                    <span>{item.name}</span>
+                  </Link>
+                );
+              })}
+            </>
+          )}
+        </nav>
+
+        {/* The plan badge is itself a permissioned surface: a role that cannot
+            read billing has no use for a meter it can neither act on nor change. */}
+        {can(BILLING_READ) && <PlanTracker />}
+
+        <div className="mt-auto shrink-0 border-t border-white/10 px-4 pt-4">
+          <div className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-white/5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-medium text-white ring-1 ring-white/15">
+              {initials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[12px] font-medium text-white">
+                {user.name ?? user.email ?? "Utente"}
+              </p>
+              {/* The human label, not the identifier: this line used to read
+                  "operatore_ufficio" to the operator it described. */}
+              <p className="truncate text-[10px] text-white/50">{roleLabel}</p>
+            </div>
+            <button
+              onClick={() => signOut()}
+              className="rounded-sm p-1 text-white/50 transition-colors hover:bg-white/10 hover:text-white"
+              aria-label="Esci"
+            >
+              <LogOut className="h-3.5 w-3.5" strokeWidth={1.75} />
+            </button>
+          </div>
+        </div>
+        <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
+      </aside>
+    </>
   );
 }
 
