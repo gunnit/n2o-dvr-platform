@@ -1,0 +1,3858 @@
+# GENERATED FILE - do not edit by hand.
+#
+# The inventory of every feature this app exposes: each API endpoint with the
+# guards that actually apply to it, plus the pages that call them. Derived from
+# the code, so it cannot describe an app that does not exist.
+#
+# Regenerate:
+#   python backend/scripts/build_feature_map.py --write
+#
+# backend/tests/test_feature_map.py diffs a fresh render against this file, so
+# adding an endpoint fails the build until the manifest is regenerated. Read
+# the diff: a new row with an empty `capabilities` or `billing_gates` is the
+# question this file exists to ask.
+#
+# Fields per endpoint:
+#   auth            required | public  (does any auth dependency resolve?)
+#   capabilities    app/core/permissions.py -- answers 403
+#   roles_allowed   derived from the capability matrix, not restated
+#   billing_gates   app/billing/gates.py    -- answers 402
+#   ai_credits      credit kinds this endpoint meters via `metered(...)`
+#   called_by_ui    a /api/v1 literal in frontend/src matches this path
+
+version: 1
+totals:
+  endpoints: 206
+  areas: 34
+  frontend_pages: 34
+  ui_api_call_sites: 92
+  capability_gated: 119
+  billing_gated: 10
+  ai_metered: 11
+endpoints_by_area:
+  - area: "admin-backups"
+    endpoints: 2
+  - area: "ai-feedback"
+    endpoints: 3
+  - area: "ambienti"
+    endpoints: 10
+  - area: "attrezzature"
+    endpoints: 7
+  - area: "auth"
+    endpoints: 6
+  - area: "aziende"
+    endpoints: 12
+  - area: "billing"
+    endpoints: 12
+  - area: "biologico"
+    endpoints: 5
+  - area: "calculations"
+    endpoints: 11
+  - area: "documents"
+    endpoints: 14
+  - area: "duvri"
+    endpoints: 8
+  - area: "feedback"
+    endpoints: 3
+  - area: "gestanti"
+    endpoints: 7
+  - area: "haccp"
+    endpoints: 5
+  - area: "incendio"
+    endpoints: 5
+  - area: "lookup"
+    endpoints: 5
+  - area: "microclima"
+    endpoints: 5
+  - area: "misure-miglioramento"
+    endpoints: 5
+  - area: "mmc"
+    endpoints: 5
+  - area: "organizations"
+    endpoints: 5
+  - area: "pee-procedures"
+    endpoints: 5
+  - area: "pericoli"
+    endpoints: 7
+  - area: "persone"
+    endpoints: 6
+  - area: "pos"
+    endpoints: 10
+  - area: "rischi"
+    endpoints: 6
+  - area: "rischi-misure-libreria"
+    endpoints: 4
+  - area: "sorveglianza"
+    endpoints: 1
+  - area: "sostanze-chimiche"
+    endpoints: 8
+  - area: "stress-ai"
+    endpoints: 1
+  - area: "stress-misure"
+    endpoints: 4
+  - area: "stress-valutazione"
+    endpoints: 4
+  - area: "survey"
+    endpoints: 5
+  - area: "users"
+    endpoints: 5
+  - area: "vdt"
+    endpoints: 5
+review:
+  unenforced_capabilities:
+    - "ai:use"
+    - "aziende:read"
+    - "documents:delete"
+    - "documents:read"
+  unguarded_writes:
+    - "POST /api/v1/ai-feedback"
+    - "PATCH /api/v1/auth/me"
+    - "POST /api/v1/auth/me/change-password"
+    - "POST /api/v1/feedback"
+  public_endpoints:
+    - "POST /api/v1/auth/login"
+    - "POST /api/v1/auth/register"
+    - "POST /api/v1/auth/register-direct"
+    - "POST /api/v1/billing/webhook"
+    - "GET /api/v1/calculate/biologico-checklist"
+    - "GET /api/v1/calculate/fire-measures"
+    - "POST /api/v1/calculate/fire-risk"
+    - "POST /api/v1/calculate/microclima/phs"
+    - "POST /api/v1/calculate/microclima/pmv"
+    - "POST /api/v1/calculate/niosh"
+    - "GET /api/v1/calculate/niosh-cp"
+    - "POST /api/v1/calculate/risk-index"
+    - "POST /api/v1/calculate/stress"
+    - "GET /api/v1/calculate/stress/indicators"
+    - "POST /api/v1/calculate/vdt"
+    - "GET /api/v1/haccp/_meta/activity-types"
+  endpoints_with_no_ui_caller:
+    - "POST /api/v1/admin/backups/event"
+    - "POST /api/v1/auth/login"
+    - "POST /api/v1/auth/register"
+    - "POST /api/v1/auth/register-direct"
+    - "POST /api/v1/aziende/autofill"
+    - "DELETE /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}"
+    - "GET /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}"
+    - "PUT /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}"
+    - "DELETE /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/foto/{foto_id}"
+    - "GET /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/foto/{foto_id}/content"
+    - "PATCH /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/ordine"
+    - "POST /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/rischi"
+    - "DELETE /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/rischi/{rischio_id}/pericoli/{pericolo_id}"
+    - "PUT /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/rischi/{rischio_id}/pericoli/{pericolo_id}"
+    - "POST /api/v1/aziende/{azienda_id}/attrezzature/estrai-foto/{ambiente_id}"
+    - "POST /api/v1/aziende/{azienda_id}/attrezzature/suggerisci/{ambiente_id}"
+    - "DELETE /api/v1/aziende/{azienda_id}/attrezzature/{attrezzatura_id}"
+    - "GET /api/v1/aziende/{azienda_id}/attrezzature/{attrezzatura_id}"
+    - "PUT /api/v1/aziende/{azienda_id}/attrezzature/{attrezzatura_id}"
+    - "GET /api/v1/aziende/{azienda_id}/biologico-valutazioni"
+    - "POST /api/v1/aziende/{azienda_id}/biologico-valutazioni"
+    - "DELETE /api/v1/aziende/{azienda_id}/biologico-valutazioni/{valutazione_id}"
+    - "GET /api/v1/aziende/{azienda_id}/biologico-valutazioni/{valutazione_id}"
+    - "PATCH /api/v1/aziende/{azienda_id}/biologico-valutazioni/{valutazione_id}"
+    - "GET /api/v1/aziende/{azienda_id}/documents/{document_id}/status"
+    - "GET /api/v1/aziende/{azienda_id}/gestanti"
+    - "POST /api/v1/aziende/{azienda_id}/gestanti"
+    - "POST /api/v1/aziende/{azienda_id}/gestanti/cross-reference"
+    - "DELETE /api/v1/aziende/{azienda_id}/gestanti/{valutazione_id}"
+    - "GET /api/v1/aziende/{azienda_id}/gestanti/{valutazione_id}"
+    - "PATCH /api/v1/aziende/{azienda_id}/gestanti/{valutazione_id}"
+    - "POST /api/v1/aziende/{azienda_id}/gestanti/{valutazione_id}/decision"
+    - "GET /api/v1/aziende/{azienda_id}/incendio-valutazioni"
+    - "POST /api/v1/aziende/{azienda_id}/incendio-valutazioni"
+    - "DELETE /api/v1/aziende/{azienda_id}/incendio-valutazioni/{valutazione_id}"
+    - "GET /api/v1/aziende/{azienda_id}/incendio-valutazioni/{valutazione_id}"
+    - "PATCH /api/v1/aziende/{azienda_id}/incendio-valutazioni/{valutazione_id}"
+    - "GET /api/v1/aziende/{azienda_id}/microclima-valutazioni"
+    - "POST /api/v1/aziende/{azienda_id}/microclima-valutazioni"
+    - "DELETE /api/v1/aziende/{azienda_id}/microclima-valutazioni/{valutazione_id}"
+    - "GET /api/v1/aziende/{azienda_id}/microclima-valutazioni/{valutazione_id}"
+    - "PATCH /api/v1/aziende/{azienda_id}/microclima-valutazioni/{valutazione_id}"
+    - "GET /api/v1/aziende/{azienda_id}/mmc"
+    - "POST /api/v1/aziende/{azienda_id}/mmc"
+    - "DELETE /api/v1/aziende/{azienda_id}/mmc/{mmc_id}"
+    - "GET /api/v1/aziende/{azienda_id}/mmc/{mmc_id}"
+    - "PATCH /api/v1/aziende/{azienda_id}/mmc/{mmc_id}"
+    - "GET /api/v1/aziende/{azienda_id}/pericoli-libreria"
+    - "POST /api/v1/aziende/{azienda_id}/stress/ai-misure"
+    - "GET /api/v1/aziende/{azienda_id}/stress/misure"
+    - "POST /api/v1/aziende/{azienda_id}/stress/misure"
+    - "DELETE /api/v1/aziende/{azienda_id}/stress/misure/{misura_id}"
+    - "PUT /api/v1/aziende/{azienda_id}/stress/misure/{misura_id}"
+    - "GET /api/v1/aziende/{azienda_id}/stress/valutazione"
+    - "PUT /api/v1/aziende/{azienda_id}/stress/valutazione"
+    - "GET /api/v1/aziende/{azienda_id}/stress/valutazione/all"
+    - "GET /api/v1/aziende/{azienda_id}/stress/valutazione/mansioni"
+    - "POST /api/v1/aziende/{azienda_id}/survey/complete"
+    - "POST /api/v1/aziende/{azienda_id}/survey/revision"
+    - "POST /api/v1/aziende/{azienda_id}/survey/sign"
+    - "PUT /api/v1/aziende/{azienda_id}/survey/step/{step_number}"
+    - "GET /api/v1/aziende/{azienda_id}/vdt"
+    - "POST /api/v1/aziende/{azienda_id}/vdt"
+    - "DELETE /api/v1/aziende/{azienda_id}/vdt/{vdt_id}"
+    - "GET /api/v1/aziende/{azienda_id}/vdt/{vdt_id}"
+    - "PATCH /api/v1/aziende/{azienda_id}/vdt/{vdt_id}"
+    - "POST /api/v1/billing/admin/organizations/{organization_id}/plan"
+    - "POST /api/v1/billing/webhook"
+    - "GET /api/v1/calculate/biologico-checklist"
+    - "POST /api/v1/calculate/fire-risk"
+    - "POST /api/v1/calculate/microclima/phs"
+    - "POST /api/v1/calculate/microclima/pmv"
+    - "POST /api/v1/calculate/niosh"
+    - "GET /api/v1/calculate/niosh-cp"
+    - "POST /api/v1/calculate/risk-index"
+    - "POST /api/v1/calculate/stress"
+    - "GET /api/v1/calculate/stress/indicators"
+    - "POST /api/v1/calculate/vdt"
+    - "DELETE /api/v1/documenti/{document_id}/gdoc"
+    - "POST /api/v1/documenti/{document_id}/open-for-editing"
+    - "POST /api/v1/documenti/{document_id}/sync-from-gdoc"
+    - "GET /api/v1/lookup/regional-regulations"
+  ui_calls_without_a_matching_route: []
+endpoints:
+  - id: "admin_backups.record_backup_event"
+    method: "POST"
+    path: "/api/v1/admin/backups/event"
+    area: "admin-backups"
+    source: "backend/app/api/v1/admin_backups.py"
+    function: "record_backup_event"
+    auth: "required"
+    capabilities:
+      - "admin:tools"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "admin_backups.get_backup_status"
+    method: "GET"
+    path: "/api/v1/admin/backups/status"
+    area: "admin-backups"
+    source: "backend/app/api/v1/admin_backups.py"
+    function: "get_backup_status"
+    auth: "required"
+    capabilities:
+      - "admin:tools"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "ai_feedback.record_feedback"
+    method: "POST"
+    path: "/api/v1/ai-feedback"
+    area: "ai-feedback"
+    source: "backend/app/api/v1/ai_feedback.py"
+    function: "record_feedback"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "ai_feedback.get_recent_feedback"
+    method: "GET"
+    path: "/api/v1/ai-feedback/admin/recent"
+    area: "ai-feedback"
+    source: "backend/app/api/v1/ai_feedback.py"
+    function: "get_recent_feedback"
+    auth: "required"
+    capabilities:
+      - "admin:tools"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "ai_feedback.get_feedback_summary"
+    method: "GET"
+    path: "/api/v1/ai-feedback/admin/summary"
+    area: "ai-feedback"
+    source: "backend/app/api/v1/ai_feedback.py"
+    function: "get_feedback_summary"
+    auth: "required"
+    capabilities:
+      - "admin:tools"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "auth.login"
+    method: "POST"
+    path: "/api/v1/auth/login"
+    area: "auth"
+    source: "backend/app/api/v1/auth.py"
+    function: "login"
+    auth: "public"
+    capabilities: []
+    roles_allowed:
+      - "public"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "auth.me"
+    method: "GET"
+    path: "/api/v1/auth/me"
+    area: "auth"
+    source: "backend/app/api/v1/auth.py"
+    function: "me"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "auth.update_me"
+    method: "PATCH"
+    path: "/api/v1/auth/me"
+    area: "auth"
+    source: "backend/app/api/v1/auth.py"
+    function: "update_me"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "auth.change_password"
+    method: "POST"
+    path: "/api/v1/auth/me/change-password"
+    area: "auth"
+    source: "backend/app/api/v1/auth.py"
+    function: "change_password"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "auth.register"
+    method: "POST"
+    path: "/api/v1/auth/register"
+    area: "auth"
+    source: "backend/app/api/v1/auth.py"
+    function: "register"
+    auth: "public"
+    capabilities: []
+    roles_allowed:
+      - "public"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "auth.register_direct"
+    method: "POST"
+    path: "/api/v1/auth/register-direct"
+    area: "auth"
+    source: "backend/app/api/v1/auth.py"
+    function: "register_direct"
+    auth: "public"
+    capabilities: []
+    roles_allowed:
+      - "public"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "aziende.list_aziende"
+    method: "GET"
+    path: "/api/v1/aziende"
+    area: "aziende"
+    source: "backend/app/api/v1/aziende.py"
+    function: "list_aziende"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "aziende.create_azienda"
+    method: "POST"
+    path: "/api/v1/aziende"
+    area: "aziende"
+    source: "backend/app/api/v1/aziende.py"
+    function: "create_azienda"
+    auth: "required"
+    capabilities:
+      - "aziende:create"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates:
+      - "_ensure_can_add_azienda"
+      - "ensure_site_slot"
+      - "ensure_subscription_active"
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "aziende.autofill_azienda"
+    method: "POST"
+    path: "/api/v1/aziende/autofill"
+    area: "aziende"
+    source: "backend/app/api/v1/aziende.py"
+    function: "autofill_azienda"
+    auth: "required"
+    capabilities:
+      - "aziende:create"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits:
+      - "visura"
+    called_by_ui: false
+    in_openapi: true
+  - id: "aziende.dashboard_kpis"
+    method: "GET"
+    path: "/api/v1/aziende/dashboard/kpis"
+    area: "aziende"
+    source: "backend/app/api/v1/aziende.py"
+    function: "dashboard_kpis"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "aziende.delete_azienda"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}"
+    area: "aziende"
+    source: "backend/app/api/v1/aziende.py"
+    function: "delete_azienda"
+    auth: "required"
+    capabilities:
+      - "aziende:delete"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "aziende.get_azienda"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}"
+    area: "aziende"
+    source: "backend/app/api/v1/aziende.py"
+    function: "get_azienda"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "aziende.update_azienda"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}"
+    area: "aziende"
+    source: "backend/app/api/v1/aziende.py"
+    function: "update_azienda"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "ambienti.list_ambienti"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/ambienti"
+    area: "ambienti"
+    source: "backend/app/api/v1/ambienti.py"
+    function: "list_ambienti"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "ambienti.create_ambiente"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/ambienti"
+    area: "ambienti"
+    source: "backend/app/api/v1/ambienti.py"
+    function: "create_ambiente"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "ambienti.delete_ambiente"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}"
+    area: "ambienti"
+    source: "backend/app/api/v1/ambienti.py"
+    function: "delete_ambiente"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "ambienti.get_ambiente"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}"
+    area: "ambienti"
+    source: "backend/app/api/v1/ambienti.py"
+    function: "get_ambiente"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "ambienti.update_ambiente"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}"
+    area: "ambienti"
+    source: "backend/app/api/v1/ambienti.py"
+    function: "update_ambiente"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "ambienti.list_ambiente_foto"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/foto"
+    area: "ambienti"
+    source: "backend/app/api/v1/ambienti.py"
+    function: "list_ambiente_foto"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "ambienti.upload_ambiente_foto"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/foto"
+    area: "ambienti"
+    source: "backend/app/api/v1/ambienti.py"
+    function: "upload_ambiente_foto"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "ambienti.delete_ambiente_foto"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/foto/{foto_id}"
+    area: "ambienti"
+    source: "backend/app/api/v1/ambienti.py"
+    function: "delete_ambiente_foto"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "ambienti.get_ambiente_foto_content"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/foto/{foto_id}/content"
+    area: "ambienti"
+    source: "backend/app/api/v1/ambienti.py"
+    function: "get_ambiente_foto_content"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "ambienti.reorder_ambiente"
+    method: "PATCH"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/ordine"
+    area: "ambienti"
+    source: "backend/app/api/v1/ambienti.py"
+    function: "reorder_ambiente"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "pericoli.list_pericoli_suggeriti"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/pericoli-suggeriti"
+    area: "pericoli"
+    source: "backend/app/api/v1/pericoli.py"
+    function: "list_pericoli_suggeriti"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "rischi.create_rischio"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/rischi"
+    area: "rischi"
+    source: "backend/app/api/v1/rischi.py"
+    function: "create_rischio"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "rischi.batch_upsert_rischi"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/rischi/batch"
+    area: "rischi"
+    source: "backend/app/api/v1/rischi.py"
+    function: "batch_upsert_rischi"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "rischi.suggerisci_rischi"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/rischi/suggerisci"
+    area: "rischi"
+    source: "backend/app/api/v1/rischi.py"
+    function: "suggerisci_rischi"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits:
+      - "reasoning"
+    called_by_ui: true
+    in_openapi: true
+  - id: "rischi.update_rischio"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/rischi/{rischio_id}"
+    area: "rischi"
+    source: "backend/app/api/v1/rischi.py"
+    function: "update_rischio"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "pericoli.list_pericoli_for_rischio"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/rischi/{rischio_id}/pericoli"
+    area: "pericoli"
+    source: "backend/app/api/v1/pericoli.py"
+    function: "list_pericoli_for_rischio"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "pericoli.create_pericolo_valutazione"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/rischi/{rischio_id}/pericoli"
+    area: "pericoli"
+    source: "backend/app/api/v1/pericoli.py"
+    function: "create_pericolo_valutazione"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "pericoli.batch_upsert_pericoli"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/rischi/{rischio_id}/pericoli/batch"
+    area: "pericoli"
+    source: "backend/app/api/v1/pericoli.py"
+    function: "batch_upsert_pericoli"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "pericoli.delete_pericolo_valutazione"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/rischi/{rischio_id}/pericoli/{pericolo_id}"
+    area: "pericoli"
+    source: "backend/app/api/v1/pericoli.py"
+    function: "delete_pericolo_valutazione"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "pericoli.update_pericolo_valutazione"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/rischi/{rischio_id}/pericoli/{pericolo_id}"
+    area: "pericoli"
+    source: "backend/app/api/v1/pericoli.py"
+    function: "update_pericolo_valutazione"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "attrezzature.list_attrezzature"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/attrezzature"
+    area: "attrezzature"
+    source: "backend/app/api/v1/attrezzature.py"
+    function: "list_attrezzature"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "attrezzature.create_attrezzatura"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/attrezzature"
+    area: "attrezzature"
+    source: "backend/app/api/v1/attrezzature.py"
+    function: "create_attrezzatura"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "attrezzature.estrai_attrezzature_da_foto"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/attrezzature/estrai-foto/{ambiente_id}"
+    area: "attrezzature"
+    source: "backend/app/api/v1/attrezzature.py"
+    function: "estrai_attrezzature_da_foto"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits:
+      - "vision"
+    called_by_ui: false
+    in_openapi: true
+  - id: "attrezzature.suggerisci_attrezzature"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/attrezzature/suggerisci/{ambiente_id}"
+    area: "attrezzature"
+    source: "backend/app/api/v1/attrezzature.py"
+    function: "suggerisci_attrezzature"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits:
+      - "reasoning"
+    called_by_ui: false
+    in_openapi: true
+  - id: "attrezzature.delete_attrezzatura"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/attrezzature/{attrezzatura_id}"
+    area: "attrezzature"
+    source: "backend/app/api/v1/attrezzature.py"
+    function: "delete_attrezzatura"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "attrezzature.get_attrezzatura"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/attrezzature/{attrezzatura_id}"
+    area: "attrezzature"
+    source: "backend/app/api/v1/attrezzature.py"
+    function: "get_attrezzatura"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "attrezzature.update_attrezzatura"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/attrezzature/{attrezzatura_id}"
+    area: "attrezzature"
+    source: "backend/app/api/v1/attrezzature.py"
+    function: "update_attrezzatura"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "biologico_valutazioni.list_biologico"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/biologico-valutazioni"
+    area: "biologico"
+    source: "backend/app/api/v1/biologico_valutazioni.py"
+    function: "list_biologico"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "biologico_valutazioni.upsert_biologico"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/biologico-valutazioni"
+    area: "biologico"
+    source: "backend/app/api/v1/biologico_valutazioni.py"
+    function: "upsert_biologico"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "biologico_valutazioni.delete_biologico"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/biologico-valutazioni/{valutazione_id}"
+    area: "biologico"
+    source: "backend/app/api/v1/biologico_valutazioni.py"
+    function: "delete_biologico"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "biologico_valutazioni.get_biologico"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/biologico-valutazioni/{valutazione_id}"
+    area: "biologico"
+    source: "backend/app/api/v1/biologico_valutazioni.py"
+    function: "get_biologico"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "biologico_valutazioni.update_biologico"
+    method: "PATCH"
+    path: "/api/v1/aziende/{azienda_id}/biologico-valutazioni/{valutazione_id}"
+    area: "biologico"
+    source: "backend/app/api/v1/biologico_valutazioni.py"
+    function: "update_biologico"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "aziende.list_description_revisions"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/description-revisions"
+    area: "aziende"
+    source: "backend/app/api/v1/aziende.py"
+    function: "list_description_revisions"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "aziende.restore_description_revision"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/description-revisions/{revision_id}/restore"
+    area: "aziende"
+    source: "backend/app/api/v1/aziende.py"
+    function: "restore_description_revision"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "documents.list_documents"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/documents"
+    area: "documents"
+    source: "backend/app/api/v1/documents.py"
+    function: "list_documents"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "documents.batch_generate_documents"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/documents/batch"
+    area: "documents"
+    source: "backend/app/api/v1/documents.py"
+    function: "batch_generate_documents"
+    auth: "required"
+    capabilities:
+      - "documents:generate"
+    roles_allowed:
+      - "admin"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates:
+      - "_ensure_company_slot_available"
+      - "ensure_company_slot"
+      - "ensure_doc_type_allowed"
+      - "ensure_subscription_active"
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "documents.generate_document"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/documents/generate"
+    area: "documents"
+    source: "backend/app/api/v1/documents.py"
+    function: "generate_document"
+    auth: "required"
+    capabilities:
+      - "documents:generate"
+    roles_allowed:
+      - "admin"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates:
+      - "_ensure_anagrafica_complete_for_dvr"
+      - "_ensure_company_slot_available"
+      - "_ensure_dvr_exists_for_dependent"
+      - "ensure_company_slot"
+      - "ensure_doc_type_allowed"
+      - "ensure_subscription_active"
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "documents.restore_document"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/documents/{document_id}/restore"
+    area: "documents"
+    source: "backend/app/api/v1/documents.py"
+    function: "restore_document"
+    auth: "required"
+    capabilities:
+      - "documents:generate"
+    roles_allowed:
+      - "admin"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates:
+      - "_ensure_company_slot_available"
+      - "_ensure_new_version_allowed"
+      - "ensure_company_slot"
+      - "ensure_doc_type_allowed"
+      - "ensure_subscription_active"
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "documents.get_document_snapshot"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/documents/{document_id}/snapshot"
+    area: "documents"
+    source: "backend/app/api/v1/documents.py"
+    function: "get_document_snapshot"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "documents.get_document_status"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/documents/{document_id}/status"
+    area: "documents"
+    source: "backend/app/api/v1/documents.py"
+    function: "get_document_status"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "duvri.list_duvri"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/duvri"
+    area: "duvri"
+    source: "backend/app/api/v1/duvri.py"
+    function: "list_duvri"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "duvri.create_duvri"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/duvri"
+    area: "duvri"
+    source: "backend/app/api/v1/duvri.py"
+    function: "create_duvri"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "duvri.equipment_types"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/duvri/_meta/equipment-types"
+    area: "duvri"
+    source: "backend/app/api/v1/duvri.py"
+    function: "equipment_types"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "duvri.delete_duvri"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/duvri/{duvri_id}"
+    area: "duvri"
+    source: "backend/app/api/v1/duvri.py"
+    function: "delete_duvri"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "duvri.get_duvri"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/duvri/{duvri_id}"
+    area: "duvri"
+    source: "backend/app/api/v1/duvri.py"
+    function: "get_duvri"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "duvri.update_duvri"
+    method: "PATCH"
+    path: "/api/v1/aziende/{azienda_id}/duvri/{duvri_id}"
+    area: "duvri"
+    source: "backend/app/api/v1/duvri.py"
+    function: "update_duvri"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "duvri.analyze_interferences"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/duvri/{duvri_id}/analyze-interferences"
+    area: "duvri"
+    source: "backend/app/api/v1/duvri.py"
+    function: "analyze_interferences"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "duvri.record_interference_decision"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/duvri/{duvri_id}/interferences/decision"
+    area: "duvri"
+    source: "backend/app/api/v1/duvri.py"
+    function: "record_interference_decision"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "aziende.genera_descrizione"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/genera-descrizione"
+    area: "aziende"
+    source: "backend/app/api/v1/aziende.py"
+    function: "genera_descrizione"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits:
+      - "reasoning"
+    called_by_ui: true
+    in_openapi: true
+  - id: "gestanti.list_gestanti"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/gestanti"
+    area: "gestanti"
+    source: "backend/app/api/v1/gestanti.py"
+    function: "list_gestanti"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "gestanti.create_gestanti"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/gestanti"
+    area: "gestanti"
+    source: "backend/app/api/v1/gestanti.py"
+    function: "create_gestanti"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "gestanti.cross_reference"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/gestanti/cross-reference"
+    area: "gestanti"
+    source: "backend/app/api/v1/gestanti.py"
+    function: "cross_reference"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "gestanti.delete_gestanti"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/gestanti/{valutazione_id}"
+    area: "gestanti"
+    source: "backend/app/api/v1/gestanti.py"
+    function: "delete_gestanti"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "gestanti.get_gestanti"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/gestanti/{valutazione_id}"
+    area: "gestanti"
+    source: "backend/app/api/v1/gestanti.py"
+    function: "get_gestanti"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "gestanti.update_gestanti"
+    method: "PATCH"
+    path: "/api/v1/aziende/{azienda_id}/gestanti/{valutazione_id}"
+    area: "gestanti"
+    source: "backend/app/api/v1/gestanti.py"
+    function: "update_gestanti"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "gestanti.record_decision"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/gestanti/{valutazione_id}/decision"
+    area: "gestanti"
+    source: "backend/app/api/v1/gestanti.py"
+    function: "record_decision"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "haccp.get_haccp_config"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/haccp/config"
+    area: "haccp"
+    source: "backend/app/api/v1/haccp.py"
+    function: "get_haccp_config"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "haccp.upsert_haccp_config"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/haccp/config"
+    area: "haccp"
+    source: "backend/app/api/v1/haccp.py"
+    function: "upsert_haccp_config"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "haccp.regenerate_ccps"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/haccp/config/regenerate-ccps"
+    area: "haccp"
+    source: "backend/app/api/v1/haccp.py"
+    function: "regenerate_ccps"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "haccp.suggest_ccp"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/haccp/suggest-ccp"
+    area: "haccp"
+    source: "backend/app/api/v1/haccp.py"
+    function: "suggest_ccp"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits:
+      - "reasoning"
+    called_by_ui: true
+    in_openapi: true
+  - id: "incendio_valutazioni.list_incendio"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/incendio-valutazioni"
+    area: "incendio"
+    source: "backend/app/api/v1/incendio_valutazioni.py"
+    function: "list_incendio"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "incendio_valutazioni.create_incendio"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/incendio-valutazioni"
+    area: "incendio"
+    source: "backend/app/api/v1/incendio_valutazioni.py"
+    function: "create_incendio"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "incendio_valutazioni.delete_incendio"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/incendio-valutazioni/{valutazione_id}"
+    area: "incendio"
+    source: "backend/app/api/v1/incendio_valutazioni.py"
+    function: "delete_incendio"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "incendio_valutazioni.get_incendio"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/incendio-valutazioni/{valutazione_id}"
+    area: "incendio"
+    source: "backend/app/api/v1/incendio_valutazioni.py"
+    function: "get_incendio"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "incendio_valutazioni.update_incendio"
+    method: "PATCH"
+    path: "/api/v1/aziende/{azienda_id}/incendio-valutazioni/{valutazione_id}"
+    area: "incendio"
+    source: "backend/app/api/v1/incendio_valutazioni.py"
+    function: "update_incendio"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "microclima_valutazioni.list_microclima"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/microclima-valutazioni"
+    area: "microclima"
+    source: "backend/app/api/v1/microclima_valutazioni.py"
+    function: "list_microclima"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "microclima_valutazioni.create_microclima"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/microclima-valutazioni"
+    area: "microclima"
+    source: "backend/app/api/v1/microclima_valutazioni.py"
+    function: "create_microclima"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "microclima_valutazioni.delete_microclima"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/microclima-valutazioni/{valutazione_id}"
+    area: "microclima"
+    source: "backend/app/api/v1/microclima_valutazioni.py"
+    function: "delete_microclima"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "microclima_valutazioni.get_microclima"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/microclima-valutazioni/{valutazione_id}"
+    area: "microclima"
+    source: "backend/app/api/v1/microclima_valutazioni.py"
+    function: "get_microclima"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "microclima_valutazioni.update_microclima"
+    method: "PATCH"
+    path: "/api/v1/aziende/{azienda_id}/microclima-valutazioni/{valutazione_id}"
+    area: "microclima"
+    source: "backend/app/api/v1/microclima_valutazioni.py"
+    function: "update_microclima"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "misure_miglioramento.list_misure"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/misure-miglioramento"
+    area: "misure-miglioramento"
+    source: "backend/app/api/v1/misure_miglioramento.py"
+    function: "list_misure"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "misure_miglioramento.create_misura"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/misure-miglioramento"
+    area: "misure-miglioramento"
+    source: "backend/app/api/v1/misure_miglioramento.py"
+    function: "create_misura"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "misure_miglioramento.genera_da_rischi"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/misure-miglioramento/genera-da-rischi"
+    area: "misure-miglioramento"
+    source: "backend/app/api/v1/misure_miglioramento.py"
+    function: "genera_da_rischi"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "misure_miglioramento.delete_misura"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/misure-miglioramento/{misura_id}"
+    area: "misure-miglioramento"
+    source: "backend/app/api/v1/misure_miglioramento.py"
+    function: "delete_misura"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "misure_miglioramento.update_misura"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/misure-miglioramento/{misura_id}"
+    area: "misure-miglioramento"
+    source: "backend/app/api/v1/misure_miglioramento.py"
+    function: "update_misura"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "mmc.list_mmc"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/mmc"
+    area: "mmc"
+    source: "backend/app/api/v1/mmc.py"
+    function: "list_mmc"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "mmc.create_mmc"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/mmc"
+    area: "mmc"
+    source: "backend/app/api/v1/mmc.py"
+    function: "create_mmc"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "mmc.delete_mmc"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/mmc/{mmc_id}"
+    area: "mmc"
+    source: "backend/app/api/v1/mmc.py"
+    function: "delete_mmc"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "mmc.get_mmc"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/mmc/{mmc_id}"
+    area: "mmc"
+    source: "backend/app/api/v1/mmc.py"
+    function: "get_mmc"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "mmc.update_mmc"
+    method: "PATCH"
+    path: "/api/v1/aziende/{azienda_id}/mmc/{mmc_id}"
+    area: "mmc"
+    source: "backend/app/api/v1/mmc.py"
+    function: "update_mmc"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "pee_procedures.get_pee_plan"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/pee/plan"
+    area: "pee-procedures"
+    source: "backend/app/api/v1/pee_procedures.py"
+    function: "get_pee_plan"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "pee_procedures.update_pee_plan"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/pee/plan"
+    area: "pee-procedures"
+    source: "backend/app/api/v1/pee_procedures.py"
+    function: "update_pee_plan"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "pee_procedures.list_procedures"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/pee/procedure"
+    area: "pee-procedures"
+    source: "backend/app/api/v1/pee_procedures.py"
+    function: "list_procedures"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "pee_procedures.reset_procedure"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/pee/procedure/{evento}/{lettera}"
+    area: "pee-procedures"
+    source: "backend/app/api/v1/pee_procedures.py"
+    function: "reset_procedure"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "pee_procedures.save_procedure_override"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/pee/procedure/{evento}/{lettera}"
+    area: "pee-procedures"
+    source: "backend/app/api/v1/pee_procedures.py"
+    function: "save_procedure_override"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "pericoli.list_pericoli_libreria"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/pericoli-libreria"
+    area: "pericoli"
+    source: "backend/app/api/v1/pericoli.py"
+    function: "list_pericoli_libreria"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "persone.list_persone"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/persone"
+    area: "persone"
+    source: "backend/app/api/v1/persone.py"
+    function: "list_persone"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "persone.create_persona"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/persone"
+    area: "persone"
+    source: "backend/app/api/v1/persone.py"
+    function: "create_persona"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "persone.delete_persona"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/persone/{persona_id}"
+    area: "persone"
+    source: "backend/app/api/v1/persone.py"
+    function: "delete_persona"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "persone.get_persona"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/persone/{persona_id}"
+    area: "persone"
+    source: "backend/app/api/v1/persone.py"
+    function: "get_persona"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "persone.update_persona"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/persone/{persona_id}"
+    area: "persone"
+    source: "backend/app/api/v1/persone.py"
+    function: "update_persona"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "persone.suggerisci_dpi_rischi"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/persone/{persona_id}/dpi-rischi/suggerisci"
+    area: "persone"
+    source: "backend/app/api/v1/persone.py"
+    function: "suggerisci_dpi_rischi"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits:
+      - "reasoning"
+    called_by_ui: true
+    in_openapi: true
+  - id: "pos.list_pos"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/pos"
+    area: "pos"
+    source: "backend/app/api/v1/pos.py"
+    function: "list_pos"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "pos.create_pos"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/pos"
+    area: "pos"
+    source: "backend/app/api/v1/pos.py"
+    function: "create_pos"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "pos.get_dpi_catalog"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/pos/meta/dpi-catalog"
+    area: "pos"
+    source: "backend/app/api/v1/pos.py"
+    function: "get_dpi_catalog"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "pos.suggest_dpi_matrix"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/pos/meta/suggest-dpi-matrix"
+    area: "pos"
+    source: "backend/app/api/v1/pos.py"
+    function: "suggest_dpi_matrix"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits:
+      - "reasoning"
+    called_by_ui: true
+    in_openapi: true
+  - id: "pos.suggest_phase_details"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/pos/meta/suggest-phase"
+    area: "pos"
+    source: "backend/app/api/v1/pos.py"
+    function: "suggest_phase_details"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits:
+      - "reasoning"
+    called_by_ui: true
+    in_openapi: true
+  - id: "pos.delete_pos"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/pos/{pos_id}"
+    area: "pos"
+    source: "backend/app/api/v1/pos.py"
+    function: "delete_pos"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "pos.get_pos"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/pos/{pos_id}"
+    area: "pos"
+    source: "backend/app/api/v1/pos.py"
+    function: "get_pos"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "pos.update_pos"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/pos/{pos_id}"
+    area: "pos"
+    source: "backend/app/api/v1/pos.py"
+    function: "update_pos"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "pos.update_dpi_matrix"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/pos/{pos_id}/dpi-matrix"
+    area: "pos"
+    source: "backend/app/api/v1/pos.py"
+    function: "update_dpi_matrix"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "pos.update_phases"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/pos/{pos_id}/fasi"
+    area: "pos"
+    source: "backend/app/api/v1/pos.py"
+    function: "update_phases"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "rischi.list_rischi"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/rischi"
+    area: "rischi"
+    source: "backend/app/api/v1/rischi.py"
+    function: "list_rischi"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "rischi_misure.list_misure"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/rischi/misure-libreria"
+    area: "rischi-misure-libreria"
+    source: "backend/app/api/v1/rischi_misure.py"
+    function: "list_misure"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "rischi_misure.create_misura"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/rischi/misure-libreria"
+    area: "rischi-misure-libreria"
+    source: "backend/app/api/v1/rischi_misure.py"
+    function: "create_misura"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "rischi_misure.delete_misura"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/rischi/misure-libreria/{misura_id}"
+    area: "rischi-misure-libreria"
+    source: "backend/app/api/v1/rischi_misure.py"
+    function: "delete_misura"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "rischi_misure.update_misura"
+    method: "PATCH"
+    path: "/api/v1/aziende/{azienda_id}/rischi/misure-libreria/{misura_id}"
+    area: "rischi-misure-libreria"
+    source: "backend/app/api/v1/rischi_misure.py"
+    function: "update_misura"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "rischi.suggerisci_misure"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/rischi/{rischio_id}/suggerisci-misure"
+    area: "rischi"
+    source: "backend/app/api/v1/rischi.py"
+    function: "suggerisci_misure"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits:
+      - "reasoning"
+    called_by_ui: true
+    in_openapi: true
+  - id: "aziende.sector_summary"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/sector-summary"
+    area: "aziende"
+    source: "backend/app/api/v1/aziende.py"
+    function: "sector_summary"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "sostanze_chimiche.list_sostanze_chimiche"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/sostanze-chimiche"
+    area: "sostanze-chimiche"
+    source: "backend/app/api/v1/sostanze_chimiche.py"
+    function: "list_sostanze_chimiche"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "sostanze_chimiche.create_sostanza_chimica"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/sostanze-chimiche"
+    area: "sostanze-chimiche"
+    source: "backend/app/api/v1/sostanze_chimiche.py"
+    function: "create_sostanza_chimica"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "sostanze_chimiche.batch_status"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/sostanze-chimiche/batch-status"
+    area: "sostanze-chimiche"
+    source: "backend/app/api/v1/sostanze_chimiche.py"
+    function: "batch_status"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "sostanze_chimiche.batch_upload_sds"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/sostanze-chimiche/batch-upload"
+    area: "sostanze-chimiche"
+    source: "backend/app/api/v1/sostanze_chimiche.py"
+    function: "batch_upload_sds"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "sostanze_chimiche.delete_sostanza_chimica"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/sostanze-chimiche/{sostanza_id}"
+    area: "sostanze-chimiche"
+    source: "backend/app/api/v1/sostanze_chimiche.py"
+    function: "delete_sostanza_chimica"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "sostanze_chimiche.get_sostanza_chimica"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/sostanze-chimiche/{sostanza_id}"
+    area: "sostanze-chimiche"
+    source: "backend/app/api/v1/sostanze_chimiche.py"
+    function: "get_sostanza_chimica"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "sostanze_chimiche.update_sostanza_chimica"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/sostanze-chimiche/{sostanza_id}"
+    area: "sostanze-chimiche"
+    source: "backend/app/api/v1/sostanze_chimiche.py"
+    function: "update_sostanza_chimica"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "sostanze_chimiche.mark_reviewed"
+    method: "PATCH"
+    path: "/api/v1/aziende/{azienda_id}/sostanze-chimiche/{sostanza_id}/review"
+    area: "sostanze-chimiche"
+    source: "backend/app/api/v1/sostanze_chimiche.py"
+    function: "mark_reviewed"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "stress_ai.ai_misure_correttive"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/stress/ai-misure"
+    area: "stress-ai"
+    source: "backend/app/api/v1/stress_ai.py"
+    function: "ai_misure_correttive"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits:
+      - "reasoning"
+    called_by_ui: false
+    in_openapi: true
+  - id: "stress_misure.list_misure"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/stress/misure"
+    area: "stress-misure"
+    source: "backend/app/api/v1/stress_misure.py"
+    function: "list_misure"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "stress_misure.create_misura"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/stress/misure"
+    area: "stress-misure"
+    source: "backend/app/api/v1/stress_misure.py"
+    function: "create_misura"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "stress_misure.delete_misura"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/stress/misure/{misura_id}"
+    area: "stress-misure"
+    source: "backend/app/api/v1/stress_misure.py"
+    function: "delete_misura"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "stress_misure.update_misura"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/stress/misure/{misura_id}"
+    area: "stress-misure"
+    source: "backend/app/api/v1/stress_misure.py"
+    function: "update_misura"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "stress_valutazione.get_valutazione"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/stress/valutazione"
+    area: "stress-valutazione"
+    source: "backend/app/api/v1/stress_valutazione.py"
+    function: "get_valutazione"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "stress_valutazione.upsert_valutazione"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/stress/valutazione"
+    area: "stress-valutazione"
+    source: "backend/app/api/v1/stress_valutazione.py"
+    function: "upsert_valutazione"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "stress_valutazione.list_valutazioni"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/stress/valutazione/all"
+    area: "stress-valutazione"
+    source: "backend/app/api/v1/stress_valutazione.py"
+    function: "list_valutazioni"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "stress_valutazione.list_mansioni"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/stress/valutazione/mansioni"
+    area: "stress-valutazione"
+    source: "backend/app/api/v1/stress_valutazione.py"
+    function: "list_mansioni"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "survey.get_survey"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/survey"
+    area: "survey"
+    source: "backend/app/api/v1/survey.py"
+    function: "get_survey"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "survey.complete_survey"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/survey/complete"
+    area: "survey"
+    source: "backend/app/api/v1/survey.py"
+    function: "complete_survey"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "survey.open_revision"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/survey/revision"
+    area: "survey"
+    source: "backend/app/api/v1/survey.py"
+    function: "open_revision"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "survey.sign_survey"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/survey/sign"
+    area: "survey"
+    source: "backend/app/api/v1/survey.py"
+    function: "sign_survey"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "survey.save_survey_step"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/survey/step/{step_number}"
+    area: "survey"
+    source: "backend/app/api/v1/survey.py"
+    function: "save_survey_step"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "vdt.list_vdt"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/vdt"
+    area: "vdt"
+    source: "backend/app/api/v1/vdt.py"
+    function: "list_vdt"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "vdt.create_vdt"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/vdt"
+    area: "vdt"
+    source: "backend/app/api/v1/vdt.py"
+    function: "create_vdt"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "vdt.delete_vdt"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/vdt/{vdt_id}"
+    area: "vdt"
+    source: "backend/app/api/v1/vdt.py"
+    function: "delete_vdt"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "vdt.get_vdt"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/vdt/{vdt_id}"
+    area: "vdt"
+    source: "backend/app/api/v1/vdt.py"
+    function: "get_vdt"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "vdt.update_vdt"
+    method: "PATCH"
+    path: "/api/v1/aziende/{azienda_id}/vdt/{vdt_id}"
+    area: "vdt"
+    source: "backend/app/api/v1/vdt.py"
+    function: "update_vdt"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "aziende.upload_visura"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/visura"
+    area: "aziende"
+    source: "backend/app/api/v1/aziende.py"
+    function: "upload_visura"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "billing.admin_set_plan"
+    method: "POST"
+    path: "/api/v1/billing/admin/organizations/{organization_id}/plan"
+    area: "billing"
+    source: "backend/app/api/v1/billing.py"
+    function: "admin_set_plan"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "platform_admin"
+    platform_admin: true
+    billing_gates:
+      - "_ensure_channel"
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "billing.cancel"
+    method: "POST"
+    path: "/api/v1/billing/cancel"
+    area: "billing"
+    source: "backend/app/api/v1/billing.py"
+    function: "cancel"
+    auth: "required"
+    capabilities:
+      - "billing:manage"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "billing.abandon_credits"
+    method: "POST"
+    path: "/api/v1/billing/credits/abandon"
+    area: "billing"
+    source: "backend/app/api/v1/billing.py"
+    function: "abandon_credits"
+    auth: "required"
+    capabilities:
+      - "billing:manage"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "billing.capture_credits"
+    method: "POST"
+    path: "/api/v1/billing/credits/capture"
+    area: "billing"
+    source: "backend/app/api/v1/billing.py"
+    function: "capture_credits"
+    auth: "required"
+    capabilities:
+      - "billing:manage"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "billing.checkout_credits"
+    method: "POST"
+    path: "/api/v1/billing/credits/checkout"
+    area: "billing"
+    source: "backend/app/api/v1/billing.py"
+    function: "checkout_credits"
+    auth: "required"
+    capabilities:
+      - "billing:manage"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "billing.list_credit_packs"
+    method: "GET"
+    path: "/api/v1/billing/credits/packs"
+    area: "billing"
+    source: "backend/app/api/v1/billing.py"
+    function: "list_credit_packs"
+    auth: "required"
+    capabilities:
+      - "billing:read"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "billing.list_credit_purchases"
+    method: "GET"
+    path: "/api/v1/billing/credits/purchases"
+    area: "billing"
+    source: "backend/app/api/v1/billing.py"
+    function: "list_credit_purchases"
+    auth: "required"
+    capabilities:
+      - "billing:read"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "billing.get_my_entitlements"
+    method: "GET"
+    path: "/api/v1/billing/entitlements"
+    area: "billing"
+    source: "backend/app/api/v1/billing.py"
+    function: "get_my_entitlements"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "billing.list_plans"
+    method: "GET"
+    path: "/api/v1/billing/plans"
+    area: "billing"
+    source: "backend/app/api/v1/billing.py"
+    function: "list_plans"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "billing.revise"
+    method: "POST"
+    path: "/api/v1/billing/revise"
+    area: "billing"
+    source: "backend/app/api/v1/billing.py"
+    function: "revise"
+    auth: "required"
+    capabilities:
+      - "billing:manage"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates:
+      - "_ensure_channel"
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "billing.subscribe"
+    method: "POST"
+    path: "/api/v1/billing/subscribe"
+    area: "billing"
+    source: "backend/app/api/v1/billing.py"
+    function: "subscribe"
+    auth: "required"
+    capabilities:
+      - "billing:manage"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates:
+      - "_ensure_channel"
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "billing.paypal_webhook"
+    method: "POST"
+    path: "/api/v1/billing/webhook"
+    area: "billing"
+    source: "backend/app/api/v1/billing.py"
+    function: "paypal_webhook"
+    auth: "public"
+    capabilities: []
+    roles_allowed:
+      - "public"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: false
+  - id: "calculations.biologico_checklist"
+    method: "GET"
+    path: "/api/v1/calculate/biologico-checklist"
+    area: "calculations"
+    source: "backend/app/api/v1/calculations.py"
+    function: "biologico_checklist"
+    auth: "public"
+    capabilities: []
+    roles_allowed:
+      - "public"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "calculations.fire_measures"
+    method: "GET"
+    path: "/api/v1/calculate/fire-measures"
+    area: "calculations"
+    source: "backend/app/api/v1/calculations.py"
+    function: "fire_measures"
+    auth: "public"
+    capabilities: []
+    roles_allowed:
+      - "public"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "calculations.calculate_fire_risk_endpoint"
+    method: "POST"
+    path: "/api/v1/calculate/fire-risk"
+    area: "calculations"
+    source: "backend/app/api/v1/calculations.py"
+    function: "calculate_fire_risk_endpoint"
+    auth: "public"
+    capabilities: []
+    roles_allowed:
+      - "public"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "calculations.calculate_microclima_phs"
+    method: "POST"
+    path: "/api/v1/calculate/microclima/phs"
+    area: "calculations"
+    source: "backend/app/api/v1/calculations.py"
+    function: "calculate_microclima_phs"
+    auth: "public"
+    capabilities: []
+    roles_allowed:
+      - "public"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "calculations.calculate_microclima_pmv"
+    method: "POST"
+    path: "/api/v1/calculate/microclima/pmv"
+    area: "calculations"
+    source: "backend/app/api/v1/calculations.py"
+    function: "calculate_microclima_pmv"
+    auth: "public"
+    capabilities: []
+    roles_allowed:
+      - "public"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "calculations.calculate_niosh"
+    method: "POST"
+    path: "/api/v1/calculate/niosh"
+    area: "calculations"
+    source: "backend/app/api/v1/calculations.py"
+    function: "calculate_niosh"
+    auth: "public"
+    capabilities: []
+    roles_allowed:
+      - "public"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "calculations.niosh_cp"
+    method: "GET"
+    path: "/api/v1/calculate/niosh-cp"
+    area: "calculations"
+    source: "backend/app/api/v1/calculations.py"
+    function: "niosh_cp"
+    auth: "public"
+    capabilities: []
+    roles_allowed:
+      - "public"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "calculations.calculate_risk_index"
+    method: "POST"
+    path: "/api/v1/calculate/risk-index"
+    area: "calculations"
+    source: "backend/app/api/v1/calculations.py"
+    function: "calculate_risk_index"
+    auth: "public"
+    capabilities: []
+    roles_allowed:
+      - "public"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "calculations.calculate_stress_assessment"
+    method: "POST"
+    path: "/api/v1/calculate/stress"
+    area: "calculations"
+    source: "backend/app/api/v1/calculations.py"
+    function: "calculate_stress_assessment"
+    auth: "public"
+    capabilities: []
+    roles_allowed:
+      - "public"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "calculations.list_stress_indicators"
+    method: "GET"
+    path: "/api/v1/calculate/stress/indicators"
+    area: "calculations"
+    source: "backend/app/api/v1/calculations.py"
+    function: "list_stress_indicators"
+    auth: "public"
+    capabilities: []
+    roles_allowed:
+      - "public"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "calculations.calculate_vdt"
+    method: "POST"
+    path: "/api/v1/calculate/vdt"
+    area: "calculations"
+    source: "backend/app/api/v1/calculations.py"
+    function: "calculate_vdt"
+    auth: "public"
+    capabilities: []
+    roles_allowed:
+      - "public"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "documents.download_document"
+    method: "GET"
+    path: "/api/v1/documenti/{document_id}/download"
+    area: "documents"
+    source: "backend/app/api/v1/documents.py"
+    function: "download_document"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "documents.discard_gdoc_edits"
+    method: "DELETE"
+    path: "/api/v1/documenti/{document_id}/gdoc"
+    area: "documents"
+    source: "backend/app/api/v1/documents.py"
+    function: "discard_gdoc_edits"
+    auth: "required"
+    capabilities:
+      - "documents:generate"
+    roles_allowed:
+      - "admin"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "documents.open_document_for_editing"
+    method: "POST"
+    path: "/api/v1/documenti/{document_id}/open-for-editing"
+    area: "documents"
+    source: "backend/app/api/v1/documents.py"
+    function: "open_document_for_editing"
+    auth: "required"
+    capabilities:
+      - "documents:generate"
+    roles_allowed:
+      - "admin"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "documents.patch_document_overrides"
+    method: "PATCH"
+    path: "/api/v1/documenti/{document_id}/overrides"
+    area: "documents"
+    source: "backend/app/api/v1/documents.py"
+    function: "patch_document_overrides"
+    auth: "required"
+    capabilities:
+      - "documents:generate"
+    roles_allowed:
+      - "admin"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "documents.preview_document"
+    method: "GET"
+    path: "/api/v1/documenti/{document_id}/preview"
+    area: "documents"
+    source: "backend/app/api/v1/documents.py"
+    function: "preview_document"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "documents.preview_document_image"
+    method: "GET"
+    path: "/api/v1/documenti/{document_id}/preview/images/{image_id}"
+    area: "documents"
+    source: "backend/app/api/v1/documents.py"
+    function: "preview_document_image"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "documents.save_edited_version"
+    method: "POST"
+    path: "/api/v1/documenti/{document_id}/save-edited-version"
+    area: "documents"
+    source: "backend/app/api/v1/documents.py"
+    function: "save_edited_version"
+    auth: "required"
+    capabilities:
+      - "documents:generate"
+    roles_allowed:
+      - "admin"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates:
+      - "_ensure_company_slot_available"
+      - "_ensure_new_version_allowed"
+      - "ensure_company_slot"
+      - "ensure_doc_type_allowed"
+      - "ensure_subscription_active"
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "documents.sync_document_from_gdoc"
+    method: "POST"
+    path: "/api/v1/documenti/{document_id}/sync-from-gdoc"
+    area: "documents"
+    source: "backend/app/api/v1/documents.py"
+    function: "sync_document_from_gdoc"
+    auth: "required"
+    capabilities:
+      - "documents:generate"
+    roles_allowed:
+      - "admin"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates:
+      - "_ensure_company_slot_available"
+      - "_ensure_new_version_allowed"
+      - "ensure_company_slot"
+      - "ensure_doc_type_allowed"
+      - "ensure_subscription_active"
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "feedback.list_feedback"
+    method: "GET"
+    path: "/api/v1/feedback"
+    area: "feedback"
+    source: "backend/app/api/v1/feedback.py"
+    function: "list_feedback"
+    auth: "required"
+    capabilities:
+      - "admin:tools"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "feedback.create_feedback"
+    method: "POST"
+    path: "/api/v1/feedback"
+    area: "feedback"
+    source: "backend/app/api/v1/feedback.py"
+    function: "create_feedback"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "feedback.update_feedback"
+    method: "PATCH"
+    path: "/api/v1/feedback/{feedback_id}"
+    area: "feedback"
+    source: "backend/app/api/v1/feedback.py"
+    function: "update_feedback"
+    auth: "required"
+    capabilities:
+      - "admin:tools"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "haccp.get_activity_types_catalog"
+    method: "GET"
+    path: "/api/v1/haccp/_meta/activity-types"
+    area: "haccp"
+    source: "backend/app/api/v1/haccp.py"
+    function: "get_activity_types_catalog"
+    auth: "public"
+    capabilities: []
+    roles_allowed:
+      - "public"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "lookups.dpi_catalog"
+    method: "GET"
+    path: "/api/v1/lookup/dpi-catalog"
+    area: "lookup"
+    source: "backend/app/api/v1/lookups.py"
+    function: "dpi_catalog"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "lookups.field_dependencies"
+    method: "GET"
+    path: "/api/v1/lookup/field-dependencies"
+    area: "lookup"
+    source: "backend/app/api/v1/lookups.py"
+    function: "field_dependencies"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "lookups.regional_regulations"
+    method: "GET"
+    path: "/api/v1/lookup/regional-regulations"
+    area: "lookup"
+    source: "backend/app/api/v1/lookups.py"
+    function: "regional_regulations"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "lookups.rischi_specifici_catalog"
+    method: "GET"
+    path: "/api/v1/lookup/rischi-specifici-catalog"
+    area: "lookup"
+    source: "backend/app/api/v1/lookups.py"
+    function: "rischi_specifici_catalog"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "lookups.seismic_zone"
+    method: "GET"
+    path: "/api/v1/lookup/seismic-zone"
+    area: "lookup"
+    source: "backend/app/api/v1/lookups.py"
+    function: "seismic_zone"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "organizations.get_branding"
+    method: "GET"
+    path: "/api/v1/organizations/me/branding"
+    area: "organizations"
+    source: "backend/app/api/v1/organizations.py"
+    function: "get_branding"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "organizations.update_branding"
+    method: "PUT"
+    path: "/api/v1/organizations/me/branding"
+    area: "organizations"
+    source: "backend/app/api/v1/organizations.py"
+    function: "update_branding"
+    auth: "required"
+    capabilities:
+      - "org:manage"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "organizations.delete_logo"
+    method: "DELETE"
+    path: "/api/v1/organizations/me/branding/logo"
+    area: "organizations"
+    source: "backend/app/api/v1/organizations.py"
+    function: "delete_logo"
+    auth: "required"
+    capabilities:
+      - "org:manage"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "organizations.get_logo"
+    method: "GET"
+    path: "/api/v1/organizations/me/branding/logo"
+    area: "organizations"
+    source: "backend/app/api/v1/organizations.py"
+    function: "get_logo"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "organizations.upload_logo"
+    method: "POST"
+    path: "/api/v1/organizations/me/branding/logo"
+    area: "organizations"
+    source: "backend/app/api/v1/organizations.py"
+    function: "upload_logo"
+    auth: "required"
+    capabilities:
+      - "org:manage"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "sorveglianza.surveillance_alerts"
+    method: "GET"
+    path: "/api/v1/sorveglianza/alerts"
+    area: "sorveglianza"
+    source: "backend/app/api/v1/sorveglianza.py"
+    function: "surveillance_alerts"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "users.list_users"
+    method: "GET"
+    path: "/api/v1/users"
+    area: "users"
+    source: "backend/app/api/v1/users.py"
+    function: "list_users"
+    auth: "required"
+    capabilities:
+      - "users:manage"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "users.create_user"
+    method: "POST"
+    path: "/api/v1/users"
+    area: "users"
+    source: "backend/app/api/v1/users.py"
+    function: "create_user"
+    auth: "required"
+    capabilities:
+      - "users:manage"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates:
+      - "ensure_seat_available"
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "users.list_roles"
+    method: "GET"
+    path: "/api/v1/users/roles"
+    area: "users"
+    source: "backend/app/api/v1/users.py"
+    function: "list_roles"
+    auth: "required"
+    capabilities:
+      - "users:manage"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "users.user_stats"
+    method: "GET"
+    path: "/api/v1/users/stats"
+    area: "users"
+    source: "backend/app/api/v1/users.py"
+    function: "user_stats"
+    auth: "required"
+    capabilities:
+      - "users:manage"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "users.update_user"
+    method: "PATCH"
+    path: "/api/v1/users/{user_id}"
+    area: "users"
+    source: "backend/app/api/v1/users.py"
+    function: "update_user"
+    auth: "required"
+    capabilities:
+      - "users:manage"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+frontend_pages:
+  - route: "/register"
+    file: "frontend/src/app/(auth)/register/page.tsx"
+  - route: "/admin/ai-feedback"
+    file: "frontend/src/app/(dashboard)/admin/ai-feedback/page.tsx"
+  - route: "/admin/branding"
+    file: "frontend/src/app/(dashboard)/admin/branding/page.tsx"
+  - route: "/admin/feedback"
+    file: "frontend/src/app/(dashboard)/admin/feedback/page.tsx"
+  - route: "/admin/users"
+    file: "frontend/src/app/(dashboard)/admin/users/page.tsx"
+  - route: "/assessments/biologico/[aziendaId]"
+    file: "frontend/src/app/(dashboard)/assessments/biologico/[aziendaId]/page.tsx"
+  - route: "/assessments/duvri/[aziendaId]"
+    file: "frontend/src/app/(dashboard)/assessments/duvri/[aziendaId]/page.tsx"
+  - route: "/assessments/gestanti/[aziendaId]"
+    file: "frontend/src/app/(dashboard)/assessments/gestanti/[aziendaId]/page.tsx"
+  - route: "/assessments/haccp/[aziendaId]"
+    file: "frontend/src/app/(dashboard)/assessments/haccp/[aziendaId]/page.tsx"
+  - route: "/assessments/incendio/[aziendaId]"
+    file: "frontend/src/app/(dashboard)/assessments/incendio/[aziendaId]/page.tsx"
+  - route: "/assessments/microclima/[aziendaId]"
+    file: "frontend/src/app/(dashboard)/assessments/microclima/[aziendaId]/page.tsx"
+  - route: "/assessments/mmc/[aziendaId]"
+    file: "frontend/src/app/(dashboard)/assessments/mmc/[aziendaId]/page.tsx"
+  - route: "/assessments"
+    file: "frontend/src/app/(dashboard)/assessments/page.tsx"
+  - route: "/assessments/pee/[aziendaId]"
+    file: "frontend/src/app/(dashboard)/assessments/pee/[aziendaId]/page.tsx"
+  - route: "/assessments/pos/[aziendaId]"
+    file: "frontend/src/app/(dashboard)/assessments/pos/[aziendaId]/page.tsx"
+  - route: "/assessments/risk/[aziendaId]"
+    file: "frontend/src/app/(dashboard)/assessments/risk/[aziendaId]/page.tsx"
+  - route: "/assessments/stress/[aziendaId]"
+    file: "frontend/src/app/(dashboard)/assessments/stress/[aziendaId]/page.tsx"
+  - route: "/assessments/vdt/[aziendaId]"
+    file: "frontend/src/app/(dashboard)/assessments/vdt/[aziendaId]/page.tsx"
+  - route: "/aziende/[id]/edit"
+    file: "frontend/src/app/(dashboard)/aziende/[id]/edit/page.tsx"
+  - route: "/aziende/[id]"
+    file: "frontend/src/app/(dashboard)/aziende/[id]/page.tsx"
+  - route: "/aziende/new"
+    file: "frontend/src/app/(dashboard)/aziende/new/page.tsx"
+  - route: "/aziende"
+    file: "frontend/src/app/(dashboard)/aziende/page.tsx"
+  - route: "/billing"
+    file: "frontend/src/app/(dashboard)/billing/page.tsx"
+  - route: "/dashboard"
+    file: "frontend/src/app/(dashboard)/dashboard/page.tsx"
+  - route: "/documents/[documentId]"
+    file: "frontend/src/app/(dashboard)/documents/[documentId]/page.tsx"
+  - route: "/documents"
+    file: "frontend/src/app/(dashboard)/documents/page.tsx"
+  - route: "/guida"
+    file: "frontend/src/app/(dashboard)/guida/page.tsx"
+  - route: "/settings/backups"
+    file: "frontend/src/app/(dashboard)/settings/backups/page.tsx"
+  - route: "/settings"
+    file: "frontend/src/app/(dashboard)/settings/page.tsx"
+  - route: "/survey/[aziendaId]"
+    file: "frontend/src/app/(dashboard)/survey/[aziendaId]/page.tsx"
+  - route: "/survey"
+    file: "frontend/src/app/(dashboard)/survey/page.tsx"
+  - route: "/login"
+    file: "frontend/src/app/login/page.tsx"
+  - route: "/"
+    file: "frontend/src/app/page.tsx"
+  - route: "/prezzi"
+    file: "frontend/src/app/prezzi/page.tsx"
