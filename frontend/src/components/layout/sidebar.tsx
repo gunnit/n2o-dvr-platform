@@ -168,7 +168,11 @@ export function Sidebar({ user }: { user: SidebarUser }) {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-0.5 px-3">
+      {/* min-h-0 + overflow-y-auto, not just flex-1: a flex item's implicit
+          min-height is its content, so without these the nav refuses to shrink
+          and shoves the plan badge and the user footer (with the only logout
+          control) off the bottom of the viewport on short screens. */}
+      <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3">
         {navigation.map((item) => {
           const isActive = pathname?.startsWith(item.href);
           const Icon = item.icon;
@@ -230,7 +234,7 @@ export function Sidebar({ user }: { user: SidebarUser }) {
           read billing has no use for a meter it can neither act on nor change. */}
       {can(BILLING_READ) && <PlanTracker />}
 
-      <div className="mt-auto border-t border-white/10 px-4 pt-4">
+      <div className="mt-auto shrink-0 border-t border-white/10 px-4 pt-4">
         <div className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-white/5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-medium text-white ring-1 ring-white/15">
             {initials}
@@ -275,7 +279,7 @@ function PlanTracker() {
 
   if (!ent.subscribed) {
     return (
-      <div className="mt-4 px-4">
+      <div className="mt-4 shrink-0 px-4">
         <Link
           href="/billing"
           className="block rounded-md border border-white/10 bg-white/5 p-3 transition-colors hover:bg-white/10"
@@ -298,13 +302,13 @@ function PlanTracker() {
   // red at 90%. Warn before the wall, not at it.
   const fill =
     percent !== null && percent >= 90
-      ? "bg-red-500"
+      ? "bg-[#ef4444]"
       : percent !== null && percent >= 75
-        ? "bg-amber-500"
-        : "bg-emerald-500";
+        ? "bg-[#f59e0b]"
+        : "bg-[#15be53]";
 
   return (
-    <div className="mt-4 px-4">
+    <div className="mt-4 shrink-0 px-4">
       <Link
         href="/billing"
         className="block rounded-md border border-white/10 bg-white/5 p-3 transition-colors hover:bg-white/10"

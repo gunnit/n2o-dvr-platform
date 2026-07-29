@@ -101,7 +101,7 @@ export function SectorSuggestions({ aziendaId }: { aziendaId: string }) {
 
   return (
     <>
-      <div className="flex flex-col gap-2 rounded-lg border border-emerald-300 bg-emerald-100 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 rounded-lg border border-[rgba(16,140,61,0.26)] bg-[rgba(16,140,61,0.05)] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-2 text-emerald-950">
           <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
@@ -111,7 +111,7 @@ export function SectorSuggestions({ aziendaId }: { aziendaId: string }) {
                 ? ` (ATECO ${summary.ateco_prefix}xx)`
                 : ""}
             </p>
-            <p className="text-xs text-emerald-900">
+            <p className="text-xs text-[#0c6b2f]">
               Vedi attrezzature, rischi e sostanze ricorrenti — usali come
               punto di partenza.
             </p>
@@ -123,7 +123,7 @@ export function SectorSuggestions({ aziendaId }: { aziendaId: string }) {
             variant="outline"
             size="sm"
             onClick={() => setOpen(true)}
-            className="border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+            className="border-[rgba(16,140,61,0.34)] text-[#0c6b2f] hover:bg-[rgba(16,140,61,0.1)]"
           >
             <History className="mr-1.5 h-3.5 w-3.5" />
             Vedi consigli del settore
@@ -132,7 +132,7 @@ export function SectorSuggestions({ aziendaId }: { aziendaId: string }) {
             type="button"
             onClick={handleDismiss}
             aria-label="Nascondi suggerimenti del settore"
-            className="rounded-md p-1 text-emerald-800 hover:bg-emerald-200/60"
+            className="rounded-md p-1 text-[#0c6b2f] hover:bg-[rgba(16,140,61,0.14)]"
           >
             <X className="h-4 w-4" />
           </button>
@@ -143,7 +143,7 @@ export function SectorSuggestions({ aziendaId }: { aziendaId: string }) {
         <DialogContent className="max-h-[80vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Lightbulb className="h-5 w-5 text-emerald-600" />
+              <Lightbulb className="h-5 w-5 text-[#0f7a37]" />
               Consigli dal settore
             </DialogTitle>
             <DialogDescription>

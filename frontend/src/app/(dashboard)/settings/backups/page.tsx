@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Callout } from "@/components/ui/callout";
 import { useApi } from "@/hooks/use-api";
 import { parseApiDate } from "@/lib/ui/api-date";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -82,7 +83,7 @@ function formatDate(iso: string | null): string {
 function ActionBadge({ action }: { action: string }) {
   if (action === "backup_completed") {
     return (
-      <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+      <Badge variant="success">
         <CheckCircle2 className="mr-1 h-3 w-3" />
         Completato
       </Badge>
@@ -90,7 +91,7 @@ function ActionBadge({ action }: { action: string }) {
   }
   if (action === "backup_failed") {
     return (
-      <Badge className="bg-red-100 text-red-700 hover:bg-red-100">
+      <Badge variant="danger">
         <AlertCircle className="mr-1 h-3 w-3" />
         Fallito
       </Badge>
@@ -185,11 +186,10 @@ export default function BackupsSettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {failureWithinDay && (
-            <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
-              <strong>Attenzione:</strong> ultimo backup fallito il{" "}
-              {formatDate(status?.last_failure_at ?? null)}.{" "}
+            <Callout tone="danger" dense title="Attenzione:">
+              ultimo backup fallito il {formatDate(status?.last_failure_at ?? null)}.{" "}
               {status?.last_failure_message ?? ""}
-            </div>
+            </Callout>
           )}
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
@@ -210,7 +210,7 @@ export default function BackupsSettingsPage() {
               }
             />
             <Field
-              icon={<CheckCircle2 className="h-3.5 w-3.5 text-green-600" />}
+              icon={<CheckCircle2 className="h-3.5 w-3.5 text-[#0f7a37]" />}
               label="Ultimo backup riuscito"
               value={formatDate(status?.last_successful_at ?? null)}
             />

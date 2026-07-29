@@ -385,8 +385,8 @@ function SDSUploadZone({
                 {r.kind === "tracked" && r.status === "completed" && (
                   <>
                     <Badge
-                      variant="default"
-                      className="bg-emerald-600 text-xs hover:bg-emerald-700"
+                      variant="success"
+                      className="text-xs"
                     >
                       <CheckCircle2 className="mr-1 h-3 w-3" />
                       Completata{" "}

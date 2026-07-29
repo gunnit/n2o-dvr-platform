@@ -426,7 +426,7 @@ export default function GestantiAssessmentPage() {
             <Badge variant="secondary">Allegato Gestanti</Badge>
             <span>D.Lgs. 151/2001 · Allegati A / B / C</span>
             {dirty && (
-              <Badge variant="outline" className="border-amber-500/50 text-amber-700">
+              <Badge variant="outline" className="border-[rgba(155,104,41,0.4)] text-[#8a5c23]">
                 Modifiche non salvate
               </Badge>
             )}
@@ -439,7 +439,7 @@ export default function GestantiAssessmentPage() {
       </div>
 
       {savedRows.length > 0 && (
-        <Card className="border-emerald-200/60 bg-emerald-50/40">
+        <Card className="border-[rgba(16,140,61,0.26)] bg-[rgba(16,140,61,0.05)]">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">
               Valutazioni archiviate ({savedRows.length})
@@ -621,7 +621,7 @@ export default function GestantiAssessmentPage() {
                 className={
                   saveMessage.startsWith("Errore")
                     ? "mt-1 text-xs text-destructive"
-                    : "mt-1 text-xs text-emerald-700"
+                    : "mt-1 text-xs text-[#0c6b2f]"
                 }
               >
                 {saveMessage}

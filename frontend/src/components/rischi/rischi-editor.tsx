@@ -55,6 +55,16 @@ import {
   Wrench,
 } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { Callout } from "@/components/ui/callout";
+import {
+  RISK_BAR,
+  RISK_CHIP,
+  RISK_LABEL,
+  RISK_ORDER,
+  RISK_RANGE,
+  livelloFor,
+} from "@/lib/ui/risk";
+import { TONE_CHIP, TONE_SURFACE } from "@/lib/ui/tones";
 import { cn } from "@/lib/utils";
 import {
   canonicalTipoLabel,
@@ -501,43 +511,14 @@ function calcIndice(p: number, d: number): number {
   return 2 * d + p;
 }
 
-function getLivello(
-  indice: number,
-): "ACCETTABILE" | "MODESTO" | "GRAVE" | "GRAVISSIMO" {
-  if (indice <= 4) return "ACCETTABILE";
-  if (indice <= 6) return "MODESTO";
-  if (indice <= 8) return "GRAVE";
-  return "GRAVISSIMO";
-}
+const getLivello = livelloFor;
 
 function getLivelloStyle(livello: string) {
-  switch (livello) {
-    case "ACCETTABILE":
-      return "bg-green-100 text-green-800 border-green-200";
-    case "MODESTO":
-      return "bg-yellow-100 text-yellow-800 border-yellow-200";
-    case "GRAVE":
-      return "bg-orange-100 text-orange-800 border-orange-200";
-    case "GRAVISSIMO":
-      return "bg-red-100 text-red-800 border-red-200";
-    default:
-      return "";
-  }
+  return RISK_CHIP[livello as LivelloRischio] ?? "";
 }
 
 function getIndiceBarColor(livello: string) {
-  switch (livello) {
-    case "ACCETTABILE":
-      return "bg-green-500";
-    case "MODESTO":
-      return "bg-yellow-500";
-    case "GRAVE":
-      return "bg-orange-500";
-    case "GRAVISSIMO":
-      return "bg-red-500";
-    default:
-      return "bg-muted";
-  }
+  return RISK_BAR[livello as LivelloRischio] ?? "bg-muted";
 }
 
 function initValutazioni(
@@ -1108,7 +1089,7 @@ export function RischiEditor({
                 !selectedAmbiente ||
                 aiLoadingByAmbiente[selectedAmbiente.id] === true
               }
-              className="border-violet-300 text-violet-700 hover:bg-violet-100"
+              className="border-[rgba(124,58,237,0.34)] text-[#5b21b6] hover:bg-[rgba(124,58,237,0.08)]"
             >
               {selectedAmbiente &&
               aiLoadingByAmbiente[selectedAmbiente.id] ? (
@@ -1140,10 +1121,13 @@ export function RischiEditor({
           <div className="space-y-4 px-6 pb-6">
             {/* Phase 8.3 — AI sintesi banner for the current ambiente */}
             {selectedAmbiente && aiSintesiByAmbiente[selectedAmbiente.id] && (
-              <div className="flex items-start gap-2 rounded-lg border border-violet-300 bg-violet-100 px-3 py-2 text-xs text-violet-900">
-                <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-600" />
-                <p>{aiSintesiByAmbiente[selectedAmbiente.id]}</p>
-              </div>
+              <Callout
+                tone="info"
+                className={cn("text-xs", TONE_SURFACE.ai)}
+                icon={<Sparkles className="h-3.5 w-3.5" strokeWidth={1.9} />}
+              >
+                {aiSintesiByAmbiente[selectedAmbiente.id]}
+              </Callout>
             )}
 
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 px-3 py-2 text-xs">
@@ -1231,7 +1215,10 @@ export function RischiEditor({
                               return (
                                 <span
                                   title={tooltip}
-                                  className="inline-flex w-fit items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800"
+                                  className={cn(
+                                    "inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+                                    TONE_CHIP.warning
+                                  )}
                                 >
                                   <Wrench className="h-3 w-3" />
                                   Suggerito da attrezzature
@@ -1382,22 +1369,17 @@ export function RischiEditor({
             {/* Legend */}
             <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               <span className="font-medium">Legenda:</span>
-              <span className="flex items-center gap-1">
-                <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500" />
-                Accettabile (3-4)
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="inline-block h-2.5 w-2.5 rounded-full bg-yellow-500" />
-                Modesto (5-6)
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="inline-block h-2.5 w-2.5 rounded-full bg-orange-500" />
-                Grave (7-8)
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500" />
-                Gravissimo (9-12)
-              </span>
+              {RISK_ORDER.map((livello) => (
+                <span key={livello} className="flex items-center gap-1">
+                  <span
+                    className={cn(
+                      "inline-block h-2.5 w-2.5 rounded-full",
+                      RISK_BAR[livello]
+                    )}
+                  />
+                  {RISK_LABEL[livello]} ({RISK_RANGE[livello]})
+                </span>
+              ))}
             </div>
           </div>
         </CardContent>
@@ -1544,7 +1526,10 @@ function SaveStatusBadge({ status }: { status: SaveStatus }) {
     return (
       <span
         title={status.message}
-        className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700"
+        className={cn(
+          "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+          TONE_CHIP.danger
+        )}
       >
         <CloudOff className="h-2.5 w-2.5" />
         Salvataggio fallito
@@ -1556,7 +1541,12 @@ function SaveStatusBadge({ status }: { status: SaveStatus }) {
     minute: "2-digit",
   });
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+        TONE_CHIP.success
+      )}
+    >
       <Check className="h-2.5 w-2.5" />
       Salvato {time}
     </span>

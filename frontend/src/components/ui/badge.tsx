@@ -2,6 +2,7 @@ import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
 import { cva, type VariantProps } from "class-variance-authority"
 
+import { TONE_CHIP } from "@/lib/ui/tones"
 import { cn } from "@/lib/utils"
 
 const badgeVariants = cva(
@@ -13,13 +14,25 @@ const badgeVariants = cva(
           "bg-[rgba(0,61,116,0.08)] text-primary border-[rgba(0,61,116,0.2)] [a]:hover:bg-[rgba(0,61,116,0.12)]",
         secondary:
           "bg-[#f6f9fc] text-[#273951] border-[#e5edf5] [a]:hover:bg-[#eef2f7]",
-        destructive:
-          "bg-[rgba(186,26,26,0.1)] text-destructive border-[rgba(186,26,26,0.3)] [a]:hover:bg-[rgba(186,26,26,0.15)]",
+        // `destructive` is the shadcn name and `danger` the one the tone
+        // vocabulary uses; they render identically so a call site can say
+        // either without the two drifting apart.
+        destructive: TONE_CHIP.danger,
+        danger: TONE_CHIP.danger,
         outline:
           "border-[#e5edf5] bg-white text-[#273951] [a]:hover:bg-[#f6f9fc]",
         ghost:
           "text-[#64748d] hover:bg-[#f6f9fc] hover:text-[#273951]",
         link: "text-primary underline-offset-4 hover:underline",
+        // Semantic tones from `lib/ui/tones`. Without these, ~40 call sites
+        // reached past the component for a raw amber-100/amber-800 pair
+        // and every one of them picked a slightly different yellow.
+        success: TONE_CHIP.success,
+        warning: TONE_CHIP.warning,
+        info: TONE_CHIP.info,
+        neutral: TONE_CHIP.neutral,
+        /** Provenance marker for anything a model wrote. */
+        ai: TONE_CHIP.ai,
       },
     },
     defaultVariants: {

@@ -203,7 +203,7 @@ export default function BiologicoAssessmentPage({
             {dirty && (
               <Badge
                 variant="outline"
-                className="border-amber-500/40 bg-amber-500/10 text-amber-800"
+                className="border-[rgba(155,104,41,0.34)] bg-[rgba(155,104,41,0.1)] text-[#8a5c23]"
               >
                 Modifiche non salvate
               </Badge>
@@ -217,9 +217,9 @@ export default function BiologicoAssessmentPage({
       </div>
 
       {savedSummary.length > 0 && (
-        <Card className="border-emerald-200/60 bg-emerald-50/40">
+        <Card className="border-[rgba(16,140,61,0.26)] bg-[rgba(16,140,61,0.05)]">
           <CardContent className="py-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-emerald-800">
+            <p className="text-xs font-medium uppercase tracking-wide text-[#0c6b2f]">
               Valutazioni archiviate
             </p>
             <ul className="mt-2 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
@@ -267,7 +267,7 @@ export default function BiologicoAssessmentPage({
                   "mt-1 text-xs",
                   saveMessage.startsWith("Errore")
                     ? "text-destructive"
-                    : "text-emerald-700",
+                    : "text-[#0c6b2f]",
                 )}
               >
                 {saveMessage}

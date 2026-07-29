@@ -18,6 +18,7 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Callout } from "@/components/ui/callout";
 import { Label } from "@/components/ui/label";
 import { Monogram } from "@/components/cards/Monogram";
 import { formatRelative } from "@/lib/ui/relative-time";
@@ -513,24 +514,28 @@ export default function DocumentsPage() {
                           </div>
 
                           {blockedByDvr && (
-                            <p className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11.5px] text-amber-800">
+                            <Callout tone="warn" dense className="px-2 py-1 text-[11.5px]">
                               Genera prima il DVR Master
-                            </p>
+                            </Callout>
                           )}
 
                           {gatedByPlan && (
-                            <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5">
-                              <Badge className="border border-amber-300 bg-amber-100 text-amber-900">
-                                <Lock className="mr-1 h-2.5 w-2.5" />
-                                Non incluso nel piano
-                              </Badge>
-                              <Link
-                                href="/billing"
-                                className="text-[11.5px] font-semibold text-primary underline-offset-2 hover:underline"
-                              >
-                                Passa a un piano superiore
-                              </Link>
-                            </div>
+                            <Callout
+                              tone="warn"
+                              dense
+                              className="px-2 py-1.5 text-[11.5px]"
+                              icon={<Lock className="h-3 w-3" strokeWidth={2} />}
+                              action={
+                                <Link
+                                  href="/billing"
+                                  className="font-semibold underline underline-offset-2"
+                                >
+                                  Passa a un piano superiore
+                                </Link>
+                              }
+                            >
+                              Non incluso nel piano
+                            </Callout>
                           )}
 
                           {existing && config ? (
@@ -588,7 +593,7 @@ export default function DocumentsPage() {
                           )}
 
                           {status === "bozza" && existing?.error_message && (
-                            <p className="text-[11.5px] text-amber-700">
+                            <p className="text-[11.5px] text-[#8a5c23]">
                               {existing.error_message}
                             </p>
                           )}

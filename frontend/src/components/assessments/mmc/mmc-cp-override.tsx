@@ -132,7 +132,7 @@ export function MmcCpOverride({
               {...form.register("worker_eta", { valueAsNumber: true })}
             />
             {form.formState.errors.worker_eta?.message && (
-              <p className="text-[11px] text-rose-600">
+              <p className="text-[11px] text-[#b01e2e]">
                 {form.formState.errors.worker_eta.message}
               </p>
             )}
@@ -147,7 +147,7 @@ export function MmcCpOverride({
           {override === undefined ? (
             <Badge variant="secondary">Auto</Badge>
           ) : (
-            <Badge className="bg-amber-500/20 text-amber-800 ring-1 ring-amber-500/30">
+            <Badge className="bg-[rgba(245,158,11,0.18)] text-[#8a5c23] ring-1 ring-[rgba(245,158,11,0.36)]">
               Modificato
             </Badge>
           )}
@@ -169,13 +169,13 @@ export function MmcCpOverride({
         </div>
 
         {lookupError && (
-          <p className="text-[11px] text-amber-700">
+          <p className="text-[11px] text-[#8a5c23]">
             {lookupError}
           </p>
         )}
 
         {editing && (
-          <div className="grid gap-3 rounded-md border border-amber-300 bg-amber-100 p-3">
+          <div className="grid gap-3 rounded-md border border-[rgba(155,104,41,0.26)] bg-[rgba(155,104,41,0.05)] p-3">
             <div className="grid gap-1.5">
               <Label htmlFor="cp-override" className="text-xs">
                 Nuovo valore CP (kg)
@@ -202,12 +202,12 @@ export function MmcCpOverride({
                 rows={2}
                 className={cn(
                   "min-h-16 rounded-md border bg-background px-3 py-2 text-sm",
-                  motivazioneError && "border-rose-500",
+                  motivazioneError && "border-[#c72a3a]",
                 )}
                 {...form.register("cp_motivazione")}
               />
               {motivazioneError && (
-                <p className="text-[11px] text-rose-600">{motivazioneError}</p>
+                <p className="text-[11px] text-[#b01e2e]">{motivazioneError}</p>
               )}
               <p className="text-[11px] text-muted-foreground">
                 Caratteri: {motivazione?.length ?? 0}

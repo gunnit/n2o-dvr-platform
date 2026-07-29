@@ -64,7 +64,7 @@ export function AIContent({ isAI, className, children }: AIContentProps) {
       className={cn(
         "transition-opacity",
         dimmed && "pointer-events-none select-none opacity-40",
-        highlighted && "ring-1 ring-violet-200 rounded-md",
+        highlighted && "ring-1 ring-[rgba(124,58,237,0.26)] rounded-md",
         className
       )}
     >

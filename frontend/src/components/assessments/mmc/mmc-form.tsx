@@ -499,11 +499,11 @@ export function MmcForm({
                   className={cn(
                     "px-3 py-1 text-sm ring-1",
                     worst.zona === "VERDE" &&
-                      "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30",
+                      "bg-[rgba(21,190,83,0.16)] text-[#0c6b2f] ring-[rgba(21,190,83,0.34)]",
                     worst.zona === "GIALLA" &&
-                      "bg-amber-500/15 text-amber-800 ring-amber-500/30",
+                      "bg-[rgba(245,158,11,0.18)] text-[#8a5c23] ring-[rgba(245,158,11,0.36)]",
                     worst.zona === "ROSSA" &&
-                      "bg-rose-500/15 text-rose-700 ring-rose-500/30",
+                      "bg-[rgba(239,68,68,0.16)] text-[#b01e2e] ring-[rgba(239,68,68,0.34)]",
                   )}
                 >
                   {worst.zona}
@@ -555,7 +555,7 @@ export function MmcForm({
           <Plus className="mr-2 h-4 w-4" /> Aggiungi sollevamento
         </Button>
         {form.formState.errors.lifts?.message && (
-          <p className="text-xs text-rose-600">
+          <p className="text-xs text-[#b01e2e]">
             {form.formState.errors.lifts.message}
           </p>
         )}

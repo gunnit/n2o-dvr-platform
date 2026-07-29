@@ -351,7 +351,7 @@ export function FascicoloStack() {
 
   if (skipMotion) {
     return (
-      <section id="fascicolo" className="dark-section bg-[#061b31] py-24 sm:py-28">
+      <section id="fascicolo" className="dark-section section-y bg-[#061b31]">
         <div className="mx-auto w-full max-w-[1160px] px-6 sm:px-7">
           {intro}
           <p className="mt-5 max-w-[52ch] text-[15.5px] leading-[1.62] font-light text-white/68">

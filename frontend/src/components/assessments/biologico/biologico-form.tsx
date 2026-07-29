@@ -77,9 +77,9 @@ const SETTORE_META: Record<Settore, { label: string; normativa: string }> = {
 };
 
 const CRITICITA_BADGE: Record<Criticita, string> = {
-  alta: "bg-rose-500/15 text-rose-700 ring-rose-500/30",
-  media: "bg-amber-500/15 text-amber-800 ring-amber-500/30",
-  bassa: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30",
+  alta: "bg-[rgba(239,68,68,0.16)] text-[#b01e2e] ring-[rgba(239,68,68,0.34)]",
+  media: "bg-[rgba(245,158,11,0.18)] text-[#8a5c23] ring-[rgba(245,158,11,0.36)]",
+  bassa: "bg-[rgba(21,190,83,0.16)] text-[#0c6b2f] ring-[rgba(21,190,83,0.34)]",
 };
 
 const CRITICITA_LABEL: Record<Criticita, string> = {
@@ -89,9 +89,9 @@ const CRITICITA_LABEL: Record<Criticita, string> = {
 };
 
 const BAND_CLASS: Record<LivelloRischio, string> = {
-  BASSO: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30",
-  MEDIO: "bg-amber-500/15 text-amber-800 ring-amber-500/30",
-  ALTO: "bg-rose-500/15 text-rose-700 ring-rose-500/30",
+  BASSO: "bg-[rgba(21,190,83,0.16)] text-[#0c6b2f] ring-[rgba(21,190,83,0.34)]",
+  MEDIO: "bg-[rgba(245,158,11,0.18)] text-[#8a5c23] ring-[rgba(245,158,11,0.36)]",
+  ALTO: "bg-[rgba(239,68,68,0.16)] text-[#b01e2e] ring-[rgba(239,68,68,0.34)]",
 };
 
 // ---------------------------------------------------------------------------
@@ -221,10 +221,10 @@ function AnswerButton({
         "rounded-md px-2.5 py-1 text-xs font-medium ring-1 transition-colors",
         active
           ? tone === "danger"
-            ? "bg-rose-500/15 text-rose-700 ring-rose-500/40"
+            ? "bg-[rgba(239,68,68,0.16)] text-[#b01e2e] ring-[rgba(239,68,68,0.34)]"
             : tone === "muted"
             ? "bg-muted text-muted-foreground ring-border"
-            : "bg-emerald-500/15 text-emerald-700 ring-emerald-500/40"
+            : "bg-[rgba(21,190,83,0.16)] text-[#0c6b2f] ring-[rgba(21,190,83,0.34)]"
           : "bg-background text-muted-foreground ring-border hover:bg-muted",
       )}
     >
@@ -482,9 +482,9 @@ export function BiologicoForm({
                 <div
                   className={cn(
                     "h-full transition-all duration-500",
-                    result.livello === "BASSO" && "bg-emerald-500",
-                    result.livello === "MEDIO" && "bg-amber-500",
-                    result.livello === "ALTO" && "bg-rose-500",
+                    result.livello === "BASSO" && "bg-[#15be53]",
+                    result.livello === "MEDIO" && "bg-[#f59e0b]",
+                    result.livello === "ALTO" && "bg-[#ef4444]",
                   )}
                   style={{
                     width: `${Math.min(100, result.ratio * 100)}%`,
@@ -538,7 +538,7 @@ export function BiologicoForm({
           {loadError && (
             <div
               role="alert"
-              className="rounded-md border border-rose-300 bg-rose-100 px-4 py-3 text-sm text-rose-900"
+              className="rounded-md border border-[rgba(199,42,58,0.28)] bg-[rgba(199,42,58,0.05)] px-4 py-3 text-sm text-[#c72a3a]"
             >
               <strong className="font-medium">Errore:</strong> {loadError}
             </div>

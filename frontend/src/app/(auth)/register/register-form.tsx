@@ -4,11 +4,8 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
-import { Shield } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { FIELD, FIELD_LABEL, SECONDARY, SUBMIT } from "@/components/auth/auth-ui";
 import { FormError } from "@/components/ui/form-error";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { throwApiError } from "@/lib/api-errors";
 import { DDL_CONSENT_TEXT, DDL_CONSENT_VERSION } from "@/lib/consent";
 
@@ -162,75 +159,83 @@ export function RegisterForm({ piano }: { piano: string | null }) {
     }
   }
 
-  const labelClass = "text-[13px] font-medium text-[#273951]";
-
   return (
-    <div className="w-full max-w-[440px] rounded-[10px] border border-white/60 bg-white/97 p-8 shadow-stripe-elevated backdrop-blur-md sm:p-9">
-      <div className="mb-7 flex flex-col items-center text-center">
-        <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-md bg-primary/10 ring-1 ring-primary/20">
-          <Shield className="h-5 w-5 text-primary" strokeWidth={1.75} />
-        </div>
-        <h1 className="font-heading text-[30px] leading-[1.1] font-light tracking-[-0.025em] text-[#061b31]">
-          Crea un account
-        </h1>
-        <p className="type-body mt-2">
-          {planName
-            ? `Un ultimo passaggio prima di attivare il piano ${planName}`
-            : "Registrati per accedere alla piattaforma"}
-        </p>
-      </div>
+    <div data-testid="register-card">
+      <h1 className="font-heading text-[38px] leading-[1.05] font-light tracking-[-0.035em] text-[#061b31]">
+        Crea un account
+      </h1>
+      <p className="mt-3 text-[15px] leading-[1.55] font-light text-[#64748d]">
+        {planName
+          ? `Un ultimo passaggio prima di attivare il piano ${planName}`
+          : "Registrati per accedere alla piattaforma"}
+      </p>
 
       {planName && (
-        <div className="mb-6 rounded-md border border-primary/25 bg-primary/5 px-3 py-2.5 text-[13px] text-[#273951]">
-          Piano selezionato: <strong>{planName}</strong>. Dopo la registrazione
-          ti portiamo su PayPal per approvare l&apos;abbonamento annuale.
+        <div className="mt-6 flex items-start gap-2.5 rounded-sm border border-[#cfe0f2] bg-primary/4 px-3.5 py-3">
+          <p className="text-[13px] leading-[1.45] text-[#273951]">
+            Piano selezionato:{" "}
+            <strong className="font-semibold text-[#061b31]">{planName}</strong>.
+            Dopo la registrazione ti portiamo su PayPal per approvare
+            l&apos;abbonamento annuale.
+          </p>
         </div>
       )}
 
-      <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="full_name" className={labelClass}>
-            Nome Completo *
-          </Label>
-          <Input
+      <form
+        ref={formRef}
+        onSubmit={handleSubmit}
+        className="mt-[34px] flex flex-col gap-[18px]"
+      >
+        <div className="flex flex-col gap-[7px]">
+          <label htmlFor="full_name" className={FIELD_LABEL}>
+            Nome completo *
+          </label>
+          <input
             id="full_name"
             name="full_name"
             type="text"
             required
             autoComplete="name"
             placeholder="Mario Rossi"
+            className={FIELD}
           />
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="email" className={labelClass}>
+
+        <div className="flex flex-col gap-[7px]">
+          <label htmlFor="email" className={FIELD_LABEL}>
             Email *
-          </Label>
-          <Input
+          </label>
+          <input
             id="email"
             name="email"
             type="email"
             required
             autoComplete="email"
             placeholder="nome@esempio.it"
+            className={FIELD}
           />
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <div className="flex items-baseline justify-between gap-2">
-              <Label htmlFor="password" className={labelClass}>
+
+        {/* Two-up from 480px rather than at `sm`: the panel is 440px wide and
+            these two fields are the shortest on the form, so pairing them is
+            what keeps the whole signup above the fold on a laptop. */}
+        <div className="grid gap-[18px] min-[480px]:grid-cols-2">
+          <div className="flex flex-col gap-[7px]">
+            <div className="flex items-baseline justify-between gap-3">
+              <label htmlFor="password" className={FIELD_LABEL}>
                 Password *
-              </Label>
+              </label>
               {/* This form asks for the password twice; being able to read it
                   back is what stops the mismatch error from happening. */}
               <button
                 type="button"
                 onClick={() => setReveal((r) => !r)}
-                className="text-[11.5px] font-medium text-primary transition-colors hover:text-[#1b5594]"
+                className="text-[12px] font-medium text-primary transition-colors hover:text-[#1b5594]"
               >
                 {reveal ? "Nascondi" : "Mostra"}
               </button>
             </div>
-            <Input
+            <input
               id="password"
               name="password"
               type={reveal ? "text" : "password"}
@@ -242,13 +247,14 @@ export function RegisterForm({ piano }: { piano: string | null }) {
                 const on = e.getModifierState?.("CapsLock") ?? false;
                 if (on !== caps) setCaps(on);
               }}
+              className={FIELD}
             />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="confirm_password" className={labelClass}>
+          <div className="flex flex-col gap-[7px]">
+            <label htmlFor="confirm_password" className={FIELD_LABEL}>
               Conferma *
-            </Label>
-            <Input
+            </label>
+            <input
               id="confirm_password"
               name="confirm_password"
               type={reveal ? "text" : "password"}
@@ -259,17 +265,21 @@ export function RegisterForm({ piano }: { piano: string | null }) {
                 const on = e.getModifierState?.("CapsLock") ?? false;
                 if (on !== caps) setCaps(on);
               }}
+              className={FIELD}
             />
           </div>
         </div>
         {caps && (
-          <p className="-mt-1.5 text-[12px] text-[#9b6829]">Blocco maiuscole attivo.</p>
+          <p className="-mt-2 text-[12px] text-[#9b6829]">
+            Blocco maiuscole attivo.
+          </p>
         )}
-        <div className="space-y-1.5">
-          <Label htmlFor="organization_name" className={labelClass}>
+
+        <div className="flex flex-col gap-[7px]">
+          <label htmlFor="organization_name" className={FIELD_LABEL}>
             {direct ? "Ragione sociale dell'impresa *" : "Studio o organizzazione"}
-          </Label>
-          <Input
+          </label>
+          <input
             id="organization_name"
             name="organization_name"
             type="text"
@@ -280,10 +290,12 @@ export function RegisterForm({ piano }: { piano: string | null }) {
             required={direct}
             aria-invalid={badField === "organization_name" || undefined}
             placeholder={direct ? "Es. Officina Meccanica Bianchi SRL" : "Es. N2O SRL"}
+            className={FIELD}
           />
         </div>
+
         {direct && (
-          <div className="rounded-md border border-[#e5edf5] bg-[#f6f9fc] p-3.5">
+          <div className="rounded-sm border border-[#e5edf5] bg-[#f6f9fc] p-3.5">
             <label
               htmlFor="consenso_datore_lavoro"
               className="flex cursor-pointer gap-2.5 text-[12.5px] leading-[1.55] text-[#273951]"
@@ -299,35 +311,43 @@ export function RegisterForm({ piano }: { piano: string | null }) {
             </label>
           </div>
         )}
-        <FormError>{error}</FormError>
-        <Button
-          type="submit"
-          className="mt-2 flex w-full items-center justify-center gap-2.5"
-          disabled={loading}
-        >
+
+        <FormError className="rounded-sm">{error}</FormError>
+
+        <button type="submit" className={SUBMIT} disabled={loading}>
           {loading && (
             <span className="h-[15px] w-[15px] animate-spin rounded-full border-[1.6px] border-white/32 border-t-white" />
           )}
-          {loading ? "Registrazione in corso…" : "Registrati"}
-        </Button>
+          <span>{loading ? "Registrazione in corso…" : "Registrati"}</span>
+        </button>
       </form>
 
-      <p className="mt-5 text-center text-[13px] text-[#64748d]">
-        Hai gi&agrave; un account?{" "}
-        <Link
-          href={piano ? `/login?piano=${encodeURIComponent(piano)}` : "/login"}
-          className="font-medium text-primary hover:underline"
-        >
-          Accedi
-        </Link>
-      </p>
+      {/* Same closing structure as /login — divider, the route out for the
+          other account state, then the fine print. */}
+      <div className="mt-[26px] flex items-center gap-3.5">
+        <span className="h-px flex-1 bg-[#e5edf5]" />
+        <span className="text-[11px] font-medium tracking-[0.13em] text-[#8a96ab] uppercase">
+          oppure
+        </span>
+        <span className="h-px flex-1 bg-[#e5edf5]" />
+      </div>
 
-      <p className="mt-4 border-t border-[#e5edf5] pt-4 text-center text-[12.5px] leading-[1.55] text-[#64748d]">
+      <Link
+        href={piano ? `/login?piano=${encodeURIComponent(piano)}` : "/login"}
+        className={`${SECONDARY} mt-[18px]`}
+      >
+        Ho gi&agrave; un account · Accedi
+      </Link>
+
+      <p className="mt-7 text-[12.5px] leading-[1.6] text-[#8a96ab]">
         {direct ? (
           <>
             Sei invece un consulente o uno studio che segue pi&ugrave; aziende
             clienti?{" "}
-            <Link href="/prezzi#consulenti" className="font-medium text-primary hover:underline">
+            <Link
+              href="/prezzi#consulenti"
+              className="font-medium text-primary hover:underline"
+            >
               Guarda i piani per consulenti
             </Link>
             .
@@ -335,7 +355,10 @@ export function RegisterForm({ piano }: { piano: string | null }) {
         ) : (
           <>
             Sei un&apos;azienda che deve documentare la propria sicurezza?{" "}
-            <Link href="/prezzi#aziende" className="font-medium text-primary hover:underline">
+            <Link
+              href="/prezzi#aziende"
+              className="font-medium text-primary hover:underline"
+            >
               Guarda i piani per aziende
             </Link>
             .

@@ -19,6 +19,7 @@ import { CheckCircle2, Loader2, Plus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { useApi } from "@/hooks/use-api";
 import {
   type CreditPack,
@@ -104,9 +105,7 @@ export function CreditPacksPanel({
 
       <div className="space-y-4 p-6">
         {blockedReason && (
-          <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-            {blockedReason}
-          </p>
+          <Callout tone="warn">{blockedReason}</Callout>
         )}
 
         <div className="grid gap-4 md:grid-cols-3">
@@ -212,9 +211,9 @@ function PurchaseHistory({ purchases }: { purchases: CreditPurchase[] }) {
                     className={cn(
                       "inline-flex items-center gap-1 whitespace-nowrap text-xs",
                       p.status === "completed"
-                        ? "text-emerald-600 dark:text-emerald-400"
+                        ? "text-[#0f7a37] dark:text-[#0f7a37]"
                         : p.status === "pending"
-                          ? "text-amber-600 dark:text-amber-400"
+                          ? "text-[#8a5c23] dark:text-[#8a5c23]"
                           : "text-muted-foreground"
                     )}
                   >

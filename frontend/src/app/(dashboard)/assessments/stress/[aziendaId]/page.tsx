@@ -904,11 +904,11 @@ export default function StressAssessmentPage() {
                 className={cn(
                   "inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium ring-1",
                   result.livello === "BASSO" &&
-                    "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30",
+                    "bg-[rgba(21,190,83,0.16)] text-[#0c6b2f] ring-[rgba(21,190,83,0.34)]",
                   result.livello === "MEDIO" &&
-                    "bg-amber-500/15 text-amber-800 ring-amber-500/30",
+                    "bg-[rgba(245,158,11,0.18)] text-[#8a5c23] ring-[rgba(245,158,11,0.36)]",
                   result.livello === "ALTO" &&
-                    "bg-rose-500/15 text-rose-700 ring-rose-500/30",
+                    "bg-[rgba(239,68,68,0.16)] text-[#b01e2e] ring-[rgba(239,68,68,0.34)]",
                 )}
               >
                 {result.livello}
@@ -941,9 +941,9 @@ export default function StressAssessmentPage() {
                   className={cn(
                     "group rounded-md border p-3 transition-colors",
                     dirty
-                      ? "border-amber-300 bg-amber-50/40"
+                      ? "border-[rgba(155,104,41,0.26)] bg-[rgba(155,104,41,0.05)]"
                       : persisted
-                        ? "border-emerald-300/60 bg-emerald-50/30"
+                        ? "border-[rgba(16,140,61,0.26)] bg-[rgba(16,140,61,0.05)]"
                         : "border-border bg-background",
                   )}
                 >
@@ -966,14 +966,14 @@ export default function StressAssessmentPage() {
                       {dirty ? (
                         <Badge
                           variant="outline"
-                          className="border-amber-400/70 text-amber-700"
+                          className="border-[rgba(155,104,41,0.4)] text-[#8a5c23]"
                         >
                           Da salvare
                         </Badge>
                       ) : persisted ? (
                         <Badge
                           variant="outline"
-                          className="border-emerald-400/70 text-emerald-700"
+                          className="border-[rgba(16,140,61,0.4)] text-[#0c6b2f]"
                         >
                           Salvato
                         </Badge>
@@ -1036,7 +1036,7 @@ export default function StressAssessmentPage() {
                   "mt-1 text-xs",
                   finalizeMessage.startsWith("Errore")
                     ? "text-destructive"
-                    : "text-emerald-700",
+                    : "text-[#0c6b2f]",
                 )}
               >
                 {finalizeMessage}
@@ -1072,9 +1072,9 @@ function LivelloMicroBadge({ livello }: { livello: string }) {
     <span
       className={cn(
         "inline-flex h-4 items-center rounded px-1 text-[10px] font-medium ring-1",
-        upper === "BASSO" && "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30",
-        upper === "MEDIO" && "bg-amber-500/15 text-amber-800 ring-amber-500/30",
-        upper === "ALTO" && "bg-rose-500/15 text-rose-700 ring-rose-500/30",
+        upper === "BASSO" && "bg-[rgba(21,190,83,0.16)] text-[#0c6b2f] ring-[rgba(21,190,83,0.34)]",
+        upper === "MEDIO" && "bg-[rgba(245,158,11,0.18)] text-[#8a5c23] ring-[rgba(245,158,11,0.36)]",
+        upper === "ALTO" && "bg-[rgba(239,68,68,0.16)] text-[#b01e2e] ring-[rgba(239,68,68,0.34)]",
       )}
     >
       {livello}

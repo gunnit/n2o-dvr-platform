@@ -8,7 +8,10 @@ import { SiteFooter } from "@/components/landing/site-footer";
 import { SiteNav } from "@/components/landing/site-nav";
 
 export const metadata: Metadata = {
-  title: "Prezzi | N2O DVR",
+  // Bare "Prezzi": the root layout's `%s | N2O DVR` template applies to child
+  // segments, so spelling the suffix out here rendered "Prezzi | N2O DVR |
+  // N2O DVR" in the tab and in search results.
+  title: "Prezzi",
   description:
     "Piani annuali per consulenti della sicurezza e per aziende. Prezzi, limiti e add-on della piattaforma N2O DVR, IVA esclusa.",
 };
@@ -57,7 +60,7 @@ export default async function PrezziPage() {
         <PricingTabs signedIn={Boolean(session)} />
 
         {/* ================= Fatturazione ================= */}
-        <section id="fatturazione" className="scroll-mt-20 bg-white py-25">
+        <section id="fatturazione" className="section-y scroll-mt-20 bg-white">
           <div className="mx-auto w-full max-w-[1160px] px-6 sm:px-7">
             <Reveal>
               <p className="mb-[18px] text-[12px] font-medium tracking-[0.16em] text-[#003d74] uppercase">
@@ -95,7 +98,7 @@ export default async function PrezziPage() {
         </section>
 
         {/* ================= Chiusura ================= */}
-        <section id="richiesta" className="dark-section scroll-mt-20 bg-[#18244e] py-[110px]">
+        <section id="richiesta" className="dark-section section-y-loose scroll-mt-20 bg-[#18244e]">
           <div className="mx-auto grid w-full max-w-[1160px] items-center gap-16 px-6 sm:px-7 md:grid-cols-2">
             <div>
               <h2 className="font-heading text-[clamp(1.8rem,3vw,2.4rem)] leading-[1.12] font-light tracking-[-0.028em] text-balance text-white">

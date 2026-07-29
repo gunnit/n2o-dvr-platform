@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import {
   Table,
   TableBody,
@@ -654,7 +655,7 @@ export function StepRiepilogo({
       {/* Firma del Cliente */}
       <Card
         className={cn(
-          isSigned && "border-green-200 bg-green-50",
+          isSigned && "border-[rgba(16,140,61,0.26)] bg-[rgba(16,140,61,0.05)]",
         )}
       >
         <CardHeader>
@@ -662,7 +663,7 @@ export function StepRiepilogo({
             <PenTool className="h-4 w-4 text-muted-foreground" />
             Firma del Cliente
             {isSigned && (
-              <Badge className="ml-2 bg-green-600 text-white hover:bg-green-700">
+              <Badge variant="success" className="ml-2">
                 <CheckCircle2 className="mr-1 h-3 w-3" />
                 Firmato
               </Badge>
@@ -672,17 +673,14 @@ export function StepRiepilogo({
         <CardContent>
           {!isComplete ? (
             /* Warning banner — survey incomplete */
-            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-yellow-800">
-                <AlertTriangle className="h-4 w-4" />
-                Completa il sopralluogo prima di firmare
-              </div>
-              <ul className="space-y-1">
+            <Callout tone="warn">
+              <p className="font-semibold">Completa il sopralluogo prima di firmare</p>
+              <ul className="mt-1.5 space-y-1">
                 {missingItems.map((item) => (
                   <li key={item.label}>
                     <button
                       type="button"
-                      className="text-sm text-yellow-800 underline underline-offset-2 hover:text-yellow-900"
+                      className="underline underline-offset-2 hover:no-underline"
                       onClick={() => onGoToStep(item.step)}
                     >
                       {item.label}
@@ -690,7 +688,7 @@ export function StepRiepilogo({
                   </li>
                 ))}
               </ul>
-            </div>
+            </Callout>
           ) : isSigned ? (
             /* Signed state */
             <div className="space-y-3">

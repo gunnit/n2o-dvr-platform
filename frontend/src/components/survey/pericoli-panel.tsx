@@ -44,6 +44,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/use-api";
+import { RISK_CHIP, livelloFor } from "@/lib/ui/risk";
 import { cn } from "@/lib/utils";
 import { MeasuresPanel } from "@/components/ai/measures-panel";
 import type {
@@ -103,23 +104,8 @@ function calcIndice(p: number, d: number): number {
   return 2 * d + p;
 }
 
-function getLivello(indice: number): LivelloRischio {
-  if (indice <= 4) return "ACCETTABILE";
-  if (indice <= 6) return "MODESTO";
-  if (indice <= 8) return "GRAVE";
-  return "GRAVISSIMO";
-}
-
-const LIVELLO_STYLE: Record<LivelloRischio, string> = {
-  ACCETTABILE:
-    "bg-green-100 text-green-800 border-green-200",
-  MODESTO:
-    "bg-yellow-100 text-yellow-800 border-yellow-200",
-  GRAVE:
-    "bg-orange-100 text-orange-800 border-orange-200",
-  GRAVISSIMO:
-    "bg-red-100 text-red-800 border-red-200",
-};
+const getLivello = livelloFor;
+const LIVELLO_STYLE = RISK_CHIP;
 
 export function PericoliPanel({
   aziendaId,
@@ -622,16 +608,16 @@ export function PericoliPanel({
                               <div className="flex flex-wrap items-center gap-1">
                                 {p.source === "custom" && (
                                   <Badge
-                                    variant="outline"
-                                    className="border-blue-200 bg-blue-50 text-[9px] text-blue-700"
+                                    variant="info"
+                                    className="text-[9px]"
                                   >
                                     Personalizzato
                                   </Badge>
                                 )}
                                 {isDelegated && (
                                   <Badge
-                                    variant="outline"
-                                    className="border-purple-200 bg-purple-50 text-[9px] text-purple-700"
+                                    variant="ai"
+                                    className="text-[9px]"
                                   >
                                     {p.valutazione_riferimento}
                                   </Badge>
@@ -704,7 +690,7 @@ export function PericoliPanel({
                             <button
                               type="button"
                               onClick={() => deletePericolo(p.id)}
-                              className="text-muted-foreground hover:text-red-600"
+                              className="text-muted-foreground hover:text-[#b01e2e]"
                               title="Rimuovi pericolo"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
@@ -762,8 +748,8 @@ export function PericoliPanel({
                         <div className="mt-0.5 flex flex-wrap items-center gap-1">
                           {s.matches_ambiente && (
                             <Badge
-                              variant="outline"
-                              className="border-emerald-200 bg-emerald-50 text-[9px] text-emerald-700"
+                              variant="success"
+                              className="text-[9px]"
                             >
                               <Sparkles className="mr-0.5 h-2.5 w-2.5" />
                               Adatto all&apos;ambiente
@@ -771,8 +757,8 @@ export function PericoliPanel({
                           )}
                           {s.triggered_by_attrezzature.length > 0 && (
                             <Badge
-                              variant="outline"
-                              className="border-amber-200 bg-amber-50 text-[9px] text-amber-800"
+                              variant="warning"
+                              className="text-[9px]"
                             >
                               <Wrench className="mr-0.5 h-2.5 w-2.5" />
                               {s.triggered_by_attrezzature.join(", ")}

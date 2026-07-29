@@ -256,12 +256,12 @@ export default function AdminAIFeedbackPage() {
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100">
+                        <Badge variant="danger">
                           {row.thumbs_down_count}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
+                        <Badge variant="success">
                           {row.thumbs_up_count}
                         </Badge>
                       </TableCell>

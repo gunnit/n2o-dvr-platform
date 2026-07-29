@@ -32,6 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useApi } from "@/hooks/use-api";
+import { TONE_CHIP } from "@/lib/ui/tones";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
 import { ADMIN_TOOLS } from "@/lib/permissions";
@@ -59,37 +60,21 @@ const TYPE_META: Record<
   FeedbackType,
   { label: string; icon: typeof Bug; tone: string }
 > = {
-  bug: { label: "Bug", icon: Bug, tone: "bg-rose-100 text-rose-700" },
-  idea: { label: "Idea", icon: Lightbulb, tone: "bg-amber-100 text-amber-700" },
+  bug: { label: "Bug", icon: Bug, tone: TONE_CHIP.danger },
+  idea: { label: "Idea", icon: Lightbulb, tone: TONE_CHIP.warning },
   observation: {
     label: "Osservazione",
     icon: MessageCircle,
-    tone: "bg-sky-100 text-sky-700",
+    tone: TONE_CHIP.info,
   },
 };
 
 const STATUS_OPTIONS: { value: FeedbackStatus; label: string; tone: string }[] =
   [
-    {
-      value: "nuovo",
-      label: "Nuovo",
-      tone: "bg-violet-100 text-violet-700",
-    },
-    {
-      value: "in_revisione",
-      label: "In revisione",
-      tone: "bg-sky-100 text-sky-700",
-    },
-    {
-      value: "risolto",
-      label: "Risolto",
-      tone: "bg-emerald-100 text-emerald-700",
-    },
-    {
-      value: "non_fara",
-      label: "Non farà",
-      tone: "bg-slate-100 text-slate-700",
-    },
+    { value: "nuovo", label: "Nuovo", tone: TONE_CHIP.ai },
+    { value: "in_revisione", label: "In revisione", tone: TONE_CHIP.info },
+    { value: "risolto", label: "Risolto", tone: TONE_CHIP.success },
+    { value: "non_fara", label: "Non farà", tone: TONE_CHIP.neutral },
   ];
 
 const STATUS_LABEL: Record<FeedbackStatus, string> = Object.fromEntries(

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2, RotateCcw, Sparkles, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/use-api";
+import { TONE_CHIP } from "@/lib/ui/tones";
 
 /**
  * Per-azienda revision history of the company description (US-2.1 AC2).
@@ -162,10 +163,10 @@ export function DescriptionHistory({
                 >
                   <span
                     className={
-                      "mt-0.5 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full " +
+                      "mt-0.5 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border " +
                       (rev.source === "ai"
-                        ? "bg-violet-100 text-violet-700"
-                        : "bg-slate-100 text-slate-700")
+                        ? TONE_CHIP.ai
+                        : TONE_CHIP.neutral)
                     }
                     aria-hidden
                   >

@@ -15,6 +15,7 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import {
   Card,
   CardContent,
@@ -513,7 +514,7 @@ export default function HaccpAssessmentPage() {
         </div>
       )}
       {toast && (
-        <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800">
+        <div className="rounded-md border border-[rgba(16,140,61,0.26)] bg-[rgba(16,140,61,0.05)] p-3 text-sm text-[#0f7a37]">
           {toast}
         </div>
       )}
@@ -598,7 +599,7 @@ export default function HaccpAssessmentPage() {
               className={cn(
                 "text-xs",
                 dirty
-                  ? "text-amber-700"
+                  ? "text-[#8a5c23]"
                   : "text-muted-foreground",
               )}
             >
@@ -927,7 +928,7 @@ export default function HaccpAssessmentPage() {
             <span
               className={cn(
                 "text-xs",
-                dirty ? "text-amber-700" : "text-muted-foreground",
+                dirty ? "text-[#8a5c23]" : "text-muted-foreground",
               )}
             >
               {dirty ? "Modifiche non salvate" : "Tutto salvato"}
@@ -966,24 +967,20 @@ export default function HaccpAssessmentPage() {
           </DialogHeader>
 
           <div className="space-y-3 py-2 text-sm">
-            <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3">
-              <p className="font-medium text-emerald-900">
-                Unisci (consigliato)
-              </p>
-              <p className="mt-1 text-xs text-emerald-900/80">
+            <Callout tone="success">
+              <p className="font-semibold">Unisci (consigliato)</p>
+              <p className="mt-0.5">
                 Mantiene le righe che hai modificato + i CCP personalizzati, e
                 aggiunge i nuovi CCP dal catalogo.
               </p>
-            </div>
-            <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
-              <p className="font-medium text-amber-900">
-                Sostituisci
-              </p>
-              <p className="mt-1 text-xs text-amber-900/80">
+            </Callout>
+            <Callout tone="warn">
+              <p className="font-semibold">Sostituisci</p>
+              <p className="mt-0.5">
                 Cancella tutti i CCP esistenti e carica solo i default della
                 nuova tipologia. Le personalizzazioni vanno perse.
               </p>
-            </div>
+            </Callout>
           </div>
 
           <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-between">

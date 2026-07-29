@@ -325,8 +325,7 @@ export default function PeeProceduresPage() {
         </div>
         {customCount > 0 && (
           <Badge
-            variant="secondary"
-            className="bg-sky-100 text-sky-800 hover:bg-sky-100"
+            variant="info"
           >
             {customCount} personalizzata{customCount === 1 ? "" : "e"}
           </Badge>
@@ -647,7 +646,7 @@ export default function PeeProceduresPage() {
                     className={cn(
                       "rounded-md border p-3",
                       proc.personalizzata
-                        ? "border-sky-300 bg-sky-100"
+                        ? "border-[rgba(27,85,148,0.24)] bg-[rgba(27,85,148,0.045)]"
                         : "border-border bg-background"
                     )}
                   >
@@ -658,8 +657,8 @@ export default function PeeProceduresPage() {
                       <span className="text-sm font-medium">{proc.titolo}</span>
                       {proc.personalizzata && (
                         <Badge
-                          variant="secondary"
-                          className="bg-sky-100 text-sky-800 hover:bg-sky-100 text-[11px]"
+                          variant="info"
+                          className="text-[11px]"
                         >
                           Personalizzata
                         </Badge>

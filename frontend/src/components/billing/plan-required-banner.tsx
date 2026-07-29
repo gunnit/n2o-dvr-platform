@@ -18,7 +18,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
 
-import { Notice } from "@/components/billing/billing-ui";
+import { Callout } from "@/components/ui/callout";
 import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
 
 const DISMISS_KEY = "n2o.plan-banner.dismissed";
@@ -101,15 +101,16 @@ export function PlanRequiredBanner() {
           } as const);
 
   return (
-    <Notice tone={variant.tone} className="mb-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p>
-          <strong>{variant.title}.</strong> {variant.body}
-        </p>
-        <div className="flex shrink-0 items-center gap-2">
+    <Callout
+      tone={variant.tone === "warn" ? "warn" : "danger"}
+      title={`${variant.title}.`}
+      dense
+      className="mb-6"
+      action={
+        <>
           <Link
             href="/billing"
-            className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-[12.5px] font-semibold text-white shadow-stripe-ambient transition-colors hover:bg-[#1b5594]"
+            className="inline-flex h-7 items-center rounded-sm border border-current/30 px-2.5 text-[12px] font-semibold transition-colors hover:bg-current/10"
           >
             {variant.cta}
           </Link>
@@ -117,12 +118,14 @@ export function PlanRequiredBanner() {
             type="button"
             onClick={dismiss}
             aria-label="Nascondi avviso"
-            className="rounded-sm p-1 opacity-60 transition-opacity hover:opacity-100"
+            className="rounded-sm p-0.5 opacity-50 transition-opacity hover:opacity-100"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5" />
           </button>
-        </div>
-      </div>
-    </Notice>
+        </>
+      }
+    >
+      {variant.body}
+    </Callout>
   );
 }

@@ -392,7 +392,7 @@ export function StepDpiRischi({
                   type="button"
                   onClick={() => flagWithAi(currentPersona.id)}
                   disabled={aiLoadingByPersona[currentPersona.id] === true}
-                  className="inline-flex h-8 items-center gap-2 rounded-md border border-violet-300 bg-violet-50 px-3 text-xs font-medium text-violet-800 transition-colors hover:bg-violet-100 disabled:opacity-60"
+                  className="inline-flex h-8 items-center gap-2 rounded-md border border-[rgba(124,58,237,0.34)] bg-[rgba(124,58,237,0.06)] px-3 text-xs font-medium text-[#5b21b6] transition-colors hover:bg-[rgba(124,58,237,0.12)] disabled:opacity-60"
                 >
                   {aiLoadingByPersona[currentPersona.id] ? (
                     <>

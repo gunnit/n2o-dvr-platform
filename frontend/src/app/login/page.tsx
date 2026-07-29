@@ -4,24 +4,11 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
-import { LoginBackdrop } from "@/components/auth/login-backdrop";
+import { AuthSplit } from "@/components/auth/auth-split";
+import { FIELD, FIELD_LABEL, SECONDARY, SUBMIT } from "@/components/auth/auth-ui";
 
 /** Reassurance labels cycled while the credentials request is in flight. */
 const PENDING_LABELS = ["Verifica credenziali…", "Quasi pronto…"];
-
-const FIELD =
-  "h-[46px] rounded-sm border border-[#e5edf5] bg-white px-3.5 text-[15px] text-[#061b31] outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-[#8a96ab] focus:border-primary focus:shadow-[0_0_0_3px_rgba(0,61,116,0.13)]";
-
-const FIELD_LABEL =
-  "text-[11.5px] font-medium tracking-[0.09em] text-[#273951] uppercase";
-
-// The lifted hover shadow is spelled out rather than reusing .shadow-stripe-deep:
-// that is a plain class in globals.css, not a Tailwind utility, so hover:/
-// not-disabled: variants cannot be stacked onto it. The `shadow:` type hint is
-// required — without it Tailwind reads a value starting with rgba() as a shadow
-// *colour* and emits --tw-shadow-color instead of box-shadow.
-const SUBMIT =
-  "shadow-stripe-ambient mt-1.5 flex h-[46px] items-center justify-center gap-2.5 rounded-sm bg-primary text-[15px] font-medium tracking-[0.01em] text-white transition-[background-color,transform,box-shadow] duration-150 hover:not-disabled:-translate-y-px hover:not-disabled:bg-[#1b5594] hover:not-disabled:shadow-[shadow:rgba(50,50,93,0.25)_0px_10px_20px_-12px,rgba(0,0,0,0.1)_0px_6px_12px_-8px] disabled:opacity-90";
 
 function InfoIcon({ className }: { className?: string }) {
   return (
@@ -250,7 +237,7 @@ function LoginForm() {
 
       <Link
         href={piano ? `/register?piano=${encodeURIComponent(piano)}` : "/prezzi"}
-        className="mt-[18px] flex h-[46px] items-center justify-center gap-2 rounded-sm border border-[#cfe0f2] text-[14.5px] font-medium text-primary transition-[background-color,border-color] duration-150 hover:border-[#a5c8ff] hover:bg-primary/4"
+        className={`${SECONDARY} mt-[18px]`}
       >
         {piano ? "Crea un account" : "Crea un account · scegli un piano"}
       </Link>
@@ -270,16 +257,10 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="grid min-h-svh grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)] bg-[#061b31] max-[900px]:min-h-0 max-[900px]:grid-cols-[minmax(0,1fr)] max-[900px]:grid-rows-[auto_auto]">
-      <LoginBackdrop />
-
-      <div className="relative flex flex-col items-center justify-center bg-white px-13 py-14 shadow-[-30px_0_70px_-40px_rgba(6,27,49,0.55)] max-[1080px]:px-[34px] max-[1080px]:py-12 max-[900px]:border-t max-[900px]:border-[rgba(6,27,49,0.1)] max-[900px]:px-[26px] max-[900px]:pt-13 max-[900px]:pb-11 max-[900px]:shadow-none">
-        <div className="w-full max-w-[392px]">
-          <Suspense fallback={null}>
-            <LoginForm />
-          </Suspense>
-        </div>
-      </div>
-    </div>
+    <AuthSplit>
+      <Suspense fallback={null}>
+        <LoginForm />
+      </Suspense>
+    </AuthSplit>
   );
 }

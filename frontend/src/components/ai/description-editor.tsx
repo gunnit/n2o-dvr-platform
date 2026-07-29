@@ -224,7 +224,7 @@ export function DescriptionEditor({
         </div>
       </div>
       {visuraAt && !visuraNotice && (
-        <p className="flex items-center gap-1.5 text-xs text-emerald-700">
+        <p className="flex items-center gap-1.5 text-xs text-[#0c6b2f]">
           <CheckCircle2 className="h-3.5 w-3.5" />
           Visura camerale caricata il{" "}
           {new Date(visuraAt).toLocaleString("it-IT", {
@@ -238,7 +238,7 @@ export function DescriptionEditor({
         </p>
       )}
       {visuraNotice && (
-        <p className="flex items-start gap-1.5 text-xs text-emerald-700">
+        <p className="flex items-start gap-1.5 text-xs text-[#0c6b2f]">
           <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
           <span>{visuraNotice}</span>
         </p>

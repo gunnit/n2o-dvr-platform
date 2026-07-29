@@ -558,8 +558,8 @@ export default function EditAziendaPage() {
                   <Label htmlFor="zona_sismica">Zona Sismica</Label>
                   {seismicLookup.kind === "found" && (
                     <Badge
-                      variant="secondary"
-                      className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 text-[10px]"
+                      variant="success"
+                      className="text-[10px]"
                       title={`Compilata dal lookup comune "${seismicLookup.comune}" (OPCM 3519/2006).`}
                     >
                       <Check className="mr-1 h-2.5 w-2.5" />
@@ -607,7 +607,7 @@ export default function EditAziendaPage() {
                   </Button>
                 </div>
                 {seismicLookup.kind === "not_found" && (
-                  <p className="flex items-start gap-1 text-[11px] text-amber-700">
+                  <p className="flex items-start gap-1 text-[11px] text-[#8a5c23]">
                     <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" />
                     Comune non trovato. Inseriscilo manualmente.
                   </p>

@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -295,9 +296,9 @@ const AREA_LABELS: Record<AreaCode, string> = {
 };
 
 const BAND_CLASS: Record<Livello, string> = {
-  BASSO: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30",
-  MEDIO: "bg-amber-500/15 text-amber-800 ring-amber-500/30",
-  ALTO: "bg-rose-500/15 text-rose-700 ring-rose-500/30",
+  BASSO: "bg-[rgba(21,190,83,0.16)] text-[#0c6b2f] ring-[rgba(21,190,83,0.34)]",
+  MEDIO: "bg-[rgba(245,158,11,0.18)] text-[#8a5c23] ring-[rgba(245,158,11,0.36)]",
+  ALTO: "bg-[rgba(239,68,68,0.16)] text-[#b01e2e] ring-[rgba(239,68,68,0.34)]",
 };
 
 function LivelloBadge({
@@ -339,7 +340,7 @@ function AnswerButton({
         "rounded-md px-2.5 py-1 text-xs font-medium ring-1 transition-colors",
         active
           ? tone === "danger"
-            ? "bg-rose-500/15 text-rose-700 ring-rose-500/40"
+            ? "bg-[rgba(239,68,68,0.16)] text-[#b01e2e] ring-[rgba(239,68,68,0.34)]"
             : "bg-primary/10 text-primary ring-primary/40"
           : "bg-background text-muted-foreground ring-border hover:bg-muted",
       )}
@@ -503,9 +504,9 @@ export function StressChecklist({ aziendaId, mansione, onResultChange }: StressC
                 <div
                   className={cn(
                     "h-full transition-all duration-200",
-                    result.livello === "BASSO" && "bg-emerald-500",
-                    result.livello === "MEDIO" && "bg-amber-500",
-                    result.livello === "ALTO" && "bg-rose-500",
+                    result.livello === "BASSO" && "bg-[#15be53]",
+                    result.livello === "MEDIO" && "bg-[#f59e0b]",
+                    result.livello === "ALTO" && "bg-[#ef4444]",
                   )}
                   style={{ width: `${(Math.max(result.totale, 0) / 67) * 100}%` }}
                 />
@@ -550,13 +551,10 @@ export function StressChecklist({ aziendaId, mansione, onResultChange }: StressC
 
       {/* Unanswered banner */}
       {showUnanswered && result.unanswered.length > 0 && (
-        <div
-          role="alert"
-          className="rounded-md border border-amber-300 bg-amber-100 px-4 py-3 text-sm text-amber-900"
-        >
-          <strong className="font-medium">Valutazione incompleta</strong> — rispondi a tutti gli{" "}
-          {result.unanswered.length} indicatori evidenziati prima di confermare.
-        </div>
+        <Callout role="alert" tone="warn" title="Valutazione incompleta —">
+          rispondi a tutti gli {result.unanswered.length} indicatori evidenziati
+          prima di confermare.
+        </Callout>
       )}
 
       {/* Area groups */}
@@ -569,7 +567,7 @@ export function StressChecklist({ aziendaId, mansione, onResultChange }: StressC
             key={group.code}
             className={cn(
               "transition-shadow",
-              hasUnanswered && "ring-2 ring-amber-500/40",
+              hasUnanswered && "ring-2 ring-[rgba(245,158,11,0.4)]",
             )}
           >
             <CardHeader className="border-b">
@@ -605,7 +603,7 @@ export function StressChecklist({ aziendaId, mansione, onResultChange }: StressC
                         data-id={ind.id}
                         className={cn(
                           "flex flex-wrap items-center justify-between gap-3 py-2.5",
-                          flagged && "bg-amber-100 -mx-3 rounded-md px-3",
+                          flagged && "bg-[rgba(245,158,11,0.14)] -mx-3 rounded-md px-3",
                         )}
                       >
                         <div className="min-w-0 flex-1">

@@ -22,6 +22,7 @@
 import { Check, Mail } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { PLANS, SUPPORT_EMAIL, type Audience } from "@/components/landing/pricing-data";
 import { cn } from "@/lib/utils";
 
@@ -69,30 +70,27 @@ export function PlanPriceList({
       <div className="space-y-5 p-6">
         {/* Stated once, above the cards, so every disabled button below is
             already explained by the time it is read. */}
-        <div className="flex gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          <Mail className="mt-0.5 h-4 w-4 shrink-0" />
-          <div className="space-y-1">
-            <p className="font-medium">
-              Il pagamento online non è attivo su questo ambiente.
-            </p>
-            <p>
-              {chosen ? (
-                <>
-                  Hai scelto il piano <strong>{chosen.name}</strong>. Scrivici a{" "}
-                </>
-              ) : (
-                <>Per attivare un piano scrivici a </>
-              )}
-              <a
-                className="font-medium underline underline-offset-2"
-                href={`mailto:${SUPPORT_EMAIL}?subject=${subject}`}
-              >
-                {SUPPORT_EMAIL}
-              </a>{" "}
-              e lo attiviamo noi, di norma in giornata.
-            </p>
-          </div>
-        </div>
+        <Callout tone="warn" icon={<Mail className="h-3.5 w-3.5" strokeWidth={1.9} />}>
+          <p className="font-semibold">
+            Il pagamento online non è attivo su questo ambiente.
+          </p>
+          <p>
+            {chosen ? (
+              <>
+                Hai scelto il piano <strong>{chosen.name}</strong>. Scrivici a{" "}
+              </>
+            ) : (
+              <>Per attivare un piano scrivici a </>
+            )}
+            <a
+              className="font-medium underline underline-offset-2"
+              href={`mailto:${SUPPORT_EMAIL}?subject=${subject}`}
+            >
+              {SUPPORT_EMAIL}
+            </a>{" "}
+            e lo attiviamo noi, di norma in giornata.
+          </p>
+        </Callout>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {plans.map((plan) => {
@@ -103,14 +101,14 @@ export function PlanPriceList({
                 key={plan.planCode}
                 className={cn(
                   "flex flex-col rounded-lg border p-4",
-                  current && "border-emerald-500 bg-emerald-50/40 dark:bg-emerald-950/20",
+                  current && "border-[rgba(16,140,61,0.5)] bg-[rgba(16,140,61,0.05)]",
                   highlighted && "border-primary ring-1 ring-primary/30"
                 )}
               >
                 <div className="flex items-baseline justify-between gap-2">
                   <h3 className="font-heading font-semibold">{plan.name}</h3>
                   {current && (
-                    <span className="shrink-0 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    <span className="shrink-0 text-xs font-medium text-[#0f7a37] dark:text-[#0f7a37]">
                       Attuale
                     </span>
                   )}
@@ -127,7 +125,7 @@ export function PlanPriceList({
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex gap-2">
                       <Check
-                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400"
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#0f7a37] dark:text-[#0f7a37]"
                         strokeWidth={2.5}
                       />
                       <span>{feature}</span>

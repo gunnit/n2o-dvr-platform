@@ -255,6 +255,31 @@ body {
    Public landing page
    ----------------------------------------------------------------------- */
 
+/* Vertical rhythm for the public sections.
+   These replace a hand-typed `py-[110px]` that was repeated on five
+   consecutive bands and never stepped down: a 390px phone was paying the
+   same 110px above and below every section as a 1440px desktop, which is
+   ~220px of dead scroll per band. DESIGN.md §8 asks for 64px+ -> 40px on
+   mobile; a clamp gives that ramp continuously instead of at one breakpoint.
+
+   Three steps, not one, because rhythm is contrast: a section that opens a
+   new idea breathes more than a band of photographs. One value everywhere
+   gives every section equal weight, which is the same as giving none.
+
+   Declared with `@utility`, not as plain `.section-y { }` rules: written as
+   plain classes these compiled away silently and every band rendered with
+   zero padding. `@utility` is the v4-sanctioned way to add one, and it also
+   makes the steps respond to variants like `sm:` if they ever need to. */
+@utility section-y {
+  padding-block: clamp(4rem, 8.5vw, 6.75rem); /* 64 -> 108 */
+}
+@utility section-y-tight {
+  padding-block: clamp(3.25rem, 6.5vw, 5.25rem); /* 52 -> 84 */
+}
+@utility section-y-loose {
+  padding-block: clamp(5rem, 10.5vw, 8.25rem); /* 80 -> 132 */
+}
+
 @keyframes landing-rise {
   from {
     opacity: 0;

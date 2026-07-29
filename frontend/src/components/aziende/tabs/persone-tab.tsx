@@ -300,12 +300,12 @@ export default function PersoneTab({ persone, ambienti }: PersoneTabProps) {
                               {p.nominativo}
                             </span>
                             {p.is_esterno && (
-                              <span className="rounded-sm border border-amber-300 bg-amber-50 px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide text-amber-800">
+                              <span className="rounded-sm border border-[rgba(155,104,41,0.3)] bg-[rgba(155,104,41,0.12)] px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide text-[#8a5c23]">
                                 Esterno
                               </span>
                             )}
                             {p.training_recente_completato && (
-                              <span className="rounded-sm border border-emerald-300 bg-emerald-50 px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide text-emerald-800">
+                              <span className="rounded-sm border border-[rgba(16,140,61,0.3)] bg-[rgba(16,140,61,0.14)] px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide text-[#0c6b2f]">
                                 Formaz. OK
                               </span>
                             )}

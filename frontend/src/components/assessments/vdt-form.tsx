@@ -10,9 +10,9 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Domain — mirrors backend/app/services/vdt_calculator.py and
@@ -275,15 +275,15 @@ export function VdtForm({
             <span className="text-muted-foreground">Totale</span>
             <span className="font-medium tabular-nums">{summary.total}</span>
           </div>
-          <div className="flex items-center justify-between rounded-md bg-rose-500/10 px-3 py-2">
+          <div className="flex items-center justify-between rounded-md bg-[rgba(239,68,68,0.1)] px-3 py-2">
             <span className="text-muted-foreground">Esposti</span>
-            <span className="font-medium tabular-nums text-rose-700">
+            <span className="font-medium tabular-nums text-[#b01e2e]">
               {summary.esposti}
             </span>
           </div>
-          <div className="flex items-center justify-between rounded-md bg-emerald-500/10 px-3 py-2">
+          <div className="flex items-center justify-between rounded-md bg-[rgba(21,190,83,0.1)] px-3 py-2">
             <span className="text-muted-foreground">Non esposti</span>
-            <span className="font-medium tabular-nums text-emerald-700">
+            <span className="font-medium tabular-nums text-[#0c6b2f]">
               {summary.non_esposti}
             </span>
           </div>
@@ -417,12 +417,12 @@ export function VdtForm({
 
                     <div className="flex shrink-0 items-center gap-2 self-center">
                       {w.esposizione === "ESPOSTO" && (
-                        <span className="inline-flex items-center rounded-md bg-rose-500/15 px-2.5 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-500/30">
+                        <span className="inline-flex items-center rounded-md bg-[rgba(239,68,68,0.16)] px-2.5 py-1 text-xs font-medium text-[#b01e2e] ring-1 ring-[rgba(239,68,68,0.34)]">
                           ESPOSTO
                         </span>
                       )}
                       {w.esposizione === "NON_ESPOSTO" && (
-                        <span className="inline-flex items-center rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-500/30">
+                        <span className="inline-flex items-center rounded-md bg-[rgba(21,190,83,0.16)] px-2.5 py-1 text-xs font-medium text-[#0c6b2f] ring-1 ring-[rgba(21,190,83,0.34)]">
                           NON ESPOSTO
                         </span>
                       )}
@@ -483,8 +483,8 @@ export function VdtForm({
                       </div>
 
                       {w.esposizione === "ESPOSTO" && (
-                        <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
-                          <p className="text-[11px] font-medium uppercase tracking-wide text-amber-900">
+                        <div className="rounded-md border border-[rgba(155,104,41,0.26)] bg-[rgba(155,104,41,0.05)] p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#8a5c23]">
                             Sorveglianza sanitaria
                           </p>
                           <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -591,18 +591,14 @@ export function VdtForm({
       </Card>
 
       {hasEsposti && (
-        <div
-          className={cn(
-            "rounded-md border border-amber-300 bg-amber-100 p-4 text-xs text-amber-900",
-          )}
-        >
-          <div className="font-medium">Sorveglianza sanitaria obbligatoria</div>
-          <p className="mt-1 leading-relaxed">
+        <Callout tone="warn">
+          <p className="font-semibold">Sorveglianza sanitaria obbligatoria</p>
+          <p className="mt-0.5">
             Visita medica oculistica prima dell&apos;adibizione al VDT e a
             intervalli stabiliti dal medico competente: cadenza standard 5
             anni; 2 anni per età ≥ 50 anni o con prescrizioni.
           </p>
-        </div>
+        </Callout>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-4">

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Download, FileText, GitCompare, History, RotateCcw, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { TONE_CHIP } from "@/lib/ui/tones";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -64,16 +65,16 @@ type DiffRow =
   | { kind: "removed"; left: string; right: null };
 
 const statusLabels: Record<string, { color: string; label: string }> = {
-  pending: { color: "bg-gray-100 text-gray-700", label: "In attesa" },
-  generating: { color: "bg-yellow-100 text-yellow-700", label: "In generazione" },
-  in_progress: { color: "bg-yellow-100 text-yellow-700", label: "In generazione" },
-  ready: { color: "bg-green-100 text-green-700", label: "Pronto" },
-  completed: { color: "bg-green-100 text-green-700", label: "Pronto" },
-  // See documents/page.tsx for the rationale on amber — bozza is a
+  pending: { color: TONE_CHIP.neutral, label: "In attesa" },
+  generating: { color: TONE_CHIP.info, label: "In generazione" },
+  in_progress: { color: TONE_CHIP.info, label: "In generazione" },
+  ready: { color: TONE_CHIP.success, label: "Pronto" },
+  completed: { color: TONE_CHIP.success, label: "Pronto" },
+  // See documents/page.tsx for the rationale on warning — bozza is a
   // recoverable rollback state, not a hard failure.
-  bozza: { color: "bg-amber-100 text-amber-800", label: "Bozza" },
-  error: { color: "bg-red-100 text-red-700", label: "Errore" },
-  failed: { color: "bg-red-100 text-red-700", label: "Errore" },
+  bozza: { color: TONE_CHIP.warning, label: "Bozza" },
+  error: { color: TONE_CHIP.danger, label: "Errore" },
+  failed: { color: TONE_CHIP.danger, label: "Errore" },
 };
 
 function formatItalianDateTime(iso: string): string {
@@ -348,7 +349,7 @@ export function VersionHistory({
                   const isCurrent = version.versione === latestVersione;
                   const statusInfo =
                     statusLabels[version.status] ?? {
-                      color: "bg-gray-100 text-gray-700",
+                      color: TONE_CHIP.neutral,
                       label: version.status,
                     };
                   const previous = versions[idx + 1];
@@ -426,7 +427,7 @@ export function VersionHistory({
                         )}
 
                         {version.status === "bozza" && version.error_message && (
-                          <p className="text-xs text-amber-700">
+                          <p className="text-xs text-[#8a5c23]">
                             {version.error_message}
                           </p>
                         )}
@@ -520,7 +521,7 @@ export function VersionHistory({
                 Caricamento...
               </div>
             ) : diffError ? (
-              <div className="p-6 text-center text-sm text-red-600">
+              <div className="p-6 text-center text-sm text-[#b01e2e]">
                 {diffError}
               </div>
             ) : diffRows.length === 0 ? (
@@ -555,16 +556,16 @@ export function VersionHistory({
                         data-ai-block={isAI ? "ai" : "non-ai"}
                         className={
                           "align-top transition-opacity " +
-                          (isAI ? "ring-1 ring-inset ring-violet-200 " : "") +
+                          (isAI ? "ring-1 ring-inset ring-[rgba(124,58,237,0.26)] " : "") +
                           (dimmed ? "pointer-events-none opacity-40 " : "")
                         }
                       >
                         <td
                           className={
                             "whitespace-pre-wrap break-words border-b px-2 py-1 " +
-                            (isAI ? "bg-violet-100 " : "") +
+                            (isAI ? "bg-[rgba(124,58,237,0.08)] " : "") +
                             (row.kind === "removed"
-                              ? "bg-red-50 text-red-900"
+                              ? "bg-[rgba(199,42,58,0.07)] text-[#b01e2e]"
                               : "")
                           }
                         >
@@ -580,9 +581,9 @@ export function VersionHistory({
                         <td
                           className={
                             "whitespace-pre-wrap break-words border-b px-2 py-1 " +
-                            (isAI ? "bg-violet-100 " : "") +
+                            (isAI ? "bg-[rgba(124,58,237,0.08)] " : "") +
                             (row.kind === "added"
-                              ? "bg-green-50 text-green-900"
+                              ? "bg-[rgba(16,140,61,0.09)] text-[#0c6b2f]"
                               : "")
                           }
                         >

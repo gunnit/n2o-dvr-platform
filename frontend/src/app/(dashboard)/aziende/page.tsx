@@ -22,6 +22,7 @@ import {
   type SurveyStatusKey,
   type SurveyStatusBucket,
 } from "@/lib/ui/status-map";
+import { Callout } from "@/components/ui/callout";
 import { usePermissions } from "@/hooks/use-permissions";
 import { AZIENDE_CREATE } from "@/lib/permissions";
 
@@ -132,7 +133,7 @@ export default function AziendePage() {
             ) : entitlements && !entitlements.subscribed ? (
               <Link
                 href="/billing"
-                className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-[11.5px] font-semibold text-amber-900 transition-colors hover:border-amber-400"
+                className="rounded-full border border-[rgba(155,104,41,0.3)] bg-[rgba(155,104,41,0.12)] px-2.5 py-0.5 text-[11.5px] font-semibold text-[#8a5c23] transition-colors hover:border-[rgba(155,104,41,0.5)]"
               >
                 Nessun piano attivo
               </Link>
@@ -170,13 +171,13 @@ export default function AziendePage() {
       </div>
 
       {siteLimitReached && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <Callout tone="warn" dense>
           Hai registrato tutte le sedi incluse nel piano.{" "}
           <Link href="/billing" className="font-semibold underline underline-offset-2">
             Aggiorna il piano
           </Link>{" "}
           per aggiungerne altre.
-        </div>
+        </Callout>
       )}
 
       {aziende.length > 0 && (

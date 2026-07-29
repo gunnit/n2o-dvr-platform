@@ -61,9 +61,9 @@ export function MmcMeasures({
   const add = () => setItems((prev) => [...prev, ""]);
 
   return (
-    <Card className="border-rose-300 bg-rose-100">
+    <Card className="border-[rgba(199,42,58,0.28)] bg-[rgba(199,42,58,0.05)]">
       <CardHeader className="flex flex-row items-center gap-2 border-b">
-        <AlertTriangle className="h-5 w-5 text-rose-600" />
+        <AlertTriangle className="h-5 w-5 text-[#b01e2e]" />
         <CardTitle className="text-sm">
           Misure obbligatorie — zona ROSSA (IR &gt; 1.00)
         </CardTitle>

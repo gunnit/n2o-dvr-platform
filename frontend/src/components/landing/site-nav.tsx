@@ -77,7 +77,11 @@ export function SiteNav({ variant = "overlay" }: { variant?: Variant }) {
             : "border-transparent bg-transparent",
       ].join(" ")}
     >
-      <div className="mx-auto flex h-[68px] w-full max-w-[1160px] items-center justify-between gap-4 px-5 sm:gap-6 sm:px-7">
+      {/* px-6, not px-5: every section below uses `px-6 sm:px-7`, so a 20px
+          gutter here put the brand mark 4px inboard of the hero headline it
+          sits directly above — the one vertical edge on the page a visitor
+          can actually see out of alignment. */}
+      <div className="mx-auto flex h-[68px] w-full max-w-[1160px] items-center justify-between gap-4 px-6 sm:gap-6 sm:px-7">
         <Link
           href="/"
           className={[

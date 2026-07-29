@@ -43,8 +43,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useApi } from "@/hooks/use-api";
-import { cn } from "@/lib/utils";
+import { TONE_CHIP } from "@/lib/ui/tones";
 import { FormError } from "@/components/ui/form-error";
+import { Callout } from "@/components/ui/callout";
 import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
 import { formatSeats } from "@/lib/billing";
 import { type RoleDefinition, usePermissions, useRoles } from "@/hooks/use-permissions";
@@ -87,15 +88,11 @@ function formatDate(iso: string): string {
 function RoleBadge({ role }: { role: string }) {
   const tone =
     role === "admin"
-      ? "bg-violet-100 text-violet-700"
+      ? TONE_CHIP.ai
       : role === "operatore_ufficio"
-        ? "bg-sky-100 text-sky-700"
-        : "bg-slate-100 text-slate-700";
-  return (
-    <Badge className={cn(tone, "hover:" + tone)}>
-      {roleLabel(role)}
-    </Badge>
-  );
+        ? TONE_CHIP.info
+        : TONE_CHIP.neutral;
+  return <Badge className={tone}>{roleLabel(role)}</Badge>;
 }
 
 /**
@@ -160,7 +157,7 @@ function RoleMatrix({ roles }: { roles: RoleDefinition[] }) {
                     <td key={r.role} className="px-2 py-2 text-center">
                       {r.capabilities.includes(capability) ? (
                         <Check
-                          className="mx-auto h-4 w-4 text-emerald-600"
+                          className="mx-auto h-4 w-4 text-[#0f7a37]"
                           aria-label="consentito"
                         />
                       ) : (
@@ -297,13 +294,13 @@ export default function AdminUsersPage() {
       </div>
 
       {seatLimitReached && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <Callout tone="warn" dense>
           Hai usato tutti gli utenti inclusi nel piano.{" "}
           <Link href="/billing" className="font-semibold underline underline-offset-2">
             Aggiorna il piano
           </Link>{" "}
           per aggiungerne altri.
-        </div>
+        </Callout>
       )}
 
       {error && (
@@ -726,7 +723,7 @@ function ResetPasswordDialog({
         </DialogHeader>
         {done ? (
           <div className="space-y-4">
-            <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            <p className="rounded-md border border-[rgba(16,140,61,0.26)] bg-[rgba(16,140,61,0.05)] px-3 py-2 text-sm text-[#0f7a37]">
               Password aggiornata. Consegnala all&apos;utente.
             </p>
             <DialogFooter>

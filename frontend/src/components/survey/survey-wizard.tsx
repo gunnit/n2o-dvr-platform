@@ -759,7 +759,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
       {/* US-1.6: lock banner when survey is firmato — nav is frozen until
          the operator opens an audited revision via Step 7. */}
       {isSigned && (
-        <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800">
+        <div className="flex items-center gap-2 rounded-md border border-[rgba(16,140,61,0.26)] bg-[rgba(16,140,61,0.05)] px-4 py-3 text-sm font-medium text-[#0f7a37]">
           <Lock className="h-4 w-4" />
           <span>
             Sopralluogo firmato — navigazione bloccata. Clicca
@@ -824,7 +824,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
                     "flex h-10 w-10 items-center justify-center rounded-full shadow-lg transition-all duration-200",
                     isActive &&
                       "bg-primary-container text-white ring-4 ring-primary-container/20",
-                    !isActive && isCompleted && "bg-green-500 text-white",
+                    !isActive && isCompleted && "bg-[#15be53] text-white",
                     !isActive && !isCompleted && "bg-slate-200 text-slate-500",
                     !navDisabled &&
                       !isActive &&
@@ -944,7 +944,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
                     <div className="flex items-center gap-3">
                       {isCompleted ? (
                         <Check
-                          className="h-5 w-5 text-green-600"
+                          className="h-5 w-5 text-[#0f7a37]"
                           strokeWidth={2.5}
                         />
                       ) : isActive ? (
@@ -990,7 +990,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
       {/* Sticky footer action bar */}
       <footer className="fixed bottom-0 left-64 right-0 z-40 flex h-16 items-center justify-between border-t border-slate-200/50 bg-white/90 px-8 backdrop-blur-md">
         <div className="flex items-center gap-2">
-          <CloudUpload className="h-4 w-4 text-green-600" strokeWidth={2} />
+          <CloudUpload className="h-4 w-4 text-[#0f7a37]" strokeWidth={2} />
           <span className="text-[11px] font-medium tracking-tight text-slate-400">
             Passo {currentStep + 1} di {STEPS.length}
             {saving ? " — salvataggio..." : " — bozza salvata"}
@@ -1000,12 +1000,12 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
           {!isSigned && currentStepErrors.length > 0 && (
             <div
               role="alert"
-              className="flex max-w-md items-center gap-1.5 text-xs font-medium text-red-600"
+              className="flex max-w-md items-center gap-1.5 text-xs font-medium text-[#b01e2e]"
             >
               <AlertCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} />
               <span className="truncate">{currentStepErrors[0].message}</span>
               {currentStepErrors.length > 1 && (
-                <span className="shrink-0 text-red-500/70">
+                <span className="shrink-0 text-[#b01e2e]/70">
                   (+{currentStepErrors.length - 1})
                 </span>
               )}
@@ -1040,7 +1040,7 @@ export function SurveyWizard({ aziendaId, initialData }: SurveyWizardProps) {
             // azienda page where documents and the firma badge live.
             <Link
               href={`/aziende/${aziendaId}`}
-              className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-8 py-2 text-sm font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-green-700"
+              className="inline-flex items-center gap-2 rounded-lg bg-[#15be53] px-8 py-2 text-sm font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-[#0c6b2f]"
             >
               <Check className="h-4 w-4" strokeWidth={2.5} />
               Sopralluogo Completato

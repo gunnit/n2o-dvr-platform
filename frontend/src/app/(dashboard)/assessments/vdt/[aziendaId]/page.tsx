@@ -292,7 +292,7 @@ export default function VdtAssessmentPage() {
                 Valutazioni salvate: {existingValutazioni.length}
               </Badge>
               {savedEsposti > 0 && (
-                <span className="text-xs font-medium text-rose-700">
+                <span className="text-xs font-medium text-[#b01e2e]">
                   {savedEsposti} esposti
                 </span>
               )}
@@ -328,11 +328,11 @@ export default function VdtAssessmentPage() {
                         {v.ore_settimanali} h/sett
                       </span>
                       {v.esposto ? (
-                        <span className="inline-flex items-center rounded-md bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-rose-500/30">
+                        <span className="inline-flex items-center rounded-md bg-[rgba(239,68,68,0.16)] px-2 py-0.5 text-xs font-medium text-[#b01e2e] ring-1 ring-[rgba(239,68,68,0.34)]">
                           ESPOSTO
                         </span>
                       ) : (
-                        <span className="inline-flex items-center rounded-md bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-500/30">
+                        <span className="inline-flex items-center rounded-md bg-[rgba(21,190,83,0.16)] px-2 py-0.5 text-xs font-medium text-[#0c6b2f] ring-1 ring-[rgba(21,190,83,0.34)]">
                           NON ESPOSTO
                         </span>
                       )}
@@ -346,7 +346,7 @@ export default function VdtAssessmentPage() {
                         onClick={() =>
                           deleteValutazione(v.id, `${v.postazione} — ${nominativo}`)
                         }
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-rose-100 hover:text-rose-700"
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-[rgba(199,42,58,0.1)] hover:text-[#b01e2e]"
                       >
                         ×
                       </button>
@@ -383,7 +383,7 @@ export default function VdtAssessmentPage() {
                   "mt-1 whitespace-pre-line text-xs",
                   finalizeMessage.startsWith("Errore")
                     ? "text-destructive"
-                    : "text-emerald-700",
+                    : "text-[#0c6b2f]",
                 )}
               >
                 {finalizeMessage}

@@ -19,6 +19,8 @@ import { useApi } from "@/hooks/use-api";
 import { AIBadge } from "./ai-badge";
 import { AIContent } from "./ai-filter-context";
 import { FormError } from "@/components/ui/form-error";
+import { SCALE_CHIP, TONE_SURFACE } from "@/lib/ui/tones";
+import { cn } from "@/lib/utils";
 
 /**
  * AI improvement measures panel (US-2.6).
@@ -80,11 +82,13 @@ interface MeasuresPanelProps {
   onSave: (combinedText: string) => void | Promise<void>;
 }
 
+// Same four-step ramp the risk index uses — priority and severity read as one
+// scale to an operator, so they should not be two different sets of colours.
 const priorityColors: Record<Priorita, string> = {
-  bassa: "bg-slate-100 text-slate-700",
-  media: "bg-amber-100 text-amber-800",
-  alta: "bg-orange-100 text-orange-800",
-  urgente: "bg-red-100 text-red-800",
+  bassa: SCALE_CHIP[0],
+  media: SCALE_CHIP[1],
+  alta: SCALE_CHIP[2],
+  urgente: SCALE_CHIP[3],
 };
 
 const tipoLabels: Record<TipoMisura, string> = {
@@ -384,7 +388,7 @@ export function MeasuresPanel({
           {availableLibrary.map((entry) => (
             <div
               key={entry.id}
-              className="rounded-md border border-emerald-300 bg-emerald-100 p-3"
+              className={cn("rounded-md border p-3", TONE_SURFACE.success)}
             >
               <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
                 <span className="text-sm font-medium">{entry.titolo}</span>
@@ -397,10 +401,7 @@ export function MeasuresPanel({
                 <Badge variant="outline" className="text-xs">
                   {tipoLabels[entry.tipo]}
                 </Badge>
-                <Badge
-                  variant="secondary"
-                  className="bg-emerald-100 text-emerald-800 text-xs"
-                >
+                <Badge variant="success" className="text-xs">
                   Libreria
                 </Badge>
               </div>
@@ -547,10 +548,7 @@ export function MeasuresPanel({
                         <AIBadge provenance="manual" size="xs" />
                       )}
                       {m.provenance === "library" && (
-                        <Badge
-                          variant="secondary"
-                          className="bg-emerald-100 text-emerald-800 text-xs"
-                        >
+                        <Badge variant="success" className="text-xs">
                           <BookOpen className="mr-1 h-2.5 w-2.5" />
                           Libreria
                         </Badge>

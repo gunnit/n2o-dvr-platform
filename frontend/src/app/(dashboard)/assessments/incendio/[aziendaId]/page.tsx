@@ -261,7 +261,7 @@ export default function IncendioAssessmentPage() {
         {dirty && (
           <Badge
             variant="outline"
-            className="border-amber-400/60 bg-amber-50 text-amber-800"
+            className="border-[rgba(155,104,41,0.34)] bg-[rgba(155,104,41,0.12)] text-[#8a5c23]"
           >
             Modifiche non salvate
           </Badge>
@@ -269,7 +269,7 @@ export default function IncendioAssessmentPage() {
       </div>
 
       {existing.length > 0 && (
-        <Card className="border-emerald-200/60 bg-emerald-50/40">
+        <Card className="border-[rgba(16,140,61,0.26)] bg-[rgba(16,140,61,0.05)]">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">
               Valutazioni archiviate ({existing.length})
@@ -363,7 +363,7 @@ export default function IncendioAssessmentPage() {
                   saveMessage.startsWith("Errore") ||
                     saveMessage.startsWith("Discrepanza")
                     ? "text-destructive"
-                    : "text-emerald-700",
+                    : "text-[#0c6b2f]",
                 )}
               >
                 {saveMessage}

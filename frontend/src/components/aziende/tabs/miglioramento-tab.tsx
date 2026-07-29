@@ -42,6 +42,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useApi } from "@/hooks/use-api";
 import type { LivelloRischio } from "@/types";
+import { RISK_BAR, RISK_CHIP } from "@/lib/ui/risk";
 
 interface MiglioramentoTabProps {
   aziendaId: string;
@@ -174,24 +175,12 @@ const PREDEFINED_MISURE: {
   },
 ];
 
-// Color rail for the priorita cell. Mirrors LIVELLO_BAR in rischi-tab.
-const LIVELLO_BAR: Record<LivelloRischio, string> = {
-  ACCETTABILE: "bg-[#15be53]",
-  MODESTO: "bg-[#9b6829]",
-  GRAVE: "bg-[#003d74]",
-  GRAVISSIMO: "bg-[#b51648]",
-};
-
-const LIVELLO_PILL: Record<LivelloRischio, string> = {
-  ACCETTABILE:
-    "bg-[rgba(21,190,83,0.2)] text-[#108c3d] border border-[rgba(21,190,83,0.4)]",
-  MODESTO:
-    "bg-[rgba(155,104,41,0.12)] text-[#9b6829] border border-[rgba(155,104,41,0.3)]",
-  GRAVE:
-    "bg-[rgba(0,61,116,0.12)] text-primary border border-[rgba(0,61,116,0.3)]",
-  GRAVISSIMO:
-    "bg-[rgba(234,34,97,0.08)] text-[#b51648] border border-[rgba(234,34,97,0.3)]",
-};
+// Colour rail + pill for the priorita cell. Both come from `lib/ui/risk` so
+// this table, the rischi editor and the survey pericoli panel step through one
+// ramp — this file used to route GRAVE through the brand navy, which read as a
+// call-to-action and flattened the middle of the scale.
+const LIVELLO_BAR = RISK_BAR;
+const LIVELLO_PILL = RISK_CHIP;
 
 const NEUTRAL_PILL =
   "bg-[#f6f9fc] text-[#273951] border border-[#e5edf5]";

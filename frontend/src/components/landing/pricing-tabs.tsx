@@ -319,13 +319,16 @@ export function PricingTabs({ signedIn }: { signedIn: boolean }) {
     <>
       <section
         id="top"
-        className="dark-section relative overflow-hidden bg-[#061b31] pt-[132px]"
+        className="dark-section relative overflow-hidden bg-[#061b31] pt-[104px] sm:pt-[132px]"
       >
         <div
           aria-hidden
           className="absolute inset-0 bg-[radial-gradient(ellipse_62%_70%_at_74%_8%,rgba(27,85,148,.5)_0%,rgba(6,27,49,0)_68%)]"
         />
-        <div className="relative mx-auto w-full max-w-[1160px] px-6 sm:px-7">
+        {/* pb-16 leaves the room the plan row laps up into with its -mt-14.
+            It used to be an empty `<div className="h-16" />` doing padding's
+            job as a sibling of the copy. */}
+        <div className="relative mx-auto w-full max-w-[1160px] px-6 pb-16 sm:px-7">
           <p className="landing-rise mb-[18px] text-[12px] font-medium tracking-[0.16em] text-[#a5c8ff] uppercase">
             Prezzi
           </p>
@@ -378,7 +381,6 @@ export function PricingTabs({ signedIn }: { signedIn: boolean }) {
             })}
           </div>
           <p className="mt-4 text-[13.5px] text-white/55">{activeNote}</p>
-          <div className="h-16" />
         </div>
       </section>
 

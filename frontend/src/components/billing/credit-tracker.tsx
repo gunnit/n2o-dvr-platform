@@ -18,7 +18,9 @@
  *   schede di sicurezza" tells the operator what to change.
  */
 
-import { AlertTriangle, Sparkles, Zap } from "lucide-react";
+import { Sparkles, Zap } from "lucide-react";
+
+import { Callout } from "@/components/ui/callout";
 
 import {
   type Entitlements,
@@ -31,15 +33,15 @@ import {
 import { cn } from "@/lib/utils";
 
 const TONE_BAR: Record<string, string> = {
-  ok: "bg-emerald-500",
-  warn: "bg-amber-500",
-  bad: "bg-red-500",
+  ok: "bg-[#15be53]",
+  warn: "bg-[#f59e0b]",
+  bad: "bg-[#ef4444]",
 };
 
 const TONE_TEXT: Record<string, string> = {
-  ok: "text-emerald-600 dark:text-emerald-400",
-  warn: "text-amber-600 dark:text-amber-400",
-  bad: "text-red-600 dark:text-red-400",
+  ok: "text-[#0f7a37] dark:text-[#0f7a37]",
+  warn: "text-[#8a5c23] dark:text-[#8a5c23]",
+  bad: "text-[#b01e2e] dark:text-[#b01e2e]",
 };
 
 export function CreditTracker({
@@ -128,31 +130,21 @@ export function CreditTracker({
           </div>
 
           {tone !== "ok" && (
-            <div
-              className={cn(
-                "flex gap-2 rounded-md border p-3 text-sm",
-                tone === "bad"
-                  ? "border-red-300 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
-                  : "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+            <Callout tone={tone === "bad" ? "danger" : "warn"}>
+              {tone === "bad" ? (
+                <>
+                  Hai usato oltre il 90% dei crediti del periodo. Quando finiscono,
+                  le funzioni AI si fermano — la generazione dei documenti senza AI
+                  e il download restano sempre disponibili.
+                </>
+              ) : (
+                <>
+                  Hai usato oltre il 75% dei crediti del periodo. Se prevedi altre
+                  estrazioni, conviene aggiungere un pacchetto prima di restare a
+                  secco a metà pratica.
+                </>
               )}
-            >
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <p>
-                {tone === "bad" ? (
-                  <>
-                    Hai usato oltre il 90% dei crediti del periodo. Quando finiscono,
-                    le funzioni AI si fermano — la generazione dei documenti senza AI
-                    e il download restano sempre disponibili.
-                  </>
-                ) : (
-                  <>
-                    Hai usato oltre il 75% dei crediti del periodo. Se prevedi altre
-                    estrazioni, conviene aggiungere un pacchetto prima di restare a
-                    secco a metà pratica.
-                  </>
-                )}
-              </p>
-            </div>
+            </Callout>
           )}
 
           {breakdown.length > 0 && (

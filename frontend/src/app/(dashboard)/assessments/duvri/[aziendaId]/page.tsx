@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import {
-  AlertTriangle,
   Building2,
   Calendar,
   Check,
@@ -28,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Callout } from "@/components/ui/callout";
 import {
   Dialog,
   DialogContent,
@@ -484,7 +484,7 @@ export default function DuvriListPage() {
 
       <div className="space-y-4">
         {items.map((d) => (
-          <Card key={d.id} className={cn(d.committente_outdated && "border-amber-300")}>
+          <Card key={d.id} className={cn(d.committente_outdated && "border-[rgba(155,104,41,0.4)]")}>
             <CardHeader>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
@@ -523,17 +523,14 @@ export default function DuvriListPage() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               {d.committente_outdated && (
-                <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium">Dati committente aggiornati</p>
-                    <p>
-                      L&apos;azienda committente e&apos; stata modificata dopo
-                      l&apos;ultimo aggiornamento di questo DUVRI. Riapri e
-                      salva per ricompilare gli automatismi.
-                    </p>
-                  </div>
-                </div>
+                <Callout tone="warn" dense>
+                  <p className="font-semibold">Dati committente aggiornati</p>
+                  <p>
+                    L&apos;azienda committente e&apos; stata modificata dopo
+                    l&apos;ultimo aggiornamento di questo DUVRI. Riapri e salva
+                    per ricompilare gli automatismi.
+                  </p>
+                </Callout>
               )}
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
@@ -582,7 +579,7 @@ export default function DuvriListPage() {
               {d.interferenze.length === 0 && (
                 <Badge
                   variant="outline"
-                  className="border-amber-300 text-amber-700"
+                  className="border-[rgba(155,104,41,0.4)] text-[#8a5c23]"
                 >
                   Nessuna interferenza analizzata
                 </Badge>
@@ -841,26 +838,26 @@ export default function DuvriListPage() {
             )}
 
             {analyzeData && analyzeData.contractor_equipment.length === 0 && (
-              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                <p className="font-medium">Nessuna attrezzatura selezionata</p>
-                <p className="text-xs">
+              <Callout tone="warn">
+                <p className="font-semibold">Nessuna attrezzatura selezionata</p>
+                <p>
                   Apri &quot;Modifica&quot; e seleziona almeno
                   un&apos;attrezzatura/attivita per poter eseguire l&apos;analisi.
                 </p>
-              </div>
+              </Callout>
             )}
 
             {analyzeData &&
               analyzeData.no_interference_detected &&
               analyzeData.contractor_equipment.length > 0 && (
-                <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900">
-                  <p className="font-medium">Nessuna interferenza rilevata</p>
-                  <p className="text-xs">
+                <Callout tone="success">
+                  <p className="font-semibold">Nessuna interferenza rilevata</p>
+                  <p>
                     Le attrezzature dichiarate non corrispondono a regole note.
                     Puoi comunque aggiungere interferenze manualmente da
                     &quot;Modifica&quot;.
                   </p>
-                </div>
+                </Callout>
               )}
 
             {analyzeData &&
@@ -872,9 +869,9 @@ export default function DuvriListPage() {
                     className={cn(
                       "rounded-md border p-3",
                       s.decision === "accept" &&
-                        "border-emerald-300 bg-emerald-100",
+                        "border-[rgba(16,140,61,0.26)] bg-[rgba(16,140,61,0.05)]",
                       s.decision === "reject" &&
-                        "border-slate-300 bg-slate-100 opacity-70"
+                        "border-[#e5edf5] bg-[#f6f9fc] opacity-70"
                     )}
                   >
                     <div className="mb-2 flex flex-wrap items-center gap-1.5">
@@ -883,13 +880,13 @@ export default function DuvriListPage() {
                         {EQUIPMENT_LABELS[s.contractor_eq] || s.contractor_eq}
                       </Badge>
                       {s.decision === "accept" && (
-                        <Badge className="bg-emerald-100 text-emerald-800 text-[11px] hover:bg-emerald-100">
+                        <Badge variant="success" className="text-[11px]">
                           <Check className="mr-1 h-2.5 w-2.5" />
                           Accettata
                         </Badge>
                       )}
                       {s.decision === "reject" && (
-                        <Badge className="bg-slate-100 text-slate-700 text-[11px] hover:bg-slate-100">
+                        <Badge variant="neutral" className="text-[11px]">
                           <ThumbsDown className="mr-1 h-2.5 w-2.5" />
                           Rifiutata
                         </Badge>

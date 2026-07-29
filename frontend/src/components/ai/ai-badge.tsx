@@ -1,8 +1,11 @@
 "use client";
 
 import { Sparkles, Pencil, User } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type badgeVariants } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import type { VariantProps } from "class-variance-authority";
+
+type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 
 /**
  * Shared AI provenance badge (US-5.3).
@@ -30,22 +33,10 @@ interface AIBadgeProps {
   size?: "sm" | "xs";
 }
 
-const defaults: Record<AIProvenance, { label: string; icon: typeof Sparkles; classes: string }> = {
-  ai: {
-    label: "Generato da AI",
-    icon: Sparkles,
-    classes: "bg-violet-100 text-violet-800 hover:bg-violet-100",
-  },
-  edited: {
-    label: "Modificato dall'utente",
-    icon: Pencil,
-    classes: "bg-sky-100 text-sky-800 hover:bg-sky-100",
-  },
-  manual: {
-    label: "Manuale",
-    icon: User,
-    classes: "bg-slate-100 text-slate-700 hover:bg-slate-100",
-  },
+const defaults: Record<AIProvenance, { label: string; icon: typeof Sparkles; variant: BadgeVariant }> = {
+  ai: { label: "Generato da AI", icon: Sparkles, variant: "ai" },
+  edited: { label: "Modificato dall'utente", icon: Pencil, variant: "info" },
+  manual: { label: "Manuale", icon: User, variant: "neutral" },
 };
 
 function formatTimestamp(ts: string | Date): string {
@@ -81,8 +72,8 @@ export function AIBadge({ provenance, timestamp, label, className, size = "sm" }
   return (
     <Badge
       data-ai-provenance={provenance}
-      variant="secondary"
-      className={cn(spec.classes, size === "xs" && "h-[18px] px-1.5 text-[11px]", className)}
+      variant={spec.variant}
+      className={cn(size === "xs" && "h-[18px] px-1.5 text-[11px]", className)}
       title={tooltipParts.join(" ")}
     >
       <Icon className={cn("mr-1", size === "xs" ? "h-2.5 w-2.5" : "h-3 w-3")} />

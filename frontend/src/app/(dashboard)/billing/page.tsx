@@ -542,7 +542,7 @@ function PlanPicker({
                 className={
                   "flex flex-col rounded-lg border p-4 " +
                   (current
-                    ? "border-emerald-500 bg-emerald-50/40 dark:bg-emerald-950/20"
+                    ? "border-[rgba(16,140,61,0.5)] bg-[rgba(16,140,61,0.05)]"
                     : highlighted
                       ? "border-primary ring-1 ring-primary/30"
                       : "")
@@ -551,7 +551,7 @@ function PlanPicker({
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold">{plan.display_name}</h3>
                   {current && (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-label="Piano attuale" />
+                    <CheckCircle2 className="h-4 w-4 text-[#0f7a37]" aria-label="Piano attuale" />
                   )}
                 </div>
                 <p className="mt-2 text-2xl font-semibold">{formatEuro(plan.price_year_cents)}</p>

@@ -429,7 +429,7 @@ export function StepPersone({
                           )}
                         </span>
                         {p.is_esterno && (
-                          <span className="rounded-sm border border-amber-300 bg-amber-50 px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide text-amber-800">
+                          <span className="rounded-sm border border-[rgba(155,104,41,0.3)] bg-[rgba(155,104,41,0.12)] px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide text-[#8a5c23]">
                             Esterno
                           </span>
                         )}

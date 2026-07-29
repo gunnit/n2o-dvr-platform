@@ -11,8 +11,8 @@
  */
 
 import type { ReactNode } from "react";
-import { AlertTriangle } from "lucide-react";
 
+import { Callout } from "@/components/ui/callout";
 import { PLAN_DISPLAY_NAMES } from "@/components/landing/pricing-data";
 import { STATUS_LABELS, STATUS_TONE, type Entitlements } from "@/lib/billing";
 import { cn } from "@/lib/utils";
@@ -41,12 +41,14 @@ export function StatusPill({
   return (
     <span
       className={cn(
-        "rounded-full px-3 py-1 text-xs font-medium",
+        // Badge recipe from DESIGN.md §4: tinted fill, matching hairline, no
+        // saturated block. Same three tones the callouts use.
+        "rounded-full border px-3 py-1 text-xs font-medium",
         tone === "ok"
-          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+          ? "border-[rgba(21,190,83,0.4)] bg-[rgba(21,190,83,0.14)] text-[#0f7a37]"
           : tone === "warn"
-            ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300"
-            : "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+            ? "border-[rgba(155,104,41,0.32)] bg-[rgba(155,104,41,0.12)] text-[#8a5c23]"
+            : "border-[rgba(199,42,58,0.32)] bg-[rgba(199,42,58,0.1)] text-[#c72a3a]",
         className
       )}
     >
@@ -88,7 +90,7 @@ export function Meter({
         <div
           className={
             "h-full rounded-full transition-all " +
-            (tone === "bad" ? "bg-red-500" : tone === "warn" ? "bg-amber-500" : "bg-emerald-500")
+            (tone === "bad" ? "bg-[#ef4444]" : tone === "warn" ? "bg-[#f59e0b]" : "bg-[#15be53]")
           }
           style={{ width: `${percent ?? 0}%` }}
         />
@@ -101,28 +103,28 @@ export function Meter({
   );
 }
 
+/**
+ * Billing's spelling of {@link Callout}.
+ *
+ * Kept as its own name because the billing screens speak in `"warn" | "bad"`
+ * (the same vocabulary as `STATUS_TONE` and the meters), and translating that
+ * at ~8 call sites would put the mapping in eight places instead of one.
+ */
 export function Notice({
   tone,
   children,
   className,
+  action,
 }: {
   tone: "warn" | "bad";
   children: ReactNode;
   className?: string;
+  action?: ReactNode;
 }) {
   return (
-    <div
-      className={cn(
-        "flex gap-2 rounded-md border p-3 text-sm",
-        tone === "warn"
-          ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
-          : "border-red-300 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200",
-        className
-      )}
-    >
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-      <div>{children}</div>
-    </div>
+    <Callout tone={tone === "warn" ? "warn" : "danger"} action={action} className={className}>
+      {children}
+    </Callout>
   );
 }
 

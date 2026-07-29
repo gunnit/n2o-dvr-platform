@@ -1,3 +1,4 @@
+import { AuthSplit } from "@/components/auth/auth-split";
 import { RegisterForm } from "./register-form";
 
 /**
@@ -18,5 +19,16 @@ export default async function RegisterPage({
   // "B_BASE,B_PLUS" as a plan code.
   const planCode = Array.isArray(piano) ? (piano[0] ?? null) : (piano ?? null);
 
-  return <RegisterForm piano={planCode} />;
+  return (
+    <AuthSplit
+      panelWidth="440px"
+      backdrop={{
+        eyebrow: "Il tuo ambiente di lavoro",
+        title: <>Il primo fascicolo parte da qui.</>,
+        body: "Attivi l'organizzazione, carichi la prima azienda e il sopralluogo comincia. I documenti si compongono da sé.",
+      }}
+    >
+      <RegisterForm piano={planCode} />
+    </AuthSplit>
+  );
 }

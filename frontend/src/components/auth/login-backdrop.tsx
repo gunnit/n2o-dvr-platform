@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useReducedMotion } from "framer-motion";
@@ -128,12 +128,34 @@ function DocRow({
   );
 }
 
+/** Login's own copy, and the default for any surface that does not override. */
+const DEFAULT_COPY = {
+  eyebrow: "Il tuo ambiente di lavoro",
+  title: (
+    <>
+      Il fascicolo è dove l&apos;hai lasciato.
+    </>
+  ),
+  body: "Sopralluoghi, valutazioni e documenti restano allineati tra una sessione e l'altra. Nessun dato da ricopiare.",
+};
+
 /**
- * Left half of the login split screen: the workshop photo under N2O's navy
+ * Left half of the auth split screen: the workshop photo under N2O's navy
  * scrims, the promise headline, and an ambient "fascicolo in composizione"
  * panel. Purely presentational — no auth state reaches it.
+ *
+ * The copy is a prop because /register and /login make different promises: one
+ * visitor has an account to return to, the other has not started yet.
  */
-export function LoginBackdrop() {
+export function LoginBackdrop({
+  eyebrow = DEFAULT_COPY.eyebrow,
+  title = DEFAULT_COPY.title,
+  body = DEFAULT_COPY.body,
+}: {
+  eyebrow?: string;
+  title?: ReactNode;
+  body?: string;
+} = {}) {
   const reduced = useReducedMotion();
   const animate = !reduced;
 
@@ -179,7 +201,10 @@ export function LoginBackdrop() {
         className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_46%,rgba(165,200,255,.1)_0%,rgba(6,27,49,0)_72%)]"
       />
 
-      <div className="relative z-2 flex h-full flex-col justify-between gap-12 px-[46px] pt-9 pb-8 max-[1080px]:px-[30px] max-[1080px]:pt-[30px] max-[1080px]:pb-[26px]">
+      {/* Tighter below 900px, where this panel stacks *above* the form: every
+          pixel it spends here is pixels the visitor scrolls before reaching
+          the first field. */}
+      <div className="relative z-2 flex h-full flex-col justify-between gap-12 px-[46px] pt-9 pb-8 max-[1080px]:px-[30px] max-[1080px]:pt-[30px] max-[1080px]:pb-[26px] max-[900px]:gap-7 max-[900px]:pt-6 max-[900px]:pb-7">
         <div className="flex items-center justify-between gap-5">
           <Link
             href="/"
@@ -194,25 +219,27 @@ export function LoginBackdrop() {
 
         <div>
           <p className="landing-rise mb-[22px] text-[11.5px] font-medium tracking-[0.16em] text-[#a5c8ff] uppercase">
-            Il tuo ambiente di lavoro
+            {eyebrow}
           </p>
           <h2
             className="landing-rise font-heading max-w-[15ch] text-[clamp(2rem,3.4vw,3.05rem)] leading-[1.05] font-light tracking-[-0.035em] text-balance text-white max-[900px]:max-w-none"
             style={{ animationDelay: "70ms" }}
           >
-            Il fascicolo è dove l&apos;hai lasciato.
+            {title}
           </h2>
           <p
             className="landing-rise mt-[22px] max-w-[44ch] text-[15.5px] leading-[1.6] font-light text-white/74"
             style={{ animationDelay: "150ms" }}
           >
-            Sopralluoghi, valutazioni e documenti restano allineati tra una
-            sessione e l&apos;altra. Nessun dato da ricopiare.
+            {body}
           </p>
 
           <div
             aria-hidden
-            className="landing-rise mt-10 max-w-[520px] rounded-lg border border-white/15 bg-white/6 px-5 pt-[18px] pb-1.5 backdrop-blur-[12px] max-[900px]:mt-[26px]"
+            // Hidden outright on phones rather than just dropping its rows:
+            // the header and progress bar alone still cost ~110px of scroll
+            // above the form, to say something the headline already said.
+            className="landing-rise mt-10 max-w-[520px] rounded-lg border border-white/15 bg-white/6 px-5 pt-[18px] pb-1.5 backdrop-blur-[12px] max-[900px]:hidden"
             style={{ animationDelay: "240ms" }}
           >
             <div className="flex items-baseline justify-between gap-4">
@@ -231,7 +258,8 @@ export function LoginBackdrop() {
               />
             </div>
 
-            <div className="mt-1.5 max-[900px]:hidden">
+            {/* No mobile guard needed — the whole panel is hidden by then. */}
+            <div className="mt-1.5">
               {rows.map((row) => (
                 <DocRow key={row.name} name={row.name} state={row.state} />
               ))}

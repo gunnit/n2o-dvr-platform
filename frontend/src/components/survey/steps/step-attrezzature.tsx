@@ -968,12 +968,12 @@ export function StepAttrezzature({
             : `Estrai attrezzature dalle ${fotoCount} foto caricate per questo ambiente.`;
 
         return (
-          <Card className="border-violet-300 bg-violet-100">
+          <Card className="border-[rgba(124,58,237,0.24)] bg-[rgba(124,58,237,0.05)]">
             <CardHeader className="pb-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">
                   <CardTitle className="flex items-center gap-2 text-base">
-                    <Sparkles className="h-4 w-4 text-violet-600" />
+                    <Sparkles className="h-4 w-4 text-[#5b21b6]" />
                     Suggerisci con AI
                   </CardTitle>
                   <CardDescription>
@@ -1003,7 +1003,7 @@ export function StepAttrezzature({
                     size="sm"
                     onClick={fetchAISuggestions}
                     disabled={anyLoading}
-                    className="border-violet-300 text-violet-700 hover:bg-violet-100"
+                    className="border-[rgba(124,58,237,0.34)] text-[#5b21b6] hover:bg-[rgba(124,58,237,0.08)]"
                   >
                     {aiLoading ? (
                       <>
@@ -1024,7 +1024,7 @@ export function StepAttrezzature({
                     onClick={extractFromPhotos}
                     disabled={anyLoading || !hasPhotos}
                     title={photoButtonTitle}
-                    className="border-violet-300 text-violet-700 hover:bg-violet-100"
+                    className="border-[rgba(124,58,237,0.34)] text-[#5b21b6] hover:bg-[rgba(124,58,237,0.08)]"
                   >
                     {photoLoading ? (
                       <>
@@ -1051,7 +1051,7 @@ export function StepAttrezzature({
                       type="button"
                       onClick={() => acceptAISuggestion(s)}
                       title={s.motivazione}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-3 py-2 text-sm font-medium text-violet-800 transition-colors hover:bg-violet-50"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[rgba(124,58,237,0.34)] bg-white px-3 py-2 text-sm font-medium text-[#5b21b6] transition-colors hover:bg-[rgba(124,58,237,0.06)]"
                     >
                       <Plus className="h-3.5 w-3.5" />
                       {s.descrizione}

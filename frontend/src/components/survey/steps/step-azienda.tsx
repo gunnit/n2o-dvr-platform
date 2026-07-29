@@ -318,8 +318,8 @@ export function StepAzienda({
                 <Label htmlFor="zona_sismica">Zona Sismica</Label>
                 {lookup.kind === "found" && (
                   <Badge
-                    variant="secondary"
-                    className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 text-[11px]"
+                    variant="success"
+                    className="text-[11px]"
                     title={`Compilata automaticamente dal lookup comune "${lookup.comune}" (fonte: OPCM 3519/2006).`}
                   >
                     <Check className="mr-1 h-2.5 w-2.5" />
@@ -366,7 +366,7 @@ export function StepAzienda({
                 </p>
               )}
               {lookup.kind === "not_found" && (
-                <p className="flex items-start gap-1 text-[11px] text-amber-700">
+                <p className="flex items-start gap-1 text-[11px] text-[#8a5c23]">
                   <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" />
                   Comune non trovato — inserisci manualmente la zona sismica.
                 </p>

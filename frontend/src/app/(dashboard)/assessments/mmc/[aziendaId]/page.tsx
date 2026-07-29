@@ -519,10 +519,10 @@ export default function MmcAssessmentPage() {
       </div>
 
       {personeGiaValutate.length > 0 && (
-        <Card className="border-emerald-300/60 bg-emerald-50/60">
+        <Card className="border-[rgba(16,140,61,0.26)] bg-[rgba(16,140,61,0.05)]">
           <CardContent className="space-y-2 py-3">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">
+              <Badge variant="success">
                 Già valutati: {personeGiaValutate.length}
               </Badge>
               <span className="text-xs text-muted-foreground">
@@ -540,26 +540,26 @@ export default function MmcAssessmentPage() {
                     className={cn(
                       "flex items-center gap-1 rounded-md border bg-white px-2 py-1",
                       isBeingEdited
-                        ? "border-blue-400 bg-blue-50 text-blue-900"
-                        : "border-emerald-300/70 text-emerald-900",
+                        ? "border-[rgba(27,85,148,0.4)] bg-[rgba(27,85,148,0.07)] text-[#1b5594]"
+                        : "border-[rgba(16,140,61,0.34)] text-[#0c6b2f]",
                     )}
                   >
                     <span
                       aria-hidden
                       className={
-                        isBeingEdited ? "text-blue-500" : "text-emerald-600"
+                        isBeingEdited ? "text-[#1b5594]" : "text-[#0f7a37]"
                       }
                     >
                       {isBeingEdited ? "..." : "✓"}
                     </span>
                     <span className="font-medium">{p.nominativo}</span>
                     {v && !isBeingEdited ? (
-                      <span className="text-emerald-700/80">
+                      <span className="text-[#0c6b2f]/80">
                         — Valutato il {formatDateIt(v.created_at)}
                       </span>
                     ) : null}
                     {isBeingEdited ? (
-                      <span className="text-blue-600/80">— In modifica</span>
+                      <span className="text-[#1b5594]/80">— In modifica</span>
                     ) : null}
                     {v && !isBeingEdited ? (
                       <button
@@ -567,7 +567,7 @@ export default function MmcAssessmentPage() {
                         aria-label={`Modifica valutazione di ${p.nominativo}`}
                         title="Modifica valutazione"
                         onClick={() => startEditing(p.id)}
-                        className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded text-emerald-600/70 hover:bg-blue-100 hover:text-blue-700"
+                        className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded text-[#0f7a37]/70 hover:bg-[rgba(27,85,148,0.1)] hover:text-[#1b5594]"
                       >
                         <Pencil className="h-3 w-3" />
                       </button>
@@ -578,7 +578,7 @@ export default function MmcAssessmentPage() {
                         aria-label={`Elimina valutazione di ${p.nominativo}`}
                         title="Elimina valutazione"
                         onClick={() => deleteValutazione(p.id, p.nominativo)}
-                        className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded text-emerald-600/70 hover:bg-rose-100 hover:text-rose-700"
+                        className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded text-[#0f7a37]/70 hover:bg-[rgba(199,42,58,0.1)] hover:text-[#b01e2e]"
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
@@ -634,8 +634,8 @@ export default function MmcAssessmentPage() {
           className={cn(
             "rounded-md border px-4 py-3 text-sm",
             finalizeMessage.startsWith("Errore")
-              ? "border-rose-300 bg-rose-100 text-rose-900"
-              : "border-emerald-300 bg-emerald-100 text-emerald-900",
+              ? "border-[rgba(199,42,58,0.28)] bg-[rgba(199,42,58,0.05)] text-[#b01e2e]"
+              : "border-[rgba(16,140,61,0.26)] bg-[rgba(16,140,61,0.05)] text-[#0c6b2f]",
           )}
         >
           {finalizeMessage}
@@ -643,7 +643,7 @@ export default function MmcAssessmentPage() {
       )}
 
       {editingIds !== null && (
-        <div className="flex items-center justify-between rounded-md border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+        <div className="flex items-center justify-between rounded-md border border-[rgba(27,85,148,0.24)] bg-[rgba(27,85,148,0.045)] px-4 py-3 text-sm text-[#1b5594]">
           <span>
             Valutazione esistente caricata: il form mostra i dati già salvati
             nel DVR. Le modifiche sovrascriveranno i dati precedenti.
@@ -653,7 +653,7 @@ export default function MmcAssessmentPage() {
             variant="ghost"
             size="sm"
             onClick={cancelEditing}
-            className="text-blue-700 hover:text-blue-900"
+            className="text-[#1b5594] hover:text-[#1b5594]"
           >
             <X className="mr-1 h-4 w-4" />
             Annulla modifiche

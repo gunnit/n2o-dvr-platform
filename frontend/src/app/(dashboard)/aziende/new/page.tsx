@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { AlertTriangle, Check, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -145,10 +146,10 @@ const FORMA_GIURIDICA_OPTIONS = [
 function AiBadge({ meta }: { meta: AziendaAutofillFieldMeta }) {
   const tone =
     meta.confidence === "high"
-      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      ? "bg-[rgba(21,190,83,0.16)] text-[#0c6b2f] border-[rgba(21,190,83,0.32)]"
       : meta.confidence === "medium"
-      ? "bg-amber-50 text-amber-700 border-amber-200"
-      : "bg-orange-50 text-orange-700 border-orange-200";
+      ? "bg-[rgba(245,158,11,0.18)] text-[#8a5c23] border-[rgba(245,158,11,0.34)]"
+      : "bg-[rgba(249,115,22,0.16)] text-[#9a3d0a] border-[rgba(249,115,22,0.32)]";
   const label =
     meta.confidence === "high"
       ? "Verificato"
@@ -665,24 +666,18 @@ export default function NewAziendaPage() {
                   </div>
                 )}
                 {existingAzienda && (
-                  <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
-                    <AlertTriangle
-                      className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700"
-                      strokeWidth={2}
-                    />
-                    <div className="flex-1 text-xs">
-                      <p>
-                        Cliente già presente in piattaforma:{" "}
-                        <span className="font-medium">{existingAzienda.ragione_sociale}</span>
-                      </p>
-                      <Link
-                        href={`/aziende/${existingAzienda.id}`}
-                        className="font-medium text-amber-900 underline underline-offset-2 hover:text-amber-950"
-                      >
-                        apri scheda
-                      </Link>
-                    </div>
-                  </div>
+                  <Callout tone="warn" dense>
+                    <p>
+                      Cliente già presente in piattaforma:{" "}
+                      <span className="font-semibold">{existingAzienda.ragione_sociale}</span>
+                    </p>
+                    <Link
+                      href={`/aziende/${existingAzienda.id}`}
+                      className="font-semibold underline underline-offset-2"
+                    >
+                      apri scheda
+                    </Link>
+                  </Callout>
                 )}
               </div>
 
@@ -1265,8 +1260,8 @@ export default function NewAziendaPage() {
                   <Label htmlFor="zona_sismica">Zona Sismica</Label>
                   {seismicLookup.kind === "found" && (
                     <Badge
-                      variant="secondary"
-                      className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 text-[10px]"
+                      variant="success"
+                      className="text-[10px]"
                       title={`Compilata dal lookup comune "${seismicLookup.comune}" (OPCM 3519/2006).`}
                     >
                       <Check className="mr-1 h-2.5 w-2.5" />
@@ -1319,7 +1314,7 @@ export default function NewAziendaPage() {
                   </Button>
                 </div>
                 {seismicLookup.kind === "not_found" && (
-                  <p className="flex items-start gap-1 text-[11px] text-amber-700">
+                  <p className="flex items-start gap-1 text-[11px] text-[#8a5c23]">
                     <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" />
                     Comune non trovato. Inseriscilo manualmente.
                   </p>

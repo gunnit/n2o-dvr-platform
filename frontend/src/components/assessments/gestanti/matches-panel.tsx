@@ -44,14 +44,14 @@ export function MatchesPanel({ data, onDecide }: Props) {
 
   if (data.cleared) {
     return (
-      <Card className="border-emerald-300 bg-emerald-100">
+      <Card className="border-[rgba(16,140,61,0.26)] bg-[rgba(16,140,61,0.05)]">
         <CardContent className="flex items-start gap-3 py-4">
-          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-700" />
+          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-[#0c6b2f]" />
           <div>
             <p className="text-sm font-semibold text-emerald-950">
               Nessun rischio identificato
             </p>
-            <p className="text-xs text-emerald-900">
+            <p className="text-xs text-[#0c6b2f]">
               La mansione{" "}
               <span className="font-medium text-foreground">
                 {data.worker_mansione ?? "—"}
@@ -84,7 +84,7 @@ export function MatchesPanel({ data, onDecide }: Props) {
             </span>
           </p>
         </div>
-        <AlertTriangle className="size-5 text-amber-500" aria-hidden />
+        <AlertTriangle className="size-5 text-[#f59e0b]" aria-hidden />
       </CardHeader>
       <CardContent className="divide-y p-0">
         {data.matches.map((match) => (
@@ -112,7 +112,7 @@ function MatchRow({
           {match.is_new && (
             <Badge
               variant="secondary"
-              className="bg-amber-500/20 text-amber-800"
+              className="bg-[rgba(245,158,11,0.18)] text-[#8a5c23]"
               title="Questo rischio e' stato introdotto dopo l'ultima valutazione salvata per questa lavoratrice."
             >
               Nuovo
@@ -123,8 +123,8 @@ function MatchRow({
               variant="outline"
               className={cn(
                 match.decision === "accept"
-                  ? "border-emerald-500/40 text-emerald-700"
-                  : "border-rose-500/40 text-rose-700",
+                  ? "border-[rgba(16,140,61,0.4)] text-[#0c6b2f]"
+                  : "border-[rgba(199,42,58,0.4)] text-[#b01e2e]",
               )}
             >
               {match.decision === "accept" ? "Accettata" : "Rifiutata"}

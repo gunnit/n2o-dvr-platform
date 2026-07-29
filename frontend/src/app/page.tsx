@@ -190,7 +190,7 @@ export default async function Home() {
             className="absolute inset-0 bg-[radial-gradient(ellipse_62%_54%_at_28%_56%,rgba(6,27,49,.62)_0%,rgba(6,27,49,0)_72%)]"
           />
 
-          <div className="relative z-2 mx-auto flex w-full max-w-[1160px] flex-1 flex-col justify-center px-6 pt-[150px] pb-16 sm:px-7">
+          <div className="relative z-2 mx-auto flex w-full max-w-[1160px] flex-1 flex-col justify-center px-6 pt-[116px] pb-12 sm:px-7 sm:pt-[150px] sm:pb-16">
             <p className={`landing-rise mb-[26px] ${EYEBROW} text-[#a5c8ff]`}>
               Piattaforma per la sicurezza sul lavoro
             </p>
@@ -240,18 +240,38 @@ export default async function Home() {
           </div>
 
           <div className="relative z-2 border-t border-white/13">
-            <div className="mx-auto grid w-full max-w-[1160px] grid-cols-1 px-6 sm:grid-cols-2 sm:px-7 lg:grid-cols-4">
+            {/* Two columns on phones rather than four stacked rows: the four
+                figures are one comparable set, and stacking them spent ~290px
+                turning a data block into a list. The hairlines make the
+                quadrant read as a table at every width. */}
+            <div className="mx-auto grid w-full max-w-[1160px] grid-cols-2 px-6 sm:px-7 lg:grid-cols-4">
               {STATS.map((stat, i) => (
                 <div
                   key={stat.label}
                   className={[
-                    "py-[22px] lg:px-6",
-                    i === 0 ? "lg:pl-0" : "",
-                    i === STATS.length - 1 ? "lg:pr-0" : "lg:border-r lg:border-white/13",
+                    "py-[18px] sm:py-[22px]",
+                    // Column rule inside each row, row rule under the first row.
+                    i % 2 === 1 ? "border-l border-white/13 pl-5" : "pr-5",
+                    i >= 2 ? "border-t border-white/13" : "",
+                    // At lg all four sit on one row: drop the row rule and let
+                    // every cell but the first carry the column rule.
+                    "lg:border-t-0",
+                    i === 0 ? "lg:border-l-0" : "lg:border-l lg:border-white/13",
+                    // Each edge stated exactly once per breakpoint. Two
+                    // competing utilities for one property (`lg:px-6` plus a
+                    // `lg:pl-0` override) are resolved by Tailwind's own
+                    // output order, not by the order they appear here — which
+                    // is how the first cell ended up indented 24px from the
+                    // headline directly above it.
+                    i === 0
+                      ? "lg:pl-0 lg:pr-6"
+                      : i === STATS.length - 1
+                        ? "lg:pl-6 lg:pr-0"
+                        : "lg:px-6",
                   ].join(" ")}
                 >
                   <p
-                    className={`font-heading text-[26px] font-light tracking-[-0.02em] text-white ${stat.tabular ? "tnum" : ""}`}
+                    className={`font-heading text-[21px] font-light tracking-[-0.02em] text-white sm:text-[26px] ${stat.tabular ? "tnum" : ""}`}
                   >
                     {stat.value}
                   </p>
@@ -266,7 +286,7 @@ export default async function Home() {
         <FascicoloStack />
 
         {/* ================= Come funziona ================= */}
-        <section id="come-funziona" className="bg-white py-[120px] sm:pb-[130px]">
+        <section id="come-funziona" className="section-y-loose bg-white">
           <div className="mx-auto w-full max-w-[1160px] px-6 sm:px-7">
             <Reveal>
               <p className={`mb-[18px] ${EYEBROW} text-[#003d74]`}>Come funziona</p>
@@ -279,7 +299,9 @@ export default async function Home() {
               </p>
             </Reveal>
 
-            <div className="mt-16 grid gap-20 sm:mt-[84px] sm:gap-24">
+            {/* Step gap stays clearly under the section's own padding so the
+                three steps read as one group rather than three sections. */}
+            <div className="mt-14 grid gap-16 sm:mt-[84px] sm:gap-24">
               {/* Step 1 */}
               <Reveal className="grid items-center gap-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1.08fr)] md:gap-[60px]">
                 <div>
@@ -422,7 +444,7 @@ export default async function Home() {
         {/* ================= Due percorsi ================= */}
         <section
           id="consulenti"
-          className="scroll-mt-[90px] border-t border-[#e5edf5] bg-[#f6f9fc] py-[110px]"
+          className="section-y scroll-mt-[90px] border-t border-[#e5edf5] bg-[#f6f9fc]"
         >
           <div className="mx-auto w-full max-w-[1160px] px-6 sm:px-7">
             <Reveal>
@@ -565,7 +587,7 @@ export default async function Home() {
         </section>
 
         {/* ================= Metodo e normativa ================= */}
-        <section id="metodo" className="dark-section scroll-mt-[70px] bg-[#18244e] py-[110px]">
+        <section id="metodo" className="dark-section section-y scroll-mt-[70px] bg-[#18244e]">
           <div className="mx-auto w-full max-w-[1160px] px-6 sm:px-7">
             <Reveal>
               <p className={`mb-[18px] ${EYEBROW} text-[#a5c8ff]`}>
@@ -621,7 +643,9 @@ export default async function Home() {
         </section>
 
         {/* ================= Settori ================= */}
-        <section className="bg-white py-[110px]">
+        {/* Tighter than its neighbours on purpose: a band of four photographs
+            carries itself and does not need prose breathing room. */}
+        <section className="section-y-tight bg-white">
           <div className="mx-auto w-full max-w-[1160px] px-6 sm:px-7">
             <div className="flex flex-wrap items-end justify-between gap-10">
               <Reveal>
@@ -669,7 +693,7 @@ export default async function Home() {
         </section>
 
         {/* ================= Fatturazione ================= */}
-        <section className="border-t border-[#e5edf5] bg-[#f6f9fc] py-[110px]">
+        <section className="section-y border-t border-[#e5edf5] bg-[#f6f9fc]">
           <div className="mx-auto w-full max-w-[1160px] px-6 sm:px-7">
             <div className="grid items-start gap-16 md:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
               <Reveal>
@@ -739,7 +763,7 @@ export default async function Home() {
         </section>
 
         {/* ================= Chiusura ================= */}
-        <section id="accedi" className="scroll-mt-[70px] bg-white py-[130px]">
+        <section id="accedi" className="section-y-loose scroll-mt-[70px] bg-white">
           <div className="mx-auto w-full max-w-[820px] px-6 text-center sm:px-7">
             <Reveal>
               <h2 className="font-heading text-[clamp(1.8rem,3.4vw,2.6rem)] leading-[1.16] font-light tracking-[-0.028em] text-balance text-[#061b31]">

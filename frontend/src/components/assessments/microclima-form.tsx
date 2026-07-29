@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AlertTriangle } from "lucide-react";
+import { Callout } from "@/components/ui/callout";
 import { cn } from "@/lib/utils";
 
 /**
@@ -136,18 +136,18 @@ function CategoryBadge({
 }) {
   if (category === "FUORI_SOGLIA") {
     return (
-      <span className="inline-flex items-center rounded-md bg-rose-500/15 px-2.5 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-500/30">
+      <span className="inline-flex items-center rounded-md bg-[rgba(239,68,68,0.16)] px-2.5 py-1 text-xs font-medium text-[#b01e2e] ring-1 ring-[rgba(239,68,68,0.34)]">
         Fuori soglia
       </span>
     );
   }
   const tone = compliant
     ? category === "A"
-      ? "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30"
+      ? "bg-[rgba(21,190,83,0.16)] text-[#0c6b2f] ring-[rgba(21,190,83,0.34)]"
       : category === "B"
-      ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/25"
-      : "bg-amber-500/15 text-amber-800 ring-amber-500/30"
-    : "bg-rose-500/15 text-rose-700 ring-rose-500/30";
+      ? "bg-[rgba(21,190,83,0.16)] text-[#0c6b2f] ring-[rgba(21,190,83,0.34)]"
+      : "bg-[rgba(245,158,11,0.18)] text-[#8a5c23] ring-[rgba(245,158,11,0.36)]"
+    : "bg-[rgba(239,68,68,0.16)] text-[#b01e2e] ring-[rgba(239,68,68,0.34)]";
   return (
     <span
       className={cn(
@@ -466,8 +466,8 @@ export function MicroclimaPmvForm({
               className={cn(
                 "tabular-nums",
                 result?.compliant
-                  ? "border-emerald-500/40 text-emerald-700"
-                  : "border-rose-500/40 text-rose-700",
+                  ? "border-[rgba(16,140,61,0.4)] text-[#0c6b2f]"
+                  : "border-[rgba(199,42,58,0.4)] text-[#b01e2e]",
               )}
             >
               {result
@@ -614,7 +614,7 @@ export function MicroclimaPmvForm({
                 "text-xs",
                 saveMessage.startsWith("Errore")
                   ? "text-destructive"
-                  : "text-emerald-700",
+                  : "text-[#0c6b2f]",
               )}
             >
               {saveMessage}
@@ -687,10 +687,10 @@ export const DEFAULT_PHS_INPUTS: PhsInputs = {
 function LivelloBadge({ livello }: { livello: string }) {
   const tone =
     livello === "ACCETTABILE"
-      ? "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30"
+      ? "bg-[rgba(21,190,83,0.16)] text-[#0c6b2f] ring-[rgba(21,190,83,0.34)]"
       : livello === "LIMITE"
-      ? "bg-amber-500/15 text-amber-800 ring-amber-500/30"
-      : "bg-rose-500/15 text-rose-700 ring-rose-500/30";
+      ? "bg-[rgba(245,158,11,0.18)] text-[#8a5c23] ring-[rgba(245,158,11,0.36)]"
+      : "bg-[rgba(239,68,68,0.16)] text-[#b01e2e] ring-[rgba(239,68,68,0.34)]";
   return (
     <span
       className={cn(
@@ -900,34 +900,28 @@ export function MicroclimaPhsForm({
   return (
     <div className="space-y-6">
       {/* Scope note */}
-      <div className="rounded-md border border-amber-300 bg-amber-100 p-3 text-xs text-amber-900">
-        <div className="font-medium">Ambito di applicazione</div>
-        <p className="mt-0.5 leading-relaxed">
+      <Callout tone="info">
+        <p className="font-semibold">Ambito di applicazione</p>
+        <p className="mt-0.5">
           Applicabile solo per esposizioni a caldo severo (es. fonderie,
           cantieri estivi con temperature &gt;30 °C, panetterie industriali,
           vetrerie). Per ambienti di comfort normale usare la scheda PMV/PPD.
         </p>
-      </div>
+      </Callout>
 
       {/* Critical-exposure banner (US-3.14 AC3): Dlim < 30 min.
           Guard against null d_lim — the API returns null for inputs outside
           the ISO 7933 applicability limits, and `null < 30` is truthy in JS. */}
       {result && result.d_lim !== null && result.d_lim < PHS_CRITICAL_DLIM_MIN && (
-        <div
-          role="alert"
-          className="flex items-start gap-3 rounded-md border border-rose-400/60 bg-rose-50 p-3 text-rose-900 shadow-sm"
-        >
-          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" aria-hidden="true" />
-          <div>
-            <p className="font-medium">Esposizione critica – misure obbligatorie</p>
-            <p className="text-sm">
-              Dlim = {fmtNum(result.d_lim, 0)}&prime; (&lt; {PHS_CRITICAL_DLIM_MIN}&prime;).
-              Interrompere l&apos;esposizione, predisporre rotazione/cicli di
-              recupero in area climatizzata e attivare la sorveglianza sanitaria
-              rinforzata ai sensi dell&apos;art. 181 D.Lgs. 81/2008.
-            </p>
-          </div>
-        </div>
+        <Callout role="alert" tone="danger">
+          <p className="font-semibold">Esposizione critica – misure obbligatorie</p>
+          <p className="mt-0.5">
+            Dlim = {fmtNum(result.d_lim, 0)}&prime; (&lt; {PHS_CRITICAL_DLIM_MIN}&prime;).
+            Interrompere l&apos;esposizione, predisporre rotazione/cicli di
+            recupero in area climatizzata e attivare la sorveglianza sanitaria
+            rinforzata ai sensi dell&apos;art. 181 D.Lgs. 81/2008.
+          </p>
+        </Callout>
       )}
 
       {/* Live result */}
@@ -1137,7 +1131,7 @@ export function MicroclimaPhsForm({
                 "text-xs",
                 saveMessage.startsWith("Errore")
                   ? "text-destructive"
-                  : "text-emerald-700",
+                  : "text-[#0c6b2f]",
               )}
             >
               {saveMessage}

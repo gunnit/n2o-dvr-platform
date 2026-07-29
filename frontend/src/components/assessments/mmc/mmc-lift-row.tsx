@@ -22,7 +22,7 @@ interface Props {
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
-  return <p className="text-[11px] text-rose-600">{message}</p>;
+  return <p className="text-[11px] text-[#b01e2e]">{message}</p>;
 }
 
 interface PesoFieldProps {
@@ -63,12 +63,12 @@ function PesoField({ index, control, register, hasError, errorMessage }: PesoFie
         step="0.1"
         min={0}
         max={200}
-        className={cn(hasError && "border-rose-500")}
+        className={cn(hasError && "border-[#c72a3a]")}
         {...register(`lifts.${index}.peso_reale` as const, { valueAsNumber: true })}
       />
       <FieldError message={errorMessage} />
       {!errorMessage && warning && (
-        <p className="text-[11px] text-amber-700" role="alert">
+        <p className="text-[11px] text-[#8a5c23]" role="alert">
           ⚠ {warning}
         </p>
       )}
@@ -90,11 +90,11 @@ export function MmcLiftRow({
 
   const bandClass =
     result?.zona === "VERDE"
-      ? "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30"
+      ? "bg-[rgba(21,190,83,0.16)] text-[#0c6b2f] ring-[rgba(21,190,83,0.34)]"
       : result?.zona === "GIALLA"
-      ? "bg-amber-500/15 text-amber-800 ring-amber-500/30"
+      ? "bg-[rgba(245,158,11,0.18)] text-[#8a5c23] ring-[rgba(245,158,11,0.36)]"
       : result?.zona === "ROSSA"
-      ? "bg-rose-500/15 text-rose-700 ring-rose-500/30"
+      ? "bg-[rgba(239,68,68,0.16)] text-[#b01e2e] ring-[rgba(239,68,68,0.34)]"
       : "bg-muted text-muted-foreground";
 
   return (
@@ -150,7 +150,7 @@ export function MmcLiftRow({
             step="1"
             min={0}
             max={175}
-            className={cn(liftErrors?.altezza && "border-rose-500")}
+            className={cn(liftErrors?.altezza && "border-[#c72a3a]")}
             {...register(`lifts.${index}.altezza` as const, { valueAsNumber: true })}
           />
           <FieldError message={liftErrors?.altezza?.message} />
@@ -167,7 +167,7 @@ export function MmcLiftRow({
             step="1"
             min={0}
             max={175}
-            className={cn(liftErrors?.dislocazione && "border-rose-500")}
+            className={cn(liftErrors?.dislocazione && "border-[#c72a3a]")}
             {...register(`lifts.${index}.dislocazione` as const, { valueAsNumber: true })}
           />
           <FieldError message={liftErrors?.dislocazione?.message} />
@@ -184,7 +184,7 @@ export function MmcLiftRow({
             step="1"
             min={25}
             max={63}
-            className={cn(liftErrors?.distanza && "border-rose-500")}
+            className={cn(liftErrors?.distanza && "border-[#c72a3a]")}
             {...register(`lifts.${index}.distanza` as const, { valueAsNumber: true })}
           />
           <FieldError message={liftErrors?.distanza?.message} />
@@ -201,7 +201,7 @@ export function MmcLiftRow({
             step="5"
             min={0}
             max={135}
-            className={cn(liftErrors?.angolo && "border-rose-500")}
+            className={cn(liftErrors?.angolo && "border-[#c72a3a]")}
             {...register(`lifts.${index}.angolo` as const, { valueAsNumber: true })}
           />
           <FieldError message={liftErrors?.angolo?.message} />
@@ -215,7 +215,7 @@ export function MmcLiftRow({
             id={`lift-${index}-presa`}
             className={cn(
               "h-9 rounded-md border bg-background px-2 text-sm",
-              liftErrors?.presa && "border-rose-500",
+              liftErrors?.presa && "border-[#c72a3a]",
             )}
             {...register(`lifts.${index}.presa` as const)}
           >
@@ -237,7 +237,7 @@ export function MmcLiftRow({
             step="0.1"
             min={0.2}
             max={15}
-            className={cn(liftErrors?.frequenza && "border-rose-500")}
+            className={cn(liftErrors?.frequenza && "border-[#c72a3a]")}
             {...register(`lifts.${index}.frequenza` as const, { valueAsNumber: true })}
           />
           <FieldError message={liftErrors?.frequenza?.message} />
@@ -251,7 +251,7 @@ export function MmcLiftRow({
             id={`lift-${index}-durata`}
             className={cn(
               "h-9 rounded-md border bg-background px-2 text-sm",
-              liftErrors?.durata && "border-rose-500",
+              liftErrors?.durata && "border-[#c72a3a]",
             )}
             {...register(`lifts.${index}.durata` as const)}
           >

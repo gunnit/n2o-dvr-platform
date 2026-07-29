@@ -142,9 +142,9 @@ export default function MicroclimaAssessmentPage() {
       </div>
 
       {savedRows.length > 0 && (
-        <Card className="border-emerald-200/60 bg-emerald-50/40">
+        <Card className="border-[rgba(16,140,61,0.26)] bg-[rgba(16,140,61,0.05)]">
           <CardContent className="py-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-emerald-800">
+            <p className="text-xs font-medium uppercase tracking-wide text-[#0c6b2f]">
               Valutazioni archiviate ({savedRows.length})
             </p>
             <ul className="mt-2 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
