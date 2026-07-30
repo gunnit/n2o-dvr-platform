@@ -345,11 +345,17 @@ export default function PanoramicaTab({
       <Panel accent="sky">
         <PanelHeader icon={Send} title="Contatti" accent="sky" />
         {hasContatti ? (
+          // The tiles carry `min-w-0`: as grid items their default
+          // `min-width: auto` sized the single mobile track to the min-content
+          // of a nowrap email (360px inside a 309px box), so the panel's
+          // `overflow-hidden` ate the right edge of every address. With the
+          // floor removed the track fits and the `truncate` below does the
+          // eliding it was always meant to.
           <div className="grid gap-4 p-6 sm:grid-cols-2">
             {azienda.pec && (
               <a
                 href={`mailto:${azienda.pec}`}
-                className="group flex items-start gap-2.5 rounded-md border border-[#e5edf5] bg-white px-3 py-2.5 transition hover:border-[#0ea5e9]/50 hover:bg-[#f6f9fc]"
+                className="group flex min-w-0 items-start gap-2.5 rounded-md border border-[#e5edf5] bg-white px-3 py-2.5 transition hover:border-[#0ea5e9]/50 hover:bg-[#f6f9fc]"
               >
                 <Send
                   className="mt-0.5 h-4 w-4 shrink-0 text-[#0ea5e9]"
@@ -366,7 +372,7 @@ export default function PanoramicaTab({
             {azienda.email && (
               <a
                 href={`mailto:${azienda.email}`}
-                className="group flex items-start gap-2.5 rounded-md border border-[#e5edf5] bg-white px-3 py-2.5 transition hover:border-[#0ea5e9]/50 hover:bg-[#f6f9fc]"
+                className="group flex min-w-0 items-start gap-2.5 rounded-md border border-[#e5edf5] bg-white px-3 py-2.5 transition hover:border-[#0ea5e9]/50 hover:bg-[#f6f9fc]"
               >
                 <Mail
                   className="mt-0.5 h-4 w-4 shrink-0 text-[#0ea5e9]"
@@ -383,7 +389,7 @@ export default function PanoramicaTab({
             {azienda.telefono && (
               <a
                 href={`tel:${azienda.telefono.replace(/\s+/g, "")}`}
-                className="group flex items-start gap-2.5 rounded-md border border-[#e5edf5] bg-white px-3 py-2.5 transition hover:border-[#0ea5e9]/50 hover:bg-[#f6f9fc]"
+                className="group flex min-w-0 items-start gap-2.5 rounded-md border border-[#e5edf5] bg-white px-3 py-2.5 transition hover:border-[#0ea5e9]/50 hover:bg-[#f6f9fc]"
               >
                 <Phone
                   className="mt-0.5 h-4 w-4 shrink-0 text-[#0ea5e9]"
@@ -402,7 +408,7 @@ export default function PanoramicaTab({
                 href={sitoHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group flex items-start gap-2.5 rounded-md border border-[#e5edf5] bg-white px-3 py-2.5 transition hover:border-[#0ea5e9]/50 hover:bg-[#f6f9fc]"
+                className="group flex min-w-0 items-start gap-2.5 rounded-md border border-[#e5edf5] bg-white px-3 py-2.5 transition hover:border-[#0ea5e9]/50 hover:bg-[#f6f9fc]"
               >
                 <Globe
                   className="mt-0.5 h-4 w-4 shrink-0 text-[#0ea5e9]"

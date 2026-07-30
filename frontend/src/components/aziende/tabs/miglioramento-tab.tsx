@@ -521,7 +521,10 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
         subtitle={subtitle}
         accent="navy"
         action={
-          <div className="flex items-center gap-2">
+          // Three labelled buttons are ~260px; a 320px phone leaves 240px of
+          // panel. They wrap among themselves once the header has already
+          // dropped them onto their own row.
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               size="sm"

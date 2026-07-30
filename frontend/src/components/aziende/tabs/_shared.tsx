@@ -153,8 +153,14 @@ export function PanelHeader({
 }) {
   const accentMeta = accent ? PANEL_ACCENT[accent] : null;
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-[#e5edf5] px-6 py-4">
-      <div className="flex items-center gap-2.5 min-w-0">
+    // `flex-wrap`, not a breakpoint: the action is arbitrary — one icon button
+    // on some panels, three labelled ones on Miglioramento — so the only honest
+    // rule is "drop to your own row when you no longer fit". The title keeps a
+    // floor of 11rem so it is the *action* that wraps rather than the heading
+    // shrinking to an ellipsis beside it; `Panel` is `overflow-hidden`, so
+    // anything that does not fit is not merely cramped, it is invisible.
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-[#e5edf5] px-6 py-4">
+      <div className="flex min-w-[11rem] flex-1 items-center gap-2.5">
         {Icon &&
           (accentMeta ? (
             <span
@@ -198,32 +204,11 @@ export const riskLevelStyles: Record<string, string> = {
     "bg-[rgba(234,34,97,0.08)] text-[#b51648] border border-[rgba(234,34,97,0.3)]",
 };
 
-export const docStatusStyles: Record<string, string> = {
-  pending: "bg-[#f6f9fc] text-[#273951] border border-[#e5edf5]",
-  in_progress:
-    "bg-[rgba(155,104,41,0.12)] text-[#9b6829] border border-[rgba(155,104,41,0.3)]",
-  completed:
-    "bg-[rgba(21,190,83,0.2)] text-[#108c3d] border border-[rgba(21,190,83,0.4)]",
-  failed:
-    "bg-[rgba(234,34,97,0.08)] text-[#b51648] border border-[rgba(234,34,97,0.25)]",
-  bozza: "bg-[#f6f9fc] text-[#273951] border border-[#e5edf5]",
-};
-
-export const docStatusLabels: Record<string, string> = {
-  pending: "In attesa",
-  in_progress: "In generazione",
-  completed: "Pronto",
-  failed: "Errore",
-  bozza: "Bozza",
-};
-
-// Documents whose status indicates a downloadable file is available
-// on the server.
-export const DOWNLOADABLE_DOC_STATUSES = new Set([
-  "completed",
-  "ready",
-  "pronto",
-]);
+// Document status labels/styles and the downloadable-status set used to live
+// here as well, duplicating (and drifting from) the copies in
+// components/documents/document-types.ts — that module is now the single
+// source of truth for the status vocabulary. Import DOC_STATUS,
+// DOC_STATUS_TONE_CLASS, isReadyStatus and isBusyStatus from there.
 
 // Compact stat tile used by tab headers / summaries.
 export function StatTile({

@@ -313,7 +313,12 @@ export default function AziendaDetailPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="type-h1 truncate">{azienda.ragione_sociale}</h1>
+            {/* Wraps on a phone, truncates from `sm` up. At 390px the ellipsis
+                was eating 120px of the ragione sociale — the one label that
+                tells the operator which fascicolo they are standing in. */}
+            <h1 className="type-h1 break-words sm:truncate">
+              {azienda.ragione_sociale}
+            </h1>
             {(() => {
               const meta = surveyStatusMeta(azienda.survey_status);
               return (

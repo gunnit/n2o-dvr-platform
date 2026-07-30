@@ -175,7 +175,11 @@ export function DescriptionEditor({
             <AIBadge provenance="edited" timestamp={lastGeneratedAt} />
           )}
         </div>
-        <div className="flex items-center gap-2">
+        {/* `flex-wrap` here too, not only on the row above: "Carica visura" and
+            "Rigenera con AI" side by side are 288px of min-content, which at
+            320px was still the widest thing on the page and held the whole
+            document open by 34px. */}
+        <div className="flex flex-wrap items-center gap-2">
           <input
             ref={fileInputRef}
             type="file"

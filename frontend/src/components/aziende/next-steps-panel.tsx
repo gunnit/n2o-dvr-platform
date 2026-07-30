@@ -161,7 +161,14 @@ function StepRow({ step, index }: { step: Step; index: number }) {
           : Circle;
 
   return (
-    <li className="flex items-center gap-4 px-6 py-4">
+    // The CTA is `shrink-0` and the copy column was only `min-w-0 flex-1`, so
+    // on a phone the button took its 176px and the text took whatever was left
+    // — 33px on the Sopralluogo row, which rendered its description as a
+    // ~150px-tall ribbon one or two characters wide. Nothing overflowed, so it
+    // read as "fits". A 12rem floor on the copy makes the button wrap beneath
+    // it instead; above `sm` the row is nowhere near that tight and is
+    // unchanged.
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-3 px-6 py-4">
       <span className="tnum w-5 shrink-0 text-[12px] font-medium text-[#94a3b8]">
         {index}
       </span>
@@ -173,7 +180,7 @@ function StepRow({ step, index }: { step: Step; index: number }) {
       >
         <Icon className={"h-4 w-4 " + meta.iconColor} strokeWidth={2} />
       </span>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-[12rem] flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span
             className={
