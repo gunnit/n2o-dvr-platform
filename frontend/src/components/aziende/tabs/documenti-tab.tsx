@@ -3,12 +3,11 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ChevronDown,
   Download,
   ExternalLink,
   FileText,
-  Files,
   Filter,
-  Paperclip,
   Pencil,
   RotateCw,
   ShieldAlert,
@@ -16,94 +15,44 @@ import {
 import { toast } from "sonner";
 
 import {
-  DOWNLOADABLE_DOC_STATUSES,
   EmptyState,
   Panel,
   PanelHeader,
   StatTile,
-  StatusPill,
-  docStatusLabels,
-  docStatusStyles,
 } from "@/components/aziende/tabs/_shared";
-import { isEditedInline } from "@/components/documents/document-types";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DocumentCard,
+  DocumentCardActions,
+  DocumentCardHeader,
+  DocumentCardMeta,
+  DocumentStatusBadge,
+} from "@/components/documents/document-card";
+import {
+  CATEGORY_META,
+  CATEGORY_ORDER,
+  type DocCategory,
+  docCategoryFor,
+  documentTypeFor,
+  documentTypeFullLabel,
+  isBusyStatus,
+  isEditedInline,
+  isReadyStatus,
+} from "@/components/documents/document-types";
+import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { apiCall, downloadFile } from "@/lib/api-client";
 import { formatRelative } from "@/lib/ui/relative-time";
+import { cn } from "@/lib/utils";
 import type { DocumentoGenerato } from "@/types";
-
-const DOC_TYPE_LABELS: Record<string, string> = {
-  dvr_master: "DVR Master",
-  allegato_mmc: "Allegato MMC (Movimentazione Carichi)",
-  allegato_vdt: "Allegato VDT (Videoterminali)",
-  allegato_stress: "Allegato Stress Lavoro-Correlato",
-  allegato_gestanti: "Allegato Lavoratrici Gestanti",
-  allegato_incendio: "Allegato Rischio Incendio",
-  allegato_microclima: "Allegato Microclima",
-  allegato_microclima_severo: "Allegato Microclima Severo",
-  allegato_biologico_alimentare: "Allegato Biologico Alimentare",
-  allegato_biologico_asilo: "Allegato Biologico Asilo",
-  allegato_biologico_dentisti: "Allegato Biologico Dentisti",
-  pee_azienda: "Piano Emergenza Aziendale",
-  pee_comune: "Piano Emergenza Comunale",
-  haccp: "Manuale HACCP",
-  haccp_forms: "Schede Autocontrollo HACCP",
-  duvri: "DUVRI",
-  pos: "POS (Piano Operativo Sicurezza)",
-};
-
-type Category = "master" | "allegati" | "complementari";
-
-const DOC_CATEGORY: Record<string, Category> = {
-  dvr_master: "master",
-  allegato_mmc: "allegati",
-  allegato_vdt: "allegati",
-  allegato_stress: "allegati",
-  allegato_gestanti: "allegati",
-  allegato_incendio: "allegati",
-  allegato_microclima: "allegati",
-  allegato_microclima_severo: "allegati",
-  allegato_biologico_alimentare: "allegati",
-  allegato_biologico_asilo: "allegati",
-  allegato_biologico_dentisti: "allegati",
-  pee_azienda: "complementari",
-  pee_comune: "complementari",
-  haccp: "complementari",
-  haccp_forms: "complementari",
-  duvri: "complementari",
-  pos: "complementari",
-};
-
-const CATEGORY_META: Record<
-  Category,
-  {
-    label: string;
-    icon: typeof FileText;
-    accent: "navy" | "emerald" | "sky";
-  }
-> = {
-  master: { label: "DVR Master", icon: FileText, accent: "navy" },
-  allegati: { label: "Allegati DVR", icon: Paperclip, accent: "emerald" },
-  complementari: { label: "Documenti Complementari", icon: Files, accent: "sky" },
-};
-
-const CATEGORY_ORDER: Category[] = ["master", "allegati", "complementari"];
-
-const IN_PROGRESS_STATUSES = new Set(["pending", "in_progress", "generating"]);
-const FAILED_STATUSES = new Set(["failed", "error", "bozza"]);
 
 type StatusFilter = "ALL" | "ready" | "in_progress" | "failed";
 
+const FAILED_STATUSES = new Set(["failed", "error", "bozza"]);
+
 function matchesFilter(doc: DocumentoGenerato, filter: StatusFilter): boolean {
   if (filter === "ALL") return true;
-  if (filter === "ready") return DOWNLOADABLE_DOC_STATUSES.has(doc.status);
-  if (filter === "in_progress") return IN_PROGRESS_STATUSES.has(doc.status);
+  if (filter === "ready") return isReadyStatus(doc.status);
+  if (filter === "in_progress") return isBusyStatus(doc.status);
   if (filter === "failed") return FAILED_STATUSES.has(doc.status);
   return true;
 }
@@ -117,6 +66,19 @@ function formatDate(iso: string): string {
     year: "numeric",
   });
 }
+
+/**
+ * One card per document *type*, headed by its newest version. This tab used to
+ * render every version as its own table row, so a company with 17 documents at
+ * v3 produced 51 undifferentiated rows and the thing an operator actually
+ * wanted — "is the current DVR ready?" — was buried among superseded copies.
+ * Older versions now live behind the `v3` disclosure on their own card.
+ */
+type TypeGroup = {
+  key: string;
+  latest: DocumentoGenerato;
+  older: DocumentoGenerato[];
+};
 
 interface DocumentiTabProps {
   aziendaId: string;
@@ -133,17 +95,14 @@ export default function DocumentiTab({
   const [downloading, setDownloading] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const total = documenti.length;
-  // Status-only gating (here and on the row actions below): the download
+  // Status-only gating (here and on the card actions below): the download
   // endpoint serves the DB file_content, and rows minted by
   // save-edited-version (or legacy gdoc syncs) can have file_path NULL.
-  const readyCount = documenti.filter((d) =>
-    DOWNLOADABLE_DOC_STATUSES.has(d.status),
-  ).length;
-  const inProgressDocs = documenti.filter((d) =>
-    IN_PROGRESS_STATUSES.has(d.status),
-  );
+  const readyCount = documenti.filter((d) => isReadyStatus(d.status)).length;
+  const inProgressDocs = documenti.filter((d) => isBusyStatus(d.status));
   const inProgressCount = inProgressDocs.length;
   const staleCount = documenti.filter((d) => d.stale_snapshot).length;
   const hasStale = staleCount > 0;
@@ -164,21 +123,48 @@ export default function DocumentiTab({
 
   const filtered = documenti.filter((d) => matchesFilter(d, statusFilter));
 
+  // Filter first, then group: with "Falliti" active a type appears only if it
+  // has a failed version, and the card is headed by that version rather than
+  // by a newer successful one that the filter excluded.
   const grouped = useMemo(() => {
-    const map: Record<Category, DocumentoGenerato[]> = {
-      master: [],
-      allegati: [],
-      complementari: [],
-    };
+    const byType = new Map<string, DocumentoGenerato[]>();
     for (const doc of filtered) {
-      const cat = DOC_CATEGORY[doc.tipo_documento] ?? "complementari";
-      map[cat].push(doc);
+      const list = byType.get(doc.tipo_documento);
+      if (list) list.push(doc);
+      else byType.set(doc.tipo_documento, [doc]);
+    }
+
+    const map: Record<DocCategory, TypeGroup[]> = {
+      dvr: [],
+      allegati: [],
+      emergenza: [],
+      haccp: [],
+      contratti: [],
+    };
+    for (const [key, versions] of byType) {
+      const sorted = [...versions].sort((a, b) => b.versione - a.versione);
+      map[docCategoryFor(key)].push({
+        key,
+        latest: sorted[0],
+        older: sorted.slice(1),
+      });
     }
     for (const cat of CATEGORY_ORDER) {
-      map[cat].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+      map[cat].sort((a, b) =>
+        a.latest.created_at < b.latest.created_at ? 1 : -1,
+      );
     }
     return map;
   }, [filtered]);
+
+  function toggleExpanded(key: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   async function handleDownload(doc: DocumentoGenerato) {
     if (downloading) return;
@@ -311,22 +297,21 @@ export default function DocumentiTab({
           ) : (
             <div className="flex flex-col gap-6">
               {CATEGORY_ORDER.map((cat) => {
-                const docs = grouped[cat];
-                if (docs.length === 0) return null;
+                const groups = grouped[cat];
+                if (groups.length === 0) return null;
                 const meta = CATEGORY_META[cat];
-                const Icon = meta.icon;
                 return (
                   <section key={cat}>
-                    <div className="mb-2 flex items-center gap-2">
-                      <Icon
-                        className="h-3.5 w-3.5 text-[#64748d]"
-                        strokeWidth={1.75}
+                    <div className="mb-3 flex items-center gap-2">
+                      <span
+                        className={cn("h-2 w-2 rounded-full", meta.rail)}
+                        aria-hidden
                       />
                       <h4 className="font-heading text-[13px] font-semibold tracking-[-0.005em] text-[#061b31]">
                         {meta.label}
                       </h4>
                       <span className="tnum inline-flex items-center rounded-md border border-[#e5edf5] bg-[#f6f9fc] px-1.5 py-0.5 text-[11px] font-medium text-[#273951]">
-                        {docs.length}
+                        {groups.length}
                       </span>
                       <span
                         aria-hidden
@@ -334,161 +319,197 @@ export default function DocumentiTab({
                       />
                     </div>
 
-                    <div className="overflow-hidden rounded-md border border-[#e5edf5]">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Documento</TableHead>
-                            <TableHead className="w-[80px]">Versione</TableHead>
-                            <TableHead className="w-[140px]">Stato</TableHead>
-                            <TableHead className="w-[180px]">Generato</TableHead>
-                            <TableHead className="w-[200px] text-right">
-                              Azioni
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {docs.map((doc) => {
-                            const label =
-                              DOC_TYPE_LABELS[doc.tipo_documento] ??
-                              doc.tipo_documento;
-                            const canDownload = DOWNLOADABLE_DOC_STATUSES.has(
-                              doc.status,
-                            );
-                            // HACCP schede are a .zip payload — no docx to
-                            // open in the in-browser editor.
-                            const canEdit =
-                              canDownload &&
-                              doc.tipo_documento !== "haccp_forms";
-                            const isDownloading = downloading === doc.id;
-                            const isRegenerating = regenerating === doc.id;
-                            const statusLabel =
-                              docStatusLabels[doc.status] ?? doc.status;
-                            const statusStyle =
-                              docStatusStyles[doc.status] ??
-                              docStatusStyles.pending;
-                            return (
-                              <TableRow key={doc.id}>
-                                <TableCell>
-                                  <div className="flex flex-col gap-0.5">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-[13px] font-medium text-[#061b31]">
-                                        {label}
-                                      </span>
-                                      {doc.stale_snapshot && (
-                                        <StatusPill className="bg-[rgba(155,104,41,0.12)] text-[#9b6829] border border-[rgba(155,104,41,0.3)]">
-                                          Da rigenerare
-                                        </StatusPill>
-                                      )}
-                                    </div>
-                                    <span className="text-[11px] text-[#64748d]">
-                                      {doc.edited_in_gdocs ? (
-                                        <span className="inline-flex items-center gap-1">
-                                          <ExternalLink
-                                            className="h-3 w-3"
-                                            strokeWidth={1.75}
-                                          />
-                                          Modificato in Google Docs
-                                        </span>
-                                      ) : isEditedInline(doc) ? (
-                                        <span className="inline-flex items-center gap-1">
-                                          <Pencil
-                                            className="h-3 w-3"
-                                            strokeWidth={1.75}
-                                          />
-                                          Modificato nell&apos;editor
-                                        </span>
-                                      ) : (
-                                        "—"
-                                      )}
-                                    </span>
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <span className="tnum text-[13px] text-[#273951]">
-                                    v{doc.versione}
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      {groups.map(({ key, latest, older }) => {
+                        const catalogue = documentTypeFor(key);
+                        const Icon = catalogue?.icon ?? FileText;
+                        const ready = isReadyStatus(latest.status);
+                        // HACCP schede are a .zip payload — no docx to open
+                        // in the in-browser editor.
+                        const canEdit = ready && key !== "haccp_forms";
+                        const isDownloading = downloading === latest.id;
+                        const isRegenerating = regenerating === latest.id;
+                        const isOpen = expanded.has(key);
+
+                        return (
+                          <DocumentCard
+                            key={key}
+                            rail={meta.rail}
+                            texture={meta.texture}
+                            ready={ready}
+                          >
+                            <DocumentCardHeader
+                              icon={Icon}
+                              accent={meta.accent}
+                              title={documentTypeFullLabel(key)}
+                              eyebrow={
+                                catalogue && (
+                                  <>
+                                    <span className="tnum">
+                                      {catalogue.pages}
+                                    </span>{" "}
+                                    pagine
+                                  </>
+                                )
+                              }
+                              trailing={
+                                <DocumentStatusBadge
+                                  status={latest.status}
+                                  title={latest.error_message ?? undefined}
+                                />
+                              }
+                            />
+
+                            <DocumentCardMeta
+                              items={[
+                                <span
+                                  key="v"
+                                  className="tnum font-semibold text-[#273951]"
+                                >
+                                  v{latest.versione}
+                                </span>,
+                                <span key="d" className="tnum">
+                                  {formatDate(latest.created_at)}
+                                </span>,
+                                formatRelative(latest.created_at),
+                                latest.generated_by_name,
+                                latest.edited_in_gdocs ? (
+                                  <span key="edited">
+                                    <ExternalLink
+                                      className="mr-1 inline h-3 w-3 align-[-2px]"
+                                      strokeWidth={1.75}
+                                    />
+                                    Google Docs
                                   </span>
-                                </TableCell>
-                                <TableCell>
-                                  <div className="flex flex-col gap-1">
-                                    <StatusPill className={statusStyle}>
-                                      {statusLabel}
-                                    </StatusPill>
-                                    {doc.error_message && (
-                                      <span
-                                        className="text-[11px] text-[#b51648] truncate max-w-[180px]"
-                                        title={doc.error_message}
-                                      >
-                                        {doc.error_message}
-                                      </span>
+                                ) : isEditedInline(latest) ? (
+                                  <span key="edited">
+                                    <Pencil
+                                      className="mr-1 inline h-3 w-3 align-[-2px]"
+                                      strokeWidth={1.75}
+                                    />
+                                    Modificato
+                                  </span>
+                                ) : null,
+                              ]}
+                            />
+
+                            {latest.stale_snapshot && (
+                              <Callout
+                                tone="warn"
+                                dense
+                                className="px-2 py-1 text-[11.5px]"
+                              >
+                                Sopralluogo cambiato dopo la generazione — da
+                                rigenerare
+                              </Callout>
+                            )}
+
+                            {latest.error_message && (
+                              <p className="text-[11.5px] text-[#8a5c23]">
+                                {latest.error_message}
+                              </p>
+                            )}
+
+                            <DocumentCardActions>
+                              {/* Download carries the primary weight and
+                                  "Rigenera" drops to a quiet icon: regeneration
+                                  burns metered AI credits, and as a full-width
+                                  labelled button on every finished row it was
+                                  the loudest control in the tab. */}
+                              <Button
+                                size="sm"
+                                onClick={() => handleDownload(latest)}
+                                disabled={!ready || isDownloading}
+                              >
+                                <Download />
+                                Scarica
+                              </Button>
+                              {canEdit && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    router.push(`/documents/${latest.id}`)
+                                  }
+                                >
+                                  <Pencil />
+                                  Apri
+                                </Button>
+                              )}
+                              <Button
+                                size="icon-sm"
+                                variant="ghost"
+                                onClick={() => handleRegenerate(latest)}
+                                disabled={isRegenerating}
+                                title="Rigenera — consuma crediti AI"
+                                aria-label={`Rigenera ${documentTypeFullLabel(key)}`}
+                              >
+                                <RotateCw
+                                  className={isRegenerating ? "animate-spin" : ""}
+                                />
+                              </Button>
+                              {older.length > 0 && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="ml-auto"
+                                  onClick={() => toggleExpanded(key)}
+                                  aria-expanded={isOpen}
+                                  title={`${older.length} version${older.length === 1 ? "e" : "i"} precedent${older.length === 1 ? "e" : "i"}`}
+                                >
+                                  <ChevronDown
+                                    className={cn(
+                                      "transition-transform",
+                                      isOpen && "rotate-180",
                                     )}
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="tnum text-[13px] text-[#273951]">
+                                  />
+                                  <span className="tnum">{older.length}</span>
+                                </Button>
+                              )}
+                            </DocumentCardActions>
+
+                            {isOpen && older.length > 0 && (
+                              <ul className="-mt-1 flex flex-col divide-y divide-[#f1f5f9] rounded-md border border-[#eef2f7] bg-[#fbfdff]">
+                                {older.map((doc) => (
+                                  <li
+                                    key={doc.id}
+                                    className="flex items-center gap-2 px-2.5 py-1.5 text-[12px]"
+                                  >
+                                    <span className="tnum font-semibold text-[#273951]">
+                                      v{doc.versione}
+                                    </span>
+                                    <span className="tnum text-[#64748d]">
                                       {formatDate(doc.created_at)}
                                     </span>
-                                    <span className="tnum text-[11px] text-[#64748d]">
-                                      {formatRelative(doc.created_at)}
-                                      {doc.generated_by_name
-                                        ? ` · ${doc.generated_by_name}`
-                                        : ""}
-                                    </span>
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <div className="flex items-center justify-end gap-1">
-                                    {canEdit && (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          router.push(`/documents/${doc.id}`)
-                                        }
-                                        title="Apri nell'editor del browser"
-                                        className="inline-flex items-center gap-1 rounded-md border border-[#e5edf5] bg-white px-2 py-1 text-[12px] font-medium text-[#273951] hover:bg-[#f6f9fc]"
-                                      >
-                                        <Pencil
-                                          className="h-3.5 w-3.5"
-                                          strokeWidth={1.75}
-                                        />
-                                        Apri
-                                      </button>
+                                    {doc.generated_by_name && (
+                                      <span className="truncate text-[#94a3b8]">
+                                        {doc.generated_by_name}
+                                      </span>
                                     )}
-                                    <button
-                                      type="button"
+                                    <DocumentStatusBadge
+                                      status={doc.status}
+                                      className="ml-auto"
+                                    />
+                                    <Button
+                                      size="icon-xs"
+                                      variant="ghost"
                                       onClick={() => handleDownload(doc)}
-                                      disabled={!canDownload || isDownloading}
-                                      className="inline-flex items-center gap-1 rounded-md border border-[#e5edf5] bg-white px-2 py-1 text-[12px] font-medium text-[#273951] hover:bg-[#f6f9fc] disabled:cursor-not-allowed disabled:opacity-50"
+                                      disabled={
+                                        !isReadyStatus(doc.status) ||
+                                        downloading === doc.id
+                                      }
+                                      title={`Scarica v${doc.versione}`}
+                                      aria-label={`Scarica versione ${doc.versione}`}
                                     >
-                                      <Download
-                                        className="h-3.5 w-3.5"
-                                        strokeWidth={1.75}
-                                      />
-                                      Scarica
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRegenerate(doc)}
-                                      disabled={isRegenerating}
-                                      className="inline-flex items-center gap-1 rounded-md border border-[#e5edf5] bg-white px-2 py-1 text-[12px] font-medium text-[#273951] hover:bg-[#f6f9fc] disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
-                                      <RotateCw
-                                        className={
-                                          "h-3.5 w-3.5 " +
-                                          (isRegenerating ? "animate-spin" : "")
-                                        }
-                                        strokeWidth={1.75}
-                                      />
-                                      Rigenera
-                                    </button>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
+                                      <Download />
+                                    </Button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </DocumentCard>
+                        );
+                      })}
                     </div>
                   </section>
                 );

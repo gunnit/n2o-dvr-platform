@@ -7,9 +7,6 @@ import {
   RefreshCw,
   Download,
   Loader2,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
   History,
   Lock,
   User as UserIcon,
@@ -17,10 +14,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Callout } from "@/components/ui/callout";
 import { Label } from "@/components/ui/label";
-import { Monogram } from "@/components/cards/Monogram";
 import { formatRelative } from "@/lib/ui/relative-time";
 import {
   Dialog,
@@ -34,8 +29,17 @@ import {
   CATEGORY_META,
   CATEGORY_ORDER,
   documentTypes,
+  isBusyStatus,
   isEditedInline,
+  isReadyStatus,
 } from "@/components/documents/document-types";
+import {
+  DocumentCard,
+  DocumentCardActions,
+  DocumentCardHeader,
+  DocumentCardMeta,
+  DocumentStatusBadge,
+} from "@/components/documents/document-card";
 import { VersionHistory } from "@/components/documents/version-history";
 import type { Azienda, DocumentoGenerato } from "@/types";
 import { apiCall, downloadFile } from "@/lib/api-client";
@@ -48,69 +52,6 @@ import { DOCUMENTS_GENERATE } from "@/lib/permissions";
 import { Select } from "@/components/ui/select";
 import { aziendaOptionLabel } from "@/lib/ui/azienda-label";
 import { EmptyStateCard } from "@/components/ui/empty-state";
-
-const complexityColors: Record<string, string> = {
-  Alta: "bg-[rgba(186,26,26,0.1)] text-[#ba1a1a] border border-[rgba(186,26,26,0.3)]",
-  Media:
-    "bg-[rgba(245,158,11,0.12)] text-[#9b6829] border border-[rgba(245,158,11,0.3)]",
-  Bassa:
-    "bg-[rgba(21,190,83,0.2)] text-[#108c3d] border border-[rgba(21,190,83,0.4)]",
-};
-
-const statusConfig: Record<string, { color: string; label: string; icon: typeof Clock }> = {
-  pending: {
-    color: "bg-[#f6f9fc] text-[#273951] border border-[#e5edf5]",
-    label: "In attesa",
-    icon: Clock,
-  },
-  in_progress: {
-    color:
-      "bg-[rgba(245,158,11,0.12)] text-[#9b6829] border border-[rgba(245,158,11,0.3)]",
-    label: "In generazione",
-    icon: Loader2,
-  },
-  generating: {
-    color:
-      "bg-[rgba(245,158,11,0.12)] text-[#9b6829] border border-[rgba(245,158,11,0.3)]",
-    label: "In generazione",
-    icon: Loader2,
-  },
-  completed: {
-    color:
-      "bg-[rgba(21,190,83,0.2)] text-[#108c3d] border border-[rgba(21,190,83,0.4)]",
-    label: "Pronto",
-    icon: CheckCircle2,
-  },
-  ready: {
-    color:
-      "bg-[rgba(21,190,83,0.2)] text-[#108c3d] border border-[rgba(21,190,83,0.4)]",
-    label: "Pronto",
-    icon: CheckCircle2,
-  },
-  // US-2.8 AC3: a failed attempt is rolled back to "bozza" — partial
-  // file discarded, record retained so the operator can retry without
-  // starting from scratch. Amber rather than red because the record is
-  // still usable (retry is available); red is reserved for non-recoverable
-  // legacy "failed" rows that predate the rollback logic.
-  bozza: {
-    color:
-      "bg-[rgba(245,158,11,0.12)] text-[#9b6829] border border-[rgba(245,158,11,0.3)]",
-    label: "Bozza",
-    icon: AlertCircle,
-  },
-  failed: {
-    color:
-      "bg-[rgba(186,26,26,0.1)] text-[#ba1a1a] border border-[rgba(186,26,26,0.3)]",
-    label: "Errore",
-    icon: AlertCircle,
-  },
-  error: {
-    color:
-      "bg-[rgba(186,26,26,0.1)] text-[#ba1a1a] border border-[rgba(186,26,26,0.3)]",
-    label: "Errore",
-    icon: AlertCircle,
-  },
-};
 
 export default function DocumentsPage() {
   const vocab = useTenantVocabulary();
@@ -441,7 +382,6 @@ export default function DocumentsPage() {
                     const existing = getDocStatus(docType.key);
                     const isGenerating = generatingTypes.has(docType.key);
                     const status = existing?.status;
-                    const config = status ? statusConfig[status] : null;
                     const versionCount = documenti.filter(
                       (d) => d.tipo_documento === docType.key,
                     ).length;
@@ -457,228 +397,206 @@ export default function DocumentsPage() {
                     // disabled and the way out is a link to /billing.
                     const gatedByPlan = isDocTypeGated(entitlements, docType.key);
                     const ActionIcon = docType.icon;
-                    const isReady =
-                      existing?.status === "ready" ||
-                      existing?.status === "completed";
+                    const isReady = Boolean(status && isReadyStatus(status));
+                    const isBusy =
+                      isGenerating || Boolean(status && isBusyStatus(status));
 
                     return (
-                      <div
+                      <DocumentCard
                         key={docType.key}
-                        className={cn(
-                          "group relative overflow-hidden rounded-md border border-[#e5edf5] bg-white shadow-stripe-ambient transition-[box-shadow,border-color] hover:border-[#d1d9e3] hover:shadow-stripe-elevated",
-                          blockedByDvr && "opacity-75",
-                          gatedByPlan && "opacity-60",
-                        )}
+                        rail={catMeta.rail}
+                        texture={catMeta.texture}
+                        ready={isReady}
+                        dimmed={blockedByDvr || gatedByPlan}
                       >
-                        <span
-                          className={cn(
-                            "absolute inset-y-0 left-0 w-[3px]",
-                            catMeta.rail,
-                          )}
-                          aria-hidden
+                        <DocumentCardHeader
+                          icon={ActionIcon}
+                          accent={catMeta.accent}
+                          title={docType.name}
+                          eyebrow={
+                            <>
+                              <span className="tnum">{docType.pages}</span>{" "}
+                              pagine · complessità{" "}
+                              {docType.complexity.toLowerCase()}
+                            </>
+                          }
+                          trailing={
+                            status ? (
+                              <DocumentStatusBadge
+                                status={status}
+                                title={
+                                  status === "bozza" && existing?.error_message
+                                    ? existing.error_message
+                                    : undefined
+                                }
+                              />
+                            ) : (
+                              <span className="rounded-md border border-dashed border-[#e5edf5] px-2 py-[3px] text-[11.5px] font-medium text-[#94a3b8] whitespace-nowrap">
+                                Mai generato
+                              </span>
+                            )
+                          }
                         />
-                        <div className="flex flex-col gap-3 p-[18px] pl-[22px]">
-                          <div className="flex items-start gap-3">
-                            <Monogram accent={catMeta.accent}>
-                              <ActionIcon className="h-5 w-5" strokeWidth={1.75} />
-                            </Monogram>
-                            <div className="min-w-0 flex-1">
-                              <h4 className="font-heading text-[14.5px] font-semibold leading-[1.25] tracking-[-0.005em] text-[#061b31]">
-                                {docType.name}
-                              </h4>
-                              <p className="mt-0.5 text-[11.5px] font-medium uppercase tracking-[0.04em] text-[#94a3b8]">
-                                <span className="tnum">{docType.pages}</span>{" "}
-                                pagine
-                              </p>
-                            </div>
-                            <Badge
-                              className={cn(
-                                complexityColors[docType.complexity],
-                                "shrink-0",
-                              )}
-                            >
-                              {docType.complexity}
-                            </Badge>
-                          </div>
 
-                          {blockedByDvr && (
-                            <Callout tone="warn" dense className="px-2 py-1 text-[11.5px]">
-                              Genera prima il DVR Master
-                            </Callout>
-                          )}
+                        {blockedByDvr && (
+                          <Callout tone="warn" dense className="px-2 py-1 text-[11.5px]">
+                            Genera prima il DVR Master
+                          </Callout>
+                        )}
 
-                          {gatedByPlan && (
-                            <Callout
-                              tone="warn"
-                              dense
-                              className="px-2 py-1.5 text-[11.5px]"
-                              icon={<Lock className="h-3 w-3" strokeWidth={2} />}
-                              action={
-                                <Link
-                                  href="/billing"
-                                  className="font-semibold underline underline-offset-2"
+                        {gatedByPlan && (
+                          <Callout
+                            tone="warn"
+                            dense
+                            className="px-2 py-1.5 text-[11.5px]"
+                            icon={<Lock className="h-3 w-3" strokeWidth={2} />}
+                            action={
+                              <Link
+                                href="/billing"
+                                className="font-semibold underline underline-offset-2"
+                              >
+                                Passa a un piano superiore
+                              </Link>
+                            }
+                          >
+                            Non incluso nel piano
+                          </Callout>
+                        )}
+
+                        {existing && (
+                          <DocumentCardMeta
+                            items={[
+                              <span
+                                key="v"
+                                className="tnum font-semibold text-[#273951]"
+                              >
+                                v{existing.versione}
+                              </span>,
+                              formatRelative(existing.created_at),
+                              existing.generated_by_name && (
+                                <span key="author">
+                                  <UserIcon
+                                    className="mr-1 inline h-3 w-3 align-[-2px]"
+                                    strokeWidth={1.75}
+                                  />
+                                  {existing.generated_by_name}
+                                </span>
+                              ),
+                              isEditedInline(existing) && (
+                                <span
+                                  key="edited"
+                                  className="inline-flex items-center gap-1 text-[#273951]"
+                                  title="Versione creata con modifiche fatte nell'editor del browser"
                                 >
-                                  Passa a un piano superiore
-                                </Link>
-                              }
-                            >
-                              Non incluso nel piano
-                            </Callout>
-                          )}
+                                  <Pencil
+                                    className="h-2.5 w-2.5"
+                                    strokeWidth={2}
+                                  />
+                                  Modificato
+                                </span>
+                              ),
+                            ]}
+                          />
+                        )}
 
-                          {existing && config ? (
-                            <div className="grid grid-cols-2 gap-3 border-t border-[#eef2f7] pt-3">
-                              <div className="min-w-0">
-                                <div className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
-                                  Stato
-                                </div>
-                                <div className="mt-0.5 flex flex-wrap items-center gap-1">
-                                  <Badge
-                                    className={config.color}
-                                    title={
-                                      status === "bozza" && existing.error_message
-                                        ? existing.error_message
-                                        : undefined
-                                    }
-                                  >
-                                    {(status === "generating" ||
-                                      status === "in_progress") && (
-                                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                                    )}
-                                    {config.label}
-                                  </Badge>
-                                  {isEditedInline(existing) && (
-                                    <Badge title="Versione creata con modifiche fatte nell'editor del browser">
-                                      <Pencil className="mr-1 h-2.5 w-2.5" />
-                                      Modificato
-                                    </Badge>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="min-w-0">
-                                <div className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
-                                  Versione · aggiornato
-                                </div>
-                                <div className="mt-0.5 truncate text-[13px] font-semibold text-[#273951]">
-                                  <span className="tnum">v{existing.versione}</span>{" "}
-                                  <span className="font-normal text-[#64748d]">
-                                    · {formatRelative(existing.created_at)}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <p className="text-[12px] text-[#94a3b8]">
-                              Mai generato
-                            </p>
-                          )}
+                        {status === "bozza" && existing?.error_message && (
+                          <p className="text-[11.5px] text-[#8a5c23]">
+                            {existing.error_message}
+                          </p>
+                        )}
 
-                          {existing?.generated_by_name && (
-                            <p className="flex items-center gap-1 text-[11.5px] text-[#64748d]">
-                              <UserIcon className="h-3 w-3" strokeWidth={1.75} />
-                              {existing.generated_by_name}
-                            </p>
-                          )}
-
-                          {status === "bozza" && existing?.error_message && (
-                            <p className="text-[11.5px] text-[#8a5c23]">
-                              {existing.error_message}
-                            </p>
-                          )}
-
-                          <div className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-[#eef2f7] pt-3">
-                            {/* Hidden, not disabled: a greyed-out "Genera" on
-                                every card invites a field operator to keep
-                                clicking. The download actions below stay. */}
-                            {canGenerate && (
+                        <DocumentCardActions>
+                          {/* Action weight follows what the operator actually
+                              wants and what the tenant pays for. On a ready
+                              document the download is the goal, so it carries
+                              the primary weight; "Rigenera" burns AI credits
+                              (metered — see app/billing) and drops to a quiet
+                              icon, where it used to be the loudest control on
+                              every finished card. */}
+                          {isReady && (
                             <Button
                               size="sm"
-                              variant={isReady ? "outline" : "default"}
-                              onClick={() => handleGenerate(docType.key)}
-                              disabled={
-                                isGenerating ||
-                                status === "generating" ||
-                                status === "in_progress" ||
-                                gatedByPlan
+                              onClick={async () => {
+                                try {
+                                  await downloadFile(
+                                    `/api/v1/documenti/${existing!.id}/download`,
+                                  );
+                                } catch (e) {
+                                  alert(
+                                    (e as Error).message || "Download fallito",
+                                  );
+                                }
+                              }}
+                            >
+                              <Download />
+                              Scarica
+                            </Button>
+                          )}
+                          {/* In-browser preview + inline editing. HACCP
+                              schede are a .zip payload with no docx to
+                              preview, so they stay download-only. */}
+                          {isReady && docType.key !== "haccp_forms" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                router.push(`/documents/${existing!.id}`)
                               }
+                              aria-label={`Modifica ${docType.name} nel browser`}
+                            >
+                              <Pencil />
+                              Modifica
+                            </Button>
+                          )}
+                          {/* Hidden, not disabled: a greyed-out "Genera" on
+                              every card invites a field operator to keep
+                              clicking. The download actions above stay. */}
+                          {canGenerate && (
+                            <Button
+                              size={isReady ? "icon-sm" : "sm"}
+                              variant={isReady ? "ghost" : "default"}
+                              onClick={() => handleGenerate(docType.key)}
+                              disabled={isBusy || gatedByPlan}
                               title={
                                 gatedByPlan
                                   ? "Il tuo piano non include questo tipo di documento"
+                                  : isReady
+                                    ? "Rigenera — consuma crediti AI"
+                                    : undefined
+                              }
+                              aria-label={
+                                isReady
+                                  ? `Rigenera ${docType.name}`
                                   : undefined
                               }
                             >
-                              {isGenerating ||
-                              status === "generating" ||
-                              status === "in_progress" ? (
-                                <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                              {isBusy ? (
+                                <Loader2 className="animate-spin" />
                               ) : (
-                                <RefreshCw className="mr-1.5 h-3 w-3" />
+                                <RefreshCw />
                               )}
                               {isReady
-                                ? "Rigenera"
+                                ? null
                                 : existing?.status === "bozza"
                                   ? "Riprova"
                                   : "Genera"}
                             </Button>
-                            )}
-                            {/* Download/editor actions gate on status only:
-                                the download endpoint serves the DB
-                                file_content, and rows minted by
-                                save-edited-version (or legacy gdoc syncs)
-                                can have file_path NULL. */}
-                            {isReady && (
-                              <Button
-                                size="icon-sm"
-                                variant="ghost"
-                                title="Scarica"
-                                aria-label="Scarica"
-                                onClick={async () => {
-                                  try {
-                                    await downloadFile(
-                                      `/api/v1/documenti/${existing.id}/download`,
-                                    );
-                                  } catch (e) {
-                                    alert(
-                                      (e as Error).message || "Download fallito",
-                                    );
-                                  }
-                                }}
-                              >
-                                <Download className="h-4 w-4" />
-                              </Button>
-                            )}
-                            {/* In-browser preview + inline editing. HACCP
-                                schede are a .zip payload with no docx to
-                                preview, so they stay download-only. */}
-                            {isReady && docType.key !== "haccp_forms" && (
-                              <Button
-                                size="icon-sm"
-                                variant="ghost"
-                                onClick={() =>
-                                  router.push(`/documents/${existing.id}`)
-                                }
-                                title="Modifica nel browser"
-                                aria-label={`Modifica ${docType.name} nel browser`}
-                              >
-                                <Pencil />
-                              </Button>
-                            )}
-                            {versionCount > 0 && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="ml-auto h-8 px-2"
-                                onClick={() => setHistoryTipo(docType.key)}
-                                title={`Storia versioni (${versionCount})`}
-                                aria-label={`Storia versioni ${docType.name}`}
-                              >
-                                <History className="mr-1 h-4 w-4" />
-                                v{versionCount}
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                          )}
+                          {versionCount > 0 && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="ml-auto"
+                              onClick={() => setHistoryTipo(docType.key)}
+                              title={`Storia versioni (${versionCount})`}
+                              aria-label={`Storia versioni ${docType.name}`}
+                            >
+                              <History />
+                              <span className="tnum">v{versionCount}</span>
+                            </Button>
+                          )}
+                        </DocumentCardActions>
+                      </DocumentCard>
                     );
                   })}
                 </div>
