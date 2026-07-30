@@ -715,3 +715,137 @@ def test_admin_set_plan_404s_for_an_unknown_organization():
     """A dangling id is 'no such tenant', not an integrity error dressed as 500."""
     resp = _run(_set_plan(org_id=uuid.uuid4()), platform_admin=True)
     assert resp.status_code == 404, resp.text
+
+
+# --- The browser-return settle (POST /billing/subscribe/confirm) -------------
+#
+# The webhook is not the only thing that has to activate a subscription. PayPal
+# redirects the buyer back the instant they approve and delivers
+# BILLING.SUBSCRIPTION.ACTIVATED afterwards — 14 seconds afterwards on
+# 2026-07-29, which was long enough for the page to read its own pre-purchase
+# entitlements and cache them for the whole session. So the return settles too,
+# and these pin the two properties that makes safe: it activates, and it
+# activates only for the tenant that actually owns the subscription.
+
+
+def _confirm(sub_id: str = "I-PYTEST1", *, paypal_status: str = "ACTIVE", owner=None):
+    """Confirm ``sub_id`` from the browser; return (response, (status, plan_code))."""
+
+    async def body(client, t, factory):
+        from app.billing import paypal_client
+
+        async def fake_get(_):
+            return _paypal_resource(sub_id, owner or t.org_id, paypal_status)
+
+        paypal_client.get_subscription = fake_get
+        resp = await client.post(
+            "/api/v1/billing/subscribe/confirm",
+            json={"paypal_subscription_id": sub_id},
+            headers=t.headers,
+        )
+        return resp, await _status_of(factory, t.org_id)
+
+    return body
+
+
+def test_confirm_activates_a_subscription_the_webhook_has_not_reported_yet():
+    """The race this endpoint exists to lose gracefully.
+
+    A tenant that has never bought anything approves at PayPal and comes back
+    before the webhook lands. Without this the page reads `subscribed: false`
+    and — because the entitlements provider fetches once per shell mount —
+    keeps saying "non hai ancora un piano" at a customer who has paid.
+    """
+    resp, (status, plan_code) = _run(
+        _confirm(),
+        subscribed=False,
+        patches={**_CONFIGURED, "get_subscription": None},
+    )
+    assert resp.status_code == 200, resp.text
+    assert (status, plan_code) == ("active", PLAN_CODE)
+    assert resp.json()["subscribed"] is True
+    assert resp.json()["is_active"] is True
+
+
+def test_confirm_refuses_a_subscription_belonging_to_another_tenant():
+    """The reason this cannot just forward the caller's org id to lifecycle.
+
+    The id arrives in a URL the customer's browser hands us — unlike a webhook,
+    it is not signature-verified. Stapling someone else's paid subscription to
+    your own organization would be a free plan for anyone who can guess an id,
+    so ownership is checked against PayPal's `custom_id` and a mismatch is a
+    404 that grants nothing.
+    """
+    resp, (status, plan_code) = _run(
+        _confirm(owner=uuid.uuid4()),
+        subscribed=False,
+        patches={**_CONFIGURED, "get_subscription": None},
+    )
+    assert resp.status_code == 404, resp.text
+    assert (status, plan_code) == (None, None)
+
+
+def test_confirm_is_idempotent_with_the_webhook():
+    """Both paths settle the same subscription; the second one is a no-op.
+
+    Same guarantee `/credits/capture` has, and for the same reason — the write
+    reconciles from PayPal's resource rather than applying a delta.
+    """
+
+    async def body(client, t, factory):
+        from app.billing import paypal_client
+
+        async def fake_get(sub_id):
+            return _paypal_resource(sub_id, t.org_id, "ACTIVE")
+
+        paypal_client.get_subscription = fake_get
+        first = await client.post(
+            "/api/v1/billing/subscribe/confirm",
+            json={"paypal_subscription_id": "I-PYTEST1"},
+            headers=t.headers,
+        )
+        second = await client.post(
+            "/api/v1/billing/subscribe/confirm",
+            json={"paypal_subscription_id": "I-PYTEST1"},
+            headers=t.headers,
+        )
+        async with factory() as s:
+            rows = (
+                await s.execute(
+                    text("SELECT count(*) FROM subscriptions WHERE organization_id = :o"),
+                    {"o": t.org_id},
+                )
+            ).scalar_one()
+        return first, second, rows
+
+    first, second, rows = _run(
+        body, subscribed=False, patches={**_CONFIGURED, "get_subscription": None}
+    )
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert rows == 1
+    assert second.json()["plan_code"] == PLAN_CODE
+
+
+def test_confirm_404s_when_paypal_does_not_know_the_subscription():
+    """A guessed or stale id must not become an activation."""
+
+    async def body(client, t, factory):
+        from app.billing import paypal_client
+
+        async def fake_get(_):
+            return None
+
+        paypal_client.get_subscription = fake_get
+        resp = await client.post(
+            "/api/v1/billing/subscribe/confirm",
+            json={"paypal_subscription_id": "I-NOSUCH"},
+            headers=t.headers,
+        )
+        return resp, await _status_of(factory, t.org_id)
+
+    resp, (status, plan_code) = _run(
+        body, subscribed=False, patches={**_CONFIGURED, "get_subscription": None}
+    )
+    assert resp.status_code == 404, resp.text
+    assert (status, plan_code) == (None, None)

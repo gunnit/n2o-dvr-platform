@@ -19,15 +19,24 @@ export function useEntitlements() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // `loading` starts true and only ever falls — a revalidation updates the plan
+  // in place rather than blanking it. Every consumer renders nothing while
+  // `loading` is true, so raising it again on each refetch would make the
+  // sidebar badge, the plan banner and the dashboard card flicker out and back
+  // on every tab focus.
   const refresh = useCallback(async () => {
     if (!isAuthenticated) return;
-    setLoading(true);
     try {
       setEntitlements(await apiFetch<Entitlements>("/api/v1/billing/entitlements"));
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Errore nel caricamento del piano");
-      setEntitlements(null);
+      // `entitlements` is deliberately left alone. A failed *revalidation*
+      // keeps the last known plan: clearing it would still be fail-open —
+      // consumers read null as "no information" and block nothing — but it
+      // would blank a paying customer's plan badge over one flaky request.
+      // Nothing is invented either way; null stays null until a successful
+      // read replaces it.
     } finally {
       setLoading(false);
     }
@@ -36,6 +45,32 @@ export function useEntitlements() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Re-read when the tab comes back to the foreground.
+  //
+  // `EntitlementsProvider` sits in the dashboard layout and fetches once per
+  // mount, which is what keeps a navigation from firing four identical
+  // requests — but client-side routing never remounts that layout, so without
+  // this the snapshot taken at sign-in is the one the sidebar badge, the plan
+  // banner and the document grid read for the entire session. A customer who
+  // bought a plan in another tab (or whose activation landed a few seconds
+  // after they returned from PayPal) stayed locked out of a plan they owned
+  // until they thought to hard-reload.
+  //
+  // Focus is the right trigger rather than an interval: it costs one request
+  // exactly when the customer is looking, and zero while they are not.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const revalidate = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    window.addEventListener("focus", revalidate);
+    document.addEventListener("visibilitychange", revalidate);
+    return () => {
+      window.removeEventListener("focus", revalidate);
+      document.removeEventListener("visibilitychange", revalidate);
+    };
+  }, [refresh, isAuthenticated]);
 
   return { entitlements, loading, error, refresh };
 }

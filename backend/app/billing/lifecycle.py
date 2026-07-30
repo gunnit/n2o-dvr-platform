@@ -297,6 +297,43 @@ async def sync_from_paypal(
     return await apply_subscription_resource(target_org, resource, db)
 
 
+async def sync_if_owned_by(
+    subscription_id: str, org_id: uuid.UUID, db: AsyncSession
+) -> str | None:
+    """Reconcile ``subscription_id``, but only if it really belongs to ``org_id``.
+
+    The browser-return counterpart to the webhook. PayPal redirects the customer
+    back the instant they approve, but ``BILLING.SUBSCRIPTION.ACTIVATED`` lands
+    seconds later — on 2026-07-29 the gap was 14s, long enough that the page
+    read its own pre-purchase entitlements and cached them for the session. So
+    the return has to be able to settle the subscription itself, exactly as
+    ``credits.complete_purchase`` does for a one-time pack.
+
+    The safety difference from the webhook is the caller: a webhook is
+    signature-verified, whereas this id arrives in a URL the customer's browser
+    hands us, so ownership is checked rather than assumed. Returns ``None`` when
+    PayPal does not know the subscription **or** it belongs to another tenant —
+    passing ``org_id`` straight to :func:`apply_subscription_resource` would let
+    anyone staple someone else's paid subscription onto their own organization.
+
+    Idempotent for the same reason the webhook is: PayPal's resource is the
+    authority and applying it twice is applying the same truth twice.
+    """
+    resource = await paypal_client.get_subscription(subscription_id)
+    if resource is None:
+        return None
+
+    owner = await find_org_for_subscription(resource, db)
+    if owner != org_id:
+        logger.warning(
+            "billing: org %s tried to confirm subscription %s, which belongs to %s",
+            org_id, subscription_id, owner,
+        )
+        return None
+
+    return await apply_subscription_resource(org_id, resource, db)
+
+
 async def get_paypal_subscription_id(org_id: uuid.UUID, db: AsyncSession) -> str | None:
     """The org's live PayPal subscription id, if it has ever activated one.
 

@@ -22,11 +22,11 @@
 
 version: 1
 totals:
-  endpoints: 206
+  endpoints: 207
   areas: 34
   frontend_pages: 34
-  ui_api_call_sites: 92
-  capability_gated: 119
+  ui_api_call_sites: 93
+  capability_gated: 120
   billing_gated: 10
   ai_metered: 11
 endpoints_by_area:
@@ -43,7 +43,7 @@ endpoints_by_area:
   - area: "aziende"
     endpoints: 12
   - area: "billing"
-    endpoints: 12
+    endpoints: 13
   - area: "biologico"
     endpoints: 5
   - area: "calculations"
@@ -3129,6 +3129,22 @@ endpoints:
     platform_admin: false
     billing_gates:
       - "_ensure_channel"
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "billing.confirm_subscription"
+    method: "POST"
+    path: "/api/v1/billing/subscribe/confirm"
+    area: "billing"
+    source: "backend/app/api/v1/billing.py"
+    function: "confirm_subscription"
+    auth: "required"
+    capabilities:
+      - "billing:manage"
+    roles_allowed:
+      - "admin"
+    platform_admin: false
+    billing_gates: []
     ai_credits: []
     called_by_ui: true
     in_openapi: true

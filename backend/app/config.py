@@ -6,6 +6,9 @@ class Settings(BaseSettings):
     APP_NAME: str = "N2O DVR API"
     DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"
+    # Root log level, applied in `app.main`. INFO because the billing lifecycle
+    # says what it did at INFO and nowhere else — see the comment there.
+    LOG_LEVEL: str = "INFO"
 
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:dev@localhost:5432/n2o"

@@ -11,6 +11,25 @@ from app.db.session import async_session_factory
 
 logger = logging.getLogger(__name__)
 
+# Uvicorn configures its own `uvicorn.*` loggers and leaves the root logger
+# alone, so without this nothing under `app.*` has a handler and Python's
+# last-resort fallback drops everything below WARNING. Production therefore had
+# uvicorn's access lines and our own errors, and *none* of our INFO — which is
+# where every interesting billing outcome is written.
+#
+# It cost a day on 2026-07-29: a customer paid for B_BASE, all three PayPal
+# webhooks answered 200, and the one line that says which branch ran —
+# `billing webhook: <id> (<type>) -> <outcome>` in `api/v1/billing.py` — was
+# never emitted, so the only record of what happened to the money was the
+# `billing_webhook_events.outcome` column. Configured at import rather than in
+# `lifespan` so anything logged while the app is still being constructed is
+# captured too.
+logging.basicConfig(
+    level=settings.LOG_LEVEL,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    force=True,
+)
+
 
 async def _warn_on_unescapable_paywall() -> None:
     """Refuse to be quietly misconfigured into a dead end (MB-6.2).

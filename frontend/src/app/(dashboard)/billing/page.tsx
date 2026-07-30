@@ -64,25 +64,12 @@ function BillingPageInner() {
   const { packs, purchases, refresh: refreshPacks } = useCreditPacks();
   const params = useSearchParams();
 
-  // PayPal bounces the customer back here after approval. The subscription is
-  // NOT active yet — the webhook decides that — so we refresh rather than
-  // announce success we cannot vouch for.
-  const esito = params.get("esito");
   // Carried from the public price list through signup. A hint for the UI only:
   // `/billing/subscribe` re-checks that the plan exists, is checkoutable and
   // belongs to this tenant's channel before PayPal is called (INV-5, INV-9).
   const piano = params.get("piano");
 
-  useEffect(() => {
-    if (esito === "ok") {
-      toast.success(
-        "Pagamento approvato. L'attivazione può richiedere qualche istante."
-      );
-      const t = setTimeout(() => void refresh(), 3000);
-      return () => clearTimeout(t);
-    }
-    if (esito === "annullato") toast.info("Pagamento annullato. Nessun addebito effettuato.");
-  }, [esito, refresh]);
+  useSubscriptionReturn({ onSettled: refresh });
 
   useCreditReturn({ onSettled: () => Promise.all([refresh(), refreshPacks()]) });
 
@@ -179,6 +166,120 @@ function BillingPageInner() {
 }
 
 /**
+ * Settle a subscription the customer has just approved at PayPal.
+ *
+ * The naive version of this — one `refresh()` a few seconds after the return —
+ * shipped, and lost. PayPal redirects the buyer back the instant they approve
+ * but delivers `BILLING.SUBSCRIPTION.ACTIVATED` to our webhook afterwards; on
+ * 2026-07-29 the gap was 14 seconds against a 3-second timer. The refresh read
+ * the state from *before* the purchase, and because `EntitlementsProvider`
+ * fetches once per shell mount, that pre-purchase snapshot then fed the sidebar
+ * badge, the dashboard card, the aziende page and the "non hai ancora un piano"
+ * banner for the rest of the session. The customer had paid and every screen
+ * said otherwise.
+ *
+ * So the return settles rather than waits: `POST /billing/subscribe/confirm`
+ * reconciles from PayPal's own resource, exactly as `/credits/capture` does for
+ * a pack. The poll behind it is the belt to that braces — if PayPal is briefly
+ * unreachable from our API the webhook still lands, and we want the page to
+ * notice when it does instead of stranding the customer on a stale screen.
+ */
+function useSubscriptionReturn({ onSettled }: { onSettled: () => Promise<unknown> }) {
+  const params = useSearchParams();
+  const { apiFetch, isAuthenticated } = useApi();
+  const handled = useRef<string | null>(null);
+
+  const esito = params.get("esito");
+  // PayPal appends this to `return_url` on approval. Absent if the customer
+  // reached /billing?esito=ok some other way — hence the poll-only fallback.
+  const subscriptionId = params.get("subscription_id");
+
+  useEffect(() => {
+    if (!esito) return;
+    // Wait for the session before claiming the return. `apiFetch` would work
+    // regardless (it resolves a token at call time), but `onSettled` is the
+    // provider's `refresh`, which early-returns while `isAuthenticated` is
+    // still false — so running now would settle the subscription on the server
+    // and leave every screen showing the old plan anyway. This is precisely
+    // how the previous 3-second timer wasted its first arming.
+    if (!isAuthenticated) return;
+    // Keyed on the subscription so a second purchase in the same session is a
+    // new return, while a re-render of the same one is not.
+    const key = `${esito}:${subscriptionId ?? "-"}`;
+    if (handled.current === key) return;
+    handled.current = key;
+
+    if (esito === "annullato") {
+      toast.info("Pagamento annullato. Nessun addebito effettuato.");
+      return;
+    }
+    if (esito !== "ok") return;
+
+    let cancelled = false;
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, ms);
+      });
+
+    void (async () => {
+      const toastId = toast.loading("Pagamento approvato. Attivazione in corso…");
+
+      if (subscriptionId) {
+        try {
+          const ent = await apiFetch<Entitlements>("/api/v1/billing/subscribe/confirm", {
+            method: "POST",
+            body: JSON.stringify({ paypal_subscription_id: subscriptionId }),
+          });
+          if (cancelled) return;
+          if (ent.subscribed && ent.is_active) {
+            await onSettled();
+            toast.success("Piano attivo. Buon lavoro!", { id: toastId });
+            return;
+          }
+        } catch {
+          // PayPal slow or the id missing — the webhook is still coming, so
+          // fall through to the poll rather than reporting a failure.
+        }
+      }
+
+      // ~40s at 2.5s intervals: comfortably longer than the webhook delay we
+      // have actually measured, short enough that a genuinely stuck activation
+      // ends in an honest message instead of a spinner nobody escapes.
+      for (let attempt = 0; attempt < 16 && !cancelled; attempt++) {
+        await sleep(2500);
+        if (cancelled) return;
+        try {
+          const ent = await apiFetch<Entitlements>("/api/v1/billing/entitlements");
+          if (cancelled) return;
+          if (ent.subscribed && ent.is_active) {
+            await onSettled();
+            toast.success("Piano attivo. Buon lavoro!", { id: toastId });
+            return;
+          }
+        } catch {
+          // Keep polling: a flaky read is not evidence the payment failed.
+        }
+      }
+
+      if (cancelled) return;
+      // Deliberately not an error toast. The money moved; what has not caught
+      // up is our side, and "ricarica" is a truthful next step the customer can
+      // actually take.
+      await onSettled();
+      toast.info(
+        "Pagamento ricevuto. L'attivazione sta richiedendo più del previsto — " +
+          "ricarica la pagina tra un minuto.",
+        { id: toastId, duration: 12_000 }
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [esito, subscriptionId, apiFetch, onSettled, isAuthenticated]);
+}
+
+/**
  * Finish a credit purchase when PayPal returns the customer to `/billing`.
  *
  * PayPal appends its own `token` (the order id) to our return URL, so the whole
@@ -197,7 +298,7 @@ function BillingPageInner() {
  */
 function useCreditReturn({ onSettled }: { onSettled: () => Promise<unknown> }) {
   const params = useSearchParams();
-  const { apiFetch } = useApi();
+  const { apiFetch, isAuthenticated } = useApi();
   const handled = useRef<string | null>(null);
 
   const crediti = params.get("crediti");
@@ -205,6 +306,9 @@ function useCreditReturn({ onSettled }: { onSettled: () => Promise<unknown> }) {
 
   useEffect(() => {
     if (!crediti || !orderId) return;
+    // Same reason as the subscription return above: `onSettled` refreshes the
+    // entitlements and the pack list, and both no-op until the session lands.
+    if (!isAuthenticated) return;
     if (handled.current === orderId) return;
     handled.current = orderId;
 
@@ -243,7 +347,7 @@ function useCreditReturn({ onSettled }: { onSettled: () => Promise<unknown> }) {
         await onSettled();
       }
     })();
-  }, [crediti, orderId, apiFetch, onSettled]);
+  }, [crediti, orderId, apiFetch, onSettled, isAuthenticated]);
 }
 
 /** The plan headline: what you are on, whether it is live, and until when. */

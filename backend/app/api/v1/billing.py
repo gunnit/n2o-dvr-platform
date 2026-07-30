@@ -592,6 +592,69 @@ async def subscribe(
     return SubscribeOut(approval_url=url, paypal_subscription_id=resource["id"])
 
 
+class ConfirmSubscriptionIn(BaseModel):
+    paypal_subscription_id: str = Field(min_length=1, max_length=64)
+
+
+@router.post("/subscribe/confirm", response_model=EntitlementsOut)
+async def confirm_subscription(
+    body: ConfirmSubscriptionIn,
+    user: User = Depends(require_capability(BILLING_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> EntitlementsOut:
+    """Settle a subscription the customer has just approved, from the browser.
+
+    PayPal redirects the buyer back to ``/billing?esito=ok`` the moment they
+    approve, and appends ``subscription_id``. The ``ACTIVATED`` webhook lands
+    seconds *later* — 14 seconds on 2026-07-29 — so a page that reads its plan
+    on return reads the state from before the purchase. This endpoint closes
+    that window by reconciling on demand instead of waiting.
+
+    Exactly the shape ``/credits/capture`` already has for one-time packs, and
+    the reason it is safe is the same: the write is
+    :func:`lifecycle.apply_subscription_resource`, reconciling from PayPal's own
+    resource, so the browser and the webhook can both settle the same
+    subscription and the second one is a no-op. INV-2 is intact — the writing
+    still happens in ``lifecycle``, and it still only believes PayPal.
+
+    404 when PayPal does not know the id or it belongs to another tenant. The
+    two are deliberately one answer: distinguishing them would confirm the
+    existence of another customer's subscription to whoever guessed the id.
+    """
+    org_id = user.organization_id
+
+    if not paypal_client.is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Pagamenti non configurati su questo ambiente.",
+        )
+
+    try:
+        outcome = await lifecycle.sync_if_owned_by(body.paypal_subscription_id, org_id, db)
+    except paypal_client.PayPalError:
+        # The webhook is the backstop and will still land, so this is "come back
+        # in a moment", not "your payment failed" — never tell a customer who
+        # has just been charged that nothing happened.
+        logger.exception(
+            "billing: could not read subscription %s while confirming for org %s",
+            body.paypal_subscription_id, org_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="PayPal non risponde. L'attivazione verrà completata a breve.",
+        )
+
+    if outcome is None:
+        raise HTTPException(status_code=404, detail="Abbonamento non trovato.")
+
+    await db.commit()
+    logger.info(
+        "billing: org %s confirmed subscription %s from the browser -> %s",
+        org_id, body.paypal_subscription_id, outcome,
+    )
+    return await _entitlements_out(org_id, await resolve_entitlements(org_id, db), db)
+
+
 # --- MB-4.4 — cancel / change plan ------------------------------------------
 
 
