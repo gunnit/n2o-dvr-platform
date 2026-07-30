@@ -470,7 +470,14 @@ export default function PanoramicaTab({
           alongside the contact card to balance the grid visually. */}
       <Panel accent="amber">
         <PanelHeader icon={Briefcase} title="Composizione operativa" accent="amber" />
-        <div className="grid gap-4 p-6 sm:grid-cols-3">
+        {/* Three columns only from `xl`. This panel is a half-width item of the
+            `md:grid-cols-2` outer grid, so from 768px to 1279px it is ~341px
+            wide — three tracks of 87px, and "Attrezzature" is a single
+            unbreakable 97px word that spilled past the panel's
+            `overflow-hidden`. `min-w-0` cannot help: nothing shrinks a word.
+            Two tracks of 138px fit it, and by `xl` the panel is wide enough
+            for three again. */}
+        <div className="grid gap-4 p-6 sm:grid-cols-2 xl:grid-cols-3">
           <div className="flex items-start gap-2.5">
             <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[rgba(0,61,116,0.08)]">
               <Users className="h-4 w-4 text-[#003d74]" strokeWidth={1.75} />
@@ -520,7 +527,7 @@ export default function PanoramicaTab({
               </p>
             </div>
           </div>
-          <div className="flex items-start gap-2.5 sm:col-span-3">
+          <div className="flex items-start gap-2.5 sm:col-span-2 xl:col-span-3">
             <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[rgba(234,34,97,0.08)]">
               <ShieldAlert
                 className="h-4 w-4 text-[#b51648]"
@@ -544,7 +551,7 @@ export default function PanoramicaTab({
               </p>
             </div>
           </div>
-          <div className="flex items-start gap-2.5 sm:col-span-3">
+          <div className="flex items-start gap-2.5 sm:col-span-2 xl:col-span-3">
             <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[rgba(124,58,237,0.1)]">
               <FileText
                 className="h-4 w-4 text-[#7c3aed]"
@@ -564,7 +571,7 @@ export default function PanoramicaTab({
             </div>
           </div>
           {azienda.capitale_sociale != null && (
-            <div className="flex items-start gap-2.5 sm:col-span-3">
+            <div className="flex items-start gap-2.5 sm:col-span-2 xl:col-span-3">
               <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[rgba(0,61,116,0.08)]">
                 <Euro className="h-4 w-4 text-[#003d74]" strokeWidth={1.75} />
               </span>
