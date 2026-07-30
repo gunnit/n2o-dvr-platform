@@ -36,8 +36,12 @@ dist/
 .vercel/
 out/
 
-# Claude Code
-.claude/
+# Claude Code — local config stays local, but `rules/` is project guidance that
+# CLAUDE.md points at, so it has to travel with the repo. Note `.claude/*` and
+# not `.claude/`: git will not descend into an excluded directory, so the
+# negation below only works if the directory itself is never excluded.
+.claude/*
+!.claude/rules/
 
 # Tool artifacts
 .playwright-mcp/

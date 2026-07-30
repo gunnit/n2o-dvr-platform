@@ -1,298 +1,68 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 # N2O DVR Automation Platform
 
-## Project Overview
-
-Automated generation of Italian workplace safety documentation (16 documents across 13 types, anchored by the DVR Master) for N2O SRL, a safety consultancy. The system replaces manual data entry with a digital survey form and AI-powered document generation, targeting 60-70% time reduction.
-
-**Client**: N2O SRL (Luca Marchetti & team) - workplace safety consultants
-**Builder**: Niuexa (Gregor Maric, Co-CEO & CTO)
-**Core principle**: "Il nostro deve essere solo una questione di revisione, non di inserimento del dato." (Review only, not data entry)
-
-## Domain Glossary
-
-| Term | Full Name | Description |
-|------|-----------|-------------|
-| DVR | Documento di Valutazione dei Rischi | Master risk assessment document (~187 pages) |
-| MMC | Movimentazione Manuale dei Carichi | Manual handling assessment (NIOSH method) |
-| VDT | Videoterminali | Display screen equipment assessment |
-| SDS/SdS | Schede di Sicurezza | Safety Data Sheets (chemical) |
-| PEE | Piano di Emergenza ed Evacuazione | Emergency & evacuation plan |
-| DUVRI | Doc. Unico Valutazione Rischi Interferenze | Interference risk assessment (contractors) |
-| POS | Piano Operativo di Sicurezza | Construction site safety plan |
-| HACCP | Hazard Analysis Critical Control Points | Food safety management system |
-| RSPP | Responsabile Servizio Prevenzione Protezione | Safety prevention manager |
-| RLS | Rappresentante dei Lavoratori per la Sicurezza | Workers' safety representative |
-| DdL | Datore di Lavoro | Employer |
-| D.Lgs. 81/2008 | Testo Unico Sicurezza | Core Italian workplace safety law |
-
-## Key Formulas
-
-- **Risk Index**: `I = 2*D + P` (NOT the standard P x D). Range 3-12. Levels: 3-4=Accettabile, 5-6=Modesto, 7-8=Grave, 9-12=Gravissimo
-- **NIOSH PLR**: `PLR = CP x A x B x C x D x E x F`. IR = P/PLR. Green<=0.75, Yellow 0.75-1.0, Red>1.0
-- **VDT Exposure**: >= 20 hours/week = Exposed
-- **Fire Risk**: INF+SI+PI (each 1-3). Sum 3-4=Low, 5-7=Medium, 8-9=High
-
-## Language & Content
-
-- All generated documents: **Italian**
-- Code, comments, variable names: **English**
-- UI labels: **Italian** (with English fallback where needed)
-
-## Privacy & Data Rules
-
-- **NEVER send to AI APIs**: codice fiscale, identity documents, personal health data
-- AI is used ONLY for: SDS chemical extraction, company description generation, improvement measures suggestions
-- All AI output requires human review before final inclusion
-- GDPR compliance required throughout
-
-## Google Drive Access
-
-Access client documents via Google OAuth credentials:
-- **Token**: `credentials/token.json` (has Drive, Docs, Sheets, Gmail, Calendar scopes)
-- **Client secret**: `credentials/client_secret_501670694075-*.json`
-- **Main folder**: `13aHCy8D78JwJzgffxYbqe7Nmyed84may`
-- **Templates folder**: `16IicFhfHg4Fzh12_DM_J3tNFy4j8Cbpa` (DOCUMENTI D.LGS. 81.08)
-- **HACCP forms folder**: `1dS-QEGaSTmCZjYRzu6Ldsf47mzTOnidR`
-
-```python
-# Access pattern
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-import json
-
-with open('credentials/token.json') as f:
-    token_data = json.load(f)
-creds = Credentials(
-    token=token_data['token'],
-    refresh_token=token_data['refresh_token'],
-    token_uri=token_data['token_uri'],
-    client_id=token_data['client_id'],
-    client_secret=token_data['client_secret'],
-    scopes=token_data['scopes']
-)
-service = build('drive', 'v3', credentials=creds)
-```
-
-## Document Output
-
-- Format: `.docx` with professional formatting, cover page, logo, table of contents
-- Template-based generation using python-docx
-- Each document shares a common data layer (Azienda, Persona, Ambiente entities)
-
-## Project Documentation (`docs/context/`)
-
-All project docs are branded with Niuexa header/footer, version 1.0, April 2026. Read the relevant doc BEFORE working on any module.
-
-### Business & Scope (read first for any task)
-
-| Document | What's Inside | When to Reference |
-|----------|--------------|-------------------|
-| `PROJECT_BRIEF.md` | Scope (15 deliverables, 16 docs), budget (EUR 14k), timeline (10-15 weeks), 5 phases, payment terms, stakeholders | Starting any new phase, scoping work, client context |
-| `USER_STORIES.md` | 5 epics, 3 personas (campo/ufficio/admin), 30+ user stories (US-1.1 through US-5.4) | Building any UI, defining acceptance criteria |
-| `DOCUMENT_CATALOG.md` | All 16 documents: page counts, table counts, static/dynamic ratios, complexity ratings, data shared with DVR | Deciding which document to build next, understanding dependencies |
-
-### Technical Design (read before writing code)
-
-| Document | What's Inside | When to Reference |
-|----------|--------------|-------------------|
-| `ARCHITECTURE.md` | Full tech stack (Next.js 16 + FastAPI + Render Postgres), DB schema with SQL, all API endpoints, deployment diagram, project folder structure, library versions, auth flow, config options | **Every coding session** — this is the system blueprint |
-| `DATA_MODEL.md` | All entities (Azienda, Persona, Ambiente, Attrezzatura, SostanzaChimica) with field-level detail, types, privacy flags, cross-document usage, assessment entities (MMC, VDT, Stress, Incendio, Microclima) | Writing ORM models, building forms, API schemas |
-| `DVR_TEMPLATE_MAPPING.md` | Structural analysis of DVR Master .docx — 111 tables cataloged, 2,445 paragraphs, 4 document parts with exact boundaries, environment risk block pattern (7 envs × identical structure), 41 dynamic/36 static/13 mixed tables, 269 dynamic cells mapped to data fields | **Building the DVR generation engine (Module 2)** — this IS the spec |
-
-### Domain Knowledge (read for calculations, legal compliance, reference data)
-
-| Document | What's Inside | When to Reference |
-|----------|--------------|-------------------|
-| `FORMULAS_AND_CALCULATIONS.md` | All 7 calculation methods: Risk Index (I=2*D+P), NIOSH (PLR/IR), VDT threshold, INAIL Stress scoring, Fire risk (INF+SI+PI), PMV/PPD thermal comfort, PHS severe heat. With input/output specs and Python library recommendations | Implementing any calculator, risk assessment logic |
-| `LEGISLATION_REFERENCE.md` | 24 Italian/EU laws and standards with article numbers, URLs, and which documents they affect. Core: D.Lgs. 81/2008, D.Lgs. 151/2001, D.M. 03/09/2021, Reg. CE 852/2004, UNI EN ISO 7730/7933/11228 | Legal compliance, document boilerplate text, understanding requirements |
-| `REFERENCE_DATA.md` | Extracted from real templates — NIOSH Factor tables (A-F with exact values, 18-row Factor F table), 60+ hazard items across 11 risk categories, 76 INAIL stress indicators with scoring rules, fire risk INF/SI/PI definitions, VDT checklist, P/D scale descriptions | **Database seeding**, populating survey form dropdowns, risk library, lookup tables |
-
-### Planning & Structure (read for module planning, document generation)
-
-| Document | What's Inside | When to Reference |
-|----------|--------------|-------------------|
-| `DOCUMENT_STRUCTURE.md` | Section-by-section breakdown of every document type: static vs dynamic classification per section, automation approach per section. Includes all DVR attachments and complementary docs | Planning document generators, understanding what's static boilerplate vs dynamic |
-| `AUTOMATION_PLAN.md` | 15 modules (Modules 1-15) across Phases 2-4: input/output per module, method, time savings estimate, complexity rating. Summary table with savings ranges | Sprint planning, prioritizing modules, estimating effort |
-
-### Key Cross-References
-
-- **Building the survey form?** → USER_STORIES (Epic 1) + DATA_MODEL (entities) + REFERENCE_DATA (risk library + equipment checklists) + ARCHITECTURE (API endpoints)
-- **Building DVR generator?** → DVR_TEMPLATE_MAPPING (the spec) + DOCUMENT_STRUCTURE (Part I-IV breakdown) + DATA_MODEL (field sources) + FORMULAS (risk index)
-- **Building an attachment?** → DOCUMENT_CATALOG (which attachment) + DOCUMENT_STRUCTURE (section breakdown) + FORMULAS (relevant calculation) + REFERENCE_DATA (lookup tables)
-- **AI integration?** → ARCHITECTURE (OpenAI setup + Pydantic schemas) + USER_STORIES (US-1.8 to US-1.10 for SDS, US-2.1/2.6 for AI generation)
-
-## Template Documents (`templates/`)
-
-32 real completed Italian safety documents — the ground truth for structure and formatting:
-
-| Template | Format | Parseable | Phase |
-|----------|--------|-----------|-------|
-| DVR RISCHIO MASTER | .docx (4.8 MB) | Yes — fully mapped in DVR_TEMPLATE_MAPPING.md | 2 |
-| ALLEGATO RISCHIO MMC | .docx (2.3 MB) | Yes — NIOSH tables extracted to REFERENCE_DATA.md | 3 |
-| ALLEGATO RISCHIO VDT | .docx (2.2 MB) | Yes — VDT criteria extracted | 3 |
-| ALLEGATO STRESS DA LAVORO CORRELATO | .docx (2.2 MB) | Yes — 76 indicators extracted | 3 |
-| ALLEGATO GESTANTI | .docx (120 KB) | Yes | 3 |
-| ALLEGATO RISCHIO INCENDIO | .docx (112 KB) | Yes — fire scoring extracted | 3 |
-| ALLEGATO MICROCLIMA | .pdf (367 KB) | No — PDF, needs manual review | 3 |
-| ALLEGATO MICROCLIMA CALDO SEVERO | .pdf (2.5 MB) | No — PDF, needs manual review | 3 |
-| ALLEGATO RISCHIO BIOLOGICO ALIMENTARE | .doc (2.4 MB) | No — legacy .doc binary | 3 |
-| RISCHIO BIOLOGICO - ASILO | .pdf (3.3 MB) | No — PDF | 3 |
-| RISCHIO BIOLOGICO - DENTISTI | .doc (6.6 MB) | No — legacy .doc binary | 3 |
-| DUVRI | .docx (353 KB) | Yes | 4 |
-| HACCP | .docx (712 KB) | Yes | 4 |
-| PIANO GESTIONE EMERGENZE - AZIENDA | .docx (1.1 MB) | Yes | 4 |
-| PIANO GESTIONE EMERGENZE - COMUNE | .docx (7.2 MB) | Yes | 4 |
-| POS | .docx (12.9 MB) | Yes | 4 |
-| `haccp/` subfolder | 15 .docx + 1 .xlsx | Yes — 16 HACCP self-check forms (SA-01 to SA-16) | 4 |
-
-**5 templates are unparseable** (PDF/legacy .doc) — all Phase 3 attachments. Will need manual analysis or conversion before those modules are built.
-
-## Project Status
-
-**Phase: Deployed to production infra** (2026-04-17). Full stack live on Render (Frankfurt): frontend, API, Celery worker, Postgres, Redis. See `DEPLOY.md` for the runbook, live URLs, and the non-obvious `render.yaml` quirks discovered during first deploy (retired postgres plan, rootDir, PYTHONPATH for alembic, asyncpg URL normalization, Next.js Suspense boundary).
-
-**Monetization is live and enforcing** (2026-07-28). The platform sells plans —
-consultant (`A_*`) and direct-company (`B_*`) — through PayPal, and
-`ENTITLEMENTS_ENFORCE=true` means plan limits actually return `402`. Three things
-to know before touching any endpoint that creates data:
-
-- **Every write path that produces new work needs an entitlement gate.** Document
-  generation, azienda creation, user invites and all 13 AI endpoints are gated;
-  `backend/tests/test_billing_enforcement.py` fails the build if a new bypass
-  appears. Read and download paths are deliberately *never* gated — D.Lgs.
-  81/2008 retention means a lapsed tenant keeps its existing documents.
-- **`ai_credits_year = None` means "pooled and unmetered" (Enterprise), not
-  "no credits".** Use `0` for a tenant that bought nothing. Getting this backwards
-  hands non-payers unlimited OpenAI spend.
-- **Credit top-ups are sellable** (€79 / €249 / €990, `backend/app/billing/credit_packs.py`)
-  as one-time PayPal *Orders*, not subscriptions. They land on
-  `usage_counters.overage_credits` for the **current period only** — packs do not
-  roll over, and `/billing` says so next to the buy button. The grant is
-  exactly-once via the `credit_purchases.status` flip, because the browser return
-  and the webhook both settle the same order; never call
-  `metering.grant_overage_credits` from anywhere but `billing/credits.py`.
-- **Production runs PayPal in *sandbox* on purpose**, so the funnel can be walked
-  with test money. `plans.paypal_plan_id` therefore holds sandbox ids, and going
-  live requires reissuing them — `DEPLOY.md` §4b-bis, not an env-var flip.
-
-Plan/limit source of truth: `backend/app/billing/plan_catalogue.py` (mirrors
-`docs/pricing/`). Phase history and deviations: `docs/build/MONETIZATION-BUILD-PLAN.md`.
-
-## Roles vs. plans — two gates, never conflated
-
-`app/billing/*` answers **what the organization bought** and fails with `402`.
-`app/core/permissions.py` answers **what this person may do inside it** and fails
-with `403`. Both apply to the same endpoints; neither substitutes for the other.
-
-- Gate on a **capability**, not a role: `Depends(require_capability(DOCUMENTS_GENERATE))`.
-  `require_role("admin")` survives only for a gate that really is about the role
-  as a category, and `test_no_endpoint_still_hardcodes_the_admin_role` fails the
-  build if a new one appears in `app/api/`.
-- The three personas nest — `operatore_campo` ⊂ `operatore_ufficio` ⊂ `admin` —
-  and `validate_matrix()` enforces it. Roughly: field collects (survey,
-  assessments, AI, read documents), office also finalises (`documents:generate`),
-  admin also owns the portfolio, the money and the team.
-- **Reads are never role-gated away.** Every role holds `documents:read` and
-  `aziende:read`, for the same D.Lgs. 81/2008 retention reason the paywall never
-  gates downloads.
-- The frontend renders its navigation from the capability list `GET /auth/me`
-  returns (`frontend/src/lib/permissions.ts` + `usePermissions()`), never from a
-  second copy of the matrix. Hiding a button is cosmetic; the 403 is the rule.
-  `backend/tests/test_permissions.py` reads the TypeScript to keep the two in step.
-
-## Live URLs
-
-- **Frontend**: https://dvr-sicurezza.it (canonical custom domain) — also https://www.dvr-sicurezza.it and https://n2o-dvr-frontend.onrender.com (Render fallback)
-- **API**: https://n2o-dvr-api.onrender.com (Swagger at `/docs`)
-- **Worker**: Celery background service (no URL)
-
-## Development Phases
-
-1. **Setup & Analysis** (1-2 weeks) - Architecture, data model, environment
-2. **Core Development** (3-4 weeks) - Digital survey form, DVR Master engine, AI integration
-3. **DVR Attachments** (3-4 weeks) - MMC, VDT, SDS AI, Stress, Gestanti, Microclima, Biologico, Incendio
-4. **Complementary Docs** (2-3 weeks) - PEE, HACCP, DUVRI, POS
-5. **Test & Go-Live** (1-2 weeks) - Real case validation, operator training
-
-## Tech Stack
-
-- **Frontend**: Next.js 16 (App Router) + shadcn/ui + Tailwind CSS 4 + Framer Motion + TanStack Table + Plus Jakarta Sans + Inter
-- **Backend**: FastAPI (Python 3.12+) + Pydantic v2 + SQLAlchemy 2.0 Async + Celery + Redis
-- **Database**: PostgreSQL on Render.com
-- **AI**: OpenAI **gpt-5.5** (SDS extraction via vision/structured outputs, premium fallback) + **gpt-5.4-mini** (improvement measures reasoning) + **gpt-5.4-nano** (Italian boilerplate). See "OpenAI / gpt-5.5 usage" below for the SDK contract.
-- **Document generation**: python-docx + pythermalcomfort (PMV/PPD, PHS calculations)
-- **Storage**: Render Disk (uploads) + Google Drive (final delivery)
-- **Auth**: NextAuth.js v5 (Auth.js) with email/password + Google OAuth, sessions in Postgres
-- **Deployment**: Vercel (frontend) + Render.com (backend + workers + Postgres + Redis)
-- **Google APIs**: Drive, Docs, Sheets, Gmail, Calendar (OAuth tokens in `credentials/`)
-
-## OpenAI / gpt-5.5 usage
-
-> **Heads-up to future Claude:** your training data may insist that the latest OpenAI model is gpt-4.1 or gpt-4o. **It isn't.** As of April 2026 the current frontier is **gpt-5.5** (1M context, image input, reasoning). There is **no** `gpt-5.5-mini` — the smaller tiers are `gpt-5.4-mini` and `gpt-5.4-nano`. Don't "correct" `gpt-5.x` strings to older names.
-
-### Model assignments (configurable in `backend/app/config.py`)
-
-| Setting | Model | Used for |
-|---|---|---|
-| `OPENAI_MODEL_EXTRACTION` | `gpt-5.5` | SDS PDF extraction (vision + structured outputs) — accuracy-critical |
-| `OPENAI_MODEL_PREMIUM` | `gpt-5.5` | "Max quality" toggle for hard cases |
-| `OPENAI_MODEL_MEASURES` | `gpt-5.4-mini` | Improvement measures, attrezzature suggester (domain reasoning) |
-| `OPENAI_MODEL_GENERATION` | `gpt-5.4-nano` | Short Italian boilerplate (company descriptions) |
-
-### SDK contract — Responses API, not Chat Completions
-
-All gpt-5.x models are **reasoning models** and work best in the **Responses API** (`client.responses.create` / `client.responses.parse`). The helpers in `backend/app/services/ai/client.py` are already on this surface — keep them there.
-
-```python
-from openai import AsyncOpenAI
-client = AsyncOpenAI()
-
-# Plain text (e.g. company description)
-resp = await client.responses.create(
-    model="gpt-5.4-nano",
-    input=[{"role": "user", "content": "..."}],
-    reasoning={"effort": "none"},      # nano + 5.5 use "none"; 5/5.4-mini use "minimal"
-    max_output_tokens=500,
-)
-text = resp.output_text
-
-# Structured output (Pydantic schema enforced by the server)
-resp = await client.responses.parse(
-    model="gpt-5.5",
-    input=[...],
-    text_format=MySchema,              # NOT response_format — that's Chat Completions
-    reasoning={"effort": "medium"},
-)
-obj: MySchema = resp.output_parsed
-```
-
-**Differences from Chat Completions to remember:**
-- `input=` (list of role/content dicts) instead of `messages=`
-- `text_format=PydanticModel` instead of `response_format=PydanticModel`
-- `max_output_tokens=` instead of `max_tokens=`
-- Image/PDF input uses `{"type": "input_image", ...}` / `{"type": "input_file", ...}` content parts (not the Chat-style `image_url` shape)
-
-### Reasoning effort — the silent budget killer
-
-`reasoning.effort` valid values vary by model — re-confirmed against the live API on 2026-06-08:
-- `gpt-5`: `minimal | low | medium | high`
-- `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.5`: `none | low | medium | high | xhigh` (no `minimal`; passing it returns 400 invalid_request_error)
-
-⚠️ `gpt-5.4-mini` **used to** accept `minimal` but no longer does — it moved to the `none` vocab. Don't pass `reasoning_effort="minimal"` with `gpt-5.4-mini` (= `OPENAI_MODEL_MEASURES`); use `"low"` for the lightest practical tier (what `pos_phase_suggester.py` does), or `"none"` if you truly want zero reasoning. The "lightest tier" is `minimal` only on full-size `gpt-5`, and `none` on 5.4-mini / nano / 5.5. The helpers in `backend/app/services/ai/client.py` accept the `minimal` vocabulary at the call site and `_normalize_effort` translates it to `none` for all none-vocab models (5.4-mini, nano, 5.5) — keep that translation in sync if you add new models.
-
-Reasoning tokens count against `max_output_tokens` **before** any visible output is produced. With a tight budget and default effort, `output_text` will come back empty. For boilerplate generation always pass the lightest tier. For SDS extraction `medium` is the right default; bump to `high` only for ambiguous documents.
-
-### Privacy contract (unchanged)
-
-Never send to any OpenAI endpoint: codice fiscale, identity documents, personal health data. The caller is responsible for stripping these fields before invoking `ai/client.py` helpers — the client doesn't sanitize.
-
-## Analysis Spreadsheet
-
-The comprehensive analysis of all documents, data model, formulas, legislation, and automation plan is in Google Drive:
-https://docs.google.com/spreadsheets/d/1jPt5668oSpxtiki-X4s9ZnAWBPmRJbsp/edit?rtpof=true
-
-8 tabs: Panoramica Documenti, Modello Dati, Piano Automazione, Schede HACCP, Formule e Calcoli, Struttura Documenti, Normativa di Riferimento, Mappatura Doc-Normativa
+Generates Italian workplace-safety documentation — 16 documents across 13 types, anchored by the ~187-page DVR Master — for N2O SRL, a safety consultancy. A digital survey replaces manual data entry and AI fills the narrative parts. Built by Niuexa (Gregor Maric).
+
+**Guiding principle**, in the client's words: *"Il nostro deve essere solo una questione di revisione, non di inserimento del dato."* The operator reviews; they never re-enter. Given a choice, prefill a field the operator can correct rather than asking them to type it.
+
+Live: https://dvr-sicurezza.it (frontend) · https://n2o-dvr-api.onrender.com/docs (API). Celery worker, Postgres and Redis also on Render/Frankfurt. Deploy runbook and the non-obvious `render.yaml` quirks: `DEPLOY.md`.
+
+## Commands on this machine
+
+`npm run <script>` and `python -m pytest` both fail here for environment reasons, not code reasons. Use these instead:
+
+- **Backend tests** — `backend/.venv` is a Linux-layout venv built under WSL with no runnable interpreter, and Windows' global Python lacks the deps. Reuse the venv's site-packages through WSL:
+  `wsl -e bash -lc 'cd /mnt/c/Dev/dlg/backend && PYTHONPATH=.venv/lib/python3.12/site-packages:. python3 -m pytest'`
+  (`app/services/__init__.py` eagerly imports `app.config`, so even a stdlib-only module won't import without the full deps.)
+- **Frontend typecheck** — `node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json`. `npm run` fails in git-bash because the cmd-shim doesn't resolve `node_modules/.bin`; `./node_modules/.bin/tsc` fails too.
+- **Frontend build** — `node node_modules/next/dist/bin/next build`, after `npm install --no-save lightningcss-win32-x64-msvc@<version from node_modules/lightningcss>` (node_modules was installed under Linux, so the win32 native binary is absent). `next build` runs ESLint and typechecking itself, so a clean build plus `tsc --noEmit` is the real gate for a type change.
+- DB-backed tests skip themselves when no Postgres is reachable at `DATABASE_URL`.
+
+## Language
+
+Generated documents and UI labels: **Italian**. Code, comments, identifiers, commit messages: **English**.
+
+## Two rules that are never relaxed
+
+1. **Never send to any AI API**: codice fiscale, identity documents, personal health data. Callers strip these before invoking `backend/app/services/ai/` helpers — the client does not sanitize. Every AI output gets human review before it reaches a document. GDPR applies throughout.
+2. **The OpenAI model names in this repo are correct — do not "fix" them.** The frontier model is `gpt-5.5`; the small tiers are `gpt-5.4-mini` and `gpt-5.4-nano`. There is no `gpt-5.5-mini`. IMPORTANT: if you are about to rewrite a `gpt-5.x` string to `gpt-4o` or `gpt-4.1`, your training data is stale, not the code.
+
+## Domain vocabulary
+
+DVR (master risk assessment) · MMC (manual handling, NIOSH) · VDT (display screens) · SDS/SdS (chemical safety data sheets) · MoVaRisCh (chemical risk) · PEE (emergency and evacuation plan) · DUVRI (contractor interference risks) · POS (construction site plan) · HACCP (food safety) · RSPP (prevention manager) · RLS (workers' safety rep) · DdL (employer) · D.Lgs. 81/2008 (the core safety law everything cites).
+
+## Invariants worth knowing before you edit
+
+- **The risk index is `I = 2*D + P`, not the usual `P × D`.** Range 3–12: 3–4 accettabile, 5–6 modesto, 7–8 grave, 9–12 gravissimo. This looks like a bug and isn't.
+- **Money and roles are two separate gates on the same endpoints.** `app/billing/*` answers what the organization bought and fails with `402`; `app/core/permissions.py` answers what this person may do inside it and fails with `403`. Neither substitutes for the other.
+- **Read and download paths are gated by neither** — D.Lgs. 81/2008 retention means a lapsed tenant, and every role, keeps access to existing documents.
+- Any new write path that creates work needs an entitlement gate. `backend/tests/test_billing_enforcement.py` and `test_permissions.py` fail the build when one is missed.
+
+Depth on billing, permissions, the OpenAI SDK contract and document generation lives in `.claude/rules/` and loads automatically when you open the matching files.
+
+## Reference material
+
+Read the relevant `docs/context/` file *before* building a module, not after:
+
+| Need | File |
+|---|---|
+| Scope, budget, timeline, stakeholders | `PROJECT_BRIEF.md` |
+| Acceptance criteria, the 3 operator personas | `USER_STORIES.md` |
+| Which of the 16 documents, and what it shares with the DVR | `DOCUMENT_CATALOG.md`, `DOCUMENT_STRUCTURE.md` |
+| System blueprint: schema, endpoints, folder layout, auth flow | `ARCHITECTURE.md` |
+| Entities with field-level detail and privacy flags | `DATA_MODEL.md` |
+| **The DVR generator's spec** — 111 tables, 269 dynamic cells mapped to fields | `DVR_TEMPLATE_MAPPING.md` |
+| All 7 calculation methods with input/output specs | `FORMULAS_AND_CALCULATIONS.md` |
+| Lookup tables for seeding and dropdowns (NIOSH factors, 60+ hazards, 76 INAIL indicators) | `REFERENCE_DATA.md` |
+| Italian and EU law, article numbers, which document each affects | `LEGISLATION_REFERENCE.md` |
+| Module-by-module automation plan | `AUTOMATION_PLAN.md` |
+| Pricing model behind the plan catalogue | `docs/pricing/`, `docs/build/MONETIZATION-BUILD-PLAN.md` |
+
+`templates/` holds 32 real completed documents — the ground truth for structure and formatting. The `.docx` ones are parseable; **five Phase-3 attachments are not** — `MICROCLIMA`, `MICROCLIMA CALDO SEVERO` and `RISCHIO BIOLOGICO - ASILO` are PDFs, and the two other `RISCHIO BIOLOGICO` files are legacy `.doc` binaries. Those modules need manual analysis or conversion first.
+
+Client documents live in Google Drive, via the OAuth token at `credentials/token.json` (Drive, Docs, Sheets, Gmail, Calendar scopes). Folder ids: main `13aHCy8D78JwJzgffxYbqe7Nmyed84may`, templates `16IicFhfHg4Fzh12_DM_J3tNFy4j8Cbpa`, HACCP forms `1dS-QEGaSTmCZjYRzu6Ldsf47mzTOnidR`. The 8-tab cross-document analysis spreadsheet: https://docs.google.com/spreadsheets/d/1jPt5668oSpxtiki-X4s9ZnAWBPmRJbsp/edit?rtpof=true
+
+## Status (July 2026)
+
+Deployed and selling. Plans — consultant (`A_*`) and direct-company (`B_*`) — are sold through PayPal with `ENTITLEMENTS_ENFORCE=true`, so limits really do return `402`. Source of truth for plans and limits: `backend/app/billing/plan_catalogue.py`.
+
+**Production runs PayPal in *sandbox* on purpose**, so the funnel can be walked with test money. `plans.paypal_plan_id` therefore holds sandbox ids, and going live means reissuing them (`DEPLOY.md` §4b-bis) — not flipping an env var.
