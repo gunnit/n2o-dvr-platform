@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from pathlib import Path
@@ -25,6 +26,7 @@ from app.schemas.ambiente import (
 from app.schemas.ambiente_foto import AmbienteFotoResponse
 from app.services.ambiente_photo import (
     DocumentImageNormalizationError,
+    MAX_ORIGINAL_IMAGE_BYTES,
     normalize_document_image,
 )
 
@@ -200,7 +202,7 @@ async def delete_ambiente(
 # the original filename so the UI can render it alongside the thumbnail.
 
 MAX_FOTO_PER_AMBIENTE = 10
-MAX_FOTO_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+MAX_FOTO_SIZE_BYTES = MAX_ORIGINAL_IMAGE_BYTES
 ALLOWED_FOTO_CONTENT_TYPES = {"image/jpeg", "image/png", "image/heic"}
 ALLOWED_FOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".heic"}
 # Keep extension → content-type mapping for octet-stream fallback
@@ -286,7 +288,7 @@ async def upload_ambiente_foto(
         raise BadRequestError("Formato non supportato o file troppo grande (max 10 MB)")
 
     try:
-        document_image = normalize_document_image(content)
+        document_image = await asyncio.to_thread(normalize_document_image, content)
     except DocumentImageNormalizationError as exc:
         raise BadRequestError(
             "Formato non supportato o file troppo grande (max 10 MB)"

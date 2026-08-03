@@ -3,10 +3,12 @@
 import asyncio
 import collections
 import importlib.util
+import inspect as pyinspect
 import logging
 import subprocess
 import sys
 from datetime import datetime
+from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -58,10 +60,12 @@ def full_dvr_doc(tmp_path):
         ruolo_antincendio=False, ruolo_preposto=False, ambienti=[],
         dpi_codes=[], rischi_specifici_codes=[], attrezzature_speciali=[],
     ))
-    module.patch_generators(fixture, str(tmp_path))
-    ok, path, message = asyncio.run(module.run_one("DVR_MASTER", fixture["azienda"].id))
-    assert ok, message
-    return Document(path), fixture
+    with luca_fixture_verifier._patched_generator_fixture(fixture, tmp_path):
+        ok, path, message = asyncio.run(
+            module.run_one("DVR_MASTER", fixture["azienda"].id)
+        )
+        assert ok, message
+        yield Document(path), fixture
 
 
 @pytest.fixture
@@ -69,10 +73,12 @@ def empty_environment_dvr_doc(tmp_path):
     module = _load_verify()
     fixture = module.build_fixture()
     fixture["ambienti"] = []
-    module.patch_generators(fixture, str(tmp_path))
-    ok, path, message = asyncio.run(module.run_one("DVR_MASTER", fixture["azienda"].id))
-    assert ok, message
-    return Document(path)
+    with luca_fixture_verifier._patched_generator_fixture(fixture, tmp_path):
+        ok, path, message = asyncio.run(
+            module.run_one("DVR_MASTER", fixture["azienda"].id)
+        )
+        assert ok, message
+        yield Document(path)
 
 
 def _next_paragraph_has_page_break(paragraph) -> bool:
@@ -130,6 +136,44 @@ def _jpeg_bytes(color: str = "blue") -> bytes:
     return output.getvalue()
 
 
+def _png_chunk_types(content: bytes) -> list[str]:
+    assert content.startswith(b"\x89PNG\r\n\x1a\n")
+    chunk_types = []
+    offset = 8
+    while offset < len(content):
+        chunk_size = int.from_bytes(content[offset : offset + 4], "big")
+        chunk_type = content[offset + 4 : offset + 8].decode("ascii")
+        chunk_types.append(chunk_type)
+        offset += 12 + chunk_size
+    assert offset == len(content)
+    return chunk_types
+
+
+def test_vera_asset_has_fixed_pixels_dimensions_and_no_metadata():
+    content = (BACKEND_ROOT / "assets" / "n2o_vera_dvr.png").read_bytes()
+
+    assert sha256(content).hexdigest() == (
+        "d69929b5cb8981836db8e0d0610e3ff62e91702581392567ffe0247aa616fe15"
+    )
+    with Image.open(BytesIO(content)) as image:
+        image.load()
+        assert image.size == (640, 358)
+        assert image.mode == "RGB"
+        assert sha256(image.tobytes()).hexdigest() == (
+            "c7c3318b2ac7fc514215a5e73c9bfad92d9f26a7aba17c60f3a502acede37f9b"
+        )
+        assert image.info == {}
+
+    chunks = _png_chunk_types(content)
+    assert set(chunks) <= {"IHDR", "IDAT", "IEND"}
+    assert not {"tEXt", "zTXt", "iTXt", "eXIf"}.intersection(chunks)
+    lowered = content.lower()
+    assert all(
+        marker not in lowered
+        for marker in (b"canva", b"artist", b"user=", b"brand=")
+    )
+
+
 def test_dvr_cover_embeds_vera_asset_and_omits_consultancy(tmp_path):
     """Configured organization branding must not leak into DVR covers."""
     gen = _new_generator()
@@ -153,6 +197,25 @@ def test_dvr_cover_embeds_vera_asset_and_omits_consultancy(tmp_path):
     assert "DOCUMENTO DI VALUTAZIONE DEI RISCHI" in text
     assert "Documento elaborato da" not in text
     assert "CONSULTANCY SENTINEL" not in text
+
+
+def test_vera_cover_audit_rejects_asset_and_embedding_changed_together(
+    tmp_path, monkeypatch
+):
+    fake_backend = tmp_path / "fake-backend"
+    fake_assets = fake_backend / "assets"
+    fake_assets.mkdir(parents=True)
+    fake_vera = fake_assets / "n2o_vera_dvr.png"
+    fake_logo = fake_assets / "logo.png"
+    Image.new("RGB", (640, 358), "red").save(fake_vera, "PNG")
+    Image.new("RGB", (8, 8), "blue").save(fake_logo, "PNG")
+    doc = Document()
+    doc.add_picture(str(fake_vera))
+    target = tmp_path / "fake-cover.docx"
+    doc.save(target)
+    monkeypatch.setattr(luca_fixture_verifier, "BACKEND_ROOT", fake_backend)
+
+    assert not luca_fixture_verifier._audit_vera_cover(target, doc)
 
 
 def test_saved_order_places_null_after_explicit_order_and_uses_stable_ties():
@@ -411,6 +474,27 @@ def test_every_level_two_heading_is_a_single_separator_without_adjacent_page_bre
     assert not _document_xml_has_adjacent_page_breaks(doc)
 
 
+@pytest.mark.parametrize("intruder_has_page_break_before", [False, True])
+def test_separator_audit_rejects_heading_after_mid_content_despite_breaks(
+    full_dvr_doc, intruder_has_page_break_before
+):
+    doc, fixture = full_dvr_doc
+    heading = next(
+        paragraph
+        for paragraph in doc.paragraphs
+        if paragraph.style.name == "Heading 2"
+        and paragraph.text == "2.2 Definizioni"
+    )
+    intruding_content = doc.add_paragraph("MID-CONTENT SENTINEL")
+    intruding_content.paragraph_format.page_break_before = (
+        intruder_has_page_break_before
+    )
+    heading._p.addprevious(intruding_content._p)
+
+    assert _next_paragraph_has_page_break(heading)
+    assert not luca_fixture_verifier._audit_topic_separators(doc, fixture)
+
+
 def test_each_part_h1_occurs_once_and_shares_its_first_topic_separator(full_dvr_doc):
     doc, fixture = full_dvr_doc
     paragraphs = doc.paragraphs
@@ -503,6 +587,8 @@ def test_declaration_has_fresh_content_page_and_signature_rows_are_signable(full
     place_date = next(paragraph for paragraph in doc.paragraphs if ", li " in paragraph.text)
     assert final_clause._p.xpath("./w:pPr/w:keepNext")
     assert place_date._p.xpath("./w:pPr/w:keepNext")
+    assert final_clause._p.getnext() is place_date._p
+    assert place_date._p.getnext() is signature._tbl
 
 
 def test_luca_fixture_auditor_reports_all_acceptance_checks(tmp_path):
@@ -628,6 +714,47 @@ def _assert_patch_surface_restored(snapshot):
         for owner, name, original in snapshot
         if getattr(owner, name) is not original
     ] == []
+
+
+def _exercise_document_fixture_and_collect_patch_leaks(
+    fixture_factory, tmp_path, *, raise_inside
+):
+    snapshots = [
+        (owner, dict(vars(owner)))
+        for owner in luca_fixture_verifier._generator_patch_objects()
+    ]
+    yielded = fixture_factory.__wrapped__(tmp_path)
+    try:
+        if not pyinspect.isgenerator(yielded):
+            return False, luca_fixture_verifier._changed_attributes(snapshots)
+        next(yielded)
+        if raise_inside:
+            with pytest.raises(RuntimeError, match="fixture consumer failed"):
+                yielded.throw(RuntimeError("fixture consumer failed"))
+        else:
+            yielded.close()
+        return True, luca_fixture_verifier._changed_attributes(snapshots)
+    finally:
+        luca_fixture_verifier._restore_attributes(
+            luca_fixture_verifier._changed_attributes(snapshots)
+        )
+
+
+@pytest.mark.parametrize(
+    "fixture_factory",
+    [full_dvr_doc, empty_environment_dvr_doc],
+    ids=["full", "empty-environment"],
+)
+@pytest.mark.parametrize("raise_inside", [False, True], ids=["success", "exception"])
+def test_document_fixtures_restore_complete_generator_patch_surface(
+    fixture_factory, tmp_path, raise_inside
+):
+    was_yield_fixture, leaks = _exercise_document_fixture_and_collect_patch_leaks(
+        fixture_factory, tmp_path, raise_inside=raise_inside
+    )
+
+    assert was_yield_fixture, "fixture must yield inside the restoration context"
+    assert [(getattr(owner, "__name__", repr(owner)), name) for owner, name, _ in leaks] == []
 
 
 def _ordered_acme_doc_content(path: Path):

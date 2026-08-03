@@ -3885,7 +3885,6 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         run = luogo_data.add_run(f"{citta}, li {oggi}")
         run.font.size = Pt(10)
         run.bold = True
-        doc.add_paragraph("")
 
     def _add_improvement_program_table(
         self, doc: Document, misure: list

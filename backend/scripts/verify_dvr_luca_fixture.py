@@ -15,6 +15,7 @@ import uuid
 from collections import Counter
 from contextlib import contextmanager
 from datetime import datetime
+from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
@@ -27,6 +28,7 @@ from docx import Document
 from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_ROW_HEIGHT_RULE
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
 from docx.shared import Cm
 from PIL import Image
 
@@ -46,6 +48,13 @@ _H1_HEADINGS = [
     "PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO",
     "PARTE IV — PROGRAMMA DI MIGLIORAMENTO",
 ]
+_PART_CONTEXT_LABELS = frozenset(
+    heading for heading in _H1_HEADINGS if heading.startswith("PARTE ")
+)
+_VERA_COVER_SHA256 = (
+    "d69929b5cb8981836db8e0d0610e3ff62e91702581392567ffe0247aa616fe15"
+)
+_VERA_COVER_DIMENSIONS = (640, 358)
 _REPORT_KEYS = (
     "acme_regression",
     "vera_cover",
@@ -75,6 +84,74 @@ def _next_paragraph_has_page_break(paragraph) -> bool:
         following is not None
         and following.xpath('.//w:br[@w:type="page"]')
     )
+
+
+def _paragraph_for_element(doc: Document, element):
+    return next(
+        (paragraph for paragraph in doc.paragraphs if paragraph._p is element),
+        None,
+    )
+
+
+def _is_part_heading_or_context(paragraph) -> bool:
+    if paragraph.text not in _PART_CONTEXT_LABELS:
+        return False
+    if paragraph.style.name == "Heading 1":
+        return True
+    populated_runs = [run for run in paragraph.runs if run.text]
+    return (
+        paragraph.alignment == WD_ALIGN_PARAGRAPH.CENTER
+        and bool(populated_runs)
+        and all(run.bold for run in populated_runs)
+    )
+
+
+def _element_starts_new_page(element) -> bool:
+    if element is None or not element.tag.endswith("}p"):
+        return False
+    if element.xpath("./w:pPr/w:sectPr"):
+        return True
+
+    meaningful_tags = {
+        qn("w:drawing"),
+        qn("w:instrText"),
+        qn("w:object"),
+        qn("w:pict"),
+        qn("w:sym"),
+        qn("w:tab"),
+    }
+
+    def is_meaningful(node) -> bool:
+        if node.tag == qn("w:t"):
+            return bool((node.text or "").strip())
+        return node.tag in meaningful_tags
+
+    page_break_before = element.xpath("./w:pPr/w:pageBreakBefore")
+    if page_break_before:
+        value = page_break_before[0].get(qn("w:val"))
+        enabled = value is None or value.lower() not in {"0", "false", "off", "no"}
+        if enabled and not any(is_meaningful(node) for node in element.iter()):
+            return True
+
+    page_breaks = element.xpath('.//w:br[@w:type="page"]')
+    if not page_breaks:
+        return False
+    last_page_break = page_breaks[-1]
+    nodes_after_break = iter(element.iter())
+    for node in nodes_after_break:
+        if node is last_page_break:
+            break
+    return not any(is_meaningful(node) for node in nodes_after_break)
+
+
+def _topic_has_start_boundary(doc: Document, heading) -> bool:
+    previous = heading._p.getprevious()
+    while previous is not None:
+        paragraph = _paragraph_for_element(doc, previous)
+        if paragraph is None or not _is_part_heading_or_context(paragraph):
+            break
+        previous = previous.getprevious()
+    return _element_starts_new_page(previous)
 
 
 def _assign_order_metadata(items: list, *, first_uuid: int) -> None:
@@ -521,6 +598,7 @@ def _audit_outline(doc: Document, fixture: dict) -> bool:
         and [paragraph.text for paragraph in headings] == expected
         and Counter(paragraph.text for paragraph in headings)
         == Counter(expected)
+        and all(_topic_has_start_boundary(doc, heading) for heading in headings)
         and all(_next_paragraph_has_page_break(heading) for heading in headings)
         and not any(left and right for left, right in zip(flags, flags[1:]))
     )
@@ -533,10 +611,22 @@ def _audit_vera_cover(path: Path, doc: Document) -> bool:
             for name in archive.namelist()
             if name.startswith("word/media/")
         ]
-    vera = (BACKEND_ROOT / "assets" / "n2o_vera_dvr.png").read_bytes()
     legacy = (BACKEND_ROOT / "assets" / "logo.png").read_bytes()
+    matching = [
+        content
+        for content in media
+        if sha256(content).hexdigest() == _VERA_COVER_SHA256
+    ]
+    dimensions_match = False
+    if len(matching) == 1:
+        try:
+            with Image.open(BytesIO(matching[0])) as image:
+                dimensions_match = image.size == _VERA_COVER_DIMENSIONS
+        except OSError:
+            dimensions_match = False
     return (
-        media.count(vera) == 1
+        len(matching) == 1
+        and dimensions_match
         and legacy not in media
         and "Documento elaborato da" not in _text(doc)
     )
@@ -779,12 +869,30 @@ def _audit_declaration_signatures(doc: Document, fixture: dict) -> bool:
     signature_cells = [
         [cell.text for cell in row.cells] for row in signature.rows
     ]
+    final_clause = next(
+        (
+            paragraph
+            for paragraph in doc.paragraphs
+            if paragraph.text.startswith("di impegnarsi a rielaborare")
+        ),
+        None,
+    )
+    place_date = next(
+        (paragraph for paragraph in doc.paragraphs if ", li " in paragraph.text),
+        None,
+    )
     declaration_text = _text(doc)
     return (
         _next_paragraph_has_page_break(declaration)
         and "DATORE FIXTURE, in qualita di Datore di Lavoro della "
         "LUCA FIXTURE INDUSTRIA SRL" in declaration_text
         and signature_cells == fixture["expected_signature_cells"]
+        and final_clause is not None
+        and place_date is not None
+        and bool(final_clause._p.xpath("./w:pPr/w:keepNext"))
+        and bool(place_date._p.xpath("./w:pPr/w:keepNext"))
+        and final_clause._p.getnext() is place_date._p
+        and place_date._p.getnext() is signature._tbl
         and all(
             row.height >= Cm(3)
             and row.height_rule == WD_ROW_HEIGHT_RULE.AT_LEAST

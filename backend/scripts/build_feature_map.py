@@ -81,11 +81,22 @@ def _iter_api_routes(routes: Iterable[Any]) -> Iterator[Any]:
     """Yield every ``APIRoute``, descending into nested routers.
 
     ``include_router()`` used to flatten children onto the parent; on newer
-    FastAPI/starlette it keeps the child router as a single entry whose own
-    ``.routes`` hold the endpoints. Recursing works on both, which is the same
-    hazard ``tests/conftest.py:route_pairs`` documents.
+    FastAPI it keeps an opaque included-router entry. Prefer FastAPI's public
+    route-context iterator there, while retaining recursive traversal for older
+    releases whose included routers expose ``.routes``.
     """
     from fastapi.routing import APIRoute
+
+    try:
+        from fastapi.routing import iter_route_contexts
+    except ImportError:  # pragma: no cover - exercised on older FastAPI only
+        iter_route_contexts = None
+
+    if iter_route_contexts is not None:
+        for context in iter_route_contexts(list(routes)):
+            if isinstance(context.original_route, APIRoute):
+                yield context
+        return
 
     for route in routes:
         if isinstance(route, APIRoute):

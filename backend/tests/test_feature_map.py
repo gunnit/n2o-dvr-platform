@@ -55,6 +55,30 @@ def manifest(generator):
     return generator.build_manifest()
 
 
+def test_route_collector_descends_modern_fastapi_included_routers(generator):
+    from fastapi import APIRouter, FastAPI
+
+    child = APIRouter(prefix="/child")
+
+    @child.get("/ping")
+    async def nested_ping():
+        return {"ok": True}
+
+    parent = APIRouter(prefix="/api")
+    parent.include_router(child)
+    probe = FastAPI()
+    probe.include_router(parent)
+
+    routes = list(generator._iter_api_routes(probe.routes))
+
+    assert [
+        (method, route.path, route.endpoint)
+        for route in routes
+        for method in sorted(route.methods or set())
+        if method not in {"HEAD", "OPTIONS"}
+    ] == [("GET", "/api/child/ping", nested_ping)]
+
+
 # --- the map is current ----------------------------------------------------
 
 

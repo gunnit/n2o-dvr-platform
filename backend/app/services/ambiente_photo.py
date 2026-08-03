@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from dataclasses import dataclass
 from io import BytesIO
@@ -15,8 +16,10 @@ from app.models.ambiente_foto import AmbienteFoto
 MAX_DOCUMENT_IMAGE_BYTES = 3 * 1024 * 1024
 MAX_DOCUMENT_IMAGE_EDGE = 2000
 MIN_DOCUMENT_IMAGE_EDGE = 640
-MAX_SOURCE_IMAGE_PIXELS = 40_000_000
-MAX_SOURCE_IMAGE_EDGE = 20_000
+MAX_ORIGINAL_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_SOURCE_IMAGE_PIXELS = 25_000_000
+MAX_SOURCE_IMAGE_EDGE = 8_192
+ALLOWED_DECODED_IMAGE_FORMATS = frozenset({"JPEG", "PNG", "HEIF", "HEIC"})
 JPEG_QUALITIES = (88, 82, 76, 70, 64, 58, 52, 46, 40)
 logger = logging.getLogger(__name__)
 
@@ -43,6 +46,11 @@ def normalize_document_image(content: bytes) -> NormalizedDocumentImage:
     register_heif_opener()
     try:
         with Image.open(BytesIO(content)) as opened:
+            decoded_format = (opened.format or "").upper()
+            if decoded_format not in ALLOWED_DECODED_IMAGE_FORMATS:
+                raise DocumentImageNormalizationError(
+                    "Immagine con formato non supportato"
+                )
             width, height = opened.size
             if (
                 width > MAX_SOURCE_IMAGE_EDGE
@@ -52,7 +60,19 @@ def normalize_document_image(content: bytes) -> NormalizedDocumentImage:
                 raise DocumentImageNormalizationError(
                     "Immagine con dimensioni non supportate"
                 )
-            image = ImageOps.exif_transpose(opened).copy()
+            # JPEG decoders can subsample during decode. For every format,
+            # reduce the single source image before EXIF copying and alpha
+            # flattening so no second full-resolution RGBA buffer is created.
+            if decoded_format == "JPEG":
+                opened.draft(
+                    "RGB", (MAX_DOCUMENT_IMAGE_EDGE, MAX_DOCUMENT_IMAGE_EDGE)
+                )
+            opened.thumbnail(
+                (MAX_DOCUMENT_IMAGE_EDGE, MAX_DOCUMENT_IMAGE_EDGE),
+                Image.Resampling.LANCZOS,
+                reducing_gap=2.0,
+            )
+            image = _flatten_to_rgb(ImageOps.exif_transpose(opened))
     except DocumentImageNormalizationError:
         raise
     except (
@@ -63,11 +83,6 @@ def normalize_document_image(content: bytes) -> NormalizedDocumentImage:
     ) as exc:
         raise DocumentImageNormalizationError("Immagine non decodificabile") from exc
 
-    image = _flatten_to_rgb(image)
-    image.thumbnail(
-        (MAX_DOCUMENT_IMAGE_EDGE, MAX_DOCUMENT_IMAGE_EDGE),
-        Image.Resampling.LANCZOS,
-    )
     while True:
         for quality in JPEG_QUALITIES:
             output = BytesIO()
@@ -97,6 +112,16 @@ def _flatten_to_rgb(image: Image.Image) -> Image.Image:
         background.alpha_composite(foreground)
         return background.convert("RGB")
     return image.convert("RGB")
+
+
+def _read_and_normalize_legacy_photo(source: Path) -> NormalizedDocumentImage:
+    with source.open("rb") as stream:
+        content = stream.read(MAX_ORIGINAL_IMAGE_BYTES + 1)
+    if len(content) > MAX_ORIGINAL_IMAGE_BYTES:
+        raise DocumentImageNormalizationError(
+            "File originale oltre il limite di 10 MB"
+        )
+    return normalize_document_image(content)
 
 
 async def backfill_document_images_for_dvr(
@@ -133,7 +158,9 @@ async def backfill_document_images_for_dvr(
             )
             continue
         try:
-            normalized = normalize_document_image(source.read_bytes())
+            normalized = await asyncio.to_thread(
+                _read_and_normalize_legacy_photo, source
+            )
         except (OSError, DocumentImageNormalizationError):
             failed += 1
             logger.warning(

@@ -2,6 +2,7 @@ import importlib.util
 import inspect as pyinspect
 import logging
 import struct
+import threading
 import uuid
 import zlib
 from datetime import datetime
@@ -87,6 +88,15 @@ def test_small_image_is_not_enlarged():
         assert image.size == (320, 200)
 
 
+def test_ordinary_twelve_megapixel_phone_photo_is_supported():
+    source = _image_bytes(Image.new("RGB", (4_032, 3_024), "navy"), "JPEG")
+
+    result = normalize_document_image(source)
+
+    with Image.open(BytesIO(result.content)) as image:
+        assert image.size == (2_000, 1_500)
+
+
 def test_payload_fallback_reduces_dimensions(monkeypatch):
     noisy = Image.effect_noise((2000, 2000), 100).convert("RGB")
     monkeypatch.setattr(
@@ -103,6 +113,14 @@ def test_heic_normalizes_to_jpeg(heic_fixture_bytes):
     assert result.content[:2] == b"\xff\xd8"
 
 
+@pytest.mark.parametrize("image_format", ["GIF", "WEBP", "TIFF"])
+def test_decodable_non_photo_contract_formats_are_rejected(image_format):
+    disguised = _image_bytes(Image.new("RGB", (16, 16), "purple"), image_format)
+
+    with pytest.raises(DocumentImageNormalizationError, match="formato"):
+        normalize_document_image(disguised)
+
+
 def test_invalid_image_raises_typed_error():
     with pytest.raises(DocumentImageNormalizationError):
         normalize_document_image(b"not an image")
@@ -110,7 +128,7 @@ def test_invalid_image_raises_typed_error():
 
 @pytest.mark.parametrize(
     ("width", "height"),
-    [(10_000, 5_000), (20_001, 1)],
+    [(6_251, 4_000), (8_193, 1)],
 )
 def test_source_dimension_limits_reject_before_decoding(width, height):
     source = _png_with_declared_dimensions(width, height)
@@ -120,6 +138,22 @@ def test_source_dimension_limits_reject_before_decoding(width, height):
     ):
         with pytest.raises(DocumentImageNormalizationError, match="dimensioni"):
             normalize_document_image(source)
+
+
+def test_rgba_source_is_resized_before_alpha_flattening(monkeypatch):
+    source = _image_bytes(Image.new("RGBA", (4_000, 1_200), (0, 0, 0, 0)), "PNG")
+    flattened_sizes = []
+    real_flatten = ambiente_photo._flatten_to_rgb
+
+    def record_flatten(image):
+        flattened_sizes.append(image.size)
+        return real_flatten(image)
+
+    monkeypatch.setattr(ambiente_photo, "_flatten_to_rgb", record_flatten)
+
+    normalize_document_image(source)
+
+    assert flattened_sizes == [(2_000, 600)]
 
 
 def test_photo_model_has_nullable_document_derivative_columns():
@@ -184,6 +218,42 @@ async def test_upload_persists_normalized_bytes(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_upload_normalization_runs_off_the_event_loop(tmp_path, monkeypatch):
+    class CountResult:
+        def scalar_one(self):
+            return 0
+
+    event_loop_thread = threading.get_ident()
+    normalization_threads = []
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = CountResult()
+    db.add = Mock()
+    db.refresh = AsyncMock()
+    monkeypatch.setattr(settings, "FILE_STORAGE_PATH", str(tmp_path))
+    monkeypatch.setattr("app.api.v1.ambienti._get_ambiente_for_org", AsyncMock())
+
+    def record_normalization(_content):
+        normalization_threads.append(threading.get_ident())
+        return NormalizedDocumentImage(b"jpeg", "image/jpeg")
+
+    monkeypatch.setattr(
+        "app.api.v1.ambienti.normalize_document_image", record_normalization
+    )
+    upload = UploadFile(
+        filename="reparto.png",
+        file=BytesIO(_image_bytes(Image.new("RGB", (32, 32), "blue"), "PNG")),
+        headers={"content-type": "image/png"},
+    )
+
+    await upload_ambiente_foto(
+        uuid.uuid4(), uuid.uuid4(), upload, uuid.uuid4(), db
+    )
+
+    assert normalization_threads
+    assert normalization_threads[0] != event_loop_thread
+
+
+@pytest.mark.asyncio
 async def test_upload_removes_only_new_file_when_commit_fails(tmp_path, monkeypatch):
     class CountResult:
         def scalar_one(self):
@@ -233,6 +303,40 @@ async def test_invalid_image_creates_no_row(tmp_path, monkeypatch):
             uuid.uuid4(), uuid.uuid4(), upload, uuid.uuid4(), db
         )
     db.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("image_format", ["GIF", "WEBP", "TIFF"])
+async def test_disguised_format_upload_creates_no_row_or_file(
+    tmp_path, monkeypatch, image_format
+):
+    class CountResult:
+        def scalar_one(self):
+            return 0
+
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = CountResult()
+    db.add = Mock()
+    monkeypatch.setattr(settings, "FILE_STORAGE_PATH", str(tmp_path))
+    monkeypatch.setattr("app.api.v1.ambienti._get_ambiente_for_org", AsyncMock())
+    upload = UploadFile(
+        filename="camuffata.jpg",
+        file=BytesIO(
+            _image_bytes(Image.new("RGB", (16, 16), "purple"), image_format)
+        ),
+        headers={"content-type": "image/jpeg"},
+    )
+
+    with pytest.raises(BadRequestError) as exc_info:
+        await upload_ambiente_foto(
+            uuid.uuid4(), uuid.uuid4(), upload, uuid.uuid4(), db
+        )
+
+    assert exc_info.value.detail == (
+        "Formato non supportato o file troppo grande (max 10 MB)"
+    )
+    db.add.assert_not_called()
+    assert not (tmp_path / "foto_ambienti").exists()
 
 
 @pytest.mark.asyncio
@@ -410,6 +514,122 @@ async def test_backfill_reads_legacy_api_disk_and_commits_before_return(tmp_path
     assert photo.document_image_bytes.startswith(b"\xff\xd8")
     assert photo.document_image_content_type == "image/jpeg"
     db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_backfill_requests_only_a_bounded_legacy_read(tmp_path):
+    class ScalarRows:
+        def scalars(self):
+            return self
+
+        def all(self):
+            return [photo]
+
+    requested_sizes = []
+
+    class RecordingReader(BytesIO):
+        def read(self, size=-1):
+            requested_sizes.append(size)
+            return super().read(size)
+
+    source = tmp_path / "legacy.png"
+    source.write_bytes(b"placeholder")
+    photo = SimpleNamespace(
+        id=uuid.uuid4(),
+        filename="legacy.png",
+        file_path=str(source),
+        document_image_bytes=None,
+        document_image_content_type=None,
+    )
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = ScalarRows()
+    reader = RecordingReader(
+        _image_bytes(Image.new("RGB", (64, 32), "blue"), "PNG")
+    )
+
+    with patch.object(Path, "open", return_value=reader):
+        result = await ambiente_photo.backfill_document_images_for_dvr(
+            uuid.uuid4(), db
+        )
+
+    assert result == ambiente_photo.PhotoBackfillResult(1, 1, 0, 0)
+    assert requested_sizes == [10 * 1024 * 1024 + 1]
+
+
+@pytest.mark.asyncio
+async def test_backfill_rejects_legacy_file_over_original_upload_limit(
+    tmp_path, monkeypatch
+):
+    class ScalarRows:
+        def scalars(self):
+            return self
+
+        def all(self):
+            return [photo]
+
+    source = tmp_path / "legacy-too-large.jpg"
+    source.write_bytes(b"x" * (10 * 1024 * 1024 + 1))
+    photo = SimpleNamespace(
+        id=uuid.uuid4(),
+        filename="legacy-too-large.jpg",
+        file_path=str(source),
+        document_image_bytes=None,
+        document_image_content_type=None,
+    )
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = ScalarRows()
+    normalize = Mock(
+        return_value=NormalizedDocumentImage(b"must-not-store", "image/jpeg")
+    )
+    monkeypatch.setattr(ambiente_photo, "normalize_document_image", normalize)
+
+    result = await ambiente_photo.backfill_document_images_for_dvr(
+        uuid.uuid4(), db
+    )
+
+    assert result == ambiente_photo.PhotoBackfillResult(1, 0, 0, 1)
+    assert photo.document_image_bytes is None
+    normalize.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_backfill_file_and_cpu_work_run_off_the_event_loop(
+    tmp_path, monkeypatch
+):
+    class ScalarRows:
+        def scalars(self):
+            return self
+
+        def all(self):
+            return [photo]
+
+    source = tmp_path / "legacy.png"
+    source.write_bytes(_image_bytes(Image.new("RGB", (64, 32), "blue"), "PNG"))
+    photo = SimpleNamespace(
+        id=uuid.uuid4(),
+        filename="legacy.png",
+        file_path=str(source),
+        document_image_bytes=None,
+        document_image_content_type=None,
+    )
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = ScalarRows()
+    event_loop_thread = threading.get_ident()
+    normalization_threads = []
+
+    def record_normalization(_content):
+        normalization_threads.append(threading.get_ident())
+        return NormalizedDocumentImage(b"jpeg", "image/jpeg")
+
+    monkeypatch.setattr(ambiente_photo, "normalize_document_image", record_normalization)
+
+    result = await ambiente_photo.backfill_document_images_for_dvr(
+        uuid.uuid4(), db
+    )
+
+    assert result == ambiente_photo.PhotoBackfillResult(1, 1, 0, 0)
+    assert normalization_threads
+    assert normalization_threads[0] != event_loop_thread
 
 
 @pytest.mark.asyncio
