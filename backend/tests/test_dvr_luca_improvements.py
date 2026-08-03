@@ -4,6 +4,8 @@ import asyncio
 import collections
 import importlib.util
 import logging
+import subprocess
+import sys
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
@@ -28,6 +30,7 @@ from app.services.document_generator.dvr_master import (
     _saved_order_key,
 )
 from app.services.ambiente_photo import normalize_document_image
+from scripts.verify_dvr_luca_fixture import build_and_audit
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -498,3 +501,37 @@ def test_declaration_has_fresh_content_page_and_signature_rows_are_signable(full
     place_date = next(paragraph for paragraph in doc.paragraphs if ", li " in paragraph.text)
     assert final_clause._p.xpath("./w:pPr/w:keepNext")
     assert place_date._p.xpath("./w:pPr/w:keepNext")
+
+
+def test_luca_fixture_auditor_reports_all_acceptance_checks(tmp_path):
+    report = build_and_audit(tmp_path)
+    assert report == {
+        "acme_regression": True,
+        "vera_cover": True,
+        "saved_people_order": True,
+        "saved_environment_order": True,
+        "external_roles": True,
+        "grouped_equipment": True,
+        "all_ten_photos": True,
+        "effective_risks": True,
+        "person_specific_risks": True,
+        "dpi_dash_alignment": True,
+        "topic_separators": True,
+        "complete_improvements": True,
+        "declaration_signatures": True,
+    }
+
+
+def test_luca_fixture_cli_is_directly_runnable_outside_backend(tmp_path):
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(BACKEND_ROOT / "scripts" / "verify_dvr_luca_fixture.py"),
+            "--help",
+        ],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
