@@ -7,6 +7,8 @@ from pillow_heif import register_heif_opener
 MAX_DOCUMENT_IMAGE_BYTES = 3 * 1024 * 1024
 MAX_DOCUMENT_IMAGE_EDGE = 2000
 MIN_DOCUMENT_IMAGE_EDGE = 640
+MAX_SOURCE_IMAGE_PIXELS = 40_000_000
+MAX_SOURCE_IMAGE_EDGE = 20_000
 JPEG_QUALITIES = (88, 82, 76, 70, 64, 58, 52, 46, 40)
 
 
@@ -24,8 +26,24 @@ def normalize_document_image(content: bytes) -> NormalizedDocumentImage:
     register_heif_opener()
     try:
         with Image.open(BytesIO(content)) as opened:
+            width, height = opened.size
+            if (
+                width > MAX_SOURCE_IMAGE_EDGE
+                or height > MAX_SOURCE_IMAGE_EDGE
+                or width * height > MAX_SOURCE_IMAGE_PIXELS
+            ):
+                raise DocumentImageNormalizationError(
+                    "Immagine con dimensioni non supportate"
+                )
             image = ImageOps.exif_transpose(opened).copy()
-    except (OSError, ValueError, UnidentifiedImageError) as exc:
+    except DocumentImageNormalizationError:
+        raise
+    except (
+        Image.DecompressionBombError,
+        OSError,
+        ValueError,
+        UnidentifiedImageError,
+    ) as exc:
         raise DocumentImageNormalizationError("Immagine non decodificabile") from exc
 
     image = _flatten_to_rgb(image)

@@ -1,5 +1,7 @@
 import importlib.util
+import struct
 import uuid
+import zlib
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -32,6 +34,14 @@ def _image_bytes(image: Image.Image, image_format: str, **save_kwargs) -> bytes:
     output = BytesIO()
     image.save(output, format=image_format, **save_kwargs)
     return output.getvalue()
+
+
+def _png_with_declared_dimensions(width: int, height: int) -> bytes:
+    """Forge only the generated PNG header; no large pixel asset is allocated."""
+    source = bytearray(_image_bytes(Image.new("RGB", (1, 1), "blue"), "PNG"))
+    source[16:24] = struct.pack(">II", width, height)
+    source[29:33] = struct.pack(">I", zlib.crc32(source[12:29]) & 0xFFFFFFFF)
+    return bytes(source)
 
 
 @pytest.fixture
@@ -89,6 +99,20 @@ def test_heic_normalizes_to_jpeg(heic_fixture_bytes):
 def test_invalid_image_raises_typed_error():
     with pytest.raises(DocumentImageNormalizationError):
         normalize_document_image(b"not an image")
+
+
+@pytest.mark.parametrize(
+    ("width", "height"),
+    [(10_000, 5_000), (20_001, 1)],
+)
+def test_source_dimension_limits_reject_before_decoding(width, height):
+    source = _png_with_declared_dimensions(width, height)
+    with patch(
+        "PIL.PngImagePlugin.PngImageFile.load",
+        side_effect=AssertionError("oversized source was decoded"),
+    ):
+        with pytest.raises(DocumentImageNormalizationError, match="dimensioni"):
+            normalize_document_image(source)
 
 
 def test_photo_model_has_nullable_document_derivative_columns():
@@ -202,6 +226,35 @@ async def test_invalid_image_creates_no_row(tmp_path, monkeypatch):
             uuid.uuid4(), uuid.uuid4(), upload, uuid.uuid4(), db
         )
     db.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_oversized_source_upload_creates_no_row_or_file(tmp_path, monkeypatch):
+    class CountResult:
+        def scalar_one(self):
+            return 0
+
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = CountResult()
+    db.add = Mock()
+    monkeypatch.setattr(settings, "FILE_STORAGE_PATH", str(tmp_path))
+    monkeypatch.setattr("app.api.v1.ambienti._get_ambiente_for_org", AsyncMock())
+    upload = UploadFile(
+        filename="troppo-grande.png",
+        file=BytesIO(_png_with_declared_dimensions(20_000, 10_000)),
+        headers={"content-type": "image/png"},
+    )
+
+    with pytest.raises(
+        BadRequestError,
+        match=r"Formato non supportato o file troppo grande \(max 10 MB\)",
+    ):
+        await upload_ambiente_foto(
+            uuid.uuid4(), uuid.uuid4(), upload, uuid.uuid4(), db
+        )
+
+    db.add.assert_not_called()
+    assert not (tmp_path / "foto_ambienti").exists()
 
 
 @pytest.mark.asyncio
