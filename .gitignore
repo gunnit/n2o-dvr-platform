@@ -73,6 +73,7 @@ npm-debug.log*
 tmp/
 *.tmp
 .superpowers/
+.worktrees/
 
 # Disposable test screenshots (root only)
 /e2e-*.png
