@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Integer, String, func
+from sqlalchemy import ForeignKey, Integer, LargeBinary, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +22,12 @@ class AmbienteFoto(Base):
     file_path: Mapped[str] = mapped_column(String, nullable=False)
     content_type: Mapped[str] = mapped_column(String(64), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    document_image_bytes: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True
+    )
+    document_image_content_type: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     ambiente: Mapped["Ambiente"] = relationship()
