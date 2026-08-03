@@ -16,7 +16,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -89,6 +89,44 @@ async def _verify_valutazione(
     if not val:
         raise NotFoundError("Valutazione rischio not found")
     return val
+
+
+async def _lock_parent(
+    rischio_id: uuid.UUID,
+    ambiente_id: uuid.UUID,
+    db: AsyncSession,
+) -> ValutazioneRischio:
+    parent = (
+        await db.execute(
+            select(ValutazioneRischio)
+            .where(
+                ValutazioneRischio.id == rischio_id,
+                ValutazioneRischio.ambiente_id == ambiente_id,
+            )
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if parent is None:
+        raise NotFoundError("Valutazione rischio not found")
+    return parent
+
+
+async def _sync_parent_applicabile(
+    parent: ValutazioneRischio,
+    db: AsyncSession,
+) -> None:
+    await db.flush()
+    any_applicable = bool(
+        (
+            await db.execute(
+                select(func.count(PericoloValutazione.id)).where(
+                    PericoloValutazione.valutazione_rischio_id == parent.id,
+                    PericoloValutazione.applicabile.is_(True),
+                )
+            )
+        ).scalar_one()
+    )
+    parent.applicabile = any_applicable
 
 
 # ---------------------------------------------------------------------------
@@ -207,13 +245,14 @@ async def create_pericolo_valutazione(
 ):
     await _verify_azienda(azienda_id, org_id, db)
     await _verify_ambiente(ambiente_id, azienda_id, db)
-    await _verify_valutazione(rischio_id, ambiente_id, db)
+    parent = await _lock_parent(rischio_id, ambiente_id, db)
 
     row = PericoloValutazione(
         **body.model_dump(),
         valutazione_rischio_id=rischio_id,
     )
     db.add(row)
+    await _sync_parent_applicabile(parent, db)
     await db.commit()
     await db.refresh(row)
     return row
@@ -235,7 +274,7 @@ async def update_pericolo_valutazione(
 ):
     await _verify_azienda(azienda_id, org_id, db)
     await _verify_ambiente(ambiente_id, azienda_id, db)
-    await _verify_valutazione(rischio_id, ambiente_id, db)
+    parent = await _lock_parent(rischio_id, ambiente_id, db)
     row = (
         await db.execute(
             select(PericoloValutazione).where(
@@ -248,6 +287,7 @@ async def update_pericolo_valutazione(
         raise NotFoundError("Pericolo not found")
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(row, k, v)
+    await _sync_parent_applicabile(parent, db)
     await db.commit()
     await db.refresh(row)
     return row
@@ -268,7 +308,7 @@ async def delete_pericolo_valutazione(
 ):
     await _verify_azienda(azienda_id, org_id, db)
     await _verify_ambiente(ambiente_id, azienda_id, db)
-    await _verify_valutazione(rischio_id, ambiente_id, db)
+    parent = await _lock_parent(rischio_id, ambiente_id, db)
     row = (
         await db.execute(
             select(PericoloValutazione).where(
@@ -280,6 +320,7 @@ async def delete_pericolo_valutazione(
     if not row:
         raise NotFoundError("Pericolo not found")
     await db.delete(row)
+    await _sync_parent_applicabile(parent, db)
     await db.commit()
 
 
@@ -302,7 +343,7 @@ async def batch_upsert_pericoli(
     """
     await _verify_azienda(azienda_id, org_id, db)
     await _verify_ambiente(ambiente_id, azienda_id, db)
-    await _verify_valutazione(rischio_id, ambiente_id, db)
+    parent = await _lock_parent(rischio_id, ambiente_id, db)
 
     existing = (
         await db.execute(
@@ -336,6 +377,7 @@ async def batch_upsert_pericoli(
         if rid not in incoming_ids and row not in out:
             await db.delete(row)
 
+    await _sync_parent_applicabile(parent, db)
     await db.commit()
     for r in out:
         await db.refresh(r)

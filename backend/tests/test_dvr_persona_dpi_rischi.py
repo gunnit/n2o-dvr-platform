@@ -1,18 +1,18 @@
-"""Tests for the per-persona DPI + rischi specifici aggregation in the
-DVR Master generator (refactor 2026-04-30).
+"""Tests for per-persona DPI and specific-risk rendering in DVR Master.
 
 Two persone with the same mansione can carry divergent flags. The
 generator must:
-  - aggregate (union) their codes when emitting the per-mansione tables
-  - flag the row with a "varia per lavoratore" note when the persone
-    diverge
-  - omit the note when the persone share identical flags
+  - retain each person's identity in the specific-risk table
+  - aggregate (union) their codes only for the per-mansione DPI tables
 """
 
 from dataclasses import dataclass, field
 
 from docx import Document
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
+from app.services.document_generator import dvr_master
 from app.services.document_generator.dvr_master import DVRMasterGenerator
 
 
@@ -100,37 +100,96 @@ def test_dpi_per_mansione_no_varia_note_when_aligned():
     assert "varia tra i lavoratori" not in text
 
 
-def test_rischi_specifici_section_aggregates_persona_codes():
-    """rischi_specifici_codes ticked on the persona must surface in the
-    aggregated 'Mansioni che espongono a rischi specifici' table, with a
-    'varia per lavoratore' suffix when the persone diverge."""
-    persone = [
-        _FakePersona(
-            id="p1",
-            nominativo="Mario Rossi",
-            mansione="Operaio",
-            # 'af_rumore' = rumore (catalog), 'mmc' = movimentazione manuale
-            rischi_specifici_codes=["af_rumore"],
-        ),
-        _FakePersona(
-            id="p2",
-            nominativo="Anna Bianchi",
-            mansione="Operaio",
-            rischi_specifici_codes=["af_rumore", "mmc"],
-        ),
+def test_specific_risks_render_one_row_per_exposed_person_without_cross_inheritance():
+    mario = _FakePersona(
+        "p1", "Mario Rossi", "Operaio", rischi_specifici_codes=["af_rumore"]
+    )
+    anna = _FakePersona(
+        "p2", "Anna Bianchi", "Operaio", rischi_specifici_codes=["mmc"]
+    )
+    doc = Document()
+    _new_generator()._add_mansioni_rischi_specifici_section(
+        doc, [mario, anna], {"vdt_esposti_persona_ids": set()}
+    )
+    table = doc.tables[-1]
+    assert [cell.text for cell in table.rows[0].cells] == [
+        "Nominativo",
+        "Mansione",
+        "Rischio specifico",
+    ]
+    assert [cell.text for cell in table.rows[1].cells][:2] == [
+        "MARIO ROSSI",
+        "OPERAIO",
+    ]
+    assert "Rumore" in table.rows[1].cells[2].text
+    assert "Movimentazione" not in table.rows[1].cells[2].text
+    assert [cell.text for cell in table.rows[2].cells][:2] == [
+        "ANNA BIANCHI",
+        "OPERAIO",
+    ]
+    assert "Movimentazione" in table.rows[2].cells[2].text
+    assert "Rumore" not in table.rows[2].cells[2].text
+
+
+def test_person_specific_risks_keep_saved_order_and_deduplicate_labels():
+    person = _FakePersona(
+        "p1",
+        "Mario Rossi",
+        "Operaio",
+        rischi_specifici_codes=["af_rumore", "mmc", "af_rumore"],
+        attrezzature_speciali=[
+            "lavori_in_quota",
+            "trabattelli",
+            "ponteggi",
+            "carrello_elevatore",
+            "ple",
+            "gru",
+            "ruspa_escavatore",
+            "patente_cde",
+            "adr",
+            "adr",
+        ],
+    )
+
+    assert dvr_master._person_specific_risk_labels(person, {"p1"}) == [
+        "Videoterminali",
+        "Lavori in quota",
+        "Utilizzo di trabattelli",
+        "Utilizzo di ponteggi",
+        "Utilizzo di carrelli elevatori",
+        "Utilizzo di piattaforme di lavoro elevabili (PLE)",
+        "Utilizzo di gru",
+        "Utilizzo di ruspe ed escavatori",
+        "Guida professionale (patente C/D/E)",
+        "Trasporto merci pericolose (ADR)",
+        "Agenti fisici - Rumore",
+        "Movimentazione manuale dei carichi (MMC)",
     ]
 
-    gen = _new_generator()
-    doc = Document()
-    extras = {"vdt_esposti_persona_ids": set()}
-    gen._add_mansioni_rischi_specifici_section(doc, persone, extras)
 
-    text = _all_text(doc).lower()
-    assert "operaio" in text
-    # Both rischi present (union)
-    assert "rumore" in text
-    # Divergent → suffix surfaces
-    assert "varia per lavoratore" in text
+def test_only_dpi_marca_modello_dash_is_centered_both_ways():
+    doc = Document()
+    _new_generator()._add_dpi_per_mansione_section(
+        doc, [_FakePersona("p", "Mario", "Operaio")], {}
+    )
+    table = next(
+        table
+        for table in doc.tables
+        if table.rows
+        and "Marca / Modello" in [
+            cell.text.strip() for cell in table.rows[0].cells
+        ]
+    )
+    column = [cell.text.strip() for cell in table.rows[0].cells].index(
+        "Marca / Modello"
+    )
+    dash_cell = table.rows[1].cells[column]
+    assert dash_cell.paragraphs[0].alignment == WD_ALIGN_PARAGRAPH.CENTER
+    assert dash_cell.vertical_alignment == WD_CELL_VERTICAL_ALIGNMENT.CENTER
+    assert (
+        table.rows[1].cells[0].vertical_alignment
+        != WD_CELL_VERTICAL_ALIGNMENT.CENTER
+    )
 
 
 def test_dpi_per_mansione_documents_mansione_with_no_flags():

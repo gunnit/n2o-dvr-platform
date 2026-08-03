@@ -246,10 +246,15 @@ def test_dvr_parte_iv_has_signature_table(generated_outputs):
         if not table.rows:
             continue
         header_cells = [cell.text.strip() for cell in table.rows[0].cells]
-        if (
-            header_cells[:1] == ["Misure di miglioramento"]
-            and "Tempi di attuazione" in header_cells
-        ):
+        if header_cells == [
+            "Priorità",
+            "Rischio",
+            "Misura di Miglioramento",
+            "Attività / Procedura",
+            "Risorse",
+            "Responsabile",
+            "Scadenza",
+        ]:
             found_program = True
             break
     assert found_program, (

@@ -6,6 +6,7 @@ import re
 import shutil
 import uuid
 from collections import OrderedDict
+from collections.abc import Collection
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -42,6 +43,10 @@ from app.schemas.document import (
     DocumentSnapshotResponse,
     OverridesPatchRequest,
     OverridesResponse,
+)
+from app.services.ambiente_photo import (
+    PhotoBackfillResult,
+    backfill_document_images_for_dvr,
 )
 
 
@@ -326,6 +331,16 @@ def _enqueue_generation(doc: DocumentoGenerato, ent: Entitlements, org_id: uuid.
         logging.getLogger(__name__).exception("Celery dispatch failed for %s", doc.id)
 
 
+async def _preflight_dvr_photo_transport(
+    azienda_id: uuid.UUID,
+    requested_types: Collection[str],
+    db: AsyncSession,
+) -> PhotoBackfillResult | None:
+    if "dvr_master" not in requested_types:
+        return None
+    return await backfill_document_images_for_dvr(azienda_id, db)
+
+
 @router.post("/generate", response_model=DocumentResponse, status_code=202)
 async def generate_document(
     azienda_id: uuid.UUID,
@@ -354,6 +369,8 @@ async def generate_document(
     await _ensure_anagrafica_complete_for_dvr(azienda, body.tipo_documento)
     # US-4.1 AC2: block dependent documents (PEE) until the DVR Master exists.
     await _ensure_dvr_exists_for_dependent(azienda_id, body.tipo_documento, db)
+
+    await _preflight_dvr_photo_transport(azienda_id, [body.tipo_documento], db)
 
     # Determine the next version number for this document type
     result = await db.execute(
@@ -553,6 +570,8 @@ async def batch_generate_documents(
         ensure_doc_type_allowed(ent, tipo, org_id)
     # MB-2.3: a batch activates the company once, not once per document.
     await _ensure_company_slot_available(ent, org_id, azienda_id, db)
+
+    await _preflight_dvr_photo_transport(azienda_id, body.tipi_documento, db)
 
     created_docs: list[DocumentoGenerato] = []
 

@@ -12,30 +12,107 @@ Output: A .docx file with professional formatting including:
 - Part IV: Improvement measures placeholder
 """
 
+import logging
 import os
 import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 
 from docx import Document
-from docx.enum.section import WD_ORIENT
-from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.enum.section import WD_ORIENT, WD_SECTION
+from docx.enum.table import (
+    WD_CELL_VERTICAL_ALIGNMENT,
+    WD_ROW_HEIGHT_RULE,
+    WD_TABLE_ALIGNMENT,
+)
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from docx.oxml.xmlchemy import BaseOxmlElement
 from docx.shared import Cm, Inches, Mm, Pt, RGBColor
+from docx.table import Table
 
 from app.data.regional_regulations import get_regulations_for_comune
 from app.services.document_generator.base import BaseDocumentGenerator
-from app.services.document_generator.branding import resolve_logo_source
-from app.services.document_generator.docx_utils import add_consultancy_letterhead
 from app.services.reference_data import (
     HAZARD_LIBRARY,
     RISK_CATEGORIES,
     normalize_categoria_to_long,
 )
 from app.services.risk_calculator import calculate_risk_index
+
+logger = logging.getLogger(__name__)
+
+
+def _photo_image_sources(photo: object) -> list[BytesIO | str]:
+    sources: list[BytesIO | str] = []
+    content = getattr(photo, "document_image_bytes", None)
+    if content:
+        sources.append(BytesIO(content))
+    path = getattr(photo, "file_path", None)
+    if path and os.path.isfile(path):
+        sources.append(path)
+    return sources
+
+
+def _effective_risk_sources(parent: object) -> list:
+    children = list(getattr(parent, "pericoli", None) or [])
+    if children:
+        return [
+            child
+            for child in children
+            if getattr(child, "applicabile", False)
+        ]
+    return [parent] if getattr(parent, "applicabile", False) else []
+
+
+_ATTREZZATURA_RISK_LABELS = {
+    "lavori_in_quota": "Lavori in quota",
+    "trabattelli": "Utilizzo di trabattelli",
+    "ponteggi": "Utilizzo di ponteggi",
+    "carrello_elevatore": "Utilizzo di carrelli elevatori",
+    "ple": "Utilizzo di piattaforme di lavoro elevabili (PLE)",
+    "gru": "Utilizzo di gru",
+    "ruspa_escavatore": "Utilizzo di ruspe ed escavatori",
+    "patente_cde": "Guida professionale (patente C/D/E)",
+    "adr": "Trasporto merci pericolose (ADR)",
+}
+
+
+def _person_specific_risk_labels(person: object, vdt_ids: set) -> list[str]:
+    from app.services.reference_data import RISCHI_SPECIFICI_CATALOG
+
+    labels: list[str] = []
+
+    def add(label: str) -> None:
+        if label and label not in labels:
+            labels.append(label)
+
+    if getattr(person, "id", None) in vdt_ids:
+        add("Videoterminali")
+    for code in getattr(person, "attrezzature_speciali", None) or []:
+        add(_ATTREZZATURA_RISK_LABELS.get(code, code))
+    for code in getattr(person, "rischi_specifici_codes", None) or []:
+        item = RISCHI_SPECIFICI_CATALOG.get(code, {})
+        add(item.get("etichetta", code))
+    return labels
+
+
+def _center_dpi_brand_model_placeholders(table: Table) -> None:
+    headers = [cell.text.strip() for cell in table.rows[0].cells]
+    if "Marca / Modello" not in headers:
+        return
+    column = headers.index("Marca / Modello")
+    for row in table.rows[1:]:
+        cell = row.cells[column]
+        if cell.text.strip() not in {"-", "—"}:
+            continue
+        cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+        for paragraph in cell.paragraphs:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
 
 # ---------------------------------------------------------------------------
@@ -698,6 +775,7 @@ _RISK_COLORS = {
 _HEADER_BG = RGBColor(0x1A, 0x23, 0x7E)           # Dark blue for table headers
 _HEADER_TEXT = RGBColor(0xFF, 0xFF, 0xFF)          # White text on headers
 _LIGHT_GRAY = RGBColor(0xF5, 0xF5, 0xF5)          # Alternating row background
+_DVR_VERA_LOGO_PATH: Path = Path(__file__).resolve().parents[3] / "assets" / "n2o_vera_dvr.png"
 
 
 def _revision_label(version: int) -> str:
@@ -712,6 +790,136 @@ def _revision_label(version: int) -> str:
     return f"{max(0, version - 1):02d}"
 
 
+def _saved_order_key(entity: object) -> tuple[bool, int, float, str]:
+    """Order DVR records by their persisted position, then stable metadata."""
+    order = getattr(entity, "ordine", None)
+    created = getattr(entity, "created_at", None)
+    created_key = created.timestamp() if created is not None else float("inf")
+    return (
+        order is None,
+        order if order is not None else 0,
+        created_key,
+        str(getattr(entity, "id", "")),
+    )
+
+
+def _start_landscape_section(doc: Document):
+    section = doc.add_section(WD_SECTION.CONTINUOUS)
+    section.orientation = WD_ORIENT.LANDSCAPE
+    section.page_width, section.page_height = section.page_height, section.page_width
+    section.left_margin = Cm(1.2)
+    section.right_margin = Cm(1.2)
+    return section
+
+
+def _restore_portrait_section(doc: Document):
+    section = doc.add_section(WD_SECTION.NEW_PAGE)
+    section.orientation = WD_ORIENT.PORTRAIT
+    section.page_width, section.page_height = section.page_height, section.page_width
+    section.top_margin = Cm(2.5)
+    section.bottom_margin = Cm(2.5)
+    section.left_margin = Cm(2.5)
+    section.right_margin = Cm(2.0)
+    return section
+
+
+def _is_external_safety_consultant(person: object) -> bool:
+    """Whether a person is an external RSPP or medico competente only."""
+    return bool(
+        getattr(person, "is_esterno", False)
+        and (
+            getattr(person, "ruolo_rspp", False)
+            or getattr(person, "ruolo_medico_competente", False)
+        )
+    )
+
+
+def _employee_persons(persons: list) -> list:
+    """Exclude external safety consultants from the employee population."""
+    return [person for person in persons if not _is_external_safety_consultant(person)]
+
+
+def _assigned_employee_persons(ambiente: object, employees: list) -> list:
+    """Return employees explicitly assigned to an environment."""
+    ambiente_id = getattr(ambiente, "id", None)
+    return [
+        person
+        for person in employees
+        if any(
+            getattr(item, "id", None) == ambiente_id
+            for item in (getattr(person, "ambienti", None) or [])
+        )
+    ]
+
+
+def _normalize_equipment_description(value: str | None) -> str:
+    """Collapse equipment descriptions into a case-insensitive group key."""
+    collapsed = " ".join(value.split()) if isinstance(value, str) else ""
+    return (collapsed or "—").casefold()
+
+
+def _mixed_flag(values: list[bool]) -> str:
+    """Render a homogeneous boolean list or flag mixed source values."""
+    unique = set(values)
+    return "MISTO" if len(unique) > 1 else ("SI" if True in unique else "NO")
+
+
+def _global_equipment_rows(attrezzature: list, ambienti: list) -> list[list[str]]:
+    """Consolidate global equipment while retaining saved environment order."""
+    environment_position = {
+        getattr(item, "id", None): index for index, item in enumerate(ambienti)
+    }
+    environment_name = {
+        getattr(item, "id", None): (
+            getattr(item, "nome", None) or "—"
+        ).upper()
+        for item in ambienti
+    }
+    groups: dict[str, dict] = {}
+    for source_position, item in enumerate(attrezzature):
+        description = getattr(item, "descrizione", None)
+        display = " ".join(description.split()) if isinstance(description, str) else ""
+        display = display or "—"
+        key = _normalize_equipment_description(display)
+        group = groups.setdefault(
+            key,
+            {
+                "display": display.upper(),
+                "source_position": source_position,
+                "environment_ids": [],
+                "ce": [],
+                "checks": [],
+            },
+        )
+        environment_id = getattr(item, "ambiente_id", None)
+        if environment_id not in group["environment_ids"]:
+            group["environment_ids"].append(environment_id)
+        group["ce"].append(bool(getattr(item, "marcatura_ce", False)))
+        group["checks"].append(bool(getattr(item, "verifiche_periodiche", False)))
+
+    def group_key(group: dict) -> tuple[int, int]:
+        positions = [
+            environment_position.get(item, len(ambienti))
+            for item in group["environment_ids"]
+        ]
+        return (min(positions, default=len(ambienti)), group["source_position"])
+
+    rows = []
+    for group in sorted(groups.values(), key=group_key):
+        ids = sorted(
+            group["environment_ids"],
+            key=lambda item: environment_position.get(item, len(ambienti)),
+        )
+        names = [environment_name.get(item, "—") for item in ids]
+        rows.append([
+            group["display"],
+            ", ".join(dict.fromkeys(names)),
+            _mixed_flag(group["ce"]),
+            _mixed_flag(group["checks"]),
+        ])
+    return rows
+
+
 class DVRMasterGenerator(BaseDocumentGenerator):
     """Generates the DVR Master document (.docx)."""
 
@@ -721,7 +929,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         Returns:
             Absolute path to the generated .docx file.
         """
-        data = await self.load_data()
+        data = dict(await self.load_data())
+        data["persone"] = sorted(list(data.get("persone") or []), key=_saved_order_key)
+        data["ambienti"] = sorted(list(data.get("ambienti") or []), key=_saved_order_key)
+        employee_persons = _employee_persons(data["persone"])
+        data["employee_persons"] = employee_persons
         azienda = data["azienda"]
         # DVR-specific extras: foto per ambiente, sorveglianza-sanitaria
         # rows per mansione, allegato presence flags, VDT exposure flags,
@@ -746,6 +958,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             doc,
             azienda,
             data["persone"],
+            employee_persons,
             data["attrezzature"],
             data["sostanze_chimiche"],
             data["ambienti"],
@@ -754,12 +967,12 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         self._add_part_iii(
             doc,
             azienda,
-            data["persone"],
+            employee_persons,
             data["ambienti"],
             data["attrezzature"],
             extras,
         )
-        self._add_part_iv(doc, azienda, data["persone"], extras)
+        self._add_part_iv(doc, azienda, data["persone"], employee_persons, extras)
 
         # Replace the TOC's cached body with the real outline that the
         # rest of the doc just emitted. Without this Word users who
@@ -883,8 +1096,8 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         # has > 10 lavoratori OR an applicable incendio assessment. Audit
         # F-010 flagged the missing cross-reference; we add it here so the
         # allegati list correctly cites the document.
-        n_persone = len(data.get("persone") or [])
-        if n_persone > 10 or incendio_present:
+        employees = data.get("employee_persons", data.get("persone", []))
+        if len(employees) > 10 or incendio_present:
             allegati_presenti.append((
                 "pee", "Piano di Emergenza ed Evacuazione (PEE)"
             ))
@@ -1100,6 +1313,19 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     # Cover page
     # ------------------------------------------------------------------
 
+    def _add_vera_logo(self, doc: Document) -> None:
+        """Add the DVR-specific VERA mark, with a visible failure marker."""
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.add_run()
+        try:
+            run.add_picture(str(_DVR_VERA_LOGO_PATH), width=Inches(4.8))
+        except Exception:
+            run.text = "[LOGO N2O VERA NON DISPONIBILE]"
+            run.font.size = Pt(14)
+            run.font.italic = True
+            run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+
     def _add_cover_page(
         self, doc: Document, azienda, generated_at: datetime, version: int
     ) -> None:
@@ -1115,30 +1341,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         for _ in range(3):
             doc.add_paragraph("")
 
-        # Logo: embed the consultancy's configured logo (or the committed
-        # default) if available, otherwise fall back to an italic gray text
-        # placeholder so generation never breaks.
-        logo_src = resolve_logo_source(self.branding)
-        if logo_src is not None:
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run()
-            try:
-                run.add_picture(logo_src, width=Inches(2.0))
-            except Exception:
-                # Any image-loading issue degrades gracefully to the text
-                # placeholder below (e.g. corrupt file).
-                run.text = "[LOGO AZIENDALE]"
-                run.font.size = Pt(14)
-                run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-                run.font.italic = True
-        else:
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run("[LOGO AZIENDALE]")
-            run.font.size = Pt(14)
-            run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-            run.font.italic = True
+        self._add_vera_logo(doc)
 
         doc.add_paragraph("")
 
@@ -1213,19 +1416,6 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         )
         run.font.size = Pt(12)
         run.bold = True
-
-        # Consultancy letterhead — the firm that produced the document.
-        # Only rendered when the org has actually configured its branding, so
-        # un-configured orgs see no new cover element vs. previously delivered
-        # documents (review finding #7).
-        if self.branding.is_configured():
-            doc.add_paragraph("")
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run("Documento elaborato da:")
-            run.font.size = Pt(9)
-            run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-            add_consultancy_letterhead(doc, self.branding, center=True)
 
         # Page break
         doc.add_page_break()
@@ -1523,6 +1713,62 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         body_cell.text = ""
         body_cell.paragraphs[0].add_run("\n\n\n")
 
+    def _last_content_element(self, doc: Document) -> BaseOxmlElement | None:
+        """Return the final body element before the document-level sectPr."""
+        for element in reversed(doc._element.body):
+            if element.tag != qn("w:sectPr"):
+                return element
+        return None
+
+    def _ensure_page_boundary(self, doc: Document) -> None:
+        """Start the next separator at a page or paragraph section boundary.
+
+        A page-break-before marker is safe after a table that has filled the
+        preceding page: unlike an explicit break run, it cannot be pushed to
+        an otherwise empty page and then force the separator onto another.
+        """
+        last = self._last_content_element(doc)
+        if last is not None and last.tag == qn("w:p"):
+            if (
+                last.xpath('.//w:br[@w:type="page"]')
+                or last.xpath('./w:pPr/w:sectPr')
+                or last.xpath('./w:pPr/w:pageBreakBefore')
+            ):
+                return
+        boundary = doc.add_paragraph()
+        boundary.paragraph_format.page_break_before = True
+
+    def _add_topic_separator(
+        self,
+        doc: Document,
+        heading: str,
+        *,
+        part_heading: str | None = None,
+        part_label: str | None = None,
+    ) -> None:
+        """Emit one dedicated, boundary-safe level-2 topic separator."""
+        self._ensure_page_boundary(doc)
+        if part_heading:
+            part = doc.add_heading(part_heading, level=1)
+            part.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for run in part.runs:
+                run.font.size = Pt(11)
+                run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+        elif part_label:
+            context = doc.add_paragraph()
+            context.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = context.add_run(part_label)
+            run.bold = True
+            run.font.size = Pt(11)
+            run.font.color.rgb = _HEADER_BG
+        topic = doc.add_heading(heading, level=2)
+        topic.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        topic.paragraph_format.space_before = Cm(6)
+        for run in topic.runs:
+            run.font.size = Pt(24)
+            run.font.bold = True
+        doc.add_page_break()
+
     # ------------------------------------------------------------------
     # Part I — Company data (Template Tables 3–17)
     # ------------------------------------------------------------------
@@ -1532,6 +1778,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         doc: Document,
         azienda,
         persone: list,
+        employee_persons: list,
         attrezzature: list,
         sostanze_chimiche: list,
         ambienti: list,
@@ -1550,16 +1797,12 @@ class DVRMasterGenerator(BaseDocumentGenerator):
           14  Sostanze chimiche / Produttore / Attività
           15–17 Static hazard library (Sicurezza / Salute / Trasversali)
         """
-        # Each Parte starts on a fresh page so the section break is
-        # visually unambiguous regardless of where the previous part
-        # ended. We do this on the heading itself rather than appending
-        # an extra `add_page_break()` so the cached TOC outline (which
-        # walks paragraphs in order) stays compact.
-        h = doc.add_heading("PARTE I — DATI GENERALI DELL'AZIENDA", level=1)
-        h.paragraph_format.page_break_before = True
-
         # Table 3 — Presentazione dell'azienda
-        doc.add_heading("1. Presentazione dell'Azienda", level=2)
+        self._add_topic_separator(
+            doc,
+            "1. Presentazione dell'Azienda",
+            part_heading="PARTE I — DATI GENERALI DELL'AZIENDA",
+        )
         self._add_azienda_header_table(doc, azienda)
         doc.add_paragraph("")
 
@@ -1571,7 +1814,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         # gate in api/v1/documents._ensure_anagrafica_complete_for_dvr
         # already blocks generation when ALL of CF/Tel/Email/PEC are
         # missing, so at least one of those rows will always render.
-        doc.add_heading("2. Anagrafica Aziendale", level=2)
+        self._add_topic_separator(
+            doc,
+            "2. Anagrafica Aziendale",
+            part_label="PARTE I — DATI GENERALI DELL'AZIENDA",
+        )
 
         ddl = next((p for p in persone if p.ruolo_datore_lavoro), None)
         ddl_label = (
@@ -1583,7 +1830,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         # the operator-declared figure on the Azienda. The declared count is
         # surfaced in parentheses when it diverges, so reviewers can spot
         # discrepancies between visura camerale and the live survey.
-        actual_count = len(persone or [])
+        actual_count = len(employee_persons or [])
         declared = getattr(azienda, "numero_dipendenti_dichiarati", None)
         if declared and declared != actual_count:
             dipendenti_label = f"{actual_count} (dichiarati: {declared})"
@@ -1648,12 +1895,20 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         doc.add_paragraph("")
 
         # Table 5 — Dati occupazionali (Nominativo | Mansione | Ambiente | Note | Contratto)
-        doc.add_heading("3. Dati Occupazionali", level=2)
-        self._add_dati_occupazionali_table(doc, persone)
+        self._add_topic_separator(
+            doc,
+            "3. Dati Occupazionali",
+            part_label="PARTE I — DATI GENERALI DELL'AZIENDA",
+        )
+        self._add_dati_occupazionali_table(doc, employee_persons)
         doc.add_paragraph("")
 
         # Tables 6–9 — Organizzazione Aziendale della Sicurezza
-        doc.add_heading("4. Organizzazione Aziendale della Sicurezza", level=2)
+        self._add_topic_separator(
+            doc,
+            "4. Organizzazione Aziendale della Sicurezza",
+            part_label="PARTE I — DATI GENERALI DELL'AZIENDA",
+        )
         role_tables = [
             ("Datore di Lavoro",
              [p for p in persone if p.ruolo_datore_lavoro]),
@@ -1683,8 +1938,12 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         doc.add_paragraph("")
 
         # Table 12 — Ambienti di Lavoro + N. Lavoratori
-        doc.add_heading("5. Ambienti di Lavoro", level=2)
-        self._add_ambienti_summary_table(doc, ambienti)
+        self._add_topic_separator(
+            doc,
+            "5. Ambienti di Lavoro",
+            part_label="PARTE I — DATI GENERALI DELL'AZIENDA",
+        )
+        self._add_ambienti_summary_table(doc, ambienti, employee_persons)
         doc.add_paragraph("")
 
         # §1.6 Servizi Igienico-Assistenziali — required under D.Lgs. 81/2008
@@ -1692,24 +1951,36 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         # has 18). Boilerplate references the law and surfaces the existing
         # azienda field if populated, otherwise emits a default paragraph
         # referencing the legal requirement (audit F-003).
-        self._add_servizi_igienico_assistenziali_section(doc, azienda, persone)
+        self._add_servizi_igienico_assistenziali_section(doc, azienda, employee_persons)
 
         # Table 13 — Macchine, attrezzature ed impianti.
         # Pass ambienti so the renderer can resolve ambiente_id → nome
         # without lazy-loading `attrezzatura.ambiente` (the base loader
         # doesn't selectinload that relationship, and lazy access in an
         # async session raises MissingGreenlet).
-        doc.add_heading("7. Macchine, Attrezzature ed Impianti", level=2)
+        self._add_topic_separator(
+            doc,
+            "7. Macchine, Attrezzature ed Impianti",
+            part_label="PARTE I — DATI GENERALI DELL'AZIENDA",
+        )
         self._add_attrezzature_table(doc, attrezzature, ambienti)
         doc.add_paragraph("")
 
         # Table 14 — Sostanze, prodotti e preparati chimici
-        doc.add_heading("8. Sostanze, Prodotti e Preparati Chimici", level=2)
+        self._add_topic_separator(
+            doc,
+            "8. Sostanze, Prodotti e Preparati Chimici",
+            part_label="PARTE I — DATI GENERALI DELL'AZIENDA",
+        )
         self._add_sostanze_table(doc, sostanze_chimiche)
         doc.add_paragraph("")
 
         # Tables 15, 16, 17 — Static hazard library
-        doc.add_heading("9. Elenco Fattori di Pericolo (Riferimento)", level=2)
+        self._add_topic_separator(
+            doc,
+            "9. Elenco Fattori di Pericolo (Riferimento)",
+            part_label="PARTE I — DATI GENERALI DELL'AZIENDA",
+        )
         p = doc.add_paragraph()
         run = p.add_run(
             "N.B. Gli elenchi seguenti sono da intendersi indicativi e non "
@@ -1731,8 +2002,6 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         self._add_hazard_library_group(doc, "Rischi Trasversali", [
             "Organizzazione del Lavoro", "Fattori Psicologici", "Fattori Ergonomici",
         ])
-
-        doc.add_page_break()
 
     def _add_dati_occupazionali_table(self, doc: Document, persone: list) -> None:
         """Template Table 5 — 5-col lavoratori grid including ambiente assignments.
@@ -1868,7 +2137,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         §1.10-1.16). Mandatory section for any workplace; the M/F separation
         requirement triggers above 10 lavoratori.
         """
-        doc.add_heading("6. Servizi Igienico-Assistenziali", level=2)
+        self._add_topic_separator(
+            doc,
+            "6. Servizi Igienico-Assistenziali",
+            part_label="PARTE I — DATI GENERALI DELL'AZIENDA",
+        )
 
         n_dipendenti = len(persone or [])
         sex_distribution = {p.sesso for p in persone if getattr(p, "sesso", None)}
@@ -1931,7 +2204,9 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 run.font.size = Pt(10)
         doc.add_paragraph("")
 
-    def _add_ambienti_summary_table(self, doc: Document, ambienti: list) -> None:
+    def _add_ambienti_summary_table(
+        self, doc: Document, ambienti: list, employee_persons: list
+    ) -> None:
         """Template Table 12 — Ambiente | Tipo | Metratura | N. Lavoratori.
 
         Note on N. Lavoratori: a worker assigned to multiple ambienti is
@@ -1951,7 +2226,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                     (a.nome or "—").upper(),
                     (a.tipo or "—"),
                     f"{mq} mq" if mq else "—",
-                    str(len(getattr(a, "persone", None) or [])),
+                    str(len(_assigned_employee_persons(a, employee_persons))),
                 ])
         self._add_data_table(doc, headers, rows)
 
@@ -1997,11 +2272,6 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         Rows are grouped by ambiente name so identical ambienti cluster
         together — matches operator expectation when scanning the list.
         """
-        amb_name_by_id: dict = {}
-        if ambienti:
-            for amb in ambienti:
-                amb_name_by_id[amb.id] = (amb.nome or "—").upper()
-
         headers = [
             "Macchine, Attrezzature ed Impianti",
             "Ambiente",
@@ -2011,23 +2281,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         if not attrezzature:
             rows = [["Nessuna attrezzatura registrata.", "—", "—", "—"]]
         else:
-            def _amb_label(a) -> str:
-                amb_id = getattr(a, "ambiente_id", None)
-                return amb_name_by_id.get(amb_id, "—")
-
-            sorted_att = sorted(
-                attrezzature,
-                key=lambda a: (_amb_label(a), (a.descrizione or "").lower()),
-            )
-            rows = [
-                [
-                    (a.descrizione or "—").upper(),
-                    _amb_label(a),
-                    "SI" if a.marcatura_ce else "NO",
-                    "SI" if a.verifiche_periodiche else "NO",
-                ]
-                for a in sorted_att
-            ]
+            rows = _global_equipment_rows(attrezzature, ambienti or [])
         self._add_data_table(doc, headers, rows)
 
     def _add_sostanze_table(self, doc: Document, sostanze: list) -> None:
@@ -2155,18 +2409,20 @@ class DVRMasterGenerator(BaseDocumentGenerator):
           2.3 Scala di Probabilità (P).
           2.4 Scala del Danno (D).
         """
-        h = doc.add_heading(
-            "PARTE II — DESCRIZIONE DELL'ATTIVITÀ E METODOLOGIA DI VALUTAZIONE",
-            level=1,
+        part_label = (
+            "PARTE II — DESCRIZIONE DELL'ATTIVITÀ E METODOLOGIA DI VALUTAZIONE"
         )
-        h.paragraph_format.page_break_before = True
+
+        # 2.1 — Activity description
+        self._add_topic_separator(
+            doc,
+            "2.1 Descrizione dell'Attività",
+            part_heading=part_label,
+        )
 
         # Template Table 18 — Azienda identity block at the top of Parte II
         self._add_azienda_header_table(doc, azienda)
         doc.add_paragraph("")
-
-        # 2.1 — Activity description
-        doc.add_heading("2.1 Descrizione dell'Attività", level=2)
 
         descrizione = (azienda.descrizione_attivita or "").strip()
         if descrizione:
@@ -2260,7 +2516,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         doc.add_paragraph("")
 
         # Template Table 19 — Definizioni (glossary)
-        doc.add_heading("2.2 Definizioni", level=2)
+        self._add_topic_separator(doc, "2.2 Definizioni", part_label=part_label)
         self._add_data_table(
             doc,
             headers=["Termine", "Definizione"],
@@ -2269,7 +2525,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         doc.add_paragraph("")
 
         # 2.3 — Risk assessment methodology
-        doc.add_heading("2.3 Metodologia di Valutazione dei Rischi", level=2)
+        self._add_topic_separator(
+            doc,
+            "2.3 Metodologia di Valutazione dei Rischi",
+            part_label=part_label,
+        )
 
         p = doc.add_paragraph()
         run = p.add_run(_METODOLOGIA_INTRO_1)
@@ -2284,7 +2544,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         doc.add_paragraph("")
 
         # Template Table 21 — Scala di Probabilita (P) with full criteria column
-        doc.add_heading("2.4 Scala di Probabilità (P)", level=2)
+        self._add_topic_separator(
+            doc,
+            "2.4 Scala di Probabilità (P)",
+            part_label=part_label,
+        )
         self._add_data_table(
             doc,
             headers=["P", "Livello", "Criteri"],
@@ -2293,14 +2557,17 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         doc.add_paragraph("")
 
         # Template Table 22 — Scala del Danno (D) with full criteria column
-        doc.add_heading("2.5 Scala del Danno (D)", level=2)
+        self._add_topic_separator(
+            doc,
+            "2.5 Scala del Danno (D)",
+            part_label=part_label,
+        )
         self._add_data_table(
             doc,
             headers=["D", "Livello", "Criteri"],
             rows=[list(row) for row in _DANNO_CRITERI_ROWS],
         )
-
-        doc.add_page_break()
+        doc.add_paragraph("")
 
     def _add_risk_level_table(self, doc: Document) -> None:
         """Render the I-range -> Livello/Azione/Tempistica lookup table.
@@ -2373,57 +2640,56 @@ class DVRMasterGenerator(BaseDocumentGenerator):
           - Trailing: 4 sections covering mansioni con rischi specifici,
             DPI per mansione, segnaletica di sicurezza, programma formazione.
         """
-        h = doc.add_heading(
-            "PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO",
-            level=1,
-        )
-        h.paragraph_format.page_break_before = True
+        part_label = "PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO"
+        first_tail_part_heading = part_label if not ambienti else None
+        if ambienti:
+            # Phase 8.2 — bucket attrezzature by ambiente_id once so each env
+            # section gets its own slice. Anything without an ambiente_id is
+            # silently skipped here (it still appears in the global Part I
+            # inventory table, so it isn't lost).
+            attrezzature_by_ambiente: dict = {}
+            for att in attrezzature:
+                amb_id = getattr(att, "ambiente_id", None)
+                if amb_id is None:
+                    continue
+                attrezzature_by_ambiente.setdefault(amb_id, []).append(att)
 
-        self._add_azienda_header_table(doc, azienda)
-        doc.add_paragraph("")
-
-        if not ambienti:
-            p = doc.add_paragraph("Nessun ambiente di lavoro registrato.")
-            p.runs[0].font.italic = True
-            doc.add_page_break()
-            return
-
-        # Phase 8.2 — bucket attrezzature by ambiente_id once so each env
-        # section gets its own slice. Anything without an ambiente_id is
-        # silently skipped here (it still appears in the global Part I
-        # inventory table, so it isn't lost).
-        attrezzature_by_ambiente: dict = {}
-        for att in attrezzature:
-            amb_id = getattr(att, "ambiente_id", None)
-            if amb_id is None:
-                continue
-            attrezzature_by_ambiente.setdefault(amb_id, []).append(att)
-
-        foto_by_ambiente = extras.get("foto_by_ambiente", {})
-        vdt_ids = extras.get("vdt_esposti_persona_ids", set())
-        persone_by_id = {getattr(p, "id", None): p for p in persone}
-        for ambiente in ambienti:
-            env_attrezzature = attrezzature_by_ambiente.get(ambiente.id, [])
-            env_foto = foto_by_ambiente.get(ambiente.id, [])
-            # VDT-esposti workers in this ambiente trigger a synthetic row
-            # in the Agenti Fisici risk table referencing art. 174 + the
-            # Allegato VDT (audit F-007).
-            env_persone = list(getattr(ambiente, "persone", None) or [])
-            vdt_in_env = sum(
-                1 for p in env_persone
-                if getattr(p, "id", None) in vdt_ids
-            )
-            self._add_environment_section(
-                doc,
-                ambiente,
-                persone_by_id,
-                env_attrezzature,
-                env_foto,
-                vdt_in_env,
-            )
+            foto_by_ambiente = extras.get("foto_by_ambiente", {})
+            vdt_ids = extras.get("vdt_esposti_persona_ids", set())
+            persone_by_id = {getattr(p, "id", None): p for p in persone}
+            for index, ambiente in enumerate(ambienti):
+                env_attrezzature = attrezzature_by_ambiente.get(ambiente.id, [])
+                env_foto = foto_by_ambiente.get(ambiente.id, [])
+                # VDT-esposti workers in this ambiente trigger a synthetic row
+                # in the Agenti Fisici risk table referencing art. 174 + the
+                # Allegato VDT (audit F-007).
+                env_persone = _assigned_employee_persons(ambiente, persone)
+                vdt_in_env = sum(
+                    1 for p in env_persone
+                    if getattr(p, "id", None) in vdt_ids
+                )
+                self._add_environment_section(
+                    doc,
+                    ambiente,
+                    persone_by_id,
+                    env_attrezzature,
+                    env_foto,
+                    persone,
+                    vdt_in_env,
+                    azienda=azienda if index == 0 else None,
+                    part_heading=part_label if index == 0 else None,
+                    part_label=part_label if index > 0 else None,
+                )
 
         # Trailing Part III sections — driven by persone + extras.
-        self._add_mansioni_rischi_specifici_section(doc, persone, extras)
+        self._add_mansioni_rischi_specifici_section(
+            doc,
+            persone,
+            extras,
+            part_heading=first_tail_part_heading,
+            azienda=azienda if not ambienti else None,
+            no_environment=not ambienti,
+        )
         self._add_dpi_per_mansione_section(doc, persone, extras)
         self._add_segnaletica_section(doc)
         self._add_formazione_programma_section(doc, persone)
@@ -2475,7 +2741,12 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         persone_by_id: dict,
         attrezzature: list,
         foto: list,
+        employee_persons: list,
         vdt_count: int = 0,
+        *,
+        azienda=None,
+        part_heading: str | None = None,
+        part_label: str | None = None,
     ) -> None:
         """Render the env section for a single environment.
 
@@ -2492,14 +2763,20 @@ class DVRMasterGenerator(BaseDocumentGenerator):
           6. One 5-col risk table per applicable macro-category.
         """
         nome_ambiente = (ambiente.nome or "—").upper()
-        doc.add_heading(
+        self._add_topic_separator(
+            doc,
             f"Identificazione dell'Ambiente di Lavoro e degli Addetti — {nome_ambiente}",
-            level=2,
+            part_heading=part_heading,
+            part_label=part_label,
         )
+
+        if azienda is not None:
+            self._add_azienda_header_table(doc, azienda)
+            doc.add_paragraph("")
 
         self._add_env_identity_table(doc, ambiente, persone_by_id)
         doc.add_paragraph("")
-        self._add_env_addetti_table(doc, ambiente)
+        self._add_env_addetti_table(doc, ambiente, employee_persons)
         doc.add_paragraph("")
 
         # Phase 8.2 — Attrezzature per ambiente. Reuses the same column
@@ -2523,54 +2800,63 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         doc.add_paragraph("")
 
         self._add_env_risk_tables(doc, ambiente, vdt_count=vdt_count)
-        doc.add_page_break()
 
     def _add_env_foto_block(
         self, doc: Document, nome_ambiente: str, foto: list
     ) -> None:
-        """Embed up to 3 foto/planimetrie inline at consistent width.
-
-        Skips photos whose filesystem file is missing rather than failing the
-        whole document — happens during dev/test resets when the DB row
-        survives but the storage path was wiped.
-        """
+        """Embed up to ten saved photos, preferring shared database bytes."""
         doc.add_heading(
             f"Foto e Planimetrie — {nome_ambiente}", level=3
         )
-        embedded = 0
-        for f in foto[:3]:
-            path = getattr(f, "file_path", None)
-            if not path or not os.path.exists(path):
-                continue
-            try:
-                p = doc.add_paragraph()
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                run = p.add_run()
-                run.add_picture(path, width=Cm(12))
+        embedded_count = 0
+        for photo in foto[:10]:
+            safe_name = Path(
+                str(getattr(photo, "filename", None) or photo.id).replace("\\", "/")
+            ).name[:255]
+            embedded = False
+            warned = False
+            for source in _photo_image_sources(photo):
+                paragraph = doc.add_paragraph()
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                try:
+                    paragraph.add_run().add_picture(source, width=Cm(12))
+                except Exception:
+                    paragraph._element.getparent().remove(paragraph._element)
+                    warned = True
+                    logger.warning(
+                        "DVR photo candidate could not be embedded",
+                        extra={
+                            "photo_id": str(photo.id),
+                            "photo_filename": safe_name,
+                        },
+                    )
+                    continue
+                embedded = True
+                embedded_count += 1
                 caption = doc.add_paragraph()
                 caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                # "Fig. N — filename" prefix prevents downstream text-only
-                # readers (audit tools, accessibility readers) from
-                # misreading the styled italic caption as a stray bare
-                # filename (audit F-003, 2026-04-29 rerun).
                 cap_run = caption.add_run(
-                    f"Fig. {embedded + 1} — {f.filename or ''}"
+                    f"Fig. {embedded_count} — {safe_name}"
                 )
                 cap_run.font.italic = True
                 cap_run.font.size = Pt(9)
                 cap_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-                embedded += 1
-            except Exception:
+                break
+            if embedded:
                 continue
-        if embedded == 0:
-            p = doc.add_paragraph()
-            run = p.add_run(
-                "[Foto/planimetrie non disponibili al momento della "
-                "generazione]"
-            )
-            run.font.italic = True
-            run.font.size = Pt(9)
-            run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+            marker = doc.add_paragraph()
+            marker_run = marker.add_run(f"[Foto non disponibile: {safe_name}]")
+            marker_run.font.italic = True
+            marker_run.font.size = Pt(9)
+            marker_run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+            if not warned:
+                logger.warning(
+                    "DVR photo unavailable",
+                    extra={
+                        "photo_id": str(photo.id),
+                        "photo_filename": safe_name,
+                    },
+                )
         doc.add_paragraph("")
 
     # ------------------------------------------------------------------
@@ -2578,118 +2864,62 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     # ------------------------------------------------------------------
 
     def _add_mansioni_rischi_specifici_section(
-        self, doc: Document, persone: list, extras: dict
+        self,
+        doc: Document,
+        persone: list,
+        extras: dict,
+        *,
+        part_heading: str | None = None,
+        azienda=None,
+        no_environment: bool = False,
     ) -> None:
         """Emit the "Mansioni che espongono i lavoratori a rischi specifici"
         table required by the template tail (DOCUMENT_STRUCTURE.md §3.N+1).
 
-        Driven by per-persona signals, then aggregated up to mansione for
-        the legal table layout. When two persone with the same mansione
-        diverge, the row shows the union of risks.
+        Driven by per-persona signals, retaining one row per exposed
+        employee so people with the same mansione do not inherit each
+        other's risks.
 
         Sources, per persona:
           - VDT esposti (>= 20h/week → "Videoterminali" rischio specifico)
           - persona.attrezzature_speciali codes (each maps to a rischio)
           - persona.rischi_specifici_codes ticked in the wizard
         """
-        from app.services.reference_data import RISCHI_SPECIFICI_CATALOG
-
-        doc.add_heading(
-            "Mansioni che espongono i lavoratori a rischi specifici", level=2
-        )
-
-        # Build mansione → set[rischio_label] index.
-        # Track the per-persona contribution count so we can flag mansioni
-        # where the flags vary across persone (audit hint for the operator).
-        mansioni_idx: dict[str, set[str]] = {}
-        mansione_persona_codes: dict[str, list[frozenset[str]]] = {}
-        vdt_ids = extras.get("vdt_esposti_persona_ids", set())
-
-        attrezzatura_to_rischio = {
-            "lavori_in_quota": "Lavori in quota",
-            "trabattelli": "Utilizzo di trabattelli",
-            "ponteggi": "Utilizzo di ponteggi",
-            "carrello_elevatore": "Utilizzo di carrelli elevatori",
-            "ple": "Utilizzo di piattaforme di lavoro elevabili (PLE)",
-            "gru": "Utilizzo di gru",
-            "ruspa_escavatore": "Utilizzo di ruspe ed escavatori",
-            "patente_cde": "Guida professionale (patente C/D/E)",
-            "adr": "Trasporto merci pericolose (ADR)",
-        }
-
-        for p in persone:
-            mansione = (p.mansione or "").strip()
-            if not mansione:
-                continue
-            bucket = mansioni_idx.setdefault(mansione, set())
-            persona_codes: set[str] = set()
-            if p.id in vdt_ids:
-                label = "Videoterminali (VDT) — esposizione >= 20h/sett."
-                bucket.add(label)
-                persona_codes.add(label)
-            for code in (p.attrezzature_speciali or []):
-                label = attrezzatura_to_rischio.get(code)
-                if label:
-                    bucket.add(label)
-                    persona_codes.add(label)
-            for rs_code in (getattr(p, "rischi_specifici_codes", None) or []):
-                meta = RISCHI_SPECIFICI_CATALOG.get(rs_code) or {}
-                label = meta.get("etichetta")
-                if label:
-                    bucket.add(label)
-                    persona_codes.add(label)
-            mansione_persona_codes.setdefault(mansione, []).append(
-                frozenset(persona_codes)
-            )
-
-        # Filter out mansioni without specific risks — they belong to the
-        # generic risk assessment, not to this table.
-        rows = []
-        for mansione in sorted(mansioni_idx.keys()):
-            rischi = sorted(mansioni_idx[mansione])
-            if not rischi:
-                continue
-            count = sum(
-                1
-                for p in persone
-                if (p.mansione or "").strip() == mansione
-            )
-            # If the persone with this mansione don't all share the same
-            # set of rischi, flag the row so the Medico del Lavoro knows
-            # to consult the per-persona detail (kept in the CRM).
-            persona_sets = mansione_persona_codes.get(mansione, [])
-            distinct = {s for s in persona_sets if s}
-            varia = len(distinct) > 1
-            rischi_cell = "; ".join(rischi)
-            if varia:
-                rischi_cell += " (varia per lavoratore — vedere scheda persona)"
-            rows.append([
-                mansione.upper(),
-                str(count),
-                rischi_cell,
-            ])
-
-        if not rows:
-            p = doc.add_paragraph()
-            run = p.add_run(
-                "Nessuna mansione presenta esposizioni a rischi specifici "
-                "che richiedano sorveglianza sanitaria mirata in aggiunta "
-                "alla valutazione generale."
-            )
-            run.font.size = Pt(10)
-            run.font.italic = True
-            doc.add_paragraph("")
-            return
-
-        self._add_data_table(
+        self._add_topic_separator(
             doc,
-            headers=[
-                "Mansione",
-                "N. Lavoratori",
-                "Rischi specifici / Sorveglianza Sanitaria",
-            ],
-            rows=rows,
+            "Mansioni che espongono i lavoratori a rischi specifici",
+            part_heading=part_heading,
+            part_label=(
+                None
+                if part_heading
+                else "PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO"
+            ),
         )
+
+        if azienda is not None:
+            self._add_azienda_header_table(doc, azienda)
+            doc.add_paragraph("")
+        if no_environment:
+            notice = doc.add_paragraph("Nessun ambiente di lavoro registrato.")
+            notice.runs[0].font.italic = True
+
+        headers = ["Nominativo", "Mansione", "Rischio specifico"]
+        rows = []
+        vdt_ids = extras.get("vdt_esposti_persona_ids", set())
+        for person in persone:
+            labels = _person_specific_risk_labels(person, vdt_ids)
+            if labels:
+                rows.append([
+                    (getattr(person, "nominativo", None) or "—").upper(),
+                    (getattr(person, "mansione", None) or "—").upper(),
+                    "; ".join(labels),
+                ])
+        if rows:
+            self._add_data_table(doc, headers, rows)
+        else:
+            doc.add_paragraph(
+                "Nessun lavoratore esposto a rischi specifici configurato."
+            )
         doc.add_paragraph("")
 
     def _add_dpi_per_mansione_section(
@@ -2711,7 +2941,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         """
         from app.services.reference_data import DPI_CATALOG
 
-        doc.add_heading("DPI in dotazione per Mansione", level=2)
+        self._add_topic_separator(
+            doc,
+            "DPI in dotazione per Mansione",
+            part_label="PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO",
+        )
 
         # Aggregate per-persona DPI codes up to mansione (union). Track
         # every mansione that appears on a persona — even those without
@@ -2802,11 +3036,12 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                     else "Sorveglianza sanitaria e formazione ex art. 36-37 D.Lgs. 81/2008."
                 )
                 rows.append([descrizione, "—", note])
-            self._add_data_table(
+            dpi_table = self._add_data_table(
                 doc,
                 headers=["Descrizione DPI", "Marca / Modello", "Note"],
                 rows=rows,
             )
+            _center_dpi_brand_model_placeholders(dpi_table)
             doc.add_paragraph("")
 
     def _add_segnaletica_section(self, doc: Document) -> None:
@@ -2815,7 +3050,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         Lists the four canonical sign categories with color/shape mapping.
         """
-        doc.add_heading("Segnaletica di Sicurezza", level=2)
+        self._add_topic_separator(
+            doc,
+            "Segnaletica di Sicurezza",
+            part_label="PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO",
+        )
 
         p = doc.add_paragraph()
         run = p.add_run(
@@ -2869,8 +3108,10 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         §3.N+4). Driven by mansione/ruolo so the operator gets a starter
         grid covering the Accordo Stato-Regioni 21/12/2011 obligations.
         """
-        doc.add_heading(
-            "Programma di Formazione, Informazione ed Addestramento", level=2
+        self._add_topic_separator(
+            doc,
+            "Programma di Informazione, Formazione e Addestramento",
+            part_label="PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO",
         )
 
         # Feedback #3 (2026-05-19): surface the current training-completion
@@ -3051,14 +3292,16 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         ])
         self._add_key_value_table(doc, rows)
 
-    def _add_env_addetti_table(self, doc: Document, ambiente) -> None:
+    def _add_env_addetti_table(
+        self, doc: Document, ambiente, employee_persons: list
+    ) -> None:
         """Template Table 25 — Nominativo / Mansione for addetti assigned to this env.
 
         Always emits the table shell so the per-env layout matches the
         template even when no persone_ambienti mapping exists yet; a single
         placeholder row signals the missing assignment to the operator.
         """
-        addetti = list(getattr(ambiente, "persone", []) or [])
+        addetti = _assigned_employee_persons(ambiente, employee_persons)
         if addetti:
             rows = [
                 [(a.nominativo or "—").upper(), (a.mansione or "—").upper()]
@@ -3078,10 +3321,17 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         # Normalize short DB names ("Elettrici") to canonical long names
         # ("Impianti Elettrici") so the lookup against _CATEGORY_ORDER keys
         # actually matches. Without this every row silently shows NO.
-        applicable_by_category = {
-            normalize_categoria_to_long(r.categoria_rischio): True
-            for r in ambiente.valutazioni_rischio
-            if getattr(r, "applicabile", False)
+        parents = list(
+            getattr(ambiente, "valutazioni_rischio", None) or []
+        )
+        effective_by_parent = {
+            id(parent): _effective_risk_sources(parent)
+            for parent in parents
+        }
+        applicable_categories = {
+            normalize_categoria_to_long(parent.categoria_rischio)
+            for parent in parents
+            if effective_by_parent[id(parent)]
         }
 
         table = doc.add_table(rows=1, cols=2)
@@ -3123,7 +3373,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             cell_flag = row.cells[1]
             cell_flag.text = ""
             p = cell_flag.paragraphs[0]
-            flag = "SI" if applicable_by_category.get(categoria) else "NO"
+            flag = "SI" if categoria in applicable_categories else "NO"
             run = p.add_run(flag)
             run.font.size = Pt(9)
             run.bold = True
@@ -3142,14 +3392,22 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         """
         # Normalize short DB names to canonical long names so the per-category
         # tables actually emit (see _add_env_risk_checklist comment).
+        parents = list(
+            getattr(ambiente, "valutazioni_rischio", None) or []
+        )
+        effective_by_parent = {
+            id(parent): _effective_risk_sources(parent)
+            for parent in parents
+        }
         by_category: dict[str, list] = {}
-        for r in ambiente.valutazioni_rischio:
-            if not getattr(r, "applicabile", False):
+        for parent in parents:
+            effective = effective_by_parent[id(parent)]
+            if not effective:
                 continue
-            key = normalize_categoria_to_long(r.categoria_rischio)
+            key = normalize_categoria_to_long(parent.categoria_rischio)
             if not key:
                 continue
-            by_category.setdefault(key, []).append(r)
+            by_category.setdefault(key, []).extend(effective)
 
         # Force the Agenti Fisici section when VDT addetti are present in
         # the ambiente — even if no other agente fisico has been ticked.
@@ -3229,21 +3487,9 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
             self._set_cell_bg(cell, _HEADER_BG)
 
-        # Phase 3 (1:N): when the parent valutazione_rischio has children
-        # in pericoli_valutazione, emit one row per child — that's the
-        # template-faithful layout. When no children exist (legacy data),
-        # fall back to the parent's single pericolo/condizioni/misure
-        # block so older DVRs still render.
-        rows_to_emit: list = []
-        for risk in risks:
-            children = [
-                c for c in (getattr(risk, "pericoli", []) or [])
-                if getattr(c, "applicabile", True)
-            ]
-            if children:
-                rows_to_emit.extend(children)
-            else:
-                rows_to_emit.append(risk)
+        # ``risks`` already contains the effective child rows (or a legacy
+        # childless parent) selected by ``_add_env_risk_tables``.
+        rows_to_emit = list(risks)
 
         # Synthetic VDT row when none of the existing children already
         # cover videoterminali — keeps the row dedupe-safe.
@@ -3322,7 +3568,12 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     # ------------------------------------------------------------------
 
     def _add_part_iv(
-        self, doc: Document, azienda, persone: list, extras: dict
+        self,
+        doc: Document,
+        azienda,
+        persone: list,
+        employee_persons: list,
+        extras: dict,
     ) -> None:
         """Parte IV — programma di miglioramento, procedure operative §4.2–4.13,
         cross-references agli allegati applicabili, Dichiarazione del Datore
@@ -3345,17 +3596,17 @@ class DVRMasterGenerator(BaseDocumentGenerator):
           §4.13 Dichiarazione del Datore di Lavoro
           (signature grid Table 110)
         """
-        h = doc.add_heading("PARTE IV — PROGRAMMA DI MIGLIORAMENTO", level=1)
-        h.paragraph_format.page_break_before = True
+        part_label = "PARTE IV — PROGRAMMA DI MIGLIORAMENTO"
+
+        self._add_topic_separator(
+            doc,
+            "4.1 Programma e Procedure di attuazione delle Misure di Miglioramento",
+            part_heading=part_label,
+        )
 
         # Template Table 108 — Azienda header
         self._add_azienda_header_table(doc, azienda)
         doc.add_paragraph("")
-
-        doc.add_heading(
-            "4.1 Programma e Procedure di attuazione delle Misure di Miglioramento",
-            level=2,
-        )
         p = doc.add_paragraph()
         run = p.add_run(
             "Il programma di miglioramento è definito sulla base delle "
@@ -3368,11 +3619,10 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         run.font.size = Pt(10)
         doc.add_paragraph("")
 
-        # Template Table 109 — Misure di miglioramento (5-col grid)
+        # Template Table 109 — Misure di miglioramento (7-col grid)
         self._add_improvement_program_table(
             doc, extras.get("misure_miglioramento") or []
         )
-        doc.add_paragraph("")
 
         # §4.2–4.12 — static procedural sections. After §4.3 we inject a
         # mansione-level Sorveglianza Sanitaria protocol table aggregated
@@ -3381,7 +3631,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         for spec in _PART_IV_PROCEDURAL_SECTIONS:
             self._add_procedural_section(doc, spec)
             if spec.heading.startswith("4.3"):
-                self._add_sorveglianza_protocol_table(doc, persone)
+                self._add_sorveglianza_protocol_table(doc, employee_persons)
 
         # Cross-reference applicable allegati by name (audit F-016).
         self._add_allegati_cross_references(
@@ -3497,7 +3747,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         assessment rows on this azienda, so the section only references
         documents that genuinely exist for this client.
         """
-        doc.add_heading("Documenti correlati al presente DVR", level=2)
+        self._add_topic_separator(
+            doc,
+            "Documenti correlati al presente DVR",
+            part_label="PARTE IV — PROGRAMMA DI MIGLIORAMENTO",
+        )
 
         if not allegati:
             p = doc.add_paragraph()
@@ -3532,7 +3786,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         """Emit one §4.x procedural section: heading, intro paragraph(s),
         optional bullet list, optional documentazione collegata footer.
         """
-        doc.add_heading(spec.heading, level=2)
+        self._add_topic_separator(
+            doc,
+            spec.heading,
+            part_label="PARTE IV — PROGRAMMA DI MIGLIORAMENTO",
+        )
         for para in spec.body:
             p = doc.add_paragraph()
             run = p.add_run(para)
@@ -3562,7 +3820,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         Names the actual DdL and ragione sociale and stamps luogo + data
         of redazione, mirroring the template's #2429 paragraph block.
         """
-        doc.add_heading("4.13 Dichiarazione del Datore di Lavoro", level=2)
+        self._add_topic_separator(
+            doc,
+            "4.13 Dichiarazione del Datore di Lavoro",
+            part_label="PARTE IV — PROGRAMMA DI MIGLIORAMENTO",
+        )
 
         ddl = next((p for p in persone if p.ruolo_datore_lavoro), None)
         ddl_name = (ddl.nominativo if ddl and ddl.nominativo else "________________________").upper()
@@ -3582,6 +3844,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         srun.bold = True
         srun.font.size = Pt(11)
 
+        last_clause = None
         for clause in (
             "che il procedimento di valutazione dei rischi ex art. 17, "
             "comma 1, lettera a) del D.Lgs. 81/2008 e s.m.i. è stato "
@@ -3604,6 +3867,10 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             run = cp.add_run(clause)
             run.font.size = Pt(10)
             cp.paragraph_format.space_after = Pt(4)
+            last_clause = cp
+
+        if last_clause is not None:
+            last_clause.paragraph_format.keep_with_next = True
 
         # Luogo, data — derived from sede operativa (or legale) + today
         citta = (
@@ -3614,33 +3881,41 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         oggi = datetime.now(timezone.utc).strftime("%d/%m/%Y")
         luogo_data = doc.add_paragraph()
         luogo_data.paragraph_format.space_before = Pt(12)
+        luogo_data.paragraph_format.keep_with_next = True
         run = luogo_data.add_run(f"{citta}, li {oggi}")
         run.font.size = Pt(10)
         run.bold = True
-        doc.add_paragraph("")
 
     def _add_improvement_program_table(
         self, doc: Document, misure: list
     ) -> None:
-        """Template Table 109 — 5-col measures grid populated from the
+        """Template Table 109 — 7-col measures grid populated from the
         ``misure_miglioramento`` table.
 
         When ``misure`` is empty the operator has actively cleared all
         rows — we still emit a single italic placeholder row so the table
         renders, but flag it as not legally complete.
         """
+        _start_landscape_section(doc)
         headers = [
-            "Misure di miglioramento",
-            "Procedure per l'attuazione delle misure di miglioramento",
-            "Risorse necessarie per l'attuazione",
+            "Priorità",
+            "Rischio",
+            "Misura di Miglioramento",
+            "Attività / Procedura",
+            "Risorse",
             "Responsabile",
-            "Tempi di attuazione",
+            "Scadenza",
         ]
+        widths = [Cm(2.0), Cm(3.5), Cm(5.2), Cm(5.2), Cm(3.0), Cm(3.2), Cm(2.8)]
         table = doc.add_table(rows=1, cols=len(headers))
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         table.style = "Table Grid"
 
         header_row = table.rows[0]
+        header_properties = header_row._tr.get_or_add_trPr()
+        repeat = OxmlElement("w:tblHeader")
+        repeat.set(qn("w:val"), "true")
+        header_properties.append(repeat)
         for i, text in enumerate(headers):
             cell = header_row.cells[i]
             cell.text = ""
@@ -3655,6 +3930,8 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         if not misure:
             row = table.add_row()
             for i, text in enumerate([
+                "—",
+                "—",
                 "[Nessuna misura inserita]",
                 "—",
                 "—",
@@ -3668,30 +3945,34 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 crun.font.size = Pt(9)
                 crun.font.italic = True
                 crun.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-            return
+        else:
+            for m in sorted(misure, key=_saved_order_key):
+                row = table.add_row()
+                values = [
+                    m.priorita or "—",
+                    m.misura or "—",
+                    m.misura_miglioramento or "—",
+                    m.procedura or "—",
+                    m.risorse or "—",
+                    m.responsabile or "—",
+                    m.scadenza or "—",
+                ]
+                priorita = (m.priorita or "").upper()
+                for i, text in enumerate(values):
+                    c = row.cells[i]
+                    c.text = ""
+                    cp = c.paragraphs[0]
+                    crun = cp.add_run(str(text))
+                    crun.font.size = Pt(9)
+                    if i == 0 and priorita in _RISK_COLORS:
+                        self._set_cell_bg(c, _RISK_COLORS[priorita])
+                        crun.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+                        crun.bold = True
 
-        for m in misure:
-            row = table.add_row()
-            values = [
-                (m.misura or "—"),
-                (m.procedura or "—"),
-                (m.risorse or "—"),
-                (m.responsabile or "—"),
-                (m.scadenza or "—"),
-            ]
-            priorita = (m.priorita or "").upper()
-            for i, text in enumerate(values):
-                c = row.cells[i]
-                c.text = ""
-                cp = c.paragraphs[0]
-                crun = cp.add_run(str(text))
-                crun.font.size = Pt(9)
-                # Color-band the misura cell when priorita maps to a
-                # known livello — mirrors the risk-table convention.
-                if i == 0 and priorita in _RISK_COLORS:
-                    self._set_cell_bg(c, _RISK_COLORS[priorita])
-                    crun.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-                    crun.bold = True
+        for row in table.rows:
+            for column, width in enumerate(widths):
+                row.cells[column].width = width
+        _restore_portrait_section(doc)
 
     def _add_signature_table(self, doc: Document, persone: list) -> None:
         """Template Table 110 — 2×3 signature grid with DL / RSPP / Medico
@@ -3736,6 +4017,10 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             "Per consultazione\nIl Rappresentante dei Lavoratori",
             f"({rls})",
         )
+        for row in table.rows:
+            row.height = Cm(3)
+            row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
+            self._set_row_cant_split(row)
 
     # ------------------------------------------------------------------
     # Helper methods
@@ -3839,7 +4124,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
     def _add_data_table(
         self, doc: Document, headers: list[str], rows: list[list[str]]
-    ) -> None:
+    ) -> Table:
         """Add a multi-column data table with styled header.
 
         Pagination behaviour:
@@ -3890,6 +4175,8 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                     self._set_cell_bg(cell, _LIGHT_GRAY)
 
             self._set_row_cant_split(row)
+
+        return table
 
     @staticmethod
     def _set_cell_bg(cell, color: RGBColor) -> None:

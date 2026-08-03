@@ -1,8 +1,11 @@
+import asyncio
+import logging
 import uuid
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,8 +24,14 @@ from app.schemas.ambiente import (
     AmbienteUpdate,
 )
 from app.schemas.ambiente_foto import AmbienteFotoResponse
+from app.services.ambiente_photo import (
+    DocumentImageNormalizationError,
+    MAX_ORIGINAL_IMAGE_BYTES,
+    normalize_document_image,
+)
 
 router = APIRouter(prefix="/aziende/{azienda_id}/ambienti", tags=["ambienti"])
+logger = logging.getLogger(__name__)
 
 
 async def _get_azienda(azienda_id: uuid.UUID, org_id: uuid.UUID, db: AsyncSession) -> Azienda:
@@ -193,7 +202,7 @@ async def delete_ambiente(
 # the original filename so the UI can render it alongside the thumbnail.
 
 MAX_FOTO_PER_AMBIENTE = 10
-MAX_FOTO_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+MAX_FOTO_SIZE_BYTES = MAX_ORIGINAL_IMAGE_BYTES
 ALLOWED_FOTO_CONTENT_TYPES = {"image/jpeg", "image/png", "image/heic"}
 ALLOWED_FOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".heic"}
 # Keep extension → content-type mapping for octet-stream fallback
@@ -278,6 +287,13 @@ async def upload_ambiente_foto(
     if len(content) > MAX_FOTO_SIZE_BYTES:
         raise BadRequestError("Formato non supportato o file troppo grande (max 10 MB)")
 
+    try:
+        document_image = await asyncio.to_thread(normalize_document_image, content)
+    except DocumentImageNormalizationError as exc:
+        raise BadRequestError(
+            "Formato non supportato o file troppo grande (max 10 MB)"
+        ) from exc
+
     # Persist to disk with a uuid-named file to avoid collisions and injection
     foto_dir = Path(settings.FILE_STORAGE_PATH) / "foto_ambienti" / str(ambiente_id)
     foto_dir.mkdir(parents=True, exist_ok=True)
@@ -299,9 +315,22 @@ async def upload_ambiente_foto(
         file_path=str(file_path),
         content_type=content_type,
         size_bytes=len(content),
+        document_image_bytes=document_image.content,
+        document_image_content_type=document_image.content_type,
     )
     db.add(foto)
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        try:
+            file_path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning(
+                "Unable to remove uncommitted photo file",
+                extra={"photo_id": str(file_id)},
+            )
+        raise
     await db.refresh(foto)
     return foto
 
@@ -348,16 +377,27 @@ async def get_ambiente_foto_content(
     foto = result.scalar_one_or_none()
     if not foto:
         raise NotFoundError("Foto not found")
+    safe_name = Path(
+        str(foto.filename or foto.id).replace("\\", "/")
+    ).name
     file_path = Path(foto.file_path)
-    # Storage volumes can be wiped during dev/test resets even while the
-    # DB row survives — surface that as 404 rather than a 500.
-    if not file_path.exists():
-        raise NotFoundError("Foto file missing on storage")
-    return FileResponse(
-        path=str(file_path),
-        media_type=foto.content_type or "application/octet-stream",
-        filename=foto.filename or f"{foto_id}",
-    )
+    if file_path.exists():
+        return FileResponse(
+            path=str(file_path),
+            media_type=foto.content_type or "application/octet-stream",
+            filename=safe_name,
+        )
+    if foto.document_image_bytes:
+        return Response(
+            content=foto.document_image_bytes,
+            media_type=foto.document_image_content_type or "image/jpeg",
+            headers={
+                "Content-Disposition": f"inline; filename*=UTF-8''{quote(safe_name)}"
+            },
+        )
+    # Legacy rows can predate the database derivative. Surface a missing local
+    # file as 404 for those rows instead of failing with an internal error.
+    raise NotFoundError("Foto file missing on storage")
 
 
 @router.delete(
