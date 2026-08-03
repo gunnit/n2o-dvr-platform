@@ -1,7 +1,10 @@
 import importlib.util
+import inspect as pyinspect
+import logging
 import struct
 import uuid
 import zlib
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,15 +15,19 @@ import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from fastapi import UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from PIL import Image
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1 import documents as documents_api
 from app.api.v1.ambienti import get_ambiente_foto_content, upload_ambiente_foto
+from app.api.v1.documents import batch_generate_documents, generate_document
 from app.config import settings
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.ambiente_foto import AmbienteFoto
+from app.schemas.document import DocumentBatchRequest, DocumentGenerateRequest
+from app.services import ambiente_photo
 from app.services.ambiente_photo import (
     DocumentImageNormalizationError,
     NormalizedDocumentImage,
@@ -335,6 +342,9 @@ async def test_content_read_falls_back_to_database_derivative(tmp_path, monkeypa
 
     assert response.body == b"normalized-jpeg"
     assert response.media_type == "image/jpeg"
+    assert response.headers["content-disposition"] == (
+        "inline; filename*=UTF-8''reparto.heic"
+    )
 
 
 @pytest.mark.asyncio
@@ -356,3 +366,265 @@ async def test_content_read_404s_when_original_and_derivative_are_unavailable(
         await get_ambiente_foto_content(
             uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), db
         )
+
+
+@pytest.mark.asyncio
+async def test_backfill_reads_legacy_api_disk_and_commits_before_return(tmp_path):
+    class ScalarRows:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self.rows
+
+    source = tmp_path / "legacy.png"
+    source.write_bytes(_image_bytes(Image.new("RGB", (64, 32), "blue"), "PNG"))
+    photo = SimpleNamespace(
+        id=uuid.uuid4(),
+        filename="legacy.png",
+        file_path=str(source),
+        document_image_bytes=None,
+        document_image_content_type=None,
+    )
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = ScalarRows([photo])
+
+    result = await ambiente_photo.backfill_document_images_for_dvr(uuid.uuid4(), db)
+
+    assert result == ambiente_photo.PhotoBackfillResult(
+        attempted=1, stored=1, unavailable=0, failed=0
+    )
+    assert photo.document_image_bytes.startswith(b"\xff\xd8")
+    assert photo.document_image_content_type == "image/jpeg"
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_backfill_leaves_unavailable_and_invalid_rows_null_without_paths_in_logs(
+    tmp_path, caplog
+):
+    class ScalarRows:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self.rows
+
+    invalid_path = tmp_path / "invalid.jpg"
+    invalid_path.write_bytes(b"not-an-image")
+    rows = [
+        SimpleNamespace(
+            id=uuid.UUID(int=11),
+            filename="private/missing.jpg",
+            file_path=str(tmp_path / "private" / "missing.jpg"),
+            document_image_bytes=None,
+            document_image_content_type=None,
+        ),
+        SimpleNamespace(
+            id=uuid.UUID(int=12),
+            filename=r"private\invalid.jpg",
+            file_path=str(invalid_path),
+            document_image_bytes=None,
+            document_image_content_type=None,
+        ),
+    ]
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = ScalarRows(rows)
+
+    with caplog.at_level(logging.WARNING):
+        result = await ambiente_photo.backfill_document_images_for_dvr(
+            uuid.uuid4(), db
+        )
+
+    assert result == ambiente_photo.PhotoBackfillResult(2, 0, 1, 1)
+    assert all(photo.document_image_bytes is None for photo in rows)
+    warnings = [record for record in caplog.records if record.levelno >= logging.WARNING]
+    assert {
+        (record.photo_id, record.photo_filename) for record in warnings
+    } == {
+        (str(uuid.UUID(int=11)), "missing.jpg"),
+        (str(uuid.UUID(int=12)), "invalid.jpg"),
+    }
+    assert all(str(tmp_path) not in record.getMessage() for record in warnings)
+    assert all("private" not in record.getMessage() for record in warnings)
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_photo_content_falls_back_to_database_bytes_when_disk_is_missing(
+    tmp_path,
+):
+    class OneRow:
+        def __init__(self, row):
+            self.row = row
+
+        def scalar_one_or_none(self):
+            return self.row
+
+    photo = SimpleNamespace(
+        id=uuid.uuid4(),
+        filename="folder/foto con spazi.jpg",
+        file_path=str(tmp_path / "missing.jpg"),
+        content_type="image/jpeg",
+        document_image_bytes=b"jpeg-from-db",
+        document_image_content_type="image/jpeg",
+    )
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = OneRow(photo)
+    ids = [uuid.uuid4() for _ in range(3)]
+
+    with patch("app.api.v1.ambienti._get_ambiente_for_org", new=AsyncMock()):
+        response = await get_ambiente_foto_content(
+            ids[0], ids[1], photo.id, ids[2], db
+        )
+
+    assert isinstance(response, Response)
+    assert response.body == photo.document_image_bytes
+    assert response.media_type == "image/jpeg"
+    assert response.headers["content-disposition"] == (
+        "inline; filename*=UTF-8''foto%20con%20spazi.jpg"
+    )
+
+
+@pytest.mark.asyncio
+async def test_preflight_calls_backfill_only_when_dvr_is_requested():
+    db = AsyncMock(spec=AsyncSession)
+    azienda_id = uuid.uuid4()
+    result = SimpleNamespace(attempted=1, stored=1, unavailable=0, failed=0)
+    with patch.object(
+        documents_api,
+        "backfill_document_images_for_dvr",
+        new=AsyncMock(return_value=result),
+        create=True,
+    ) as backfill:
+        assert await documents_api._preflight_dvr_photo_transport(
+            azienda_id, ["dvr_master", "allegato_vdt"], db
+        ) == result
+        assert (
+            await documents_api._preflight_dvr_photo_transport(
+                azienda_id, ["allegato_vdt"], db
+            )
+            is None
+        )
+    backfill.assert_awaited_once_with(azienda_id, db)
+
+
+def test_single_and_batch_routes_preflight_before_dispatch():
+    for endpoint in (generate_document, batch_generate_documents):
+        source = pyinspect.getsource(endpoint)
+        assert source.index("await _preflight_dvr_photo_transport") < source.index(
+            "_enqueue_generation"
+        )
+
+
+class _LatestDocumentResult:
+    def scalar_one_or_none(self):
+        return None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("endpoint", "body", "requested_types", "expects_preflight"),
+    [
+        (
+            generate_document,
+            DocumentGenerateRequest(tipo_documento="dvr_master"),
+            ["dvr_master"],
+            True,
+        ),
+        (
+            generate_document,
+            DocumentGenerateRequest(tipo_documento="allegato_vdt"),
+            ["allegato_vdt"],
+            False,
+        ),
+        (
+            batch_generate_documents,
+            DocumentBatchRequest(tipi_documento=["allegato_vdt", "dvr_master"]),
+            ["allegato_vdt", "dvr_master"],
+            True,
+        ),
+        (
+            batch_generate_documents,
+            DocumentBatchRequest(tipi_documento=["allegato_vdt"]),
+            ["allegato_vdt"],
+            False,
+        ),
+    ],
+)
+async def test_document_routes_preflight_once_only_for_dvr_requests(
+    endpoint, body, requested_types, expects_preflight
+):
+    azienda_id, org_id, user_id = [uuid.uuid4() for _ in range(3)]
+    db = AsyncMock(spec=AsyncSession)
+    db.add = Mock()
+    db.execute.return_value = _LatestDocumentResult()
+    events: list[str] = []
+
+    async def record_backfill(*args):
+        events.append("preflight")
+
+    def record_dispatch(*args):
+        events.append("dispatch")
+
+    async def stamp_document(doc):
+        doc.id = uuid.uuid4()
+        doc.created_at = datetime(2026, 8, 3)
+
+    db.refresh.side_effect = stamp_document
+    azienda = SimpleNamespace(
+        codice_fiscale="01234567890", telefono=None, email=None, pec=None
+    )
+    user = SimpleNamespace(id=user_id)
+    ent = SimpleNamespace()
+    with (
+        patch.object(documents_api, "_get_azienda", new=AsyncMock(return_value=azienda)),
+        patch.object(documents_api, "ensure_subscription_active"),
+        patch.object(documents_api, "ensure_doc_type_allowed"),
+        patch.object(
+            documents_api,
+            "_ensure_company_slot_available",
+            new=AsyncMock(),
+        ),
+        patch.object(
+            documents_api,
+            "_ensure_anagrafica_complete_for_dvr",
+            new=AsyncMock(),
+        ),
+        patch.object(
+            documents_api,
+            "_ensure_dvr_exists_for_dependent",
+            new=AsyncMock(),
+        ),
+        patch.object(
+            documents_api,
+            "_check_batch_preconditions",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch.object(
+            documents_api,
+            "_resolve_user_name",
+            new=AsyncMock(return_value=None),
+        ),
+        patch.object(
+            documents_api,
+            "backfill_document_images_for_dvr",
+            new=AsyncMock(side_effect=record_backfill),
+            create=True,
+        ) as backfill,
+        patch.object(documents_api, "_enqueue_generation", side_effect=record_dispatch),
+    ):
+        await endpoint(azienda_id, body, org_id, user, ent, db)
+
+    if expects_preflight:
+        backfill.assert_awaited_once_with(azienda_id, db)
+        assert events[0] == "preflight"
+    else:
+        backfill.assert_not_awaited()
+    assert events.count("dispatch") == len(requested_types)

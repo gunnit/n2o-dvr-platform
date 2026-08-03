@@ -12,11 +12,13 @@ Output: A .docx file with professional formatting including:
 - Part IV: Improvement measures placeholder
 """
 
+import logging
 import os
 import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 
 from docx import Document
@@ -34,6 +36,19 @@ from app.services.reference_data import (
     normalize_categoria_to_long,
 )
 from app.services.risk_calculator import calculate_risk_index
+
+logger = logging.getLogger(__name__)
+
+
+def _photo_image_sources(photo: object) -> list[BytesIO | str]:
+    sources: list[BytesIO | str] = []
+    content = getattr(photo, "document_image_bytes", None)
+    if content:
+        sources.append(BytesIO(content))
+    path = getattr(photo, "file_path", None)
+    if path and os.path.isfile(path):
+        sources.append(path)
+    return sources
 
 
 # ---------------------------------------------------------------------------
@@ -2603,49 +2618,59 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     def _add_env_foto_block(
         self, doc: Document, nome_ambiente: str, foto: list
     ) -> None:
-        """Embed up to 3 foto/planimetrie inline at consistent width.
-
-        Skips photos whose filesystem file is missing rather than failing the
-        whole document — happens during dev/test resets when the DB row
-        survives but the storage path was wiped.
-        """
+        """Embed up to ten saved photos, preferring shared database bytes."""
         doc.add_heading(
             f"Foto e Planimetrie — {nome_ambiente}", level=3
         )
-        embedded = 0
-        for f in foto[:3]:
-            path = getattr(f, "file_path", None)
-            if not path or not os.path.exists(path):
-                continue
-            try:
-                p = doc.add_paragraph()
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                run = p.add_run()
-                run.add_picture(path, width=Cm(12))
+        embedded_count = 0
+        for photo in foto[:10]:
+            safe_name = Path(
+                str(getattr(photo, "filename", None) or photo.id).replace("\\", "/")
+            ).name[:255]
+            embedded = False
+            warned = False
+            for source in _photo_image_sources(photo):
+                paragraph = doc.add_paragraph()
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                try:
+                    paragraph.add_run().add_picture(source, width=Cm(12))
+                except Exception:
+                    paragraph._element.getparent().remove(paragraph._element)
+                    warned = True
+                    logger.warning(
+                        "DVR photo candidate could not be embedded",
+                        extra={
+                            "photo_id": str(photo.id),
+                            "photo_filename": safe_name,
+                        },
+                    )
+                    continue
+                embedded = True
+                embedded_count += 1
                 caption = doc.add_paragraph()
                 caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                # "Fig. N — filename" prefix prevents downstream text-only
-                # readers (audit tools, accessibility readers) from
-                # misreading the styled italic caption as a stray bare
-                # filename (audit F-003, 2026-04-29 rerun).
                 cap_run = caption.add_run(
-                    f"Fig. {embedded + 1} — {f.filename or ''}"
+                    f"Fig. {embedded_count} — {safe_name}"
                 )
                 cap_run.font.italic = True
                 cap_run.font.size = Pt(9)
                 cap_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-                embedded += 1
-            except Exception:
+                break
+            if embedded:
                 continue
-        if embedded == 0:
-            p = doc.add_paragraph()
-            run = p.add_run(
-                "[Foto/planimetrie non disponibili al momento della "
-                "generazione]"
-            )
-            run.font.italic = True
-            run.font.size = Pt(9)
-            run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+            marker = doc.add_paragraph()
+            marker_run = marker.add_run(f"[Foto non disponibile: {safe_name}]")
+            marker_run.font.italic = True
+            marker_run.font.size = Pt(9)
+            marker_run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+            if not warned:
+                logger.warning(
+                    "DVR photo unavailable",
+                    extra={
+                        "photo_id": str(photo.id),
+                        "photo_filename": safe_name,
+                    },
+                )
         doc.add_paragraph("")
 
     # ------------------------------------------------------------------

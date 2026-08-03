@@ -1,6 +1,7 @@
 import logging
 import uuid
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import FileResponse, Response
@@ -382,9 +383,15 @@ async def get_ambiente_foto_content(
             filename=foto.filename or f"{foto_id}",
         )
     if foto.document_image_bytes:
+        safe_name = quote(
+            Path(str(foto.filename or foto.id).replace("\\", "/")).name
+        )
         return Response(
             content=foto.document_image_bytes,
             media_type=foto.document_image_content_type or "image/jpeg",
+            headers={
+                "Content-Disposition": f"inline; filename*=UTF-8''{safe_name}"
+            },
         )
     # Legacy rows can predate the database derivative. Surface a missing local
     # file as 404 for those rows instead of failing with an internal error.
