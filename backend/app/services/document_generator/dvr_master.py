@@ -23,10 +23,11 @@ from pathlib import Path
 
 from docx import Document
 from docx.enum.section import WD_ORIENT
-from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.shared import Cm, Inches, Mm, Pt, RGBColor
+from docx.table import Table
 
 from app.data.regional_regulations import get_regulations_for_comune
 from app.services.document_generator.base import BaseDocumentGenerator
@@ -49,6 +50,63 @@ def _photo_image_sources(photo: object) -> list[BytesIO | str]:
     if path and os.path.isfile(path):
         sources.append(path)
     return sources
+
+
+def _effective_risk_sources(parent: object) -> list:
+    children = list(getattr(parent, "pericoli", None) or [])
+    if children:
+        return [
+            child
+            for child in children
+            if getattr(child, "applicabile", False)
+        ]
+    return [parent] if getattr(parent, "applicabile", False) else []
+
+
+_ATTREZZATURA_RISK_LABELS = {
+    "lavori_in_quota": "Lavori in quota",
+    "trabattelli": "Utilizzo di trabattelli",
+    "ponteggi": "Utilizzo di ponteggi",
+    "carrello_elevatore": "Utilizzo di carrelli elevatori",
+    "ple": "Utilizzo di piattaforme di lavoro elevabili (PLE)",
+    "gru": "Utilizzo di gru",
+    "ruspa_escavatore": "Utilizzo di ruspe ed escavatori",
+    "patente_cde": "Guida professionale (patente C/D/E)",
+    "adr": "Trasporto merci pericolose (ADR)",
+}
+
+
+def _person_specific_risk_labels(person: object, vdt_ids: set) -> list[str]:
+    from app.services.reference_data import RISCHI_SPECIFICI_CATALOG
+
+    labels: list[str] = []
+
+    def add(label: str) -> None:
+        if label and label not in labels:
+            labels.append(label)
+
+    if getattr(person, "id", None) in vdt_ids:
+        add("Videoterminali")
+    for code in getattr(person, "attrezzature_speciali", None) or []:
+        add(_ATTREZZATURA_RISK_LABELS.get(code, code))
+    for code in getattr(person, "rischi_specifici_codes", None) or []:
+        item = RISCHI_SPECIFICI_CATALOG.get(code, {})
+        add(item.get("etichetta", code))
+    return labels
+
+
+def _center_dpi_brand_model_placeholders(table: Table) -> None:
+    headers = [cell.text.strip() for cell in table.rows[0].cells]
+    if "Marca / Modello" not in headers:
+        return
+    column = headers.index("Marca / Modello")
+    for row in table.rows[1:]:
+        cell = row.cells[column]
+        if cell.text.strip() not in {"-", "—"}:
+            continue
+        cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+        for paragraph in cell.paragraphs:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
 
 # ---------------------------------------------------------------------------
@@ -2683,113 +2741,36 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         """Emit the "Mansioni che espongono i lavoratori a rischi specifici"
         table required by the template tail (DOCUMENT_STRUCTURE.md §3.N+1).
 
-        Driven by per-persona signals, then aggregated up to mansione for
-        the legal table layout. When two persone with the same mansione
-        diverge, the row shows the union of risks.
+        Driven by per-persona signals, retaining one row per exposed
+        employee so people with the same mansione do not inherit each
+        other's risks.
 
         Sources, per persona:
           - VDT esposti (>= 20h/week → "Videoterminali" rischio specifico)
           - persona.attrezzature_speciali codes (each maps to a rischio)
           - persona.rischi_specifici_codes ticked in the wizard
         """
-        from app.services.reference_data import RISCHI_SPECIFICI_CATALOG
-
         doc.add_heading(
             "Mansioni che espongono i lavoratori a rischi specifici", level=2
         )
 
-        # Build mansione → set[rischio_label] index.
-        # Track the per-persona contribution count so we can flag mansioni
-        # where the flags vary across persone (audit hint for the operator).
-        mansioni_idx: dict[str, set[str]] = {}
-        mansione_persona_codes: dict[str, list[frozenset[str]]] = {}
-        vdt_ids = extras.get("vdt_esposti_persona_ids", set())
-
-        attrezzatura_to_rischio = {
-            "lavori_in_quota": "Lavori in quota",
-            "trabattelli": "Utilizzo di trabattelli",
-            "ponteggi": "Utilizzo di ponteggi",
-            "carrello_elevatore": "Utilizzo di carrelli elevatori",
-            "ple": "Utilizzo di piattaforme di lavoro elevabili (PLE)",
-            "gru": "Utilizzo di gru",
-            "ruspa_escavatore": "Utilizzo di ruspe ed escavatori",
-            "patente_cde": "Guida professionale (patente C/D/E)",
-            "adr": "Trasporto merci pericolose (ADR)",
-        }
-
-        for p in persone:
-            mansione = (p.mansione or "").strip()
-            if not mansione:
-                continue
-            bucket = mansioni_idx.setdefault(mansione, set())
-            persona_codes: set[str] = set()
-            if p.id in vdt_ids:
-                label = "Videoterminali (VDT) — esposizione >= 20h/sett."
-                bucket.add(label)
-                persona_codes.add(label)
-            for code in (p.attrezzature_speciali or []):
-                label = attrezzatura_to_rischio.get(code)
-                if label:
-                    bucket.add(label)
-                    persona_codes.add(label)
-            for rs_code in (getattr(p, "rischi_specifici_codes", None) or []):
-                meta = RISCHI_SPECIFICI_CATALOG.get(rs_code) or {}
-                label = meta.get("etichetta")
-                if label:
-                    bucket.add(label)
-                    persona_codes.add(label)
-            mansione_persona_codes.setdefault(mansione, []).append(
-                frozenset(persona_codes)
-            )
-
-        # Filter out mansioni without specific risks — they belong to the
-        # generic risk assessment, not to this table.
+        headers = ["Nominativo", "Mansione", "Rischio specifico"]
         rows = []
-        for mansione in sorted(mansioni_idx.keys()):
-            rischi = sorted(mansioni_idx[mansione])
-            if not rischi:
-                continue
-            count = sum(
-                1
-                for p in persone
-                if (p.mansione or "").strip() == mansione
+        vdt_ids = extras.get("vdt_esposti_persona_ids", set())
+        for person in persone:
+            labels = _person_specific_risk_labels(person, vdt_ids)
+            if labels:
+                rows.append([
+                    (getattr(person, "nominativo", None) or "—").upper(),
+                    (getattr(person, "mansione", None) or "—").upper(),
+                    "; ".join(labels),
+                ])
+        if rows:
+            self._add_data_table(doc, headers, rows)
+        else:
+            doc.add_paragraph(
+                "Nessun lavoratore esposto a rischi specifici configurato."
             )
-            # If the persone with this mansione don't all share the same
-            # set of rischi, flag the row so the Medico del Lavoro knows
-            # to consult the per-persona detail (kept in the CRM).
-            persona_sets = mansione_persona_codes.get(mansione, [])
-            distinct = {s for s in persona_sets if s}
-            varia = len(distinct) > 1
-            rischi_cell = "; ".join(rischi)
-            if varia:
-                rischi_cell += " (varia per lavoratore — vedere scheda persona)"
-            rows.append([
-                mansione.upper(),
-                str(count),
-                rischi_cell,
-            ])
-
-        if not rows:
-            p = doc.add_paragraph()
-            run = p.add_run(
-                "Nessuna mansione presenta esposizioni a rischi specifici "
-                "che richiedano sorveglianza sanitaria mirata in aggiunta "
-                "alla valutazione generale."
-            )
-            run.font.size = Pt(10)
-            run.font.italic = True
-            doc.add_paragraph("")
-            return
-
-        self._add_data_table(
-            doc,
-            headers=[
-                "Mansione",
-                "N. Lavoratori",
-                "Rischi specifici / Sorveglianza Sanitaria",
-            ],
-            rows=rows,
-        )
         doc.add_paragraph("")
 
     def _add_dpi_per_mansione_section(
@@ -2902,11 +2883,12 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                     else "Sorveglianza sanitaria e formazione ex art. 36-37 D.Lgs. 81/2008."
                 )
                 rows.append([descrizione, "—", note])
-            self._add_data_table(
+            dpi_table = self._add_data_table(
                 doc,
                 headers=["Descrizione DPI", "Marca / Modello", "Note"],
                 rows=rows,
             )
+            _center_dpi_brand_model_placeholders(dpi_table)
             doc.add_paragraph("")
 
     def _add_segnaletica_section(self, doc: Document) -> None:
@@ -3180,10 +3162,17 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         # Normalize short DB names ("Elettrici") to canonical long names
         # ("Impianti Elettrici") so the lookup against _CATEGORY_ORDER keys
         # actually matches. Without this every row silently shows NO.
-        applicable_by_category = {
-            normalize_categoria_to_long(r.categoria_rischio): True
-            for r in ambiente.valutazioni_rischio
-            if getattr(r, "applicabile", False)
+        parents = list(
+            getattr(ambiente, "valutazioni_rischio", None) or []
+        )
+        effective_by_parent = {
+            id(parent): _effective_risk_sources(parent)
+            for parent in parents
+        }
+        applicable_categories = {
+            normalize_categoria_to_long(parent.categoria_rischio)
+            for parent in parents
+            if effective_by_parent[id(parent)]
         }
 
         table = doc.add_table(rows=1, cols=2)
@@ -3225,7 +3214,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             cell_flag = row.cells[1]
             cell_flag.text = ""
             p = cell_flag.paragraphs[0]
-            flag = "SI" if applicable_by_category.get(categoria) else "NO"
+            flag = "SI" if categoria in applicable_categories else "NO"
             run = p.add_run(flag)
             run.font.size = Pt(9)
             run.bold = True
@@ -3244,14 +3233,22 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         """
         # Normalize short DB names to canonical long names so the per-category
         # tables actually emit (see _add_env_risk_checklist comment).
+        parents = list(
+            getattr(ambiente, "valutazioni_rischio", None) or []
+        )
+        effective_by_parent = {
+            id(parent): _effective_risk_sources(parent)
+            for parent in parents
+        }
         by_category: dict[str, list] = {}
-        for r in ambiente.valutazioni_rischio:
-            if not getattr(r, "applicabile", False):
+        for parent in parents:
+            effective = effective_by_parent[id(parent)]
+            if not effective:
                 continue
-            key = normalize_categoria_to_long(r.categoria_rischio)
+            key = normalize_categoria_to_long(parent.categoria_rischio)
             if not key:
                 continue
-            by_category.setdefault(key, []).append(r)
+            by_category.setdefault(key, []).extend(effective)
 
         # Force the Agenti Fisici section when VDT addetti are present in
         # the ambiente — even if no other agente fisico has been ticked.
@@ -3331,21 +3328,9 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
             self._set_cell_bg(cell, _HEADER_BG)
 
-        # Phase 3 (1:N): when the parent valutazione_rischio has children
-        # in pericoli_valutazione, emit one row per child — that's the
-        # template-faithful layout. When no children exist (legacy data),
-        # fall back to the parent's single pericolo/condizioni/misure
-        # block so older DVRs still render.
-        rows_to_emit: list = []
-        for risk in risks:
-            children = [
-                c for c in (getattr(risk, "pericoli", []) or [])
-                if getattr(c, "applicabile", True)
-            ]
-            if children:
-                rows_to_emit.extend(children)
-            else:
-                rows_to_emit.append(risk)
+        # ``risks`` already contains the effective child rows (or a legacy
+        # childless parent) selected by ``_add_env_risk_tables``.
+        rows_to_emit = list(risks)
 
         # Synthetic VDT row when none of the existing children already
         # cover videoterminali — keeps the row dedupe-safe.
@@ -3946,7 +3931,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
     def _add_data_table(
         self, doc: Document, headers: list[str], rows: list[list[str]]
-    ) -> None:
+    ) -> Table:
         """Add a multi-column data table with styled header.
 
         Pagination behaviour:
@@ -3997,6 +3982,8 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                     self._set_cell_bg(cell, _LIGHT_GRAY)
 
             self._set_row_cant_split(row)
+
+        return table
 
     @staticmethod
     def _set_cell_bg(cell, color: RGBColor) -> None:

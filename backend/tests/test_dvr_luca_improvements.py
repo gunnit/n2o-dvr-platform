@@ -242,3 +242,65 @@ def test_corrupt_database_derivative_falls_back_to_valid_local_file(tmp_path, ca
         (str(uuid.UUID(int=3)), "legacy.jpg")
     ]
     assert all(str(tmp_path) not in record.getMessage() for record in warnings)
+
+
+def test_parent_false_applicable_children_are_effective_in_relationship_order():
+    parent = SimpleNamespace(
+        applicabile=False,
+        pericoli=[
+            SimpleNamespace(pericolo="A", applicabile=True),
+            SimpleNamespace(pericolo="B", applicabile=False),
+            SimpleNamespace(pericolo="C", applicabile=True),
+        ],
+    )
+    assert [
+        row.pericolo for row in dvr_master._effective_risk_sources(parent)
+    ] == ["A", "C"]
+
+
+def test_all_disabled_children_do_not_resurrect_parent():
+    parent = SimpleNamespace(
+        applicabile=True,
+        pericoli=[SimpleNamespace(pericolo="A", applicabile=False)],
+    )
+    assert dvr_master._effective_risk_sources(parent) == []
+
+
+def test_childless_applicable_parent_remains_effective():
+    parent = SimpleNamespace(applicabile=True, pericoli=[])
+    assert dvr_master._effective_risk_sources(parent) == [parent]
+
+
+def test_parent_false_applicable_children_render_once_and_mark_checklist_yes():
+    applicable = SimpleNamespace(
+        pericolo="CHILD APPLICABLE SENTINEL",
+        applicabile=True,
+        condizioni_esposizione="COND",
+        rischio="RISK",
+        misure_prevenzione="MEASURE",
+        probabilita_p=2,
+        danno_d=3,
+        livello_rischio="GRAVE",
+    )
+    disabled = SimpleNamespace(
+        pericolo="CHILD DISABLED SENTINEL", applicabile=False
+    )
+    parent = SimpleNamespace(
+        categoria_rischio="Macchine",
+        applicabile=False,
+        pericoli=[applicable, disabled],
+    )
+    ambiente = SimpleNamespace(valutazioni_rischio=[parent])
+    doc = Document()
+    gen = _new_generator()
+    gen._add_env_risk_checklist(doc, ambiente)
+    gen._add_env_risk_tables(doc, ambiente)
+    text = _all_text(doc)
+    assert text.count("CHILD APPLICABLE SENTINEL") == 1
+    assert "CHILD DISABLED SENTINEL" not in text
+    assert any(
+        "SI" in cell.text
+        for table in doc.tables
+        for row in table.rows
+        for cell in row.cells
+    )
