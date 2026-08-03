@@ -1,5 +1,8 @@
 """Regression coverage for Luca's DVR cover corrections."""
 
+import asyncio
+import collections
+import importlib.util
 import logging
 from datetime import datetime
 from io import BytesIO
@@ -8,13 +11,18 @@ from types import SimpleNamespace
 import uuid
 from zipfile import ZipFile
 
+import pytest
 from docx import Document
+from docx.enum.section import WD_ORIENT
+from docx.enum.table import WD_ROW_HEIGHT_RULE
+from docx.shared import Cm, Pt
 from PIL import Image
 
 from app.services.document_generator.branding import Branding
 from app.services.document_generator import dvr_master
 from app.services.document_generator.dvr_master import (
     DVRMasterGenerator,
+    _PART_IV_PROCEDURAL_SECTIONS,
     _employee_persons,
     _global_equipment_rows,
     _saved_order_key,
@@ -23,6 +31,70 @@ from app.services.ambiente_photo import normalize_document_image
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _load_verify():
+    path = BACKEND_ROOT / "scripts" / "verify_all_generators.py"
+    spec = importlib.util.spec_from_file_location("verify_all_generators_luca", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
+def full_dvr_doc(tmp_path):
+    module = _load_verify()
+    fixture = module.build_fixture()
+    fixture["persone"].append(module.mk(
+        nominativo="Dott.ssa Test Medico", mansione="Medico Competente",
+        ordine=99, created_at=datetime(2026, 1, 10), is_esterno=True,
+        ruolo_medico_competente=True, ruolo_datore_lavoro=False,
+        ruolo_rspp=False, ruolo_rls=False, ruolo_primo_soccorso=False,
+        ruolo_antincendio=False, ruolo_preposto=False, ambienti=[],
+        dpi_codes=[], rischi_specifici_codes=[], attrezzature_speciali=[],
+    ))
+    module.patch_generators(fixture, str(tmp_path))
+    ok, path, message = asyncio.run(module.run_one("DVR_MASTER", fixture["azienda"].id))
+    assert ok, message
+    return Document(path), fixture
+
+
+@pytest.fixture
+def empty_environment_dvr_doc(tmp_path):
+    module = _load_verify()
+    fixture = module.build_fixture()
+    fixture["ambienti"] = []
+    module.patch_generators(fixture, str(tmp_path))
+    ok, path, message = asyncio.run(module.run_one("DVR_MASTER", fixture["azienda"].id))
+    assert ok, message
+    return Document(path)
+
+
+def _next_paragraph_has_page_break(paragraph) -> bool:
+    following = paragraph._p.getnext()
+    return bool(following is not None and following.xpath('.//w:br[@w:type="page"]'))
+
+
+def _document_xml_has_adjacent_page_breaks(doc: Document) -> bool:
+    flags = [bool(paragraph._p.xpath('.//w:br[@w:type="page"]')) for paragraph in doc.paragraphs]
+    return any(left and right for left, right in zip(flags, flags[1:]))
+
+
+def test_table_ending_topic_uses_page_break_before_boundary_to_avoid_a_blank_page():
+    doc = Document()
+    doc.add_table(rows=1, cols=1)
+    generator = _new_generator()
+
+    generator._ensure_page_boundary(doc)
+
+    boundary = generator._last_content_element(doc)
+    assert boundary.xpath("./w:pPr/w:pageBreakBefore")
+    assert not boundary.xpath('.//w:br[@w:type="page"]')
+    body_length = len(doc._element.body)
+
+    generator._ensure_page_boundary(doc)
+
+    assert len(doc._element.body) == body_length
 
 
 def _new_generator() -> DVRMasterGenerator:
@@ -304,3 +376,125 @@ def test_parent_false_applicable_children_render_once_and_mark_checklist_yes():
         for row in table.rows
         for cell in row.cells
     )
+
+
+def test_every_level_two_heading_is_a_single_separator_without_adjacent_page_breaks(full_dvr_doc):
+    doc, fixture = full_dvr_doc
+    headings = [p for p in doc.paragraphs if p.style.name == "Heading 2"]
+    expected = {
+        "1. Presentazione dell'Azienda", "2. Anagrafica Aziendale",
+        "3. Dati Occupazionali", "4. Organizzazione Aziendale della Sicurezza",
+        "5. Ambienti di Lavoro", "6. Servizi Igienico-Assistenziali",
+        "7. Macchine, Attrezzature ed Impianti", "8. Sostanze, Prodotti e Preparati Chimici",
+        "9. Elenco Fattori di Pericolo (Riferimento)", "2.1 Descrizione dell'Attività",
+        "2.2 Definizioni", "2.3 Metodologia di Valutazione dei Rischi",
+        "2.4 Scala di Probabilità (P)", "2.5 Scala del Danno (D)",
+        "Mansioni che espongono i lavoratori a rischi specifici",
+        "DPI in dotazione per Mansione", "Segnaletica di Sicurezza",
+        "Programma di Informazione, Formazione e Addestramento",
+        "4.1 Programma e Procedure di attuazione delle Misure di Miglioramento",
+        "Documenti correlati al presente DVR", "4.13 Dichiarazione del Datore di Lavoro",
+    }
+    expected.update(spec.heading for spec in _PART_IV_PROCEDURAL_SECTIONS)
+    expected.update(
+        f"Identificazione dell'Ambiente di Lavoro e degli Addetti — {(ambiente.nome or '—').upper()}"
+        for ambiente in fixture["ambienti"]
+    )
+    assert collections.Counter(paragraph.text for paragraph in headings) == collections.Counter(expected)
+    for heading in headings:
+        assert _next_paragraph_has_page_break(heading)
+    assert not _document_xml_has_adjacent_page_breaks(doc)
+
+
+def test_each_part_h1_occurs_once_and_shares_its_first_topic_separator(full_dvr_doc):
+    doc, fixture = full_dvr_doc
+    paragraphs = doc.paragraphs
+    h1 = [p for p in paragraphs if p.style.name == "Heading 1"]
+    h1_text = [p.text for p in h1]
+    assert h1_text.count("PARTE I — DATI GENERALI DELL'AZIENDA") == 1
+    assert h1_text.count("PARTE II — DESCRIZIONE DELL'ATTIVITÀ E METODOLOGIA DI VALUTAZIONE") == 1
+    assert h1_text.count("PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO") == 1
+    assert h1_text.count("PARTE IV — PROGRAMMA DI MIGLIORAMENTO") == 1
+    assert all(paragraph.runs[0].font.size == Pt(11) for paragraph in h1 if paragraph.text.startswith("PARTE "))
+    first_environment = min(fixture["ambienti"], key=_saved_order_key)
+    first_topics = {
+        "PARTE I — DATI GENERALI DELL'AZIENDA": "1. Presentazione dell'Azienda",
+        "PARTE II — DESCRIZIONE DELL'ATTIVITÀ E METODOLOGIA DI VALUTAZIONE": "2.1 Descrizione dell'Attività",
+        "PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO": f"Identificazione dell'Ambiente di Lavoro e degli Addetti — {(first_environment.nome or '—').upper()}",
+        "PARTE IV — PROGRAMMA DI MIGLIORAMENTO": "4.1 Programma e Procedure di attuazione delle Misure di Miglioramento",
+    }
+    for part_heading, first_topic in first_topics.items():
+        part = next(paragraph for paragraph in h1 if paragraph.text == part_heading)
+        following = paragraphs[paragraphs.index(part) + 1]
+        assert following.style.name == "Heading 2"
+        assert following.text == first_topic
+
+
+def test_empty_environment_part_keeps_its_h1_with_all_inline_tail_topics(empty_environment_dvr_doc):
+    doc = empty_environment_dvr_doc
+    paragraphs = doc.paragraphs
+    part = next(
+        paragraph for paragraph in paragraphs
+        if paragraph.style.name == "Heading 1"
+        and paragraph.text == "PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO"
+    )
+    part_index = paragraphs.index(part)
+    assert paragraphs[part_index + 1].style.name == "Heading 2"
+    assert paragraphs[part_index + 1].text == "Mansioni che espongono i lavoratori a rischi specifici"
+    expected_tail = {
+        "Mansioni che espongono i lavoratori a rischi specifici",
+        "DPI in dotazione per Mansione",
+        "Segnaletica di Sicurezza",
+        "Programma di Informazione, Formazione e Addestramento",
+    }
+    tail = [
+        paragraph for paragraph in paragraphs
+        if paragraph.style.name == "Heading 2" and paragraph.text in expected_tail
+    ]
+    assert collections.Counter(paragraph.text for paragraph in tail) == collections.Counter(expected_tail)
+    assert all(paragraph.style.name == "Heading 2" for paragraph in tail)
+    assert all(_next_paragraph_has_page_break(paragraph) for paragraph in tail)
+    assert any(paragraph.text == "Nessun ambiente di lavoro registrato." for paragraph in paragraphs)
+
+
+def test_improvement_table_prints_all_saved_fields_in_order_and_restores_portrait():
+    rows = [
+        SimpleNamespace(id=uuid.UUID(int=2), created_at=datetime(2026, 1, 2), ordine=2, priorita="MODESTO", misura="R2", misura_miglioramento="M2", procedura="P2", risorse="S2", responsabile="A2", scadenza="D2"),
+        SimpleNamespace(id=uuid.UUID(int=1), created_at=datetime(2026, 1, 1), ordine=1, priorita="GRAVE", misura="R1", misura_miglioramento="M1", procedura="P1", risorse="S1", responsabile="A1", scadenza="D1"),
+    ]
+    doc = Document()
+    _new_generator()._add_improvement_program_table(doc, rows)
+    table = doc.tables[-1]
+    assert [c.text for c in table.rows[0].cells] == [
+        "Priorità", "Rischio", "Misura di Miglioramento", "Attività / Procedura", "Risorse", "Responsabile", "Scadenza"
+    ]
+    assert [c.text for c in table.rows[1].cells] == ["GRAVE", "R1", "M1", "P1", "S1", "A1", "D1"]
+    assert doc.sections[-2].orientation == WD_ORIENT.LANDSCAPE
+    assert doc.sections[-1].orientation == WD_ORIENT.PORTRAIT
+
+
+def test_declaration_has_fresh_content_page_and_signature_rows_are_signable(full_dvr_doc):
+    doc, _fixture = full_dvr_doc
+    declaration = next(
+        paragraph for paragraph in doc.paragraphs
+        if paragraph.text == "4.13 Dichiarazione del Datore di Lavoro"
+        and paragraph.style.name == "Heading 2"
+    )
+    assert _next_paragraph_has_page_break(declaration)
+    signature = next(
+        table for table in doc.tables
+        if len(table.rows) == 2
+        and len(table.rows[0].cells) == 3
+        and "Il Datore di Lavoro" in " ".join(cell.text for cell in table.rows[0].cells)
+    )
+    signature_text = " ".join(cell.text for row in signature.rows for cell in row.cells)
+    for expected in ("MARIO ROSSI", "LUCA BIANCHI", "DOTT.SSA TEST MEDICO", "GIULIA VERDI"):
+        assert expected in signature_text
+    for row in signature.rows:
+        assert row.height >= Cm(3)
+        assert row.height_rule == WD_ROW_HEIGHT_RULE.AT_LEAST
+        assert row._tr.xpath("./w:trPr/w:cantSplit")
+    final_clause = next(paragraph for paragraph in doc.paragraphs if paragraph.text.startswith("di impegnarsi a rielaborare"))
+    place_date = next(paragraph for paragraph in doc.paragraphs if ", li " in paragraph.text)
+    assert final_clause._p.xpath("./w:pPr/w:keepNext")
+    assert place_date._p.xpath("./w:pPr/w:keepNext")
