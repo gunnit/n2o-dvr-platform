@@ -28,8 +28,6 @@ from docx.shared import Cm, Inches, Mm, Pt, RGBColor
 
 from app.data.regional_regulations import get_regulations_for_comune
 from app.services.document_generator.base import BaseDocumentGenerator
-from app.services.document_generator.branding import resolve_logo_source
-from app.services.document_generator.docx_utils import add_consultancy_letterhead
 from app.services.reference_data import (
     HAZARD_LIBRARY,
     RISK_CATEGORIES,
@@ -698,6 +696,7 @@ _RISK_COLORS = {
 _HEADER_BG = RGBColor(0x1A, 0x23, 0x7E)           # Dark blue for table headers
 _HEADER_TEXT = RGBColor(0xFF, 0xFF, 0xFF)          # White text on headers
 _LIGHT_GRAY = RGBColor(0xF5, 0xF5, 0xF5)          # Alternating row background
+_DVR_VERA_LOGO_PATH: Path = Path(__file__).resolve().parents[3] / "assets" / "n2o_vera_dvr.png"
 
 
 def _revision_label(version: int) -> str:
@@ -1100,6 +1099,19 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     # Cover page
     # ------------------------------------------------------------------
 
+    def _add_vera_logo(self, doc: Document) -> None:
+        """Add the DVR-specific VERA mark, with a visible failure marker."""
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.add_run()
+        try:
+            run.add_picture(str(_DVR_VERA_LOGO_PATH), width=Inches(4.8))
+        except Exception:
+            run.text = "[LOGO N2O VERA NON DISPONIBILE]"
+            run.font.size = Pt(14)
+            run.font.italic = True
+            run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+
     def _add_cover_page(
         self, doc: Document, azienda, generated_at: datetime, version: int
     ) -> None:
@@ -1115,30 +1127,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         for _ in range(3):
             doc.add_paragraph("")
 
-        # Logo: embed the consultancy's configured logo (or the committed
-        # default) if available, otherwise fall back to an italic gray text
-        # placeholder so generation never breaks.
-        logo_src = resolve_logo_source(self.branding)
-        if logo_src is not None:
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run()
-            try:
-                run.add_picture(logo_src, width=Inches(2.0))
-            except Exception:
-                # Any image-loading issue degrades gracefully to the text
-                # placeholder below (e.g. corrupt file).
-                run.text = "[LOGO AZIENDALE]"
-                run.font.size = Pt(14)
-                run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-                run.font.italic = True
-        else:
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run("[LOGO AZIENDALE]")
-            run.font.size = Pt(14)
-            run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-            run.font.italic = True
+        self._add_vera_logo(doc)
 
         doc.add_paragraph("")
 
@@ -1213,19 +1202,6 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         )
         run.font.size = Pt(12)
         run.bold = True
-
-        # Consultancy letterhead — the firm that produced the document.
-        # Only rendered when the org has actually configured its branding, so
-        # un-configured orgs see no new cover element vs. previously delivered
-        # documents (review finding #7).
-        if self.branding.is_configured():
-            doc.add_paragraph("")
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run("Documento elaborato da:")
-            run.font.size = Pt(9)
-            run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-            add_consultancy_letterhead(doc, self.branding, center=True)
 
         # Page break
         doc.add_page_break()
