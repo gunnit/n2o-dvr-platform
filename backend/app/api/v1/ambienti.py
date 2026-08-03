@@ -375,22 +375,22 @@ async def get_ambiente_foto_content(
     foto = result.scalar_one_or_none()
     if not foto:
         raise NotFoundError("Foto not found")
+    safe_name = Path(
+        str(foto.filename or foto.id).replace("\\", "/")
+    ).name
     file_path = Path(foto.file_path)
     if file_path.exists():
         return FileResponse(
             path=str(file_path),
             media_type=foto.content_type or "application/octet-stream",
-            filename=foto.filename or f"{foto_id}",
+            filename=safe_name,
         )
     if foto.document_image_bytes:
-        safe_name = quote(
-            Path(str(foto.filename or foto.id).replace("\\", "/")).name
-        )
         return Response(
             content=foto.document_image_bytes,
             media_type=foto.document_image_content_type or "image/jpeg",
             headers={
-                "Content-Disposition": f"inline; filename*=UTF-8''{safe_name}"
+                "Content-Disposition": f"inline; filename*=UTF-8''{quote(safe_name)}"
             },
         )
     # Legacy rows can predate the database derivative. Surface a missing local

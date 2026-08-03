@@ -300,13 +300,20 @@ class _PhotoResult:
 
 
 @pytest.mark.asyncio
-async def test_content_read_prefers_original_local_file(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "stored_name",
+    ["folder/photo.jpg", r"folder\photo.jpg"],
+    ids=["posix-separator", "windows-separator"],
+)
+async def test_content_read_local_file_sanitizes_response_filename(
+    tmp_path, monkeypatch, stored_name
+):
     original = tmp_path / "original.png"
     original.write_bytes(b"original")
     photo = SimpleNamespace(
         file_path=str(original),
         content_type="image/png",
-        filename="reparto.png",
+        filename=stored_name,
         document_image_bytes=b"normalized",
         document_image_content_type="image/jpeg",
     )
@@ -321,6 +328,9 @@ async def test_content_read_prefers_original_local_file(tmp_path, monkeypatch):
     assert isinstance(response, FileResponse)
     assert Path(response.path).read_bytes() == b"original"
     assert response.media_type == "image/png"
+    assert response.headers["content-disposition"] == (
+        'attachment; filename="photo.jpg"'
+    )
 
 
 @pytest.mark.asyncio
