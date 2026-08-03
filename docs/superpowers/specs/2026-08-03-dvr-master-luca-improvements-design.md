@@ -1,8 +1,8 @@
 # DVR Master — Luca Improvement Round Design
 
-**Date:** 2026-08-03  
+**Date:** 2026-08-03
 **Status:** Implemented and locally verified; pending production rollout
-**Repository:** `gunnit/n2o-dvr-platform`  
+**Repository:** `gunnit/n2o-dvr-platform`
 **Base revision:** `60267a7047ef7665388770fb6e6c87609db305ea`
 
 ## 1. Context
