@@ -711,6 +711,116 @@ def _revision_label(version: int) -> str:
     return f"{max(0, version - 1):02d}"
 
 
+def _saved_order_key(entity: object) -> tuple[bool, int, float, str]:
+    """Order DVR records by their persisted position, then stable metadata."""
+    order = getattr(entity, "ordine", None)
+    created = getattr(entity, "created_at", None)
+    created_key = created.timestamp() if created is not None else float("inf")
+    return (
+        order is None,
+        order if order is not None else 0,
+        created_key,
+        str(getattr(entity, "id", "")),
+    )
+
+
+def _is_external_safety_consultant(person: object) -> bool:
+    """Whether a person is an external RSPP or medico competente only."""
+    return bool(
+        getattr(person, "is_esterno", False)
+        and (
+            getattr(person, "ruolo_rspp", False)
+            or getattr(person, "ruolo_medico_competente", False)
+        )
+    )
+
+
+def _employee_persons(persons: list) -> list:
+    """Exclude external safety consultants from the employee population."""
+    return [person for person in persons if not _is_external_safety_consultant(person)]
+
+
+def _assigned_employee_persons(ambiente: object, employees: list) -> list:
+    """Return employees explicitly assigned to an environment."""
+    ambiente_id = getattr(ambiente, "id", None)
+    return [
+        person
+        for person in employees
+        if any(
+            getattr(item, "id", None) == ambiente_id
+            for item in (getattr(person, "ambienti", None) or [])
+        )
+    ]
+
+
+def _normalize_equipment_description(value: str | None) -> str:
+    """Collapse equipment descriptions into a case-insensitive group key."""
+    collapsed = " ".join(value.split()) if isinstance(value, str) else ""
+    return (collapsed or "—").casefold()
+
+
+def _mixed_flag(values: list[bool]) -> str:
+    """Render a homogeneous boolean list or flag mixed source values."""
+    unique = set(values)
+    return "MISTO" if len(unique) > 1 else ("SI" if True in unique else "NO")
+
+
+def _global_equipment_rows(attrezzature: list, ambienti: list) -> list[list[str]]:
+    """Consolidate global equipment while retaining saved environment order."""
+    environment_position = {
+        getattr(item, "id", None): index for index, item in enumerate(ambienti)
+    }
+    environment_name = {
+        getattr(item, "id", None): (
+            getattr(item, "nome", None) or "—"
+        ).upper()
+        for item in ambienti
+    }
+    groups: dict[str, dict] = {}
+    for source_position, item in enumerate(attrezzature):
+        description = getattr(item, "descrizione", None)
+        display = " ".join(description.split()) if isinstance(description, str) else ""
+        display = display or "—"
+        key = _normalize_equipment_description(display)
+        group = groups.setdefault(
+            key,
+            {
+                "display": display.upper(),
+                "source_position": source_position,
+                "environment_ids": [],
+                "ce": [],
+                "checks": [],
+            },
+        )
+        environment_id = getattr(item, "ambiente_id", None)
+        if environment_id not in group["environment_ids"]:
+            group["environment_ids"].append(environment_id)
+        group["ce"].append(bool(getattr(item, "marcatura_ce", False)))
+        group["checks"].append(bool(getattr(item, "verifiche_periodiche", False)))
+
+    def group_key(group: dict) -> tuple[int, int]:
+        positions = [
+            environment_position.get(item, len(ambienti))
+            for item in group["environment_ids"]
+        ]
+        return (min(positions, default=len(ambienti)), group["source_position"])
+
+    rows = []
+    for group in sorted(groups.values(), key=group_key):
+        ids = sorted(
+            group["environment_ids"],
+            key=lambda item: environment_position.get(item, len(ambienti)),
+        )
+        names = [environment_name.get(item, "—") for item in ids]
+        rows.append([
+            group["display"],
+            ", ".join(dict.fromkeys(names)),
+            _mixed_flag(group["ce"]),
+            _mixed_flag(group["checks"]),
+        ])
+    return rows
+
+
 class DVRMasterGenerator(BaseDocumentGenerator):
     """Generates the DVR Master document (.docx)."""
 
@@ -720,7 +830,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         Returns:
             Absolute path to the generated .docx file.
         """
-        data = await self.load_data()
+        data = dict(await self.load_data())
+        data["persone"] = sorted(list(data.get("persone") or []), key=_saved_order_key)
+        data["ambienti"] = sorted(list(data.get("ambienti") or []), key=_saved_order_key)
+        employee_persons = _employee_persons(data["persone"])
+        data["employee_persons"] = employee_persons
         azienda = data["azienda"]
         # DVR-specific extras: foto per ambiente, sorveglianza-sanitaria
         # rows per mansione, allegato presence flags, VDT exposure flags,
@@ -745,6 +859,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             doc,
             azienda,
             data["persone"],
+            employee_persons,
             data["attrezzature"],
             data["sostanze_chimiche"],
             data["ambienti"],
@@ -753,12 +868,12 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         self._add_part_iii(
             doc,
             azienda,
-            data["persone"],
+            employee_persons,
             data["ambienti"],
             data["attrezzature"],
             extras,
         )
-        self._add_part_iv(doc, azienda, data["persone"], extras)
+        self._add_part_iv(doc, azienda, data["persone"], employee_persons, extras)
 
         # Replace the TOC's cached body with the real outline that the
         # rest of the doc just emitted. Without this Word users who
@@ -882,8 +997,8 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         # has > 10 lavoratori OR an applicable incendio assessment. Audit
         # F-010 flagged the missing cross-reference; we add it here so the
         # allegati list correctly cites the document.
-        n_persone = len(data.get("persone") or [])
-        if n_persone > 10 or incendio_present:
+        employees = data.get("employee_persons", data.get("persone", []))
+        if len(employees) > 10 or incendio_present:
             allegati_presenti.append((
                 "pee", "Piano di Emergenza ed Evacuazione (PEE)"
             ))
@@ -1508,6 +1623,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         doc: Document,
         azienda,
         persone: list,
+        employee_persons: list,
         attrezzature: list,
         sostanze_chimiche: list,
         ambienti: list,
@@ -1559,7 +1675,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         # the operator-declared figure on the Azienda. The declared count is
         # surfaced in parentheses when it diverges, so reviewers can spot
         # discrepancies between visura camerale and the live survey.
-        actual_count = len(persone or [])
+        actual_count = len(employee_persons or [])
         declared = getattr(azienda, "numero_dipendenti_dichiarati", None)
         if declared and declared != actual_count:
             dipendenti_label = f"{actual_count} (dichiarati: {declared})"
@@ -1625,7 +1741,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         # Table 5 — Dati occupazionali (Nominativo | Mansione | Ambiente | Note | Contratto)
         doc.add_heading("3. Dati Occupazionali", level=2)
-        self._add_dati_occupazionali_table(doc, persone)
+        self._add_dati_occupazionali_table(doc, employee_persons)
         doc.add_paragraph("")
 
         # Tables 6–9 — Organizzazione Aziendale della Sicurezza
@@ -1660,7 +1776,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         # Table 12 — Ambienti di Lavoro + N. Lavoratori
         doc.add_heading("5. Ambienti di Lavoro", level=2)
-        self._add_ambienti_summary_table(doc, ambienti)
+        self._add_ambienti_summary_table(doc, ambienti, employee_persons)
         doc.add_paragraph("")
 
         # §1.6 Servizi Igienico-Assistenziali — required under D.Lgs. 81/2008
@@ -1668,7 +1784,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         # has 18). Boilerplate references the law and surfaces the existing
         # azienda field if populated, otherwise emits a default paragraph
         # referencing the legal requirement (audit F-003).
-        self._add_servizi_igienico_assistenziali_section(doc, azienda, persone)
+        self._add_servizi_igienico_assistenziali_section(doc, azienda, employee_persons)
 
         # Table 13 — Macchine, attrezzature ed impianti.
         # Pass ambienti so the renderer can resolve ambiente_id → nome
@@ -1907,7 +2023,9 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 run.font.size = Pt(10)
         doc.add_paragraph("")
 
-    def _add_ambienti_summary_table(self, doc: Document, ambienti: list) -> None:
+    def _add_ambienti_summary_table(
+        self, doc: Document, ambienti: list, employee_persons: list
+    ) -> None:
         """Template Table 12 — Ambiente | Tipo | Metratura | N. Lavoratori.
 
         Note on N. Lavoratori: a worker assigned to multiple ambienti is
@@ -1927,7 +2045,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                     (a.nome or "—").upper(),
                     (a.tipo or "—"),
                     f"{mq} mq" if mq else "—",
-                    str(len(getattr(a, "persone", None) or [])),
+                    str(len(_assigned_employee_persons(a, employee_persons))),
                 ])
         self._add_data_table(doc, headers, rows)
 
@@ -1973,11 +2091,6 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         Rows are grouped by ambiente name so identical ambienti cluster
         together — matches operator expectation when scanning the list.
         """
-        amb_name_by_id: dict = {}
-        if ambienti:
-            for amb in ambienti:
-                amb_name_by_id[amb.id] = (amb.nome or "—").upper()
-
         headers = [
             "Macchine, Attrezzature ed Impianti",
             "Ambiente",
@@ -1987,23 +2100,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         if not attrezzature:
             rows = [["Nessuna attrezzatura registrata.", "—", "—", "—"]]
         else:
-            def _amb_label(a) -> str:
-                amb_id = getattr(a, "ambiente_id", None)
-                return amb_name_by_id.get(amb_id, "—")
-
-            sorted_att = sorted(
-                attrezzature,
-                key=lambda a: (_amb_label(a), (a.descrizione or "").lower()),
-            )
-            rows = [
-                [
-                    (a.descrizione or "—").upper(),
-                    _amb_label(a),
-                    "SI" if a.marcatura_ce else "NO",
-                    "SI" if a.verifiche_periodiche else "NO",
-                ]
-                for a in sorted_att
-            ]
+            rows = _global_equipment_rows(attrezzature, ambienti or [])
         self._add_data_table(doc, headers, rows)
 
     def _add_sostanze_table(self, doc: Document, sostanze: list) -> None:
@@ -2384,7 +2481,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             # VDT-esposti workers in this ambiente trigger a synthetic row
             # in the Agenti Fisici risk table referencing art. 174 + the
             # Allegato VDT (audit F-007).
-            env_persone = list(getattr(ambiente, "persone", None) or [])
+            env_persone = _assigned_employee_persons(ambiente, persone)
             vdt_in_env = sum(
                 1 for p in env_persone
                 if getattr(p, "id", None) in vdt_ids
@@ -2395,6 +2492,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 persone_by_id,
                 env_attrezzature,
                 env_foto,
+                persone,
                 vdt_in_env,
             )
 
@@ -2451,6 +2549,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         persone_by_id: dict,
         attrezzature: list,
         foto: list,
+        employee_persons: list,
         vdt_count: int = 0,
     ) -> None:
         """Render the env section for a single environment.
@@ -2475,7 +2574,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         self._add_env_identity_table(doc, ambiente, persone_by_id)
         doc.add_paragraph("")
-        self._add_env_addetti_table(doc, ambiente)
+        self._add_env_addetti_table(doc, ambiente, employee_persons)
         doc.add_paragraph("")
 
         # Phase 8.2 — Attrezzature per ambiente. Reuses the same column
@@ -3027,14 +3126,16 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         ])
         self._add_key_value_table(doc, rows)
 
-    def _add_env_addetti_table(self, doc: Document, ambiente) -> None:
+    def _add_env_addetti_table(
+        self, doc: Document, ambiente, employee_persons: list
+    ) -> None:
         """Template Table 25 — Nominativo / Mansione for addetti assigned to this env.
 
         Always emits the table shell so the per-env layout matches the
         template even when no persone_ambienti mapping exists yet; a single
         placeholder row signals the missing assignment to the operator.
         """
-        addetti = list(getattr(ambiente, "persone", []) or [])
+        addetti = _assigned_employee_persons(ambiente, employee_persons)
         if addetti:
             rows = [
                 [(a.nominativo or "—").upper(), (a.mansione or "—").upper()]
@@ -3298,7 +3399,12 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     # ------------------------------------------------------------------
 
     def _add_part_iv(
-        self, doc: Document, azienda, persone: list, extras: dict
+        self,
+        doc: Document,
+        azienda,
+        persone: list,
+        employee_persons: list,
+        extras: dict,
     ) -> None:
         """Parte IV — programma di miglioramento, procedure operative §4.2–4.13,
         cross-references agli allegati applicabili, Dichiarazione del Datore
@@ -3357,7 +3463,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         for spec in _PART_IV_PROCEDURAL_SECTIONS:
             self._add_procedural_section(doc, spec)
             if spec.heading.startswith("4.3"):
-                self._add_sorveglianza_protocol_table(doc, persone)
+                self._add_sorveglianza_protocol_table(doc, employee_persons)
 
         # Cross-reference applicable allegati by name (audit F-016).
         self._add_allegati_cross_references(
