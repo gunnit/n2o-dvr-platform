@@ -17,6 +17,7 @@ import pytest
 from docx import Document
 from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_ROW_HEIGHT_RULE
+from docx.enum.text import WD_BREAK
 from docx.shared import Cm, Pt
 from PIL import Image
 
@@ -30,6 +31,7 @@ from app.services.document_generator.dvr_master import (
     _saved_order_key,
 )
 from app.services.ambiente_photo import normalize_document_image
+from scripts import verify_dvr_luca_fixture as luca_fixture_verifier
 from scripts.verify_dvr_luca_fixture import build_and_audit
 
 
@@ -535,3 +537,231 @@ def test_luca_fixture_cli_is_directly_runnable_outside_backend(tmp_path):
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+def _generator_patch_surface():
+    from app.services.document_generator import (
+        _biologico_common,
+        allegato_gestanti,
+        allegato_incendio,
+        allegato_microclima,
+        allegato_microclima_severo,
+        allegato_mmc,
+        allegato_stress,
+        allegato_vdt,
+        base,
+        data_loader,
+        duvri,
+        haccp_forms,
+        haccp_manuale,
+        pee_azienda,
+        pee_comune,
+        pos,
+    )
+
+    version_classes = [
+        allegato_mmc.AllegatoMmcGenerator,
+        allegato_vdt.AllegatoVdtGenerator,
+        allegato_stress.AllegatoStressGenerator,
+        allegato_gestanti.AllegatoGestantiGenerator,
+        allegato_incendio.AllegatoIncendioGenerator,
+        allegato_microclima.AllegatoMicroclimaGenerator,
+        allegato_microclima_severo.AllegatoMicroclimaSeveroGenerator,
+        pee_azienda.PeeAziendaGenerator,
+        pee_comune.PeeComuneGenerator,
+        duvri.DuvriGenerator,
+        pos.PosGenerator,
+        haccp_manuale.HaccpManualeGenerator,
+        haccp_forms.HaccpFormsGenerator,
+    ]
+    loader_modules = [
+        (allegato_mmc, "load_mmc"),
+        (allegato_vdt, "load_vdt"),
+        (allegato_stress, "load_stress"),
+        (allegato_incendio, "load_incendio"),
+        (allegato_microclima, "load_microclima"),
+        (allegato_microclima_severo, "load_microclima"),
+        (allegato_gestanti, "load_gestanti"),
+        (duvri, "load_duvri"),
+        (pos, "load_pos"),
+        (haccp_manuale, "load_haccp"),
+        (haccp_forms, "load_haccp"),
+        (pee_azienda, "load_pee"),
+        (pee_comune, "load_pee"),
+    ]
+    data_loaders = [
+        "load_mmc",
+        "load_vdt",
+        "load_stress",
+        "load_incendio",
+        "load_microclima",
+        "load_gestanti",
+        "load_biologico",
+        "load_haccp",
+        "load_pee",
+        "load_duvri",
+        "load_pos",
+    ]
+    return [
+        (base.BaseDocumentGenerator, "load_data"),
+        (base.BaseDocumentGenerator, "_get_output_dir"),
+        (DVRMasterGenerator, "_load_dvr_extras"),
+        (DVRMasterGenerator, "_get_next_version"),
+        *[(generator, "_next_version") for generator in version_classes],
+        (_biologico_common, "_next_version"),
+        *[(data_loader, name) for name in data_loaders],
+        *loader_modules,
+        (_biologico_common, "load_biologico"),
+    ]
+
+
+def _snapshot_patch_surface():
+    return [
+        (owner, name, getattr(owner, name))
+        for owner, name in _generator_patch_surface()
+    ]
+
+
+def _assert_patch_surface_restored(snapshot):
+    assert [
+        (owner, name)
+        for owner, name, original in snapshot
+        if getattr(owner, name) is not original
+    ] == []
+
+
+def _ordered_acme_doc_content(path: Path):
+    doc = Document(path)
+    roster = next(
+        table
+        for table in doc.tables
+        if table.rows
+        and [cell.text.strip() for cell in table.rows[0].cells]
+        == [
+            "Nominativo",
+            "Mansione",
+            "Ambiente di Lavoro",
+            "Codice Fiscale",
+            "Tipologia contrattuale",
+        ]
+    )
+    prefix = "Identificazione dell'Ambiente di Lavoro e degli Addetti — "
+    return (
+        [row.cells[0].text.strip() for row in roster.rows[1:]],
+        [
+            paragraph.text.removeprefix(prefix)
+            for paragraph in doc.paragraphs
+            if paragraph.style.name == "Heading 2"
+            and paragraph.text.startswith(prefix)
+        ],
+    )
+
+
+def test_repeat_builds_keep_exact_acme_roster_and_environment_order(tmp_path):
+    expected = (
+        [
+            "MARIO ROSSI",
+            "LUCA BIANCHI",
+            "GIULIA VERDI",
+            "ANTONIO MARRONE",
+            "VALENTINA RINALDI",
+        ],
+        [
+            "UFFICI AMMINISTRATIVI E TECNICI",
+            "OFFICINA MECCANICA",
+            "MAGAZZINO",
+            "MENSA AZIENDALE CON CUCINA",
+            "DEPOSITO CHIMICI",
+            "AREA ESTERNA",
+        ],
+    )
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+
+    build_and_audit(first)
+    build_and_audit(second)
+
+    assert _ordered_acme_doc_content(first / "DVR_Acme_Regression.docx") == expected
+    assert _ordered_acme_doc_content(second / "DVR_Acme_Regression.docx") == expected
+
+
+def test_build_and_audit_restores_every_generator_patch_on_success(tmp_path):
+    before = _snapshot_patch_surface()
+
+    build_and_audit(tmp_path)
+
+    _assert_patch_surface_restored(before)
+
+
+def test_build_and_audit_restores_every_generator_patch_on_exception(
+    tmp_path, monkeypatch
+):
+    before = _snapshot_patch_surface()
+
+    def fail_audit(path, fixture):
+        raise RuntimeError("forced audit failure")
+
+    monkeypatch.setattr(luca_fixture_verifier, "audit_luca_docx", fail_audit)
+    with pytest.raises(RuntimeError, match="forced audit failure"):
+        build_and_audit(tmp_path)
+
+    _assert_patch_surface_restored(before)
+
+
+def test_photo_audit_rejects_captions_without_adjacent_drawings():
+    doc = Document()
+    expected = [f"Fig. {index} — foto-{index - 1}.jpg" for index in range(1, 11)]
+    for caption in expected:
+        doc.add_paragraph(caption)
+
+    assert not luca_fixture_verifier._audit_all_ten_photos(
+        doc, {"expected_photo_captions": expected}
+    )
+
+
+def test_effective_risk_audit_rejects_sentinel_text_without_risk_tables():
+    doc = Document()
+    doc.add_paragraph("RISK APPLICABLE SENTINEL")
+
+    assert not luca_fixture_verifier._audit_effective_risks(doc, {})
+
+
+def test_acme_audit_rejects_wrong_roster_order(tmp_path):
+    build_and_audit(tmp_path)
+    fixture = luca_fixture_verifier.build_acme_fixture()
+    path = tmp_path / "DVR_Acme_Regression.docx"
+    doc = Document(path)
+    roster = next(
+        table
+        for table in doc.tables
+        if table.rows
+        and table.rows[0].cells[0].text.strip() == "Nominativo"
+    )
+    first = roster.rows[1].cells[0].text
+    second = roster.rows[2].cells[0].text
+    roster.rows[1].cells[0].text = second
+    roster.rows[2].cells[0].text = first
+    doc.save(path)
+
+    assert not luca_fixture_verifier._audit_acme_regression(path, fixture)
+
+
+def test_declaration_audit_rejects_swapped_rspp_and_medico_cells():
+    fixture = luca_fixture_verifier.build_luca_fixture()
+    doc = Document()
+    doc.add_heading("4.13 Dichiarazione del Datore di Lavoro", level=2)
+    doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
+    doc.add_paragraph(
+        "DATORE FIXTURE, in qualita di Datore di Lavoro della "
+        "LUCA FIXTURE INDUSTRIA SRL"
+    )
+    _new_generator()._add_signature_table(doc, fixture["persone"])
+    signature = doc.tables[-1]
+    rspp = signature.cell(0, 2).text
+    medico = signature.cell(1, 0).text
+    signature.cell(0, 2).text = medico
+    signature.cell(1, 0).text = rspp
+
+    assert not luca_fixture_verifier._audit_declaration_signatures(
+        doc, fixture
+    )

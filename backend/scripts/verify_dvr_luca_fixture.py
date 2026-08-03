@@ -7,11 +7,13 @@ only fictional identities and generated image pixels.
 
 import argparse
 import asyncio
+import importlib
 import json
 import shutil
 import sys
 import uuid
 from collections import Counter
+from contextlib import contextmanager
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
@@ -75,9 +77,108 @@ def _next_paragraph_has_page_break(paragraph) -> bool:
     )
 
 
+def _assign_order_metadata(items: list, *, first_uuid: int) -> None:
+    for index, item in enumerate(items):
+        item.id = uuid.UUID(int=first_uuid + index)
+        item.ordine = index
+        item.created_at = datetime(2026, 1, index + 1)
+
+
+def build_acme_fixture() -> dict:
+    """Return the existing full Acme fixture with deterministic saved order."""
+    fixture = build_fixture()
+    fixture["azienda"].id = uuid.UUID(int=100)
+    fixture["azienda"].organization_id = uuid.UUID(int=101)
+    fixture["generated_at"] = datetime(2026, 8, 3, 9, 0, 0)
+    _assign_order_metadata(fixture["ambienti"], first_uuid=200)
+    _assign_order_metadata(fixture["persone"], first_uuid=300)
+    _assign_order_metadata(fixture["attrezzature"], first_uuid=400)
+    _assign_order_metadata(fixture["sostanze_chimiche"], first_uuid=500)
+    for environment_index, environment in enumerate(fixture["ambienti"]):
+        _assign_order_metadata(
+            environment.valutazioni_rischio,
+            first_uuid=600 + environment_index * 10,
+        )
+
+    fixture["expected_people_rows"] = [
+        [
+            "MARIO ROSSI",
+            "DATORE DI LAVORO",
+            "TUTTA L'AZIENDA (RUOLO TRASVERSALE)",
+            "—",
+            "—",
+        ],
+        [
+            "LUCA BIANCHI",
+            "RSPP",
+            "TUTTA L'AZIENDA (RUOLO TRASVERSALE)",
+            "—",
+            "—",
+        ],
+        [
+            "GIULIA VERDI",
+            "RLS",
+            "TUTTA L'AZIENDA (RUOLO TRASVERSALE)",
+            "—",
+            "—",
+        ],
+        ["ANTONIO MARRONE", "OPERAIO TORNITORE", "—", "—", "—"],
+        ["VALENTINA RINALDI", "IMPIEGATA (GESTANTE)", "—", "—", "—"],
+    ]
+    fixture["expected_environments"] = [
+        "UFFICI AMMINISTRATIVI E TECNICI",
+        "OFFICINA MECCANICA",
+        "MAGAZZINO",
+        "MENSA AZIENDALE CON CUCINA",
+        "DEPOSITO CHIMICI",
+        "AREA ESTERNA",
+    ]
+    fixture["expected_environment_rows"] = [
+        ["UFFICI AMMINISTRATIVI E TECNICI", "Ufficio", "220 mq", "0"],
+        ["OFFICINA MECCANICA", "Officina", "850 mq", "0"],
+        ["MAGAZZINO", "Magazzino", "620 mq", "0"],
+        ["MENSA AZIENDALE CON CUCINA", "Cucina", "180 mq", "0"],
+        ["DEPOSITO CHIMICI", "Magazzino", "90 mq", "0"],
+        ["AREA ESTERNA", "Esterno", "440 mq", "0"],
+    ]
+    fixture["expected_global_equipment_rows"] = [
+        ["TORNIO PARALLELO CNC", "—", "SI", "SI"],
+        ["FRESATRICE CNC", "—", "SI", "SI"],
+        ["CARRELLO ELEVATORE", "—", "SI", "SI"],
+        ["POSTAZIONE VDT", "—", "SI", "NO"],
+    ]
+    fixture["expected_table_inventory"] = {
+        "total": 71,
+        "dimensions": Counter(
+            {
+                (2, 1): 5,
+                (2, 2): 6,
+                (2, 3): 13,
+                (2, 5): 12,
+                (2, 7): 1,
+                (3, 2): 7,
+                (3, 6): 1,
+                (5, 2): 6,
+                (5, 3): 2,
+                (5, 4): 2,
+                (6, 5): 1,
+                (7, 4): 3,
+                (8, 2): 1,
+                (10, 5): 1,
+                (15, 2): 6,
+                (16, 2): 1,
+                (17, 2): 1,
+                (28, 2): 1,
+                (33, 2): 1,
+            }
+        ),
+    }
+    return fixture
+
+
 def build_luca_fixture() -> dict:
     """Return a deterministic, wholly synthetic staging-equivalent fixture."""
-    fixture = build_fixture()
+    fixture = build_acme_fixture()
     fixture["azienda"].ragione_sociale = "LUCA FIXTURE INDUSTRIA SRL"
     fixture["generated_at"] = datetime(2026, 8, 3, 9, 0, 0)
     zulu_env, alpha_env = fixture["ambienti"][:2]
@@ -90,6 +191,7 @@ def build_luca_fixture() -> dict:
     fixture["ambienti"] = [alpha_env, zulu_env]
 
     ddl = mk(
+        id=uuid.UUID(int=700),
         nominativo="Datore Fixture",
         mansione="Datore",
         ordine=0,
@@ -108,6 +210,7 @@ def build_luca_fixture() -> dict:
         attrezzature_speciali=[],
     )
     zulu_worker = mk(
+        id=uuid.UUID(int=701),
         nominativo="Zulu Worker",
         mansione="Operaio",
         ordine=1,
@@ -126,6 +229,7 @@ def build_luca_fixture() -> dict:
         attrezzature_speciali=[],
     )
     alpha_worker = mk(
+        id=uuid.UUID(int=702),
         nominativo="Alpha Worker",
         mansione="Operaio",
         ordine=2,
@@ -144,6 +248,7 @@ def build_luca_fixture() -> dict:
         attrezzature_speciali=[],
     )
     external_rspp = mk(
+        id=uuid.UUID(int=703),
         nominativo="Consulente RSPP",
         mansione="RSPP",
         ordine=3,
@@ -162,6 +267,7 @@ def build_luca_fixture() -> dict:
         attrezzature_speciali=[],
     )
     external_medico = mk(
+        id=uuid.UUID(int=704),
         nominativo="Consulente Medico",
         mansione="Medico",
         ordine=4,
@@ -191,22 +297,30 @@ def build_luca_fixture() -> dict:
 
     fixture["attrezzature"] = [
         mk(
+            id=uuid.UUID(int=800),
             descrizione=" Trapano   a colonna ",
             ambiente_id=alpha_env.id,
             marcatura_ce=True,
             verifiche_periodiche=False,
+            ordine=1,
+            created_at=datetime(2026, 1, 1),
         ),
         mk(
+            id=uuid.UUID(int=801),
             descrizione="TRAPANO A COLONNA",
             ambiente_id=zulu_env.id,
             marcatura_ce=False,
             verifiche_periodiche=False,
+            ordine=0,
+            created_at=datetime(2026, 1, 2),
         ),
     ]
     applicable = mk(
+        id=uuid.UUID(int=900),
         pericolo="RISK APPLICABLE SENTINEL",
         applicabile=True,
         ordine=1,
+        created_at=datetime(2026, 1, 1),
         condizioni_esposizione="Condizione",
         rischio="Rischio",
         misure_prevenzione="Misura",
@@ -215,12 +329,19 @@ def build_luca_fixture() -> dict:
         livello_rischio="GRAVE",
     )
     disabled = mk(
-        pericolo="RISK DISABLED SENTINEL", applicabile=False, ordine=2
+        id=uuid.UUID(int=901),
+        pericolo="RISK DISABLED SENTINEL",
+        applicabile=False,
+        ordine=2,
+        created_at=datetime(2026, 1, 2),
     )
     zulu_env.valutazioni_rischio = [
         mk(
+            id=uuid.UUID(int=902),
             categoria_rischio="Macchine",
             applicabile=False,
+            ordine=0,
+            created_at=datetime(2026, 1, 1),
             pericoli=[applicable, disabled],
         )
     ]
@@ -246,6 +367,7 @@ def build_luca_fixture() -> dict:
         normalized = normalize_document_image(source)
         photos.append(
             mk(
+                id=uuid.UUID(int=1000 + index),
                 filename=filename,
                 file_path="/not-shared-on-worker/" + filename,
                 document_image_bytes=normalized.content,
@@ -295,6 +417,22 @@ def build_luca_fixture() -> dict:
     fixture["expected_photo_captions"] = [
         f"Fig. {index + 1} — {photo.filename}"
         for index, photo in enumerate(photos)
+    ]
+    fixture["expected_signature_cells"] = [
+        [
+            "Il Datore di Lavoro\n(DATORE FIXTURE)\n"
+            "___________________________",
+            "\n\n___________________________",
+            "Il Responsabile del S.P.P.\n(CONSULENTE RSPP)\n"
+            "___________________________",
+        ],
+        [
+            "Il Medico Competente\n(CONSULENTE MEDICO)\n"
+            "___________________________",
+            "\n\n___________________________",
+            "Per consultazione\nIl Rappresentante dei Lavoratori\n"
+            "(ALPHA WORKER)\n___________________________",
+        ],
     ]
     return fixture
 
@@ -482,22 +620,75 @@ def _audit_grouped_equipment(doc: Document, fixture: dict) -> bool:
 
 
 def _audit_all_ten_photos(doc: Document, fixture: dict) -> bool:
-    captions = [
-        paragraph.text
-        for paragraph in doc.paragraphs
+    paragraphs = doc.paragraphs
+    caption_positions = [
+        index
+        for index, paragraph in enumerate(paragraphs)
         if paragraph.text.startswith("Fig. ")
+    ]
+    captions = [paragraphs[index].text for index in caption_positions]
+    paired_images = [
+        paragraphs[index - 1]
+        for index in caption_positions
+        if index > 0
+        and len(paragraphs[index - 1]._p.xpath(".//w:drawing")) == 1
+        and not paragraphs[index - 1].text.strip()
     ]
     return (
         captions == fixture["expected_photo_captions"]
+        and len(paired_images) == 10
+        and len({id(paragraph._p) for paragraph in paired_images}) == 10
         and "[Foto non disponibile:" not in _text(doc)
     )
 
 
 def _audit_effective_risks(doc: Document, fixture: dict) -> bool:
     full = _text(doc)
+    checklist_header = ["Categoria di Rischio", "Applicabile"]
+    checklists = [
+        table
+        for table in doc.tables
+        if table.rows
+        and [cell.text.strip() for cell in table.rows[0].cells]
+        == checklist_header
+    ]
+    machine_rows = [
+        [cell.text.strip() for cell in row.cells]
+        for table in checklists
+        for row in table.rows[1:]
+        if row.cells[0].text.strip() == "Macchine"
+    ]
+    risk_header = [
+        "PERICOLO",
+        "CONDIZIONI DI IMPIEGO O DI ESPOSIZIONE",
+        "RISCHIO",
+        "MISURE DI PREVENZIONE E PROTEZIONE ATTUATE E DPI",
+        "I = P + 2*D",
+    ]
+    risk_tables = [
+        table
+        for table in doc.tables
+        if table.rows
+        and [cell.text.strip() for cell in table.rows[0].cells] == risk_header
+    ]
+    risk_rows = [
+        [cell.text.strip() for cell in row.cells]
+        for table in risk_tables
+        for row in table.rows[1:]
+    ]
     return (
         full.count("RISK APPLICABLE SENTINEL") == 1
         and "RISK DISABLED SENTINEL" not in full
+        and machine_rows == [["Macchine", "SI"], ["Macchine", "NO"]]
+        and len(risk_tables) == 1
+        and risk_rows
+        == [[
+            "RISK APPLICABLE SENTINEL",
+            "Condizione",
+            "Rischio",
+            "Misura",
+            "P = 2; D = 3; I = 8; GRAVE",
+        ]]
     )
 
 
@@ -585,21 +776,15 @@ def _audit_declaration_signatures(doc: Document, fixture: dict) -> bool:
         and "Il Datore di Lavoro"
         in " ".join(cell.text for cell in table.rows[0].cells)
     )
-    signature_text = "\n".join(
-        cell.text for row in signature.rows for cell in row.cells
-    )
+    signature_cells = [
+        [cell.text for cell in row.cells] for row in signature.rows
+    ]
     declaration_text = _text(doc)
-    expected_names = (
-        "DATORE FIXTURE",
-        "CONSULENTE RSPP",
-        "CONSULENTE MEDICO",
-        "ALPHA WORKER",
-    )
     return (
         _next_paragraph_has_page_break(declaration)
         and "DATORE FIXTURE, in qualita di Datore di Lavoro della "
         "LUCA FIXTURE INDUSTRIA SRL" in declaration_text
-        and all(name in signature_text for name in expected_names)
+        and signature_cells == fixture["expected_signature_cells"]
         and all(
             row.height >= Cm(3)
             and row.height_rule == WD_ROW_HEIGHT_RULE.AT_LEAST
@@ -607,6 +792,89 @@ def _audit_declaration_signatures(doc: Document, fixture: dict) -> bool:
             for row in signature.rows
         )
     )
+
+
+def _generator_patch_objects() -> list[object]:
+    from app.services.document_generator import (
+        _biologico_common,
+        base,
+        data_loader,
+    )
+
+    module_classes = [
+        ("allegato_mmc", "AllegatoMmcGenerator"),
+        ("allegato_vdt", "AllegatoVdtGenerator"),
+        ("allegato_stress", "AllegatoStressGenerator"),
+        ("allegato_gestanti", "AllegatoGestantiGenerator"),
+        ("allegato_incendio", "AllegatoIncendioGenerator"),
+        ("allegato_microclima", "AllegatoMicroclimaGenerator"),
+        ("allegato_microclima_severo", "AllegatoMicroclimaSeveroGenerator"),
+        ("pee_azienda", "PeeAziendaGenerator"),
+        ("pee_comune", "PeeComuneGenerator"),
+        ("duvri", "DuvriGenerator"),
+        ("pos", "PosGenerator"),
+        ("haccp_manuale", "HaccpManualeGenerator"),
+        ("haccp_forms", "HaccpFormsGenerator"),
+    ]
+    modules = [
+        importlib.import_module(
+            f"app.services.document_generator.{module_name}"
+        )
+        for module_name, _class_name in module_classes
+    ]
+    version_classes = [
+        getattr(module, class_name)
+        for module, (_module_name, class_name) in zip(modules, module_classes)
+    ]
+    return [
+        base.BaseDocumentGenerator,
+        DVRMasterGenerator,
+        *version_classes,
+        data_loader,
+        _biologico_common,
+        *modules,
+    ]
+
+
+_MISSING_ATTRIBUTE = object()
+
+
+def _changed_attributes(snapshots: list[tuple[object, dict]]) -> list[tuple]:
+    changes = []
+    for owner, before in snapshots:
+        current = vars(owner)
+        for name in before.keys() | current.keys():
+            original = before.get(name, _MISSING_ATTRIBUTE)
+            replacement = current.get(name, _MISSING_ATTRIBUTE)
+            if replacement is not original:
+                changes.append((owner, name, original))
+    return changes
+
+
+def _restore_attributes(changes: list[tuple]) -> None:
+    for owner, name, original in reversed(changes):
+        if original is _MISSING_ATTRIBUTE:
+            if name in vars(owner):
+                delattr(owner, name)
+        else:
+            setattr(owner, name, original)
+
+
+@contextmanager
+def _patched_generator_fixture(fixture: dict, output_dir: Path):
+    snapshots = [
+        (owner, dict(vars(owner))) for owner in _generator_patch_objects()
+    ]
+    try:
+        patch_generators(fixture, str(output_dir))
+    except BaseException:
+        _restore_attributes(_changed_attributes(snapshots))
+        raise
+    changes = _changed_attributes(snapshots)
+    try:
+        yield
+    finally:
+        _restore_attributes(changes)
 
 
 def _audit_acme_regression(path: Path, fixture: dict) -> bool:
@@ -621,19 +889,44 @@ def _audit_acme_regression(path: Path, fixture: dict) -> bool:
             "Tipologia contrattuale",
         ],
     )
-    expected_people = {
-        (person.nominativo or "—").upper()
-        for person in fixture["persone"]
-        if not getattr(person, "is_esterno", False)
-    }
-    actual_people = {
-        row.cells[0].text.strip() for row in occupational.rows[1:]
+    environment_summary = _table_with_headers(
+        doc, ["Ambiente", "Tipo", "Metratura", "N. Lavoratori"]
+    )
+    global_equipment = _table_with_headers(
+        doc,
+        [
+            "Macchine, Attrezzature ed Impianti",
+            "Ambiente",
+            "Marcata CE",
+            "Verifiche Periodiche",
+        ],
+    )
+    actual_inventory = {
+        "total": len(doc.tables),
+        "dimensions": Counter(
+            (len(table.rows), len(table.rows[0].cells))
+            for table in doc.tables
+        ),
     }
     return (
         fixture["azienda"].ragione_sociale in _text(doc)
         and _audit_outline(doc, fixture)
-        and actual_people == expected_people
-        and len(doc.tables) >= 50
+        and [
+            [cell.text.strip() for cell in row.cells]
+            for row in occupational.rows[1:]
+        ]
+        == fixture["expected_people_rows"]
+        and [
+            [cell.text.strip() for cell in row.cells]
+            for row in environment_summary.rows[1:]
+        ]
+        == fixture["expected_environment_rows"]
+        and [
+            [cell.text.strip() for cell in row.cells]
+            for row in global_equipment.rows[1:]
+        ]
+        == fixture["expected_global_equipment_rows"]
+        and actual_inventory == fixture["expected_table_inventory"]
     )
 
 
@@ -642,33 +935,33 @@ def build_and_audit(output_dir: Path) -> dict[str, bool]:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    acme = build_fixture()
-    patch_generators(acme, str(output_dir))
-    acme_ok, acme_path, acme_message = asyncio.run(
-        run_one("DVR_MASTER", acme["azienda"].id)
-    )
-    if not acme_ok:
-        raise AssertionError(acme_message)
-    stable_acme = output_dir / "DVR_Acme_Regression.docx"
-    shutil.copy2(acme_path, stable_acme)
+    acme = build_acme_fixture()
+    with _patched_generator_fixture(acme, output_dir):
+        acme_ok, acme_path, acme_message = asyncio.run(
+            run_one("DVR_MASTER", acme["azienda"].id)
+        )
+        if not acme_ok:
+            raise AssertionError(acme_message)
+        stable_acme = output_dir / "DVR_Acme_Regression.docx"
+        shutil.copy2(acme_path, stable_acme)
 
-    fixture = build_luca_fixture()
-    patch_generators(fixture, str(output_dir))
+        fixture = build_luca_fixture()
+        patch_generators(fixture, str(output_dir))
 
-    async def rich_dvr_extras(self, data):
-        return fixture["dvr_extras"]
+        async def rich_dvr_extras(self, data):
+            return fixture["dvr_extras"]
 
-    DVRMasterGenerator._load_dvr_extras = rich_dvr_extras
-    ok, generated_path, message = asyncio.run(
-        run_one("DVR_MASTER", fixture["azienda"].id)
-    )
-    if not ok:
-        raise AssertionError(message)
-    stable_path = output_dir / "DVR_Luca_Fixture.docx"
-    shutil.copy2(generated_path, stable_path)
+        DVRMasterGenerator._load_dvr_extras = rich_dvr_extras
+        ok, generated_path, message = asyncio.run(
+            run_one("DVR_MASTER", fixture["azienda"].id)
+        )
+        if not ok:
+            raise AssertionError(message)
+        stable_path = output_dir / "DVR_Luca_Fixture.docx"
+        shutil.copy2(generated_path, stable_path)
 
-    report = audit_luca_docx(stable_path, fixture)
-    report["acme_regression"] = _audit_acme_regression(stable_acme, acme)
+        report = audit_luca_docx(stable_path, fixture)
+        report["acme_regression"] = _audit_acme_regression(stable_acme, acme)
     return {key: report[key] for key in _REPORT_KEYS}
 
 
