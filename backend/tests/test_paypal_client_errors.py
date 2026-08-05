@@ -195,6 +195,7 @@ def test_every_paypal_call_site_in_the_api_catches_paypalerror():
     CANNOT_RAISE = {
         "is_configured",
         "approval_link",
+        "order_approval_link",
         "order_is_paid",
         "order_reference_id",
         "order_custom_id",

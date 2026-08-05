@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { Ambiente } from "@/types";
 
@@ -17,6 +18,7 @@ import {
   type IncendioFormValues,
 } from "./incendio-form";
 import { IncendioMeasures } from "./incendio-measures";
+import { incendioAreaNameIsReadOnly } from "./incendio-roundtrip";
 import { Select } from "@/components/ui/select";
 
 // ---------------------------------------------------------------------------
@@ -139,6 +141,10 @@ export function IncendioAreaCard({
 
   const current = watch(`areas.${index}`);
   const areaErrors = errors.areas?.[index];
+  const linkedNameIsReadOnly = incendioAreaNameIsReadOnly(
+    current?.ambiente_id ?? null,
+    ambienti.map((ambiente) => ambiente.id),
+  );
 
   return (
     <Card>
@@ -172,25 +178,31 @@ export function IncendioAreaCard({
                   </label>
                   <Select
                     id={`areas.${index}.ambiente_select`}
-                    value=""
+                    value={current?.ambiente_id ?? "__altro__"}
                     onChange={(e) => {
                       const val = e.target.value;
-                      if (val && val !== "__altro__") {
-                        setValue(`areas.${index}.nome`, val, {
+                      if (val === "__altro__") {
+                        setValue(`areas.${index}.ambiente_id`, null, {
+                          shouldValidate: true,
+                          shouldDirty: true,
+                        });
+                        return;
+                      }
+                      const ambiente = ambienti.find((amb) => amb.id === val);
+                      if (ambiente) {
+                        setValue(`areas.${index}.ambiente_id`, ambiente.id, {
+                          shouldValidate: true,
+                          shouldDirty: true,
+                        });
+                        setValue(`areas.${index}.nome`, ambiente.nome, {
                           shouldValidate: true,
                           shouldDirty: true,
                         });
                       }
-                      // Reset the select so it always shows the placeholder,
-                      // acting as a "pick to fill" control.
-                      e.target.value = "";
                     }}
                   >
-                    <option value="" disabled>
-                      Seleziona ambiente...
-                    </option>
                     {ambienti.map((amb) => (
-                      <option key={amb.id} value={amb.nome}>
+                      <option key={amb.id} value={amb.id}>
                         {amb.nome}
                         {amb.tipo ? ` (${amb.tipo})` : ""}
                       </option>
@@ -210,8 +222,26 @@ export function IncendioAreaCard({
                   id={`areas.${index}.nome`}
                   placeholder="Es. Magazzino materie prime"
                   maxLength={255}
+                  readOnly={linkedNameIsReadOnly}
+                  title={
+                    linkedNameIsReadOnly
+                      ? "Per usare un nome manuale, seleziona Altro come ambiente."
+                      : undefined
+                  }
                   aria-invalid={areaErrors?.nome ? true : undefined}
-                  {...register(`areas.${index}.nome`)}
+                  {...register(`areas.${index}.nome`, {
+                    onChange: () => {
+                      // If the linked Ambiente is no longer available, a
+                      // manual rename turns this into an unlinked area rather
+                      // than persisting contradictory identifiers and names.
+                      if (current?.ambiente_id) {
+                        setValue(`areas.${index}.ambiente_id`, null, {
+                          shouldValidate: true,
+                          shouldDirty: true,
+                        });
+                      }
+                    },
+                  })}
                 />
                 {areaErrors?.nome && (
                   <p className="mt-1 text-[11px] text-destructive">
@@ -317,8 +347,73 @@ export function IncendioAreaCard({
           );
         })}
 
+        <div className="space-y-3 rounded-md border bg-muted/10 p-3">
+          <div>
+            <h4 className="text-sm font-medium">Dotazioni antincendio presenti</h4>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Indica le quantità presenti nell&apos;area valutata.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {(
+              [
+                ["estintori_presenti", "Estintori"],
+                ["idranti_presenti", "Idranti"],
+                ["uscite_emergenza", "Uscite di emergenza"],
+              ] as const
+            ).map(([field, label]) => (
+              <div key={field}>
+                <label
+                  htmlFor={`areas.${index}.${field}`}
+                  className="text-[11px] uppercase tracking-wide text-muted-foreground"
+                >
+                  {label}
+                </label>
+                <Input
+                  id={`areas.${index}.${field}`}
+                  type="number"
+                  min={0}
+                  step={1}
+                  aria-invalid={areaErrors?.[field] ? true : undefined}
+                  {...register(`areas.${index}.${field}`, {
+                    valueAsNumber: true,
+                  })}
+                />
+                {areaErrors?.[field] && (
+                  <p className="mt-1 text-[11px] text-destructive">
+                    {areaErrors[field]?.message}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+          <div>
+            <label
+              htmlFor={`areas.${index}.note`}
+              className="text-[11px] uppercase tracking-wide text-muted-foreground"
+            >
+              Note
+            </label>
+            <Textarea
+              id={`areas.${index}.note`}
+              placeholder="Annotazioni specifiche sull'area, verifiche o criticità…"
+              {...register(`areas.${index}.note`)}
+            />
+          </div>
+        </div>
+
         {result?.complete && result.livello && (
-          <IncendioMeasures areaIndex={index} livello={result.livello} />
+          <IncendioMeasures
+            areaIndex={index}
+            livello={result.livello}
+            value={current?.misure_prevenzione ?? null}
+            onChange={(value) =>
+              setValue(`areas.${index}.misure_prevenzione`, value, {
+                shouldValidate: true,
+                shouldDirty: true,
+              })
+            }
+          />
         )}
       </CardContent>
     </Card>

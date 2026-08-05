@@ -54,6 +54,7 @@ import {
 import { useApi } from "@/hooks/use-api";
 
 import { PhaseCard } from "./phase-card";
+import { normalizeCsvValues } from "./pos-field-behavior";
 import {
   makeBlankPhase,
   phasesUpdateSchema,
@@ -178,6 +179,12 @@ export function PhaseBuilder({
   const onSave = form.handleSubmit(async (v) => {
     setSaving(true);
     try {
+      const normalizedPhases = v.fasi.map((phase) => ({
+        ...phase,
+        rischi: normalizeCsvValues(phase.rischi),
+        dpi: normalizeCsvValues(phase.dpi),
+        mezzi: normalizeCsvValues(phase.mezzi),
+      }));
       // The backend re-validates and returns the persisted POS row with
       // canonical `fasi_lavorative`. We swap our form state to that
       // result so the operator sees the server-renumbered ordine.
@@ -185,7 +192,7 @@ export function PhaseBuilder({
         `/api/v1/aziende/${aziendaId}/pos/${posId}/fasi`,
         {
           method: "PUT",
-          body: JSON.stringify({ fasi: v.fasi }),
+          body: JSON.stringify({ fasi: normalizedPhases }),
         },
       );
       const fresh = (saved.fasi_lavorative ?? [])
@@ -304,4 +311,3 @@ export function PhaseBuilder({
     </form>
   );
 }
-

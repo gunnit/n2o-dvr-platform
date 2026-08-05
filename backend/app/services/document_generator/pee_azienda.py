@@ -23,6 +23,7 @@ from app.services.document_generator.docx_utils import (
     format_sede,
     page_break,
     replace_placeholders,
+    scrub_body,
     slugify,
 )
 
@@ -30,6 +31,56 @@ logger = logging.getLogger(__name__)
 
 TEMPLATE = TEMPLATES_DIR / "PIANO GESTIONE EMERGENZE - AZIENDA.docx"
 TIPO_DOC = "pee_azienda"
+
+
+def _remove_donor_collection_point_images(doc: Document) -> None:
+    """Remove the legacy customer's collection-point photo and its overlay."""
+    in_collection_point_block = False
+    cleaned_paragraphs = []
+    block_paragraphs = []
+    donor_relationship_ids = set()
+    donor_point = "parcheggio del polo commerciale"
+
+    for paragraph in doc.paragraphs:
+        text = paragraph.text.casefold()
+        if "raggiungere il punto di raccolta esterno" in text and donor_point in text:
+            in_collection_point_block = True
+            continue
+        if (
+            in_collection_point_block
+            and "il punto di raccolta del personale evacuato sarà" in text
+            and donor_point in text
+        ):
+            break
+        if not in_collection_point_block:
+            continue
+
+        block_paragraphs.append(paragraph)
+        drawings = paragraph._p.xpath(".//w:drawing")
+        for drawing in drawings:
+            donor_relationship_ids.update(
+                drawing.xpath(".//a:blip/@r:embed")
+            )
+            drawing.getparent().remove(drawing)
+        if drawings:
+            cleaned_paragraphs.append(paragraph)
+
+    if cleaned_paragraphs:
+        placeholder_paragraph = cleaned_paragraphs[0]
+        run = placeholder_paragraph.add_run(
+            "Immagine del punto di raccolta da configurare."
+        )
+        run.italic = True
+        for paragraph in block_paragraphs:
+            if paragraph is placeholder_paragraph or paragraph.text.strip():
+                continue
+            paragraph._p.getparent().remove(paragraph._p)
+
+    for relationship_id in donor_relationship_ids:
+        if not doc.element.body.xpath(
+            f'.//a:blip[@r:embed="{relationship_id}"]'
+        ):
+            doc.part.drop_rel(relationship_id)
 
 
 async def _find_planimetria_path(db, azienda_id) -> str | None:
@@ -79,9 +130,17 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
                 "RAGIONE SOCIALE": azienda.ragione_sociale or "",
                 "[AZIENDA]": azienda.ragione_sociale or "",
             })
+            _remove_donor_collection_point_images(doc)
+            scrub_body(doc, {
+                "Parcheggio del polo commerciale": (
+                    (pee.punto_raccolta if pee else None) or "—"
+                ),
+                " (come illustrato sopra)": "",
+            })
         else:
             doc = Document()
 
+        drill_frequency = (pee.frequenza_prove if pee else None) or "non configurata"
         page_break(doc)
         add_heading(doc, f"PIANO DI EMERGENZA - {azienda.ragione_sociale}", level=1)
         add_kv_table(doc, [
@@ -90,7 +149,15 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
             ("Data emissione", generated_at.strftime("%d/%m/%Y")),
             ("Coordinatore emergenza", (pee.coordinatore_emergenza if pee else "—") or "—"),
             ("Punto di raccolta", (pee.punto_raccolta if pee else "—") or "—"),
-            ("Frequenza prove", (pee.frequenza_prove if pee else "annuale") or "annuale"),
+            ("Frequenza prove", drill_frequency),
+            ("Orario di lavoro dichiarato", azienda.orario_lavoro or "—"),
+            (
+                "Lavoratori dichiarati dall'azienda",
+                str(azienda.numero_dipendenti_dichiarati)
+                if azienda.numero_dipendenti_dichiarati is not None
+                else "—",
+            ),
+            ("Persone registrate nel DVR", str(len(data.get("persone") or []))),
             ("Tempo evacuazione stimato (min)", str(pee.tempo_evacuazione_stimato_min) if pee and pee.tempo_evacuazione_stimato_min else "—"),
             ("Riferimento normativo", "D.M. 02/09/2021 (Criteri gestione emergenza luoghi di lavoro)"),
         ])
@@ -159,7 +226,16 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
                 add_paragraph(doc, proc["testo"])
 
         add_heading(doc, "Formazione e prove di evacuazione", level=2)
-        add_paragraph(doc, "La squadra di emergenza riceve formazione specifica (primo soccorso D.M. 388/2003 e antincendio D.M. 02/09/2021). Prove di evacuazione con cadenza almeno annuale con registrazione dell'esito.")
+        add_paragraph(
+            doc,
+            "La squadra di emergenza riceve formazione specifica (primo soccorso D.M. 388/2003 "
+            "e antincendio D.M. 02/09/2021).",
+        )
+        add_paragraph(
+            doc,
+            f"Le prove di evacuazione seguono la frequenza configurata: {drill_frequency}. "
+            "Ogni prova viene registrata con il relativo esito.",
+        )
 
         version = await self._next_version()
         output_dir = self._get_output_dir()

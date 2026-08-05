@@ -21,6 +21,11 @@ import {
   type FireLivello,
 } from "@/components/assessments/incendio/incendio-form";
 import { IncendioVvfBanner } from "@/components/assessments/incendio/incendio-vvf-banner";
+import {
+  incendioAreaFromServer,
+  incendioAreaToRequest,
+  incendioSaveAllowed,
+} from "@/components/assessments/incendio/incendio-roundtrip";
 import type { Ambiente, Azienda } from "@/types";
 
 // Italian action text per livello (kept for the "Azione consigliata" summary
@@ -49,6 +54,11 @@ interface ServerRow {
   inf: number;
   si: number;
   pi: number;
+  note: string | null;
+  misure_prevenzione: string | null;
+  estintori_presenti: number;
+  idranti_presenti: number;
+  uscite_emergenza: number;
   punteggio_totale: number | null;
   livello_rischio: ServerLivello | null;
   created_at: string;
@@ -91,6 +101,10 @@ export default function IncendioAssessmentPage() {
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  const saveAllowed = incendioSaveAllowed({
+    allScoresComplete: result.allComplete,
+    formIsValid: form.formState.isValid,
+  });
 
   useEffect(() => {
     const subscription = form.watch(() => setDirty(form.formState.isDirty));
@@ -130,10 +144,10 @@ export default function IncendioAssessmentPage() {
         const azData = (await azRes.json()) as Azienda;
         if (cancelled) return;
         setAzienda(azData);
-        if (ambRes.ok) {
-          const ambData = (await ambRes.json()) as Ambiente[];
-          if (!cancelled) setAmbienti(ambData);
-        }
+        const ambData = ambRes.ok
+          ? ((await ambRes.json()) as Ambiente[])
+          : [];
+        if (!cancelled) setAmbienti(ambData);
 
         if (rowsRes.ok) {
           const rows = (await rowsRes.json()) as ServerRow[];
@@ -141,12 +155,13 @@ export default function IncendioAssessmentPage() {
           setExisting(rows);
           if (rows.length > 0) {
             form.reset({
-              areas: rows.map((r) => ({
-                nome: r.nome_area ?? "",
-                inf: r.inf as 1 | 2 | 3,
-                si: r.si as 1 | 2 | 3,
-                pi: r.pi as 1 | 2 | 3,
-              })),
+              areas: rows.map((row) =>
+                incendioAreaFromServer(
+                  row,
+                  ambData.find((ambiente) => ambiente.id === row.ambiente_id)
+                    ?.nome,
+                ),
+              ),
             });
           }
         }
@@ -175,7 +190,7 @@ export default function IncendioAssessmentPage() {
   // before anything is destroyed. Worst case on a failed DELETE is a duplicate
   // (recoverable), which we surface rather than silently swallow.
   const save = useCallback(async () => {
-    if (!result.allComplete || result.areas.length === 0) return;
+    if (!saveAllowed || result.areas.length === 0) return;
     setSaving(true);
     setSaveMessage(null);
     try {
@@ -183,19 +198,8 @@ export default function IncendioAssessmentPage() {
 
       // 1. POST one row per area from the form. If any fails we throw before
       //    touching the existing rows — no data loss.
-      for (const area of result.areas) {
-        if (
-          area.inf === undefined ||
-          area.si === undefined ||
-          area.pi === undefined
-        )
-          continue;
-        const body = JSON.stringify({
-          nome_area: area.nome || null,
-          inf: area.inf,
-          si: area.si,
-          pi: area.pi,
-        });
+      for (const area of form.getValues().areas) {
+        const body = JSON.stringify(incendioAreaToRequest(area));
         const res = await fetch(
           `${apiUrl}/api/v1/aziende/${aziendaId}/incendio-valutazioni`,
           { method: "POST", headers, body },
@@ -235,7 +239,7 @@ export default function IncendioAssessmentPage() {
     } finally {
       setSaving(false);
     }
-  }, [result, existing, apiUrl, aziendaId, form, refetchExisting]);
+  }, [saveAllowed, result, existing, apiUrl, aziendaId, form, refetchExisting]);
 
   const pageSubtitle = useMemo(() => {
     if (loadError) return `Azienda ${aziendaId} (metadati non disponibili)`;
@@ -352,9 +356,11 @@ export default function IncendioAssessmentPage() {
           <div>
             <p className="text-sm font-medium">Salva valutazione</p>
             <p className="text-xs text-muted-foreground">
-              {result.allComplete
+              {saveAllowed
                 ? `Tutte le aree (${result.areas.length}) sono compilate. La valutazione sarà archiviata nel fascicolo cliente.`
-                : "Completa INF, SI e PI per ciascuna area per salvare la valutazione."}
+                : result.allComplete
+                  ? "Correggi i campi non validi prima di salvare la valutazione."
+                  : "Completa INF, SI e PI per ciascuna area per salvare la valutazione."}
             </p>
             {saveMessage && (
               <p
@@ -371,7 +377,7 @@ export default function IncendioAssessmentPage() {
             )}
           </div>
           <div className="flex gap-2">
-            <Button disabled={!result.allComplete || saving} onClick={save}>
+            <Button disabled={!saveAllowed || saving} onClick={save}>
               {saving ? "Salvataggio in corso…" : "Salva valutazione"}
             </Button>
           </div>

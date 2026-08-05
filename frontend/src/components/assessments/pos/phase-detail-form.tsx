@@ -10,7 +10,7 @@
  * to attach a snapshot.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useReducer, useRef } from "react";
 import {
   Controller,
   type UseFormReturn,
@@ -32,6 +32,12 @@ import {
   ZONA_NIOSH_VALUES,
   type PhasesUpdateValues,
 } from "./phase-schema";
+import {
+  csvDraftReducer,
+  draftCsvValues,
+  normalizeCsvValues,
+  parseCsvDraft,
+} from "./pos-field-behavior";
 
 interface Props {
   form: UseFormReturn<PhasesUpdateValues>;
@@ -41,28 +47,51 @@ interface Props {
 function CsvField({
   label,
   value,
-  onChange,
+  onDraftChange,
+  onCommit,
   placeholder,
 }: {
   label: string;
   value: string[];
-  onChange: (v: string[]) => void;
+  onDraftChange: (v: string[]) => void;
+  onCommit: (v: string[]) => void;
   placeholder?: string;
 }) {
+  const [draft, updateDraft] = useReducer(
+    csvDraftReducer,
+    value.join(", "),
+  );
+  const editingRef = useRef(false);
+
+  useEffect(() => {
+    if (!editingRef.current) {
+      updateDraft({ type: "sync", values: value });
+    }
+  }, [value]);
+
+  const commitDraft = () => {
+    const parsed = parseCsvDraft(draft);
+    editingRef.current = false;
+    updateDraft({ type: "sync", values: parsed });
+    onCommit(parsed);
+  };
+
   return (
     <div className="space-y-1">
       <Label className="text-xs">{label}</Label>
       <Input
-        value={value.join(", ")}
+        value={draft}
         placeholder={placeholder}
-        onChange={(e) =>
-          onChange(
-            e.target.value
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean),
-          )
-        }
+        onFocus={() => {
+          editingRef.current = true;
+        }}
+        onChange={(e) => {
+          const nextDraft = e.target.value;
+          editingRef.current = true;
+          updateDraft({ type: "edit", value: nextDraft });
+          onDraftChange(draftCsvValues(nextDraft));
+        }}
+        onBlur={commitDraft}
       />
       <p className="text-[10px] text-muted-foreground">Separa con virgole.</p>
     </div>
@@ -78,16 +107,16 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
   const niosh = watch(`${base}.niosh`);
   const rumore = watch(`${base}.rumore`);
   const vibr = watch(`${base}.vibrazioni`);
-  const rischi = watch(`${base}.rischi`) ?? [];
-  const dpi = watch(`${base}.dpi`) ?? [];
-  const mezzi = watch(`${base}.mezzi`) ?? [];
+  const rischi = watch(`${base}.rischi`);
+  const dpi = watch(`${base}.dpi`);
+  const mezzi = watch(`${base}.mezzi`);
 
   // Memo so we don't re-derive the array on every render.
   const summary = useMemo(
     () => ({
-      rischi: rischi.length,
-      dpi: dpi.length,
-      mezzi: mezzi.length,
+      rischi: normalizeCsvValues(rischi ?? []).length,
+      dpi: normalizeCsvValues(dpi ?? []).length,
+      mezzi: normalizeCsvValues(mezzi ?? []).length,
     }),
     [rischi, dpi, mezzi],
   );
@@ -107,7 +136,11 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
               <CsvField
                 label={`Rischi della fase (${summary.rischi})`}
                 value={field.value ?? []}
-                onChange={field.onChange}
+                onDraftChange={field.onChange}
+                onCommit={(values) => {
+                  field.onChange(values);
+                  field.onBlur();
+                }}
                 placeholder="Caduta dall'alto, Schiacciamento, Rumore"
               />
             )}
@@ -119,7 +152,11 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
               <CsvField
                 label={`DPI obbligatori (${summary.dpi})`}
                 value={field.value ?? []}
-                onChange={field.onChange}
+                onDraftChange={field.onChange}
+                onCommit={(values) => {
+                  field.onChange(values);
+                  field.onBlur();
+                }}
                 placeholder="Casco, Scarpe, Imbragatura"
               />
             )}
@@ -133,7 +170,11 @@ export function PhaseDetailForm({ form, phaseIndex }: Props) {
               <CsvField
                 label={`Mezzi e attrezzature (${summary.mezzi})`}
                 value={field.value ?? []}
-                onChange={field.onChange}
+                onDraftChange={field.onChange}
+                onCommit={(values) => {
+                  field.onChange(values);
+                  field.onBlur();
+                }}
                 placeholder="Escavatore, Autobetoniera"
               />
             )}

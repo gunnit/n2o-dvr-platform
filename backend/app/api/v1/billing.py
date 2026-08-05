@@ -406,9 +406,47 @@ async def checkout_credits(
         )
 
     order_id = resource.get("id")
-    url = paypal_client.approval_link(resource)
+    url = paypal_client.order_approval_link(resource)
     if not order_id or not url:
-        logger.error("billing: PayPal credit order for org %s has no id/approve link", org_id)
+        raw_status = resource.get("status")
+        safe_status = (
+            raw_status
+            if isinstance(raw_status, str)
+            and raw_status in {
+                "CREATED",
+                "SAVED",
+                "APPROVED",
+                "VOIDED",
+                "COMPLETED",
+                "PAYER_ACTION_REQUIRED",
+            }
+            else "UNKNOWN"
+        )
+        links = resource.get("links")
+        if not isinstance(links, list):
+            links = []
+        safe_relations = sorted(
+            {
+                link.get("rel")
+                for link in links
+                if isinstance(link, dict)
+                and link.get("rel")
+                in {
+                    "self",
+                    "approve",
+                    "payer-action",
+                    "update",
+                    "capture",
+                }
+            }
+        )
+        logger.error(
+            "billing: PayPal credit order for org %s has no id/payment link "
+            "status=%s relations=%s",
+            org_id,
+            safe_status,
+            ",".join(safe_relations) or "none",
+        )
         await credits_ledger.abandon(purchase_id, db)
         await db.commit()
         raise HTTPException(

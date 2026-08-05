@@ -37,24 +37,21 @@ PREVENTION_CATEGORIES: list[tuple[str, str]] = [
     ("5. Efficienza dei sistemi di protezione antincendio",
      "Manutenzione periodica registro antincendio, verifiche annuali estintori/idranti/rivelatori, controllo porte REI."),
     ("6. Informazione e formazione dei lavoratori",
-     "Corso antincendio (basso/medio/alto livello) D.M. 02/09/2021, esercitazione annuale, aggiornamento triennale."),
+     "Corso antincendio (livello 1/2/3) D.M. 02/09/2021 e aggiornamento almeno quinquennale."),
 ]
 
 # Per-livello specific recommendations to layer on top of the generic
 # categories. Higher risk -> more demanding measures.
 LIVELLO_SPECIFIC_MEASURES: dict[str, list[str]] = {
     "BASSO": [
-        "Esercitazione antincendio almeno annuale.",
         "Verifica estintori semestrale a cura di tecnico abilitato.",
         "Addetti antincendio formazione 4 ore (livello 1-FOR).",
     ],
     "MEDIO": [
-        "Esercitazione antincendio almeno annuale con scenari multipli (esodo, primo intervento).",
         "Verifica estintori semestrale; impianto rivelazione + allarme periodicamente testato.",
         "Addetti antincendio formazione 8 ore (livello 2-FOR) + idoneità tecnica per gli ambienti soggetti a CPI.",
     ],
     "ALTO": [
-        "Esercitazione antincendio semestrale; coinvolgimento VV.F. nei piani di emergenza complessi.",
         "Sistema di rivelazione automatica e spegnimento (sprinkler / aerosol) dove tecnicamente fattibile.",
         "Addetti antincendio formazione 16 ore (livello 3-FOR) + idoneità tecnica obbligatoria; CPI in corso di validità.",
         "Coordinamento con il responsabile CPI per aggiornamenti periodici.",
@@ -96,7 +93,7 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
         add_data_table(doc, ["Codice", "Indicatore", "Scala 1-3"], [
             ["INF", "Infiammabilità e carico d'incendio", "1=basso; 2=medio; 3=alto"],
             ["SI",  "Sorgenti di ignizione presenti", "1=assenti/rare; 2=discrete; 3=numerose"],
-            ["PI",  "Presenza di persone e loro esodo", "1=semplice; 2=medio; 3=complesso"],
+            ["PI",  "Propagazione dell'incendio", "1=bassa; 2=media; 3=elevata"],
         ])
         add_paragraph(doc, "Classificazione del rischio = INF + SI + PI: 3-4 = BASSO, 5-7 = MEDIO, 8-9 = ALTO.")
 
@@ -104,7 +101,7 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
         if not incendi:
             add_paragraph(doc, "Nessuna valutazione del rischio incendio disponibile.", italic=True)
         else:
-            headers = ["Ambiente", "INF", "SI", "PI", "Totale", "Livello", "Uscite", "Estintori"]
+            headers = ["Ambiente", "INF", "SI", "PI", "Totale", "Livello", "Uscite", "Estintori", "Idranti"]
             rows = []
             for v in incendi:
                 amb_name = (
@@ -117,6 +114,7 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
                     str(v.punteggio_totale or (v.inf + v.si + v.pi)),
                     v.livello_rischio or "",
                     str(v.uscite_emergenza), str(v.estintori_presenti),
+                    str(v.idranti_presenti),
                 ])
             add_data_table(doc, headers, rows)
 
@@ -174,7 +172,23 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
                 add_paragraph(doc, v.misure_prevenzione)
 
         add_heading(doc, "Gestione dell'emergenza", level=2)
-        add_paragraph(doc, "Il personale e addestrato all'uso degli estintori. Il piano di emergenza (allegato PEE) descrive procedure dettagliate per ogni scenario d'incendio. E prevista esercitazione antincendio almeno annuale (D.M. 02/09/2021 art. 6).")
+        add_paragraph(
+            doc,
+            "Il piano di emergenza (allegato PEE) descrive le procedure per gli scenari d'incendio.",
+        )
+        declared_workers = getattr(azienda, "numero_dipendenti_dichiarati", None)
+        if declared_workers is not None and declared_workers >= 10:
+            add_paragraph(
+                doc,
+                "Per il numero di lavoratori modellato, le esercitazioni antincendio sono effettuate "
+                "con cadenza almeno annuale (D.M. 02/09/2021, Allegato I, punto 1.3).",
+            )
+        else:
+            add_paragraph(
+                doc,
+                "La cadenza delle esercitazioni antincendio deve essere verificata in base all'applicabilità "
+                "dei criteri del D.M. 02/09/2021 al luogo di lavoro.",
+            )
 
         add_heading(doc, "Sottoscrizione", level=2)
         add_data_table(doc, ["Ruolo", "Nominativo", "Firma"], [

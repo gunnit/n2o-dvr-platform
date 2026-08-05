@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,9 @@ import type { FireLivello } from "./incendio-form";
 // ---------------------------------------------------------------------------
 // Measures checklist. Fetches the canonical list for the band from the
 // `/api/v1/calculate/fire-measures` endpoint (backed by
-// `app/data/fire_measures.py`). Selection state lives locally — the page is
-// responsible for harvesting it at submit time.
+// `app/data/fire_measures.py`). The displayed default remains local until the
+// operator edits it; edits are mirrored into the owning form so persisted
+// choices survive load/edit/save.
 // ---------------------------------------------------------------------------
 
 export interface IncendioMeasuresProps {
@@ -23,10 +24,14 @@ export interface IncendioMeasuresProps {
    */
   livello: FireLivello;
   /**
-   * Stable area identifier (index or array-field id) — used to scope the
-   * local storage key so each area keeps its own selection.
+   * Stable area identifier (index or array-field id) — keeps each async
+   * recommendation fetch scoped to the area that requested it.
    */
   areaIndex: number;
+  /** Newline-delimited persisted selection for this area. */
+  value: string | null;
+  /** Writes the newline-delimited selection back to the owning form. */
+  onChange: (value: string) => void;
 }
 
 const apiUrl =
@@ -34,11 +39,22 @@ const apiUrl =
     (process.env.NEXT_PUBLIC_API_URL as string | undefined)) ||
   "http://localhost:8000";
 
-export function IncendioMeasures({ livello, areaIndex }: IncendioMeasuresProps) {
+function measureLines(value: string | null): string[] {
+  return (value ?? "")
+    .split("\n")
+    .map((measure) => measure.trim())
+    .filter(Boolean);
+}
+
+export function IncendioMeasures({
+  livello,
+  areaIndex,
+  value,
+  onChange,
+}: IncendioMeasuresProps) {
   const [measures, setMeasures] = useState<string[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [hasInteracted, setHasInteracted] = useState(false);
   const [custom, setCustom] = useState("");
-  const [customMeasures, setCustomMeasures] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -55,9 +71,6 @@ export function IncendioMeasures({ livello, areaIndex }: IncendioMeasuresProps) 
         const data = (await res.json()) as { misure: string[] };
         if (!cancelled) {
           setMeasures(data.misure);
-          // Pre-select everything by default — operators can uncheck items
-          // that do not apply. Mirrors the existing AZIONE_PER_LIVELLO copy.
-          setSelected(new Set(data.misure));
         }
       } catch (err) {
         if (!cancelled) {
@@ -79,20 +92,34 @@ export function IncendioMeasures({ livello, areaIndex }: IncendioMeasuresProps) 
     // Reset custom list when the band changes; re-add happens per-area.
   }, [livello, areaIndex]);
 
+  const persistedSelection = useMemo(() => measureLines(value), [value]);
+  const selected = useMemo(
+    () =>
+      new Set(
+        value === null && !hasInteracted ? measures : persistedSelection,
+      ),
+    [hasInteracted, measures, persistedSelection, value],
+  );
+
+  const customMeasures = useMemo(
+    () => persistedSelection.filter((measure) => !measures.includes(measure)),
+    [measures, persistedSelection],
+  );
+
   const toggle = (m: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(m)) next.delete(m);
-      else next.add(m);
-      return next;
-    });
+    const next = new Set(selected);
+    if (next.has(m)) next.delete(m);
+    else next.add(m);
+    setHasInteracted(true);
+    onChange(Array.from(next).join("\n"));
   };
 
   const addCustom = () => {
     const trimmed = custom.trim();
     if (!trimmed) return;
-    setCustomMeasures((prev) => [...prev, trimmed]);
-    setSelected((prev) => new Set(prev).add(trimmed));
+    const next = new Set(selected).add(trimmed);
+    setHasInteracted(true);
+    onChange(Array.from(next).join("\n"));
     setCustom("");
   };
 

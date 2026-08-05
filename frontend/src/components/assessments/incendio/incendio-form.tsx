@@ -86,6 +86,7 @@ export function computeArea(values: {
 const RANGE_MSG = "Valore consentito: 1-3";
 
 export const areaSchema = z.object({
+  ambiente_id: z.string().nullable(),
   nome: z
     .string()
     .min(1, "Nome area richiesto")
@@ -105,6 +106,20 @@ export const areaSchema = z.object({
     .int(RANGE_MSG)
     .min(1, RANGE_MSG)
     .max(3, RANGE_MSG),
+  note: z.string(),
+  misure_prevenzione: z.string().nullable(),
+  estintori_presenti: z
+    .number({ message: "Inserisci un numero intero non negativo" })
+    .int("Inserisci un numero intero non negativo")
+    .min(0, "Inserisci un numero intero non negativo"),
+  idranti_presenti: z
+    .number({ message: "Inserisci un numero intero non negativo" })
+    .int("Inserisci un numero intero non negativo")
+    .min(0, "Inserisci un numero intero non negativo"),
+  uscite_emergenza: z
+    .number({ message: "Inserisci un numero intero non negativo" })
+    .int("Inserisci un numero intero non negativo")
+    .min(0, "Inserisci un numero intero non negativo"),
 });
 
 export const incendioFormSchema = z.object({
@@ -114,10 +129,16 @@ export const incendioFormSchema = z.object({
 export type IncendioFormValues = z.infer<typeof incendioFormSchema>;
 
 export const DEFAULT_AREA: IncendioFormValues["areas"][number] = {
+  ambiente_id: null,
   nome: "",
   inf: 1,
   si: 1,
   pi: 1,
+  note: "",
+  misure_prevenzione: null,
+  estintori_presenti: 0,
+  idranti_presenti: 0,
+  uscite_emergenza: 0,
 };
 
 // ---------------------------------------------------------------------------
@@ -230,6 +251,7 @@ export function IncendioForm({ form, onResultChange, ambienti = [] }: IncendioFo
     const current = watched.areas[index];
     if (!current) return;
     append({
+      ...DEFAULT_AREA,
       nome: "",
       inf: current.inf,
       si: current.si,

@@ -313,7 +313,28 @@ def approval_link(resource: dict[str, Any]) -> str | None:
     """Pull the customer-facing approval URL out of a subscription resource."""
     for link in resource.get("links", []):
         if link.get("rel") == "approve":
-            return link.get("href")
+            href = link.get("href")
+            return href if isinstance(href, str) and href else None
+    return None
+
+
+def order_approval_link(resource: dict[str, Any]) -> str | None:
+    """Pull the checkout URL out of a PayPal Orders v2 resource.
+
+    Current Orders v2 responses use ``payer-action`` when the payer must
+    approve an order. ``approve`` remains a compatibility fallback for older
+    response shapes and must not take precedence when both are present.
+    """
+    links = resource.get("links")
+    if not isinstance(links, list):
+        return None
+    for relation in ("payer-action", "approve"):
+        for link in links:
+            if not isinstance(link, Mapping) or link.get("rel") != relation:
+                continue
+            href = link.get("href")
+            if isinstance(href, str) and href:
+                return href
     return None
 
 

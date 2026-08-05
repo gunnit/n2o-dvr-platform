@@ -12,8 +12,8 @@ template structure end-to-end:
   6. Dati Occupazionali (current persone, no codice fiscale leaked)
   7. Organizzazione Aziendale della Sicurezza (DdL/RSPP/RLS/MC)
   8. Metodologia NIOSH (CP, A, B, C, D, E, F factor reference tables)
-  9. Per-worker assessment grid (one 13x5 table per persona+task)
- 10. Quadro sinottico (Nominativo / Mansione / IR / Area, color-coded)
+  9. Per-worker assessment grid (all tasks grouped by worker)
+ 10. Quadro sinottico (one color-coded row per worker/task)
  11. Programma di Attuazione delle Misure (suggested measures per zone)
  12. Dichiarazione del Datore di Lavoro
  13. Signature block (DdL / RSPP / MC / RLS)
@@ -101,6 +101,55 @@ _DEFAULT_MEASURES_BY_ZONE = {
 }
 
 
+def _task_order_key(task: object) -> tuple[bool, float, str]:
+    created = getattr(task, "created_at", None)
+    created_key = created.timestamp() if created is not None else float("inf")
+    return (
+        created is None,
+        created_key,
+        str(getattr(task, "id", "")),
+    )
+
+
+def _person_order_key(person: object) -> tuple[bool, int, float, str]:
+    """Keep worker groups in stable persisted order."""
+    order = getattr(person, "ordine", None)
+    created = getattr(person, "created_at", None)
+    created_key = created.timestamp() if created is not None else float("inf")
+    return (
+        order is None,
+        order if order is not None else 0,
+        created_key,
+        str(getattr(person, "id", "")),
+    )
+
+
+def group_mmc_rows(mmc_rows: list, persone: list) -> list[tuple[object | None, list]]:
+    """Return every MMC task once, grouped in stable persisted worker order."""
+    person_by_id = {
+        getattr(person, "id", None): person
+        for person in persone
+        if getattr(person, "id", None) is not None
+    }
+    tasks_by_person: dict[object, list] = {}
+    unassociated: list = []
+    for row in mmc_rows:
+        person_id = getattr(row, "persona_id", None)
+        if person_id is not None and person_id in person_by_id:
+            tasks_by_person.setdefault(person_id, []).append(row)
+        else:
+            unassociated.append(row)
+
+    groups = [
+        (person, sorted(tasks_by_person[person.id], key=_task_order_key))
+        for person in sorted(person_by_id.values(), key=_person_order_key)
+        if person.id in tasks_by_person
+    ]
+    if unassociated:
+        groups.append((None, sorted(unassociated, key=_task_order_key)))
+    return groups
+
+
 class AllegatoMmcGenerator(BaseDocumentGenerator):
     async def generate(self) -> str:
         data = await self.load_data()
@@ -109,6 +158,7 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         ambienti = data["ambienti"]
         generated_at: datetime = data["generated_at"]
         mmc_rows = await load_mmc(self.db, self.azienda_id)
+        mmc_groups = group_mmc_rows(mmc_rows, persone)
         version = await self._next_version()
 
         ambiente_by_id = {a.id: a for a in ambienti}
@@ -125,8 +175,8 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         self._add_dati_occupazionali(doc, persone)
         self._add_organizzazione(doc, persone)
         self._add_metodologia(doc)
-        self._add_per_worker_assessments(doc, mmc_rows, persona_by_id, ambiente_by_id)
-        self._add_quadro_sinottico(doc, mmc_rows, persona_by_id)
+        self._add_per_worker_assessments(doc, mmc_groups, ambiente_by_id)
+        self._add_quadro_sinottico(doc, mmc_groups)
         self._add_programma_attuazione(doc, mmc_rows, persona_by_id)
         self._add_dichiarazione_ddl(doc, azienda, persone)
         self._add_signature_block(doc, persone)
@@ -350,21 +400,36 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
     def _add_dati_occupazionali(self, doc, persone: list) -> None:
         add_heading(doc, "Dati Occupazionali", level=1)
         if not persone:
-            add_paragraph(doc, "Nessun lavoratore registrato per questa azienda.", italic=True)
+            add_paragraph(
+                doc,
+                "Nessun lavoratore registrato per questa azienda.",
+                italic=True,
+            )
             page_break(doc)
             return
 
-        headers = ["Nominativo", "Mansione", "Sesso", "Fascia età", "Tipologia contrattuale"]
-        rows = []
-        for p in persone:
-            rows.append([
-                p.nominativo or "—",
-                p.mansione or "—",
-                p.sesso or "—",
-                p.fascia_eta or "—",
-                p.tipologia_contrattuale or "—",
-            ])
-        add_data_table(doc, headers, rows)
+        headers = [
+            "Nominativo",
+            "Mansione",
+            "Sesso",
+            "Fascia età",
+            "Tipologia contrattuale",
+        ]
+        rows = [
+            [
+                person.nominativo or "—",
+                person.mansione or "—",
+                person.sesso or "—",
+                person.fascia_eta or "—",
+                person.tipologia_contrattuale or "—",
+            ]
+            for person in persone
+        ]
+        add_data_table(
+            doc,
+            headers,
+            rows,
+        )
         page_break(doc)
 
     # ------------------------------------------------------------------
@@ -498,12 +563,11 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
     def _add_per_worker_assessments(
         self,
         doc,
-        mmc_rows: list,
-        persona_by_id: dict,
+        mmc_groups: list[tuple[object | None, list]],
         ambiente_by_id: dict,
     ) -> None:
         add_heading(doc, "Tavole di Valutazione del Rischio MMC", level=1)
-        if not mmc_rows:
+        if not mmc_groups:
             add_paragraph(
                 doc,
                 "Nessuna attività di movimentazione manuale dei carichi e' stata "
@@ -513,17 +577,37 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
             page_break(doc)
             return
 
-        for i, r in enumerate(mmc_rows, 1):
-            persona = persona_by_id.get(r.persona_id) if r.persona_id else None
-            ambiente = ambiente_by_id.get(r.ambiente_id) if r.ambiente_id else None
-            self._render_assessment_table(doc, i, r, persona, ambiente)
-            page_break(doc)
+        task_index = 0
+        for persona, tasks in mmc_groups:
+            if persona is None:
+                worker_heading = "Valutazioni non associate"
+            else:
+                worker_heading = (
+                    f"{getattr(persona, 'nominativo', None) or '—'} — "
+                    f"{getattr(persona, 'mansione', None) or '—'}"
+                )
+            add_heading(doc, worker_heading, level=2)
+            for row in tasks:
+                task_index += 1
+                ambiente = (
+                    ambiente_by_id.get(row.ambiente_id)
+                    if getattr(row, "ambiente_id", None)
+                    else None
+                )
+                self._render_assessment_table(
+                    doc,
+                    task_index,
+                    row,
+                    persona,
+                    ambiente,
+                )
+                page_break(doc)
 
     def _render_assessment_table(self, doc, idx: int, r, persona, ambiente) -> None:
         nominativo = (persona.nominativo if persona else "—") or "—"
         mansione = (persona.mansione if persona else "—") or "—"
 
-        add_heading(doc, f"{idx}. {r.compito or 'Compito'}", level=2)
+        add_heading(doc, f"{idx}. {r.compito or 'Compito'}", level=3)
         if ambiente:
             add_paragraph(doc, f"Ambiente: {ambiente.nome or '—'}", italic=True, size=10)
 
@@ -665,33 +749,18 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
     # Quadro sinottico
     # ------------------------------------------------------------------
 
-    def _add_quadro_sinottico(self, doc, mmc_rows: list, persona_by_id: dict) -> None:
+    def _add_quadro_sinottico(
+        self,
+        doc,
+        mmc_groups: list[tuple[object | None, list]],
+    ) -> None:
         add_heading(doc, "Quadro sinottico di esposizione", level=1)
-        if not mmc_rows:
+        if not mmc_groups:
             add_paragraph(doc, "Nessuna valutazione presente.", italic=True)
             page_break(doc)
             return
 
-        # Worst-case per persona — using recomputed IR when inputs allow it,
-        # so the synopsis matches what the per-worker grid actually shows.
-        worst_by_persona: dict = {}
-        ir_by_row: dict = {}
-        area_by_row: dict = {}
-        for r in mmc_rows:
-            recomp = self._recompute_if_inputs_present(r)
-            ir = float(recomp["ir"]) if recomp else float(r.indice_ir or 0)
-            area = (
-                recomp["area"] if recomp
-                else (r.area_classificazione or self._area_from_livello(r.livello_rischio))
-            )
-            ir_by_row[id(r)] = ir
-            area_by_row[id(r)] = area
-            key = r.persona_id or f"_anon_{id(r)}"
-            cur = worst_by_persona.get(key)
-            if cur is None or ir > ir_by_row[id(cur)]:
-                worst_by_persona[key] = r
-
-        table = doc.add_table(rows=1, cols=4)
+        table = doc.add_table(rows=1, cols=5)
         try:
             table.style = "Table Grid"
         except KeyError:
@@ -699,35 +768,55 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
         hdr = table.rows[0]
-        for i, h in enumerate(["Nominativo", "Mansione", "IR", "Area"]):
+        for i, h in enumerate(["Nominativo", "Mansione", "Compito", "IR", "Area"]):
             hdr.cells[i].text = h
         style_header_row(hdr)
 
-        for key, r in worst_by_persona.items():
-            persona = persona_by_id.get(r.persona_id) if r.persona_id else None
-            nominativo = (persona.nominativo if persona else "—") or "—"
-            mansione = (persona.mansione if persona else "—") or "—"
-            ir = ir_by_row[id(r)]
-            area = area_by_row[id(r)]
+        for persona, tasks in mmc_groups:
+            nominativo = (
+                (getattr(persona, "nominativo", None) or "—")
+                if persona is not None
+                else "—"
+            )
+            mansione = (
+                (getattr(persona, "mansione", None) or "—")
+                if persona is not None
+                else "—"
+            )
+            for task in tasks:
+                recomputed = self._recompute_if_inputs_present(task)
+                ir = (
+                    float(recomputed["ir"])
+                    if recomputed
+                    else float(task.indice_ir or 0)
+                )
+                area = (
+                    recomputed["area"]
+                    if recomputed
+                    else (
+                        task.area_classificazione
+                        or self._area_from_livello(task.livello_rischio)
+                    )
+                )
 
-            row = table.add_row()
-            row.cells[0].text = nominativo
-            row.cells[1].text = mansione
-            row.cells[2].text = f"{ir:.2f}"
-            row.cells[3].text = area or "—"
+                row = table.add_row()
+                row.cells[0].text = nominativo
+                row.cells[1].text = mansione
+                row.cells[2].text = task.compito or "—"
+                row.cells[3].text = f"{ir:.2f}"
+                row.cells[4].text = area or "—"
 
-            # Color the IR + Area cells by zone
-            shade_hex = _AREA_COLORS.get(area or "", "FFFFFF")
-            for cell in (row.cells[2], row.cells[3]):
-                shade_cell(cell, shade_hex)
-                for p in cell.paragraphs:
-                    for run in p.runs:
-                        run.font.bold = True
-                        run.font.size = Pt(10)
-            for cell in (row.cells[0], row.cells[1]):
-                for p in cell.paragraphs:
-                    for run in p.runs:
-                        run.font.size = Pt(10)
+                shade_hex = _AREA_COLORS.get(area or "", "FFFFFF")
+                for cell in (row.cells[3], row.cells[4]):
+                    shade_cell(cell, shade_hex)
+                    for paragraph in cell.paragraphs:
+                        for run in paragraph.runs:
+                            run.font.bold = True
+                            run.font.size = Pt(10)
+                for cell in (row.cells[0], row.cells[1], row.cells[2]):
+                    for paragraph in cell.paragraphs:
+                        for run in paragraph.runs:
+                            run.font.size = Pt(10)
 
         page_break(doc)
 
@@ -819,12 +908,15 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         for zone, rows in zones.items():
             add_heading(doc, _ZONE_HEADINGS.get(zone, zone), level=2)
             if not rows:
-                add_paragraph(
+                notice = add_paragraph(
                     doc,
                     f"Nessun lavoratore classificato in {zone.lower()}.",
                     italic=True,
                     size=10,
                 )
+                # LibreOffice can visually crowd this notice into the long
+                # Heading 2 above it unless the separation is explicit.
+                notice.paragraph_format.space_before = Pt(6)
                 continue
 
             # Table: lavoratore | compito | misure

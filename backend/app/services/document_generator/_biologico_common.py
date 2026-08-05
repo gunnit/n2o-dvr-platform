@@ -47,7 +47,14 @@ async def build_biologico_document(
     ])
 
     add_heading(doc, "Inquadramento", level=2)
-    add_paragraph(doc, "La valutazione segue il Titolo X (artt. 266-286) del D.Lgs. 81/2008 e classifica gli agenti biologici nei gruppi da 1 a 4 dell'Allegato XLVI in base a patogenicità, contagiosità e disponibilità di terapia/profilassi; le misure di contenimento e la segnaletica di rischio biologico sono definite agli Allegati XLIV e XLV.")
+    add_paragraph(
+        doc,
+        "La valutazione segue il Titolo X (artt. 266-286) del D.Lgs. 81/2008. "
+        "Il Titolo X classifica gli agenti biologici in quattro gruppi in base a patogenicità, "
+        "trasmissibilità e disponibilità di misure profilattiche o terapeutiche; "
+        "l'Allegato XLVI elenca gli agenti dei gruppi 2, 3 e 4. Le misure di contenimento "
+        "e la segnaletica di rischio biologico sono definite negli Allegati XLIV e XLV.",
+    )
 
     add_heading(doc, "Agenti biologici identificati", level=2)
     agenti = (row.agenti_identificati if row and row.agenti_identificati else None) or agenti_default
@@ -69,6 +76,19 @@ async def build_biologico_document(
     if row and row.formazione_specifica:
         add_heading(doc, "Formazione specifica", level=3)
         add_paragraph(doc, row.formazione_specifica)
+    if row and row.risposte_checklist:
+        add_heading(doc, "Esiti checklist rischio biologico", level=2)
+        add_data_table(
+            doc,
+            ["Controllo", "Risposta"],
+            [
+                [str(item.get("id", "")), str(item.get("risposta", ""))]
+                for item in row.risposte_checklist
+            ],
+        )
+    if row and row.note:
+        add_heading(doc, "Note valutazione biologica", level=2)
+        add_paragraph(doc, row.note)
 
     add_heading(doc, "Esito valutazione", level=2)
     add_kv_table(doc, [

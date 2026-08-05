@@ -280,5 +280,10 @@ def test_ai_client_has_no_billing_concepts():
     """services/ai/client.py stays the OpenAI + privacy boundary. Metering
     happens one layer up, at the endpoint, where org and db are in scope."""
     client = (APP / "services" / "ai" / "client.py").read_text(encoding="utf-8")
-    for term in ("credit", "entitle", "billing", "spend_credits"):
+    # OpenAI itself uses provider codes such as ``credit_balance_exhausted``;
+    # naming and sanitizing that provider condition here is still part of the
+    # API boundary. What must never cross this seam is application billing or
+    # entitlement machinery.
+    assert "crediti dvr" not in client.lower()
+    for term in ("app.billing", "entitle", "spend_credits", "usage_counters"):
         assert term not in client.lower(), f"{term!r} leaked into the AI client"

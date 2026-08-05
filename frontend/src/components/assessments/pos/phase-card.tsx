@@ -11,7 +11,7 @@
  * it; we never derive it from react-hook-form's internal _rhfId.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, GripVertical, Loader2, Sparkles, Trash2 } from "lucide-react";
@@ -30,6 +30,7 @@ import { useApi } from "@/hooks/use-api";
 
 import { PhaseDetailForm } from "./phase-detail-form";
 import type { PhasesUpdateValues, PhaseValues } from "./phase-schema";
+import { expandTextareaToContent } from "./pos-field-behavior";
 
 interface PhaseSuggestResponse {
   descrizione: string;
@@ -77,6 +78,14 @@ export function PhaseCard({
   const base = `fasi.${index}` as const;
   const phase = form.watch(base);
   const dipendeDa = phase?.dipende_da ?? [];
+  const descriptionField = form.register(`${base}.descrizione` as const);
+  const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (descriptionRef.current) {
+      expandTextareaToContent(descriptionRef.current);
+    }
+  }, [phase?.descrizione]);
 
   // Eligible predecessors: every other phase, named for the dropdown.
   const candidates = allPhases.filter((p) => p.id !== phase?.id);
@@ -192,9 +201,16 @@ export function PhaseCard({
               </Button>
             </div>
             <Textarea
-              {...form.register(`${base}.descrizione` as const)}
+              {...descriptionField}
+              ref={(element) => {
+                descriptionRef.current = element;
+                descriptionField.ref(element);
+                if (element) expandTextareaToContent(element);
+              }}
+              onInput={(event) => expandTextareaToContent(event.currentTarget)}
               rows={2}
               maxLength={4000}
+              className="resize-none overflow-hidden"
               placeholder="Dettaglio della lavorazione svolta in questa fase…"
             />
           </div>

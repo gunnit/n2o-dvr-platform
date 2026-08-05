@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import ast
 import re
+import uuid
+from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -138,6 +141,141 @@ def test_reference_id_round_trips_our_purchase_id():
     assert paypal_client.order_reference_id(resource) == "abc-123"
     assert paypal_client.order_reference_id({"purchase_units": [{}]}) is None
     assert paypal_client.order_reference_id({}) is None
+
+
+def test_order_approval_link_prefers_payer_action_with_approve_fallback():
+    payer_action = "https://www.sandbox.paypal.com/checkoutnow?token=ORDER-1"
+    legacy_approve = "https://www.sandbox.paypal.com/approve?token=ORDER-1"
+
+    assert paypal_client.order_approval_link(
+        {
+            "links": [
+                {"rel": "approve", "href": legacy_approve},
+                {"rel": "payer-action", "href": payer_action},
+            ]
+        }
+    ) == payer_action
+    assert paypal_client.order_approval_link(
+        {"links": [{"rel": "approve", "href": legacy_approve}]}
+    ) == legacy_approve
+    assert paypal_client.order_approval_link(
+        {"links": [{"rel": "payer-action", "href": ""}]}
+    ) is None
+    assert paypal_client.order_approval_link({"links": None}) is None
+
+
+@pytest.mark.asyncio
+async def test_credit_checkout_keeps_valid_payer_action_order_pending(monkeypatch):
+    """A documented Orders v2 payer-action response must be attached, not abandoned."""
+    from app.api.v1 import billing
+
+    purchase_id = uuid.uuid4()
+    attached: list[tuple[uuid.UUID, str]] = []
+    abandoned: list[uuid.UUID] = []
+
+    async def start_purchase(**_kwargs):
+        return SimpleNamespace(id=purchase_id)
+
+    async def attach_order(row_id, order_id, _db):
+        attached.append((row_id, order_id))
+
+    async def abandon(row_id, _db):
+        abandoned.append(row_id)
+
+    async def create_order(**_kwargs):
+        return {
+            "id": "ORDER-1",
+            "status": "PAYER_ACTION_REQUIRED",
+            "links": [
+                {
+                    "rel": "payer-action",
+                    "href": "https://www.sandbox.paypal.com/checkoutnow?token=ORDER-1",
+                }
+            ],
+        }
+
+    class FakeDb:
+        def __init__(self) -> None:
+            self.commits = 0
+
+        async def commit(self) -> None:
+            self.commits += 1
+
+    monkeypatch.setattr(billing.paypal_client, "is_configured", lambda: True)
+    monkeypatch.setattr(billing.paypal_client, "create_order", create_order)
+    monkeypatch.setattr(billing.credits_ledger, "start_purchase", start_purchase)
+    monkeypatch.setattr(billing.credits_ledger, "attach_order", attach_order)
+    monkeypatch.setattr(billing.credits_ledger, "abandon", abandon)
+
+    result = await billing.checkout_credits(
+        billing.CreditCheckoutIn(pack_code="PACK_500"),
+        user=SimpleNamespace(id=uuid.uuid4(), organization_id=uuid.uuid4()),
+        ent=SimpleNamespace(
+            subscribed=True,
+            is_active=True,
+            credits_unmetered=False,
+            meter_period_start=date(2026, 1, 1),
+        ),
+        db=FakeDb(),
+    )
+
+    assert result.paypal_order_id == "ORDER-1"
+    assert result.approval_url.endswith("token=ORDER-1")
+    assert attached == [(purchase_id, "ORDER-1")]
+    assert abandoned == []
+
+
+@pytest.mark.asyncio
+async def test_credit_checkout_abandons_order_when_links_are_not_a_list(monkeypatch):
+    """Malformed PayPal links must take the sanitized 502 path, not crash."""
+    from app.api.v1 import billing
+
+    purchase_id = uuid.uuid4()
+    abandoned: list[uuid.UUID] = []
+
+    async def start_purchase(**_kwargs):
+        return SimpleNamespace(id=purchase_id)
+
+    async def abandon(row_id, _db):
+        abandoned.append(row_id)
+
+    async def create_order(**_kwargs):
+        return {
+            "id": "ORDER-1",
+            "status": ["PAYER_ACTION_REQUIRED"],
+            "links": None,
+        }
+
+    class FakeDb:
+        def __init__(self) -> None:
+            self.commits = 0
+
+        async def commit(self) -> None:
+            self.commits += 1
+
+    db = FakeDb()
+    monkeypatch.setattr(billing.paypal_client, "is_configured", lambda: True)
+    monkeypatch.setattr(billing.paypal_client, "create_order", create_order)
+    monkeypatch.setattr(billing.credits_ledger, "start_purchase", start_purchase)
+    monkeypatch.setattr(billing.credits_ledger, "abandon", abandon)
+
+    with pytest.raises(billing.HTTPException) as excinfo:
+        await billing.checkout_credits(
+            billing.CreditCheckoutIn(pack_code="PACK_500"),
+            user=SimpleNamespace(id=uuid.uuid4(), organization_id=uuid.uuid4()),
+            ent=SimpleNamespace(
+                subscribed=True,
+                is_active=True,
+                credits_unmetered=False,
+                meter_period_start=date(2026, 1, 1),
+            ),
+            db=db,
+        )
+
+    assert excinfo.value.status_code == 502
+    assert abandoned == [purchase_id]
+    # One durable pending row before PayPal, then one durable abandonment.
+    assert db.commits == 2
 
 
 def test_capture_webhook_resolves_the_order_id():

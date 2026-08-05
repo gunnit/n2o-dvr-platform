@@ -6,6 +6,7 @@ would run via Celery with the actual DB.
 """
 
 import asyncio
+import hashlib
 import importlib
 import os
 import sys
@@ -29,6 +30,43 @@ def _load_verify():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _document_text(path: str) -> str:
+    """Return all visible DOCX text, including tables and headers/footers."""
+    doc = Document(path)
+    chunks = [p.text for p in doc.paragraphs]
+    for table in doc.tables:
+        for row in table.rows:
+            chunks.extend(cell.text for cell in row.cells)
+    for section in doc.sections:
+        for part in (section.header, section.footer):
+            chunks.extend(p.text for p in part.paragraphs)
+            for table in part.tables:
+                for row in table.rows:
+                    chunks.extend(cell.text for cell in row.cells)
+    return "\n".join(chunks)
+
+
+def _find_table(doc: Document, expected_header: tuple[str, ...]):
+    for table in doc.tables:
+        if not table.rows:
+            continue
+        header = tuple(cell.text.strip() for cell in table.rows[0].cells)
+        if header == expected_header:
+            return table
+    return None
+
+
+def _all_key_value_pairs(doc: Document) -> dict[str, str]:
+    pairs: dict[str, str] = {}
+    for table in doc.tables:
+        for row in table.rows:
+            if len(row.cells) == 2:
+                key = row.cells[0].text.strip()
+                if key:
+                    pairs[key] = row.cells[1].text.strip()
+    return pairs
 
 
 @pytest.fixture(scope="module")
@@ -93,6 +131,235 @@ def test_biologico_all_three_variants_generate(generated_outputs):
     for key in ("ALLEGATO_BIOLOGICO_ALIMENTARE", "ALLEGATO_BIOLOGICO_ASILO", "ALLEGATO_BIOLOGICO_DENTISTI"):
         ok, path, _ = generated_outputs[key]
         assert ok and path.endswith(".docx"), f"{key} failed"
+
+
+def test_fire_renders_current_pi_meaning_and_modeled_hydrants(generated_outputs):
+    ok, path, _ = generated_outputs["ALLEGATO_INCENDIO"]
+    assert ok and path
+    doc = Document(path)
+    text = _document_text(path)
+
+    assert "Propagazione dell'incendio" in text
+    assert "Presenza di persone e loro esodo" not in text
+
+    header = (
+        "Ambiente", "INF", "SI", "PI", "Totale", "Livello",
+        "Uscite", "Estintori", "Idranti",
+    )
+    table = _find_table(doc, header)
+    assert table is not None, "fire environment table must expose modeled hydrants"
+    rows = [tuple(cell.text.strip() for cell in row.cells) for row in table.rows[1:]]
+    assert (
+        "Officina meccanica", "3", "3", "2", "8", "ALTO", "2", "4", "2"
+    ) in rows
+
+
+def test_fire_training_and_drill_text_uses_supported_cadence(generated_outputs):
+    ok, path, _ = generated_outputs["ALLEGATO_INCENDIO"]
+    assert ok and path
+    text = _document_text(path)
+
+    assert "aggiornamento almeno quinquennale" in text
+    assert "aggiornamento triennale" not in text
+    assert "D.M. 02/09/2021 art. 6" not in text
+    assert "cadenza almeno annuale" in text
+    assert "Allegato I, punto 1.3" in text
+
+
+def test_fire_does_not_claim_a_drill_cadence_for_small_employer(tmp_path):
+    module = _load_verify()
+    fixture = module.build_fixture()
+    fixture["azienda"].numero_dipendenti_dichiarati = 4
+    fixture["persone"] = fixture["persone"][:4]
+    module.patch_generators(fixture, str(tmp_path))
+
+    ok, path, msg = asyncio.run(
+        module.run_one("ALLEGATO_INCENDIO", fixture["azienda"].id)
+    )
+    assert ok, msg
+    text = _document_text(path)
+
+    assert "cadenza almeno annuale" not in text
+    assert "Esercitazione antincendio almeno annuale" not in text
+    assert "Esercitazione antincendio semestrale" not in text
+    assert "verificata in base all'applicabilità" in text
+
+
+def test_fire_does_not_count_registered_consultants_as_declared_workers(tmp_path):
+    module = _load_verify()
+    fixture = module.build_fixture()
+    fixture["azienda"].numero_dipendenti_dichiarati = None
+    fixture["persone"] = [
+        module.mk(
+            nominativo=f"Consulente esterno {index}",
+            is_esterno=True,
+            ruolo_rspp=index == 0,
+            ruolo_medico_competente=index == 1,
+        )
+        for index in range(10)
+    ]
+    module.patch_generators(fixture, str(tmp_path))
+
+    ok, path, msg = asyncio.run(
+        module.run_one("ALLEGATO_INCENDIO", fixture["azienda"].id)
+    )
+    assert ok, msg
+    text = _document_text(path)
+
+    assert "cadenza almeno annuale" not in text
+    assert "verificata in base all'applicabilità" in text
+
+
+def test_pee_azienda_renders_existing_workforce_data_with_exact_labels(
+    generated_outputs,
+):
+    ok, path, _ = generated_outputs["PEE_AZIENDA"]
+    assert ok and path
+    pairs = _all_key_value_pairs(Document(path))
+
+    assert pairs["Orario di lavoro dichiarato"] == "Lun-Ven 08:00-17:00"
+    assert pairs["Lavoratori dichiarati dall'azienda"] == "37"
+    assert pairs["Persone registrate nel DVR"] == "5"
+    assert "Affollamento massimo" not in pairs
+    assert "Occupazione massima" not in pairs
+
+
+def test_pee_azienda_uses_only_the_configured_drill_frequency(generated_outputs):
+    ok, path, _ = generated_outputs["PEE_AZIENDA"]
+    assert ok and path
+    doc = Document(path)
+    pairs = _all_key_value_pairs(doc)
+    text = _document_text(path)
+
+    assert pairs["Frequenza prove"] == "semestrale"
+    assert "Le prove di evacuazione seguono la frequenza configurata: semestrale." in text
+    assert "Prove di evacuazione con cadenza almeno annuale" not in text
+
+
+def test_pee_azienda_scrubs_donor_collection_point(generated_outputs):
+    ok, path, _ = generated_outputs["PEE_AZIENDA"]
+    assert ok and path
+    doc = Document(path)
+    text = _document_text(path)
+
+    assert "Parcheggio del polo commerciale" not in text
+    assert "Piazzale ingresso" in text
+
+    start = next(
+        index
+        for index, paragraph in enumerate(doc.paragraphs)
+        if "Raggiungere il punto di raccolta esterno (Piazzale ingresso)"
+        in paragraph.text
+    )
+    end = next(
+        index
+        for index, paragraph in enumerate(doc.paragraphs[start + 1 :], start + 1)
+        if "Il punto di raccolta del personale evacuato sarà il Piazzale ingresso"
+        in paragraph.text
+    )
+    assert not any(
+        paragraph._p.xpath(".//w:drawing")
+        for paragraph in doc.paragraphs[start + 1 : end]
+    ), "donor collection-point images must not remain in the configured output"
+    assert all(
+        paragraph.text.strip() for paragraph in doc.paragraphs[start + 1 : end]
+    ), "removing donor media must not leave its image-spacer paragraphs behind"
+    assert "come illustrato sopra" not in text
+
+    template_doc = Document(
+        BACKEND_ROOT.parent
+        / "templates"
+        / "PIANO GESTIONE EMERGENZE - AZIENDA.docx"
+    )
+    template_start = next(
+        index
+        for index, paragraph in enumerate(template_doc.paragraphs)
+        if "Raggiungere il punto di raccolta esterno " in paragraph.text
+        and "Parcheggio del polo commerciale" in paragraph.text
+    )
+    template_end = next(
+        index
+        for index, paragraph in enumerate(
+            template_doc.paragraphs[template_start + 1 :], template_start + 1
+        )
+        if "Il punto di raccolta del personale evacuato sarà" in paragraph.text
+        and "Parcheggio del polo commerciale" in paragraph.text
+    )
+    donor_relationship_ids = {
+        relationship_id
+        for paragraph in template_doc.paragraphs[template_start + 1 : template_end]
+        for relationship_id in paragraph._p.xpath(".//a:blip/@r:embed")
+    }
+    assert len(donor_relationship_ids) == 2
+    donor_media_hashes = {
+        hashlib.sha256(
+            template_doc.part.related_parts[relationship_id].blob
+        ).hexdigest()
+        for relationship_id in donor_relationship_ids
+    }
+
+    with zipfile.ZipFile(path) as archive:
+        document_xml = archive.read("word/document.xml").decode("utf-8")
+        generated_media_hashes = {
+            hashlib.sha256(archive.read(name)).hexdigest()
+            for name in archive.namelist()
+            if name.startswith("word/media/")
+        }
+    assert "stampa discount" not in document_xml.casefold()
+    assert donor_media_hashes.isdisjoint(generated_media_hashes)
+
+
+def test_biologico_renders_all_already_stored_assessment_content(
+    generated_outputs,
+):
+    ok, path, _ = generated_outputs["ALLEGATO_BIOLOGICO_ALIMENTARE"]
+    assert ok and path
+    text = _document_text(path)
+
+    expected_values = (
+        "Salmonella spp.",
+        "ingestione",
+        "Salmonellosi",
+        "Catena del freddo ≤ 4°C",
+        "Guanti monouso",
+        "Sorveglianza annuale.",
+        "Corso HACCP base.",
+        "AL.01",
+        "NO",
+        "AL.02",
+        "SI",
+        "Verificare lavaggio mani e formazione del turno serale.",
+    )
+    missing = [value for value in expected_values if value not in text]
+    assert not missing, f"biological annex omitted stored values: {missing}"
+
+
+def test_biologico_describes_title_x_and_annex_xlvi_accurately(
+    generated_outputs,
+):
+    ok, path, _ = generated_outputs["ALLEGATO_BIOLOGICO_ALIMENTARE"]
+    assert ok and path
+    text = _document_text(path)
+
+    assert "Il Titolo X classifica gli agenti biologici in quattro gruppi" in text
+    assert "l'Allegato XLVI elenca gli agenti dei gruppi 2, 3 e 4" in text
+    assert "gruppi da 1 a 4 dell'Allegato XLVI" not in text
+
+
+def test_biological_sections_remain_isolated_from_fire_and_pee(generated_outputs):
+    bio_path = generated_outputs["ALLEGATO_BIOLOGICO_ALIMENTARE"][1]
+    unique_headings = (
+        "Esiti checklist rischio biologico",
+        "Note valutazione biologica",
+    )
+    bio_text = _document_text(bio_path)
+    for heading in unique_headings:
+        assert heading in bio_text
+
+    for key in ("ALLEGATO_INCENDIO", "PEE_AZIENDA", "PEE_COMUNE"):
+        text = _document_text(generated_outputs[key][1])
+        leaked = [heading for heading in unique_headings if heading in text]
+        assert not leaked, f"{key} contains biological-only sections: {leaked}"
 
 
 def test_vdt_emits_full_template_sections(generated_outputs):

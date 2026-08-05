@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import base64
 import logging
+import re
+from collections.abc import Mapping
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, NoReturn, TypeVar
 
 from openai import AsyncOpenAI, OpenAIError
 from pydantic import BaseModel
@@ -29,6 +31,10 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 _client: AsyncOpenAI | None = None
+
+_SAFE_PROVIDER_IDENTIFIER = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+_PROVIDER_QUOTA_CODES = {"credit_balance_exhausted", "insufficient_quota"}
+_PROVIDER_RATE_LIMIT_CODES = {"rate_limit_exceeded", "rate_limit_error"}
 
 
 def get_client() -> AsyncOpenAI:
@@ -73,6 +79,70 @@ def _normalize_effort(model_name: str, effort: str) -> str:
     return effort
 
 
+def _safe_provider_identifier(value: Any) -> str:
+    """Return a bounded provider identifier suitable for structured logs.
+
+    Provider exception messages and bodies can contain billing URLs or other
+    account details. Only short identifier-shaped fields cross the logging
+    boundary; everything else is reduced to ``unknown``.
+    """
+    if isinstance(value, str) and _SAFE_PROVIDER_IDENTIFIER.fullmatch(value):
+        return value
+    return "unknown"
+
+
+def _provider_error_fields(exc: OpenAIError) -> tuple[int | None, str, str]:
+    """Extract non-sensitive status/code/type fields from an OpenAI error."""
+    status = getattr(exc, "status_code", None)
+    if not isinstance(status, int):
+        status = None
+
+    code: Any = getattr(exc, "code", None)
+    error_type: Any = getattr(exc, "type", None)
+    body = getattr(exc, "body", None)
+    if isinstance(body, Mapping):
+        nested = body.get("error")
+        if isinstance(nested, Mapping):
+            code = nested.get("code", code)
+            error_type = nested.get("type", error_type)
+        else:
+            code = body.get("code", code)
+            error_type = body.get("type", error_type)
+
+    return (
+        status,
+        _safe_provider_identifier(code),
+        _safe_provider_identifier(error_type),
+    )
+
+
+def _raise_provider_error(operation: str, exc: OpenAIError) -> NoReturn:
+    """Translate a provider failure into stable Italian customer messaging."""
+    status, code, error_type = _provider_error_fields(exc)
+    logger.error(
+        "provider request failed provider=openai operation=%s "
+        "provider_status=%s provider_code=%s provider_type=%s",
+        operation,
+        status,
+        code,
+        error_type,
+    )
+
+    if code in _PROVIDER_QUOTA_CODES or error_type in _PROVIDER_QUOTA_CODES:
+        detail = "Il servizio AI è temporaneamente non disponibile. Riprova più tardi."
+    elif (
+        status == 429
+        or code in _PROVIDER_RATE_LIMIT_CODES
+        or error_type in _PROVIDER_RATE_LIMIT_CODES
+    ):
+        detail = "Il servizio AI è temporaneamente sovraccarico. Riprova tra poco."
+    else:
+        detail = "Il servizio AI è temporaneamente non disponibile. Riprova più tardi."
+    # Suppress the provider exception context as well as its message: generic
+    # exception middleware may render chained causes into operational logs.
+    raise AIError(detail) from None
+
+
 async def generate_text(
     prompt: str,
     *,
@@ -108,8 +178,7 @@ async def generate_text(
             reasoning={"effort": effort},
         )
     except OpenAIError as exc:
-        logger.exception("OpenAI generate_text failed")
-        raise AIError(f"AI generation failed: {exc}") from exc
+        _raise_provider_error("generate_text", exc)
 
     text = response.output_text or ""
     status = getattr(response, "status", None)
@@ -165,8 +234,7 @@ async def generate_structured(
             reasoning={"effort": effort},
         )
     except OpenAIError as exc:
-        logger.exception("OpenAI generate_structured failed")
-        raise AIError(f"AI structured generation failed: {exc}") from exc
+        _raise_provider_error("generate_structured", exc)
 
     parsed = response.output_parsed
     if parsed is None:
@@ -226,8 +294,7 @@ async def extract_from_pdf(
             reasoning={"effort": effort},
         )
     except OpenAIError as exc:
-        logger.exception("OpenAI extract_from_pdf failed for %s", path.name)
-        raise AIError(f"PDF extraction failed: {exc}") from exc
+        _raise_provider_error("extract_from_pdf", exc)
 
     parsed = response.output_parsed
     if parsed is None:
@@ -308,10 +375,7 @@ async def extract_from_images(
             reasoning={"effort": effort},
         )
     except OpenAIError as exc:
-        logger.exception(
-            "OpenAI extract_from_images failed (%d images)", len(image_paths)
-        )
-        raise AIError(f"Image extraction failed: {exc}") from exc
+        _raise_provider_error("extract_from_images", exc)
 
     parsed = response.output_parsed
     if parsed is None:

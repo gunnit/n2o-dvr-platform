@@ -61,6 +61,8 @@ def build_fixture() -> dict:
         attivita="Lavorazioni meccaniche di precisione con mensa aziendale",
         codice_ateco="25.62.00",
         descrizione_attivita="ACME Meccanica opera nel settore delle lavorazioni meccaniche di precisione.",
+        orario_lavoro="Lun-Ven 08:00-17:00",
+        numero_dipendenti_dichiarati=37,
         organization_id=uuid.uuid4(),
         survey_status="completed",
     )
@@ -170,6 +172,11 @@ def build_fixture() -> dict:
         protocollo_sanitario="Sorveglianza annuale.",
         formazione_specifica="Corso HACCP base.",
         livello_rischio="MEDIO",
+        risposte_checklist=[
+            {"id": "AL.01", "risposta": "NO"},
+            {"id": "AL.02", "risposta": "SI"},
+        ],
+        note="Verificare lavaggio mani e formazione del turno serale.",
     )]
 
     haccp_config = mk(
@@ -207,7 +214,7 @@ def build_fixture() -> dict:
         punto_raccolta="Piazzale ingresso",
         vie_fuga="Uscita nord, uscita sud officina",
         tempo_evacuazione_stimato_min=3,
-        frequenza_prove="annuale",
+        frequenza_prove="semestrale",
     )
     pee_comune_row = mk(
         tipo="comune",
