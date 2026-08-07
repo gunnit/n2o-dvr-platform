@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, ForeignKey, Integer, LargeBinary, String, Text, func
+from sqlalchemy import Boolean, ForeignKey, Integer, LargeBinary, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,6 +21,12 @@ class DocumentoGenerato(Base):
     # the partial file is deleted, file_path is NULL, and error_message
     # carries a short Italian explanation for the operator.
     status: Mapped[str] = mapped_column(String, default="pending")
+    # Durable count of entries into generator I/O. The first delivery records
+    # 1 and one recovery delivery records 2 before dispatch. A later delivery
+    # restores the row to bozza instead of retrying forever.
+    generation_attempts: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
     file_path: Mapped[str | None] = mapped_column(String)
     # Document bytes stored in Postgres so the API service can serve downloads
     # without sharing a filesystem with the Celery worker (Render deploys them

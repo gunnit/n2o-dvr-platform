@@ -9,6 +9,8 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import create_engine, inspect, text
 
+from app.models.documento_generato import DocumentoGenerato
+
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
@@ -98,3 +100,13 @@ def test_document_attempt_counter_migration_bounds_postgres_lock_wait(monkeypatc
         ("execute", "SET LOCAL lock_timeout = '5s'"),
         ("drop_column", ("documenti_generati", "generation_attempts")),
     ]
+
+
+def test_document_attempt_counter_model_matches_migration_contract():
+    """The worker mapping keeps the deployed counter non-null and defaulted."""
+    column = DocumentoGenerato.__table__.c.generation_attempts
+
+    assert column.type.python_type is int
+    assert column.nullable is False
+    assert column.default.arg == 0
+    assert str(column.server_default.arg) == "0"

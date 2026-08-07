@@ -25,6 +25,11 @@ from app.services.survey_snapshot import compute_survey_snapshot_hash
 
 logger = logging.getLogger(__name__)
 
+MAX_GENERATION_ATTEMPTS = 2
+INTERRUPTED_GENERATION_ERROR = (
+    "Generazione interrotta due volte. Riprova manualmente."
+)
+
 
 def _friendly_error_for(exc: Exception) -> str:
     """Translate a raw exception into a short Italian line for the operator.
@@ -59,11 +64,30 @@ async def _run_generation(document_id: uuid.UUID) -> None:
             return
 
         if doc.status in {"completed", "ready"}:
-            logger.info("Document %s already completed; skipping redelivery", document_id)
+            logger.info(
+                "Document %s already completed; repairing meter on redelivery",
+                document_id,
+            )
+            await record_activation_for_azienda(doc.azienda_id, db)
+            return
+
+        if doc.generation_attempts >= MAX_GENERATION_ATTEMPTS:
+            logger.warning(
+                "Document %s reached the automatic generation-attempt limit",
+                document_id,
+            )
+            doc.status = "bozza"
+            doc.file_path = None
+            doc.file_content = None
+            doc.file_name = None
+            doc.error_message = INTERRUPTED_GENERATION_ERROR
+            doc.generation_completed_at = datetime.utcnow()
+            await db.commit()
             return
 
         output_path: str | None = None
         try:
+            doc.generation_attempts += 1
             doc.status = "in_progress"
             doc.generation_started_at = datetime.utcnow()
             doc.error_message = None  # clear any prior rollback note
@@ -217,6 +241,7 @@ async def _run_generation(document_id: uuid.UUID) -> None:
     time_limit=660,       # 11 min — hard kill (worker process terminated)
     acks_late=True,
     reject_on_worker_lost=True,
+    acks_on_failure_or_timeout=False,
 )
 def generate_document_task(document_id: str) -> str:
     """Entry point from the API layer. Runs the async workflow in a new loop.

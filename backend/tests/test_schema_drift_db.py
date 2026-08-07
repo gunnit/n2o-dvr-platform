@@ -26,7 +26,6 @@ import os
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from sqlalchemy import Column, Integer
 
 from app.db.base import Base
 from app.db.session import _normalize_async_url
@@ -39,34 +38,9 @@ def _diff(connection) -> list:
     return compare_metadata(MigrationContext.configure(connection), Base.metadata)
 
 
-def _without_migration_first_columns(diffs: list) -> list:
-    """Ignore only the column deliberately deployed before its worker mapping.
-
-    Remove this allowance in the immediate follow-up release that maps
-    ``DocumentoGenerato.generation_attempts``.
-    """
-    return [
-        diff
-        for diff in diffs
-        if not (
-            len(diff) >= 4
-            and diff[0] == "remove_column"
-            and diff[2] == "documenti_generati"
-            and getattr(diff[3], "name", None) == "generation_attempts"
-        )
-    ]
-
-
-def test_migration_first_column_allowance_is_narrow() -> None:
-    allowed = ("remove_column", None, "documenti_generati", Column("generation_attempts", Integer))
-    unrelated = ("remove_column", None, "documenti_generati", Column("unexpected", Integer))
-
-    assert _without_migration_first_columns([allowed, unrelated]) == [unrelated]
-
-
 @pytest.mark.skipif(_URL is None, reason="no DATABASE_URL — needs a migrated Postgres")
 def test_models_match_migrated_schema() -> None:
-    """Head and models match apart from the explicit migration-first column."""
+    """Migration head and the complete model metadata match exactly."""
     from sqlalchemy.ext.asyncio import create_async_engine
 
     async def _go() -> list:
@@ -77,7 +51,7 @@ def test_models_match_migrated_schema() -> None:
         finally:
             await engine.dispose()
 
-    diffs = _without_migration_first_columns(asyncio.run(_go()))
+    diffs = asyncio.run(_go())
 
     assert diffs == [], (
         "Models and migrations disagree in "
