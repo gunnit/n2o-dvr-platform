@@ -58,6 +58,10 @@ async def _run_generation(document_id: uuid.UUID) -> None:
             logger.error("Document record not found: %s", document_id)
             return
 
+        if doc.status in {"completed", "ready"}:
+            logger.info("Document %s already completed; skipping redelivery", document_id)
+            return
+
         output_path: str | None = None
         try:
             doc.status = "in_progress"
@@ -211,6 +215,8 @@ async def _run_generation(document_id: uuid.UUID) -> None:
     name="app.tasks.document_tasks.generate_document_task",
     soft_time_limit=600,  # 10 min — triggers a catchable exception
     time_limit=660,       # 11 min — hard kill (worker process terminated)
+    acks_late=True,
+    reject_on_worker_lost=True,
 )
 def generate_document_task(document_id: str) -> str:
     """Entry point from the API layer. Runs the async workflow in a new loop.
