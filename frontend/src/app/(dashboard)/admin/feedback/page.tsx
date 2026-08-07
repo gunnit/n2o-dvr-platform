@@ -41,6 +41,8 @@ import { Select } from "@/components/ui/select";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterTabs } from "@/components/ui/filter-tabs";
 
+import { fetchAllFeedback } from "./feedback-pagination";
+
 type FeedbackType = "bug" | "idea" | "observation";
 type FeedbackStatus = "nuovo" | "in_revisione" | "risolto" | "non_fara";
 
@@ -140,7 +142,7 @@ export default function AdminFeedbackPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiFetch<FeedbackRow[]>("/api/v1/feedback");
+      const data = await fetchAllFeedback<FeedbackRow>(apiFetch);
       setRows(data);
     } catch (err) {
       setError(
