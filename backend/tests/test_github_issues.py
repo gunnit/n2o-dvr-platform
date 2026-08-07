@@ -8,6 +8,7 @@ shape get caught here, not by a 422 in production.
 
 from __future__ import annotations
 
+import json
 import uuid
 from types import SimpleNamespace
 from typing import Any
@@ -62,7 +63,9 @@ def _install_transport(monkeypatch, handler):
 
 
 @pytest.mark.asyncio
-async def test_create_issue_success(monkeypatch, configure_github):
+async def test_create_issue_payload_excludes_private_feedback_data(
+    monkeypatch, configure_github
+):
     seen: dict[str, Any] = {}
 
     def handler(req: httpx.Request) -> httpx.Response:
@@ -80,22 +83,28 @@ async def test_create_issue_success(monkeypatch, configure_github):
 
     _install_transport(monkeypatch, handler)
 
-    fb = _make_fb()
-    number, url = await github_issues.create_issue_from_feedback(
-        fb, user_label="Mario Rossi"
+    fb = _make_fb(
+        description="PRIVATE_DESCRIPTION",
+        page_url="https://dvr-sicurezza.it/PRIVATE_PAGE",
+        route="/PRIVATE_ROUTE",
+        user_agent="PRIVATE_USER_AGENT",
     )
+    number, url = await github_issues.create_issue_from_feedback(fb)
 
     assert number == 42
     assert url == "https://github.com/acme/test-repo/issues/42"
     assert seen["method"] == "POST"
     assert seen["url"] == "https://api.github.com/repos/acme/test-repo/issues"
     assert seen["headers"]["authorization"] == "Bearer ghp_test_token"
+    payload = json.loads(seen["json"])
+    serialized = json.dumps(payload)
+    assert "PRIVATE_" not in serialized
+    assert str(fb.id) not in serialized
+    assert payload["title"] == "[Bug] Nuova segnalazione DVR"
+    assert "contenuto non viene copiato" in payload["body"]
     # Labels include the configured default plus the type-derived one.
-    body = seen["json"]
-    assert "user-feedback" in body
-    assert "bug" in body
-    assert "Mario Rossi" in body
-    assert str(fb.id) in body
+    assert "user-feedback" in payload["labels"]
+    assert "bug" in payload["labels"]
 
 
 @pytest.mark.asyncio
@@ -109,9 +118,7 @@ async def test_create_issue_no_token_is_noop(monkeypatch):
         return httpx.Response(201, json={})
 
     _install_transport(monkeypatch, handler)
-    number, url = await github_issues.create_issue_from_feedback(
-        _make_fb(), user_label=None
-    )
+    number, url = await github_issues.create_issue_from_feedback(_make_fb())
     assert (number, url) == (None, None)
     assert called is False, "no token = no HTTP call"
 
@@ -122,9 +129,7 @@ async def test_create_issue_4xx_logs_and_returns_none(monkeypatch, configure_git
         return httpx.Response(422, json={"message": "Validation failed"})
 
     _install_transport(monkeypatch, handler)
-    number, url = await github_issues.create_issue_from_feedback(
-        _make_fb(), user_label=None
-    )
+    number, url = await github_issues.create_issue_from_feedback(_make_fb())
     assert (number, url) == (None, None)
 
 
@@ -134,9 +139,7 @@ async def test_create_issue_network_error_returns_none(monkeypatch, configure_gi
         raise httpx.ConnectError("boom")
 
     _install_transport(monkeypatch, handler)
-    number, url = await github_issues.create_issue_from_feedback(
-        _make_fb(), user_label=None
-    )
+    number, url = await github_issues.create_issue_from_feedback(_make_fb())
     assert (number, url) == (None, None)
 
 
@@ -159,13 +162,10 @@ async def test_close_issue_sends_state_reason(monkeypatch, configure_github):
 
 
 @pytest.mark.asyncio
-async def test_build_title_truncates_and_prefixes():
+async def test_build_title_is_generic_and_type_derived():
     fb = _make_fb(
         type="idea",
         description="x" * 200,
     )
-    title = github_issues._build_title(fb)
-    assert title.startswith("[Idea] ")
-    assert title.endswith("...")
-    # Prefix (7 chars) + 77 truncated body + "..." = 87 max
-    assert len(title) <= 90
+    title = github_issues._build_title(fb.type)
+    assert title == "[Idea] Nuova segnalazione DVR"

@@ -102,9 +102,7 @@ async def create_feedback(
     # POST, ~200ms p95) and we want the issue URL in the response so the
     # admin UI can link straight to it. Failures are swallowed inside
     # github_issues — they never break this endpoint.
-    number, html_url = await github_issues.create_issue_from_feedback(
-        fb, user_label=user.full_name or user.email
-    )
+    number, html_url = await github_issues.create_issue_from_feedback(fb)
     if number is not None:
         fb.github_issue_number = number
         fb.github_issue_url = html_url

@@ -46,44 +46,27 @@ def _headers() -> dict[str, str]:
     }
 
 
-def _build_body(fb: UserFeedback, user_label: str | None) -> str:
-    """Render the issue body. Plain markdown — no secrets, no PII."""
-    route = fb.route or "—"
-    page = fb.page_url or "—"
-    submitter = user_label or "—"
-    ua = fb.user_agent or "—"
+def _feedback_type_label(feedback_type: str) -> str:
+    return {"bug": "Bug", "idea": "Idea", "observation": "Osservazione"}.get(
+        feedback_type, "Feedback"
+    )
+
+
+def _build_title(feedback_type: str) -> str:
+    return f"[{_feedback_type_label(feedback_type)}] Nuova segnalazione DVR"
+
+
+def _build_body(feedback_type: str) -> str:
+    """Render a generic notification without feedback content or identity."""
+    label = _feedback_type_label(feedback_type)
     return (
-        f"**Tipo:** {fb.type}\n"
-        f"**Inviato da:** {submitter}\n"
-        f"**Route:** `{route}`\n"
-        f"**Pagina:** {page}\n"
-        f"**User agent:** `{ua}`\n"
-        f"**Feedback ID:** `{fb.id}`\n\n"
-        f"---\n\n"
-        f"{fb.description}\n\n"
-        f"---\n"
-        f"_Aperto automaticamente da DVR Sicurezza. "
-        f"Menziona `@claude` quando è pronto per il fix automatico._"
+        f"**Tipo:** {label}\n\n"
+        "È disponibile una nuova segnalazione nell'area amministrativa Feedback. "
+        "Il contenuto non viene copiato su GitHub per tutelare i dati personali e aziendali."
     )
 
 
-def _build_title(fb: UserFeedback) -> str:
-    """Take the first non-empty line, cap to ~80 chars."""
-    first = next(
-        (line.strip() for line in fb.description.splitlines() if line.strip()),
-        "(senza descrizione)",
-    )
-    if len(first) > 80:
-        first = first[:77].rstrip() + "..."
-    prefix = {"bug": "Bug", "idea": "Idea", "observation": "Osservazione"}.get(
-        fb.type, "Feedback"
-    )
-    return f"[{prefix}] {first}"
-
-
-async def create_issue_from_feedback(
-    fb: UserFeedback, user_label: str | None
-) -> tuple[int | None, str | None]:
+async def create_issue_from_feedback(fb: UserFeedback) -> tuple[int | None, str | None]:
     """Open a GitHub issue mirroring this feedback row.
 
     Returns (issue_number, html_url) on success, (None, None) otherwise.
@@ -99,8 +82,8 @@ async def create_issue_from_feedback(
         labels.append(type_label)
 
     payload = {
-        "title": _build_title(fb),
-        "body": _build_body(fb, user_label),
+        "title": _build_title(fb.type),
+        "body": _build_body(fb.type),
         "labels": labels,
     }
 
