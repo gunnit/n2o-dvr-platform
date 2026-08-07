@@ -21,7 +21,7 @@ class UserFeedback(Base):
 
     __table_args__ = (
         # The admin triage list filters `WHERE organization_id = :org [AND status = :s]`
-        # and orders by created_at DESC (app/api/v1/feedback.py). Both created by
+        # and orders by (created_at DESC, id DESC) (app/api/v1/feedback.py). Both created by
         # migration e5f6a7b8c9d1.
         Index("ix_user_feedback_org_status", "organization_id", "status"),
         Index("ix_user_feedback_created_at", "created_at"),

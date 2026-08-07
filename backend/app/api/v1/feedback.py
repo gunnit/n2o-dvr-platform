@@ -130,7 +130,11 @@ async def list_feedback(
         stmt = stmt.where(UserFeedback.status == status)
     if type is not None:
         stmt = stmt.where(UserFeedback.type == type)
-    stmt = stmt.order_by(desc(UserFeedback.created_at)).offset(offset).limit(limit)
+    stmt = (
+        stmt.order_by(desc(UserFeedback.created_at), desc(UserFeedback.id))
+        .offset(offset)
+        .limit(limit)
+    )
 
     rows = (await db.execute(stmt)).all()
     return [
