@@ -1,6 +1,7 @@
 """DUVRI - Documento Unico Valutazione Rischi Interferenze (art. 26 D.Lgs. 81/2008)."""
 
 import os
+import unicodedata
 
 from docx import Document
 from sqlalchemy import func, select
@@ -23,9 +24,101 @@ from app.services.document_generator.docx_utils import (
 
 TEMPLATE = TEMPLATES_DIR / "DUVRI.docx"
 TIPO_DOC = "duvri"
+UNKNOWN_ENVIRONMENT = "Ambiente non disponibile"
 
 
-def _remove_body_paragraph_block(doc: Document, start_marker: str, end_marker: str) -> None:
+def _normalize_display_text(value) -> str:
+    return " ".join(unicodedata.normalize("NFKC", str(value or "")).split())
+
+
+def _company_equipment_rows(data: dict) -> list[list[str]]:
+    environment_names = {
+        str(ambiente.id): _normalize_display_text(ambiente.nome)
+        or UNKNOWN_ENVIRONMENT
+        for ambiente in data["ambienti"]
+        if getattr(ambiente, "id", None) is not None
+    }
+    records = []
+    for equipment in data["attrezzature"]:
+        description = _normalize_display_text(
+            getattr(equipment, "descrizione", None)
+        )
+        if not description:
+            continue
+        environment = environment_names.get(
+            str(getattr(equipment, "ambiente_id", None)),
+            UNKNOWN_ENVIRONMENT,
+        )
+        records.append((
+            environment,
+            description,
+            str(getattr(equipment, "id", "")),
+        ))
+    records.sort(
+        key=lambda record: (
+            record[0].casefold(),
+            record[1].casefold(),
+            record[2],
+        )
+    )
+    return [[description, environment] for environment, description, _ in records]
+
+
+def _body_paragraph_with_marker(doc: Document, marker: str):
+    marker = marker.casefold()
+    return next(
+        (
+            paragraph
+            for paragraph in doc.paragraphs
+            if marker in paragraph.text.casefold()
+        ),
+        None,
+    )
+
+
+def _add_company_equipment(doc: Document, rows: list[list[str]]) -> list:
+    blocks = [add_heading(doc, "Attrezzature del committente", level=2)._p]
+    if rows:
+        blocks.append(
+            add_data_table(
+                doc,
+                ["Attrezzatura del committente", "Ambiente"],
+                rows,
+            )._element
+        )
+    else:
+        blocks.append(
+            add_paragraph(
+                doc,
+                "Nessuna attrezzatura registrata nel Rischio Master.",
+                italic=True,
+            )._p
+        )
+    return blocks
+
+
+def _insert_company_equipment_at_legacy_anchor(
+    doc: Document,
+    rows: list[list[str]],
+) -> bool:
+    anchor = _body_paragraph_with_marker(
+        doc,
+        "Attrezzature e mezzi messi a disposizione dal Committente",
+    )
+    if anchor is None:
+        return False
+    for block in _add_company_equipment(doc, rows):
+        anchor._p.addprevious(block)
+    return True
+
+
+def _remove_body_paragraph_block(
+    doc: Document,
+    start_marker: str,
+    end_marker: str,
+    *,
+    replacement: str | None = None,
+) -> bool:
     """Remove a legacy body block delimited by stable text anchors."""
     paragraphs = list(doc.paragraphs)
     start = next(
@@ -37,7 +130,7 @@ def _remove_body_paragraph_block(doc: Document, start_marker: str, end_marker: s
         None,
     )
     if start is None:
-        return
+        return False
     end = next(
         (
             index
@@ -47,19 +140,29 @@ def _remove_body_paragraph_block(doc: Document, start_marker: str, end_marker: s
         None,
     )
     if end is None:
-        return
+        return False
+    if replacement:
+        replacement_paragraph = add_paragraph(doc, replacement)
+        paragraphs[start]._p.addprevious(replacement_paragraph._p)
     for paragraph in paragraphs[start : end + 1]:
         paragraph._p.getparent().remove(paragraph._p)
+    return True
 
 
-def _remove_body_tables_with_anchor(doc: Document, marker: str) -> None:
-    """Remove legacy body tables that contain a known donor-only marker."""
+def _replace_body_tables_with_anchor(
+    doc: Document,
+    marker: str,
+    replacement: str,
+) -> None:
+    """Replace donor tables with a narrow reference to current appalto data."""
     marker = marker.casefold()
     for table in list(doc.tables):
         table_text = "\n".join(
             cell.text for row in table.rows for cell in row.cells
         ).casefold()
         if marker in table_text:
+            replacement_paragraph = add_paragraph(doc, replacement)
+            table._element.addprevious(replacement_paragraph._p)
             table._element.getparent().remove(table._element)
 
 
@@ -74,14 +177,30 @@ def _remove_legacy_donor_equipment(doc: Document) -> None:
         doc,
         "Movimentazione materiali – Muletto / Transpallet",
         "In caso di utilizzo contemporaneo, le attività sono coordinate tra preposti",
+        replacement=(
+            "Le misure di coordinamento applicabili sono riportate, per ciascun "
+            "appalto, nella sezione Interferenze identificate in calce al "
+            "presente documento."
+        ),
     )
     _remove_body_paragraph_block(
         doc,
         "ATTIVITÀ DI SALDATURA – SVOLTA DA",
         "È vietato depositare materiali combustibili nelle aree limitrofe durante le operazioni",
     )
-    _remove_body_tables_with_anchor(doc, "Attività operative RECOM")
-    _remove_body_tables_with_anchor(doc, "Possibili rischi/interferenze per RECOM")
+    _replace_body_tables_with_anchor(
+        doc,
+        "Attività operative RECOM",
+        "Le date e le attività di ciascun appalto sono riportate nelle relative "
+        "sezioni in calce al presente documento.",
+    )
+    _replace_body_tables_with_anchor(
+        doc,
+        "Possibili rischi/interferenze per RECOM",
+        "Le attrezzature e le attività dell’appaltatore, con le relative "
+        "interferenze, sono riportate nelle sezioni dedicate ai singoli appalti "
+        "in calce al presente documento.",
+    )
 
 
 class DuvriGenerator(BaseDocumentGenerator):
@@ -90,6 +209,8 @@ class DuvriGenerator(BaseDocumentGenerator):
         azienda = data["azienda"]
         generated_at = data["generated_at"]
         duvri_rows = await load_duvri(self.db, self.azienda_id)
+        company_equipment_rows = _company_equipment_rows(data)
+        company_equipment_inserted = False
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
@@ -97,6 +218,10 @@ class DuvriGenerator(BaseDocumentGenerator):
             # Blank the sample dates left in the template body; the generator
             # supplies the real appalto/sottoscrizione dates below.
             scrub_body(doc, {"01.11.2025": "__/__/____", "15/01/2026": "__/__/____"})
+            company_equipment_inserted = _insert_company_equipment_at_legacy_anchor(
+                doc,
+                company_equipment_rows,
+            )
             _remove_legacy_donor_equipment(doc)
         else:
             doc = Document()
@@ -115,35 +240,8 @@ class DuvriGenerator(BaseDocumentGenerator):
         add_paragraph(doc, "Il presente DUVRI individua le misure di prevenzione e protezione necessarie ad eliminare o ridurre al minimo i rischi derivanti dalle interferenze tra le attività del committente e quelle dell'impresa appaltatrice.")
         add_paragraph(doc, "Ai sensi dell'art. 26 comma 3-bis del D.Lgs. 81/2008 (introdotto dal D.Lgs. 106/2009), l'obbligo di redazione del DUVRI non si applica ai servizi di natura intellettuale, alle mere forniture di materiali o attrezzature, nonché ai lavori o servizi la cui durata non superi i cinque uomini-giorno, salvo che comportino rischi derivanti da agenti cancerogeni, biologici, atmosfere esplosive o dai rischi particolari di cui all'Allegato XI.")
 
-        ambienti_by_id = {
-            str(ambiente.id): ambiente.nome
-            for ambiente in data["ambienti"]
-            if getattr(ambiente, "id", None) is not None
-        }
-        equipment_rows = []
-        for attrezzatura in data["attrezzature"]:
-            descrizione = (getattr(attrezzatura, "descrizione", None) or "").strip()
-            if not descrizione:
-                continue
-            ambiente = ambienti_by_id.get(str(getattr(attrezzatura, "ambiente_id", None)))
-            equipment_rows.append([
-                descrizione,
-                ambiente or "Ambiente non disponibile",
-            ])
-
-        add_heading(doc, "Attrezzature del committente", level=2)
-        if equipment_rows:
-            add_data_table(
-                doc,
-                ["Attrezzatura del committente", "Ambiente"],
-                equipment_rows,
-            )
-        else:
-            add_paragraph(
-                doc,
-                "Nessuna attrezzatura registrata nel Rischio Master.",
-                italic=True,
-            )
+        if not company_equipment_inserted:
+            _add_company_equipment(doc, company_equipment_rows)
 
         if not duvri_rows:
             add_paragraph(doc, "Non risultano appalti attivi al momento della valutazione.", italic=True)

@@ -293,6 +293,7 @@ export default function DuvriListPage() {
 
   useEffect(() => {
     let cancelled = false;
+    setRiskMasterEquipment([]);
     setRiskMasterEquipmentLoading(true);
     setRiskMasterEquipmentError(null);
 
@@ -752,7 +753,9 @@ export default function DuvriListPage() {
             <div className="space-y-2 rounded-md border border-input bg-muted/20 p-3">
               <div className="flex items-center justify-between gap-3">
                 <Label>Attrezzature del committente (Rischio Master)</Label>
-                <Badge variant="secondary">{riskMasterEquipment.length}</Badge>
+                {!riskMasterEquipmentLoading && !riskMasterEquipmentError && (
+                  <Badge variant="secondary">{riskMasterEquipment.length}</Badge>
+                )}
               </div>
               {riskMasterEquipmentLoading ? (
                 <p className="text-xs text-muted-foreground">
@@ -772,12 +775,12 @@ export default function DuvriListPage() {
                   {riskMasterEquipment.map((equipment) => (
                     <div
                       key={equipment.id}
-                      className="flex min-w-0 items-center justify-between gap-3 rounded border border-input bg-background px-2.5 py-2 text-xs"
+                      className="grid min-w-0 gap-1 rounded border border-input bg-background px-2.5 py-2 text-xs sm:grid-cols-2 sm:gap-3"
                     >
-                      <span className="truncate font-medium">
+                      <span className="min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] font-medium">
                         {equipment.description}
                       </span>
-                      <span className="shrink-0 text-muted-foreground">
+                      <span className="min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] text-muted-foreground sm:text-right">
                         {equipment.environment}
                       </span>
                     </div>

@@ -131,3 +131,111 @@ passed, but the local LibreOffice conversion repeatedly left a zero-byte
 temporary file and did not emit a usable PDF, including with an isolated
 temporary profile and output directory. This is a local conversion-tooling
 limitation, not a DOCX generation failure; visual review remains outstanding.
+
+## Final review fix round 1
+
+Run completed: 2026-08-08 17:33:23 CEST
+
+### Review findings addressed
+
+- Moved the current Risk Master principal-equipment heading/table (or empty
+  fallback) from the appended generated section to the original legacy
+  equipment block position. It now follows the retained equipment introduction
+  and precedes the emergency-management section.
+- Replaced the removed donor cronoprogram and equipment-interference tables
+  with narrow Italian references to the current per-appalto sections.
+- Added a current-data cross-reference below the retained `MISURE DI
+  PREVENZIONE` heading where donor-specific sample measures were removed.
+- Normalized environment display names and sorted principal rows
+  deterministically by normalized environment, description, then equipment ID,
+  while preserving duplicate records and skipping only blank descriptions.
+- Added focused generated-DOCX coverage for XML/body placement, cross-reference
+  text, empty inventory, blank and missing environment fallback, normalized
+  names, duplicate preservation, stable ordering, and donor-marker absence.
+- Changed the DUVRI form's principal-equipment rows to a responsive wrapping
+  grid so long descriptions and environment names do not force mobile overflow.
+  Rows now clear at load start, and the count is hidden while loading or when an
+  error is displayed.
+
+### TDD RED
+
+The document fixture/tests were changed before generator code.
+
+Command:
+
+```bash
+cd backend && /Users/macbookair/Documents/DVR/backend/.venv/bin/python -m pytest -q tests/test_generators.py -k duvri
+```
+
+Observed result after correcting the emergency-section lookup to ignore the
+table-of-contents entry:
+
+```text
+4 failed, 22 deselected in 9.92s
+```
+
+The failures were the intended behaviors: unsorted rows, principal table at
+body index 618 after the emergency section at index 114, empty fallback at the
+same appended position, and unnormalized/unstably ordered environment rows.
+
+### TDD GREEN
+
+The same focused command after implementation:
+
+```text
+4 passed, 22 deselected in 9.69s
+```
+
+### Required verification
+
+```text
+Frontend affected test:
+2 passed, 0 failed
+
+npm run test:unit:
+15 passed, 0 failed
+
+./node_modules/.bin/tsc --noEmit:
+exit 0
+
+npm run build -- --webpack:
+Next.js 16.3.0 webpack production build compiled successfully; 21/21 static pages generated
+
+pytest -q tests/test_generators.py::test_all_17_generators_pass:
+1 passed in 10.14s
+
+python -m scripts.verify_all_generators /private/tmp/dvr-duvri-final-review-1.7JTOBp:
+RESULT: 17/17 generators produced valid output
+
+pytest -q:
+824 passed, 70 skipped, 11 warnings in 62.76s
+```
+
+The frontend unit runner emitted only its existing module-type warning. The 11
+backend warnings are the existing datetime/TestClient deprecation warnings; no
+test failed.
+
+### Fresh synthetic artifact
+
+```text
+/private/tmp/dvr-duvri-final-review-1.7JTOBp/abfaf86b-2ea2-4b9b-aeb5-4d0b31b18b23/duvri_acme_meccanica_composita_srl_v1.docx
+```
+
+Structural inspection found 608 paragraphs and 23 tables, with body order
+`introduction 104 < principal table 111 < emergency section 116`. The four
+principal rows are normalized and deterministically ordered, the contractor
+row remains in its separate `Tipo` / `Descrizione` table, each of the three
+cross-references occurs once, and all six known donor markers occur zero times.
+
+### Fix-round files
+
+- `backend/app/services/document_generator/duvri.py`
+- `backend/tests/test_generators.py`
+- `frontend/src/app/(dashboard)/assessments/duvri/[aziendaId]/page.tsx`
+- `.superpowers/sdd/2026-08-08-duvri-risk-master-equipment/task-2-report.md`
+
+### Concern
+
+The fresh DOCX is retained for visual review. Per the final-review instruction,
+no additional time was spent retrying the locally blocked LibreOffice PDF
+conversion; structural inspection and all automated gates passed.

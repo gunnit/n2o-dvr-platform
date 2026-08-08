@@ -58,6 +58,30 @@ def _find_table(doc: Document, expected_header: tuple[str, ...]):
     return None
 
 
+def _body_index(doc: Document, element) -> int:
+    return list(doc.element.body.iterchildren()).index(element)
+
+
+def _paragraph_with_text(doc: Document, marker: str):
+    return next(paragraph for paragraph in doc.paragraphs if marker in paragraph.text)
+
+
+def _paragraph_with_text_after(doc: Document, marker: str, element):
+    element_index = _body_index(doc, element)
+    return next(
+        paragraph
+        for paragraph in doc.paragraphs
+        if marker in paragraph.text and _body_index(doc, paragraph._p) > element_index
+    )
+
+
+def _generate_duvri(module, fixture, output_dir: Path) -> tuple[Document, str]:
+    module.patch_generators(fixture, str(output_dir))
+    ok, path, message = asyncio.run(module.run_one("DUVRI", fixture["azienda"].id))
+    assert ok, message
+    return Document(path), path
+
+
 def _all_key_value_pairs(doc: Document) -> dict[str, str]:
     pairs: dict[str, str] = {}
     for table in doc.tables:
@@ -126,12 +150,12 @@ def test_duvri_renders_current_equipment_without_legacy_donor_equipment(
         tuple(cell.text.strip() for cell in row.cells)
         for row in company_equipment.rows[1:]
     ]
-    assert sorted(company_rows) == sorted([
-        ("Tornio parallelo CNC", "Officina meccanica"),
-        ("Fresatrice CNC", "Officina meccanica"),
+    assert company_rows == [
         ("Carrello elevatore", "Magazzino"),
+        ("Fresatrice CNC", "Officina meccanica"),
+        ("Tornio parallelo CNC", "Officina meccanica"),
         ("Postazione VDT", "Uffici amministrativi e tecnici"),
-    ])
+    ]
 
     contractor_equipment = _find_table(doc, ("Tipo", "Descrizione"))
     assert contractor_equipment is not None
@@ -150,6 +174,116 @@ def test_duvri_renders_current_equipment_without_legacy_donor_equipment(
     ):
         assert donor_text not in text
     assert text.count("Carrello elevatore") == 1
+
+
+def test_duvri_places_current_equipment_in_legacy_section_with_cross_references(
+    generated_outputs,
+):
+    ok, path, _ = generated_outputs["DUVRI"]
+    assert ok and path
+    doc = Document(path)
+    text = _document_text(path)
+    company_equipment = _find_table(
+        doc, ("Attrezzatura del committente", "Ambiente")
+    )
+    assert company_equipment is not None
+
+    introduction = _paragraph_with_text(
+        doc,
+        "si riporta di seguito l’elenco delle attrezzature di lavoro",
+    )
+    emergency = _paragraph_with_text_after(
+        doc,
+        "Soggetti di riferimento per la gestione delle emergenze",
+        introduction._p,
+    )
+    assert (
+        _body_index(doc, introduction._p)
+        < _body_index(doc, company_equipment._element)
+        < _body_index(doc, emergency._p)
+    )
+
+    for cross_reference in (
+        "Le date e le attività di ciascun appalto sono riportate nelle relative sezioni in calce al presente documento.",
+        "Le attrezzature e le attività dell’appaltatore, con le relative interferenze, sono riportate nelle sezioni dedicate ai singoli appalti in calce al presente documento.",
+        "Le misure di coordinamento applicabili sono riportate, per ciascun appalto, nella sezione Interferenze identificate in calce al presente documento.",
+    ):
+        assert cross_reference in text
+
+    measures_heading = _paragraph_with_text(doc, "MISURE DI PREVENZIONE")
+    measures_reference = _paragraph_with_text(
+        doc,
+        "Le misure di coordinamento applicabili sono riportate",
+    )
+    assert _body_index(doc, measures_heading._p) < _body_index(
+        doc, measures_reference._p
+    )
+
+
+def test_duvri_places_empty_inventory_fallback_in_legacy_equipment_section(
+    tmp_path,
+):
+    module = _load_verify()
+    fixture = module.build_fixture()
+    fixture["attrezzature"] = []
+    doc, path = _generate_duvri(module, fixture, tmp_path)
+    text = _document_text(path)
+
+    fallback = _paragraph_with_text(
+        doc,
+        "Nessuna attrezzatura registrata nel Rischio Master.",
+    )
+    introduction = _paragraph_with_text(
+        doc,
+        "si riporta di seguito l’elenco delle attrezzature di lavoro",
+    )
+    emergency = _paragraph_with_text_after(
+        doc,
+        "Soggetti di riferimento per la gestione delle emergenze",
+        introduction._p,
+    )
+    assert (
+        _body_index(doc, introduction._p)
+        < _body_index(doc, fallback._p)
+        < _body_index(doc, emergency._p)
+    )
+    assert _find_table(doc, ("Attrezzatura del committente", "Ambiente")) is None
+    assert text.count("Nessuna attrezzatura registrata nel Rischio Master.") == 1
+
+
+def test_duvri_normalizes_environments_and_preserves_stably_ordered_duplicates(
+    tmp_path,
+):
+    module = _load_verify()
+    fixture = module.build_fixture()
+    fixture["ambienti"] = [
+        module.mk(id="warehouse", nome="  Magazzino   Nord  "),
+        module.mk(id="blank-environment", nome="   "),
+    ]
+    fixture["attrezzature"] = [
+        module.mk(id="equipment-5", ambiente_id="warehouse", descrizione=" Trapano "),
+        module.mk(id="equipment-2", ambiente_id="missing", descrizione=" Generatore "),
+        module.mk(id="equipment-4", ambiente_id="warehouse", descrizione="Trapano"),
+        module.mk(id="equipment-1", ambiente_id="blank-environment", descrizione=" Avvitatore "),
+        module.mk(id="equipment-3", ambiente_id="warehouse", descrizione=" Fresatrice "),
+        module.mk(id="equipment-ignored", ambiente_id="warehouse", descrizione="   "),
+    ]
+    doc, _ = _generate_duvri(module, fixture, tmp_path)
+    company_equipment = _find_table(
+        doc, ("Attrezzatura del committente", "Ambiente")
+    )
+    assert company_equipment is not None
+
+    assert [
+        tuple(cell.text.strip() for cell in row.cells)
+        for row in company_equipment.rows[1:]
+    ] == [
+        ("Avvitatore", "Ambiente non disponibile"),
+        ("Generatore", "Ambiente non disponibile"),
+        ("Fresatrice", "Magazzino Nord"),
+        ("Trapano", "Magazzino Nord"),
+        ("Trapano", "Magazzino Nord"),
+    ]
 
 
 def test_haccp_forms_produces_zip(generated_outputs):
