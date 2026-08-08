@@ -955,7 +955,7 @@ export function MicroclimaPhsForm({
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-2 pt-4 text-xs sm:grid-cols-4">
           <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
-            <span className="text-muted-foreground">T rettale</span>
+            <span className="text-muted-foreground">T corporea</span>
             <span className="font-medium tabular-nums">
               {result ? fmtNum(result.t_re, 1, " °C") : "—"}
             </span>
