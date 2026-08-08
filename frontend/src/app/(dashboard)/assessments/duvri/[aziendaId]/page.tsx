@@ -46,6 +46,10 @@ import {
 import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
+import {
+  loadRiskMasterEquipment,
+  type RiskMasterEquipmentRow,
+} from "./risk-master-equipment";
 
 /**
  * DUVRI list + create/edit screen (US-4.5).
@@ -242,6 +246,14 @@ export default function DuvriListPage() {
   const [deleting, setDeleting] = useState(false);
 
   const [equipmentTypes, setEquipmentTypes] = useState<string[]>([]);
+  const [riskMasterEquipment, setRiskMasterEquipment] = useState<
+    RiskMasterEquipmentRow[]
+  >([]);
+  const [riskMasterEquipmentLoading, setRiskMasterEquipmentLoading] =
+    useState(true);
+  const [riskMasterEquipmentError, setRiskMasterEquipmentError] = useState<
+    string | null
+  >(null);
   const [analyzeTarget, setAnalyzeTarget] = useState<DuvriResponse | null>(null);
   const [analyzeData, setAnalyzeData] = useState<AnalyzeResponse | null>(null);
   const [analyzeLoading, setAnalyzeLoading] = useState(false);
@@ -277,6 +289,33 @@ export default function DuvriListPage() {
         // still works for new contractors.
         setEquipmentTypes(Object.keys(EQUIPMENT_LABELS));
       });
+  }, [aziendaId, apiFetch]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRiskMasterEquipmentLoading(true);
+    setRiskMasterEquipmentError(null);
+
+    loadRiskMasterEquipment(aziendaId, apiFetch)
+      .then((rows) => {
+        if (!cancelled) setRiskMasterEquipment(rows);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setRiskMasterEquipmentError(
+            err instanceof Error
+              ? err.message
+              : "Caricamento non riuscito."
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setRiskMasterEquipmentLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [aziendaId, apiFetch]);
 
   const toggleEquipment = (tipo: string) => {
@@ -708,6 +747,43 @@ export default function DuvriListPage() {
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2 rounded-md border border-input bg-muted/20 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <Label>Attrezzature del committente (Rischio Master)</Label>
+                <Badge variant="secondary">{riskMasterEquipment.length}</Badge>
+              </div>
+              {riskMasterEquipmentLoading ? (
+                <p className="text-xs text-muted-foreground">
+                  Caricamento attrezzature del Rischio Master...
+                </p>
+              ) : riskMasterEquipmentError ? (
+                <Callout role="alert" tone="danger" dense>
+                  Impossibile caricare le attrezzature del Rischio Master: {" "}
+                  {riskMasterEquipmentError}
+                </Callout>
+              ) : riskMasterEquipment.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Nessuna attrezzatura registrata nel Rischio Master.
+                </p>
+              ) : (
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {riskMasterEquipment.map((equipment) => (
+                    <div
+                      key={equipment.id}
+                      className="flex min-w-0 items-center justify-between gap-3 rounded border border-input bg-background px-2.5 py-2 text-xs"
+                    >
+                      <span className="truncate font-medium">
+                        {equipment.description}
+                      </span>
+                      <span className="shrink-0 text-muted-foreground">
+                        {equipment.environment}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
