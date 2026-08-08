@@ -24,9 +24,16 @@ export function normalizeCsvValues(values: string[]): string[] {
   return parseCsvDraft(values.join(","));
 }
 
-type ResizableTextarea = Pick<HTMLTextAreaElement, "scrollHeight" | "style">;
+type ResizableTextarea = Pick<
+  HTMLTextAreaElement,
+  "clientHeight" | "scrollHeight" | "style"
+>;
 
 export function expandTextareaToContent(textarea: ResizableTextarea): void {
   textarea.style.height = "auto";
   textarea.style.height = `${textarea.scrollHeight}px`;
+  const clippedPixels = textarea.scrollHeight - textarea.clientHeight;
+  if (clippedPixels > 0) {
+    textarea.style.height = `${textarea.scrollHeight + clippedPixels}px`;
+  }
 }

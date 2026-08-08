@@ -56,3 +56,28 @@ test("description expansion resets height before applying the full content heigh
 
   assert.deepEqual(heightWrites, ["auto", "176px"]);
 });
+
+test("description expansion includes the border-box overflow at mobile widths", () => {
+  const heightWrites = [];
+  let height = "80px";
+  const style = {};
+  Object.defineProperty(style, "height", {
+    get: () => height,
+    set: (value) => {
+      height = value;
+      heightWrites.push(value);
+    },
+  });
+
+  const textarea = {
+    scrollHeight: 156,
+    get clientHeight() {
+      return height === "156px" ? 154 : 156;
+    },
+    style,
+  };
+
+  expandTextareaToContent(textarea);
+
+  assert.deepEqual(heightWrites, ["auto", "156px", "158px"]);
+});
