@@ -110,6 +110,48 @@ def test_dvr_master_has_acme_name(generated_outputs):
     assert "ACME" in full_text.upper()
 
 
+def test_duvri_renders_current_equipment_without_legacy_donor_equipment(
+    generated_outputs,
+):
+    ok, path, _ = generated_outputs["DUVRI"]
+    assert ok and path
+    doc = Document(path)
+    text = _document_text(path)
+
+    company_equipment = _find_table(
+        doc, ("Attrezzatura del committente", "Ambiente")
+    )
+    assert company_equipment is not None
+    company_rows = [
+        tuple(cell.text.strip() for cell in row.cells)
+        for row in company_equipment.rows[1:]
+    ]
+    assert sorted(company_rows) == sorted([
+        ("Tornio parallelo CNC", "Officina meccanica"),
+        ("Fresatrice CNC", "Officina meccanica"),
+        ("Carrello elevatore", "Magazzino"),
+        ("Postazione VDT", "Uffici amministrativi e tecnici"),
+    ])
+
+    contractor_equipment = _find_table(doc, ("Tipo", "Descrizione"))
+    assert contractor_equipment is not None
+    assert [
+        tuple(cell.text.strip() for cell in row.cells)
+        for row in contractor_equipment.rows[1:]
+    ] == [("Pulizia ordinaria", "Lavasciuga pavimenti")]
+
+    for donor_text in (
+        "RECOM",
+        "Carrello elevatore (muletto)",
+        "Transpallet elettrico",
+        "Lavatrice ad uso operativo",
+        "Sabbiatrice",
+        "Forno per lavorazioni",
+    ):
+        assert donor_text not in text
+    assert text.count("Carrello elevatore") == 1
+
+
 def test_haccp_forms_produces_zip(generated_outputs):
     ok, path, _ = generated_outputs["HACCP_FORMS"]
     assert ok and path.endswith(".zip")

@@ -90,10 +90,10 @@ def build_fixture() -> dict:
         mk(id=uuid.uuid4(), nominativo="Valentina Rinaldi", mansione="Impiegata (gestante)", sesso="F", fascia_eta=">18", ruolo_datore_lavoro=False, ruolo_rspp=False, ruolo_rls=False, ruolo_primo_soccorso=False, ruolo_antincendio=False, ruolo_preposto=False),
     ]
     attrezzature = [
-        mk(descrizione="Tornio parallelo CNC", marcatura_ce=True, verifiche_periodiche=True),
-        mk(descrizione="Fresatrice CNC", marcatura_ce=True, verifiche_periodiche=True),
-        mk(descrizione="Carrello elevatore", marcatura_ce=True, verifiche_periodiche=True),
-        mk(descrizione="Postazione VDT", marcatura_ce=True, verifiche_periodiche=False),
+        mk(ambiente_id=officina.id, descrizione="Tornio parallelo CNC", marcatura_ce=True, verifiche_periodiche=True),
+        mk(ambiente_id=officina.id, descrizione="Fresatrice CNC", marcatura_ce=True, verifiche_periodiche=True),
+        mk(ambiente_id=magazzino.id, descrizione="Carrello elevatore", marcatura_ce=True, verifiche_periodiche=True),
+        mk(ambiente_id=ufficio.id, descrizione="Postazione VDT", marcatura_ce=True, verifiche_periodiche=False),
     ]
     sostanze = [
         mk(nome_prodotto="Olio da taglio", produttore="ChemCo", pittogrammi=["GHS07"], frasi_h=["H315"], frasi_p=["P264"], stato_miscela="Liquido"),
@@ -238,6 +238,10 @@ def build_fixture() -> dict:
         data_fine=date(2027, 4, 30),
         importo_appalto=42000.0,
         costi_sicurezza=850.0,
+        attrezzature_appaltatore=[{
+            "tipo": "Pulizia ordinaria",
+            "descrizione": "Lavasciuga pavimenti",
+        }],
         interferenze=[{"rischio": "Scivolamento", "misure": "Segnaletica", "dpi": ["scarpe antiscivolo"]}],
     )]
     pos_rows = [mk(

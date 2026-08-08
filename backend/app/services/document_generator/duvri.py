@@ -25,6 +25,65 @@ TEMPLATE = TEMPLATES_DIR / "DUVRI.docx"
 TIPO_DOC = "duvri"
 
 
+def _remove_body_paragraph_block(doc: Document, start_marker: str, end_marker: str) -> None:
+    """Remove a legacy body block delimited by stable text anchors."""
+    paragraphs = list(doc.paragraphs)
+    start = next(
+        (
+            index
+            for index, paragraph in enumerate(paragraphs)
+            if start_marker.casefold() in paragraph.text.casefold()
+        ),
+        None,
+    )
+    if start is None:
+        return
+    end = next(
+        (
+            index
+            for index, paragraph in enumerate(paragraphs[start:], start)
+            if end_marker.casefold() in paragraph.text.casefold()
+        ),
+        None,
+    )
+    if end is None:
+        return
+    for paragraph in paragraphs[start : end + 1]:
+        paragraph._p.getparent().remove(paragraph._p)
+
+
+def _remove_body_tables_with_anchor(doc: Document, marker: str) -> None:
+    """Remove legacy body tables that contain a known donor-only marker."""
+    marker = marker.casefold()
+    for table in list(doc.tables):
+        table_text = "\n".join(
+            cell.text for row in table.rows for cell in row.cells
+        ).casefold()
+        if marker in table_text:
+            table._element.getparent().remove(table._element)
+
+
+def _remove_legacy_donor_equipment(doc: Document) -> None:
+    """Drop template-only equipment examples without touching generic DUVRI text."""
+    _remove_body_paragraph_block(
+        doc,
+        "Attrezzature e mezzi messi a disposizione dal Committente",
+        "L’utilizzo di tali attrezzature avviene all’interno degli spazi aziendali condivisi",
+    )
+    _remove_body_paragraph_block(
+        doc,
+        "Movimentazione materiali – Muletto / Transpallet",
+        "In caso di utilizzo contemporaneo, le attività sono coordinate tra preposti",
+    )
+    _remove_body_paragraph_block(
+        doc,
+        "ATTIVITÀ DI SALDATURA – SVOLTA DA",
+        "È vietato depositare materiali combustibili nelle aree limitrofe durante le operazioni",
+    )
+    _remove_body_tables_with_anchor(doc, "Attività operative RECOM")
+    _remove_body_tables_with_anchor(doc, "Possibili rischi/interferenze per RECOM")
+
+
 class DuvriGenerator(BaseDocumentGenerator):
     async def generate(self) -> str:
         data = await self.load_data()
@@ -38,6 +97,7 @@ class DuvriGenerator(BaseDocumentGenerator):
             # Blank the sample dates left in the template body; the generator
             # supplies the real appalto/sottoscrizione dates below.
             scrub_body(doc, {"01.11.2025": "__/__/____", "15/01/2026": "__/__/____"})
+            _remove_legacy_donor_equipment(doc)
         else:
             doc = Document()
 
@@ -54,6 +114,36 @@ class DuvriGenerator(BaseDocumentGenerator):
         add_heading(doc, "Oggetto del documento", level=2)
         add_paragraph(doc, "Il presente DUVRI individua le misure di prevenzione e protezione necessarie ad eliminare o ridurre al minimo i rischi derivanti dalle interferenze tra le attività del committente e quelle dell'impresa appaltatrice.")
         add_paragraph(doc, "Ai sensi dell'art. 26 comma 3-bis del D.Lgs. 81/2008 (introdotto dal D.Lgs. 106/2009), l'obbligo di redazione del DUVRI non si applica ai servizi di natura intellettuale, alle mere forniture di materiali o attrezzature, nonché ai lavori o servizi la cui durata non superi i cinque uomini-giorno, salvo che comportino rischi derivanti da agenti cancerogeni, biologici, atmosfere esplosive o dai rischi particolari di cui all'Allegato XI.")
+
+        ambienti_by_id = {
+            str(ambiente.id): ambiente.nome
+            for ambiente in data["ambienti"]
+            if getattr(ambiente, "id", None) is not None
+        }
+        equipment_rows = []
+        for attrezzatura in data["attrezzature"]:
+            descrizione = (getattr(attrezzatura, "descrizione", None) or "").strip()
+            if not descrizione:
+                continue
+            ambiente = ambienti_by_id.get(str(getattr(attrezzatura, "ambiente_id", None)))
+            equipment_rows.append([
+                descrizione,
+                ambiente or "Ambiente non disponibile",
+            ])
+
+        add_heading(doc, "Attrezzature del committente", level=2)
+        if equipment_rows:
+            add_data_table(
+                doc,
+                ["Attrezzatura del committente", "Ambiente"],
+                equipment_rows,
+            )
+        else:
+            add_paragraph(
+                doc,
+                "Nessuna attrezzatura registrata nel Rischio Master.",
+                italic=True,
+            )
 
         if not duvri_rows:
             add_paragraph(doc, "Non risultano appalti attivi al momento della valutazione.", italic=True)
