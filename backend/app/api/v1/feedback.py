@@ -7,17 +7,20 @@ PATCH /feedback/{id}    — admin updates status
 Every successful create is mirrored to a GitHub issue (best-effort) so
 the team triages from the repo. Status changes flow back: `risolto` and
 `non_fara` close the issue; reopening a triaged item reopens it.
+
+A repeated create inside `DUPLICATE_WINDOW` answers with the row already
+stored, so one report never becomes two rows or two public issues.
 """
 
 import logging
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -40,6 +43,11 @@ ROUTE_MAX = 512
 USER_AGENT_MAX = 512
 
 _WEB_URL = re.compile(r"^https?://", re.IGNORECASE)
+
+# A submission retried after a client-side timeout, a second tab, or a
+# double tap is the same report — not a second one. Without this window it
+# also became a second issue in the public repo.
+DUPLICATE_WINDOW = timedelta(minutes=5)
 
 
 class FeedbackCreate(BaseModel):
@@ -119,6 +127,30 @@ async def create_feedback(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> UserFeedback:
+    # Same author, same type, same words, inside the window: a retry, not a
+    # second report. Answering with the row we already have keeps the
+    # triage queue clean and — because mirroring only runs on a fresh row —
+    # stops one report becoming several issues in the public repo. The
+    # cutoff is computed by the database so it shares a clock with the
+    # `now()` server default that wrote `created_at`.
+    duplicate = (
+        await db.execute(
+            select(UserFeedback)
+            .where(
+                UserFeedback.organization_id == user.organization_id,
+                UserFeedback.user_id == user.id,
+                UserFeedback.type == body.type,
+                UserFeedback.description == body.description,
+                UserFeedback.created_at >= func.now() - DUPLICATE_WINDOW,
+            )
+            .order_by(desc(UserFeedback.created_at), desc(UserFeedback.id))
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if duplicate is not None:
+        log.info("feedback: repeat submission by %s, returning %s", user.id, duplicate.id)
+        return duplicate
+
     fb = UserFeedback(
         organization_id=user.organization_id,
         user_id=user.id,

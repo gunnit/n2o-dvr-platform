@@ -255,6 +255,75 @@ def test_non_web_page_url_is_dropped_not_stored(silent_mirror):
     _with_tenants(body)
 
 
+# --- repeat submissions ----------------------------------------------------
+
+
+def test_repeat_submission_returns_the_stored_row_and_mirrors_once(silent_mirror):
+    """A retried send is one report: one row, one issue in the public repo."""
+
+    async def body(client, tenant):
+        payload = {
+            "type": "bug",
+            "description": "Nella tipologia contrattuale manca: socio lavoratore",
+            "route": "/survey/step-2",
+        }
+        first = await client.post("/api/v1/feedback", json=payload, headers=tenant.headers)
+        second = await client.post("/api/v1/feedback", json=payload, headers=tenant.headers)
+
+        assert first.status_code == 201
+        assert second.status_code == 201
+        assert second.json()["id"] == first.json()["id"]
+
+        listed = await client.get("/api/v1/feedback", headers=tenant.headers)
+        assert len(listed.json()) == 1
+        assert len(silent_mirror["create"]) == 1
+
+    _with_tenants(body)
+
+
+def test_a_different_report_is_never_folded_into_the_previous_one(silent_mirror):
+    """Only an identical resend is a duplicate — two real reports stay two."""
+
+    async def body(client, tenant):
+        await client.post(
+            "/api/v1/feedback",
+            json={"type": "bug", "description": "Primo problema"},
+            headers=tenant.headers,
+        )
+        await client.post(
+            "/api/v1/feedback",
+            json={"type": "bug", "description": "Secondo problema"},
+            headers=tenant.headers,
+        )
+        # Same words, different type: still a separate report.
+        await client.post(
+            "/api/v1/feedback",
+            json={"type": "idea", "description": "Primo problema"},
+            headers=tenant.headers,
+        )
+
+        listed = await client.get("/api/v1/feedback", headers=tenant.headers)
+        assert len(listed.json()) == 3
+        assert len(silent_mirror["create"]) == 3
+
+    _with_tenants(body)
+
+
+def test_two_tenants_reporting_the_same_words_both_get_a_row(silent_mirror):
+    """The window is per author, so it must not swallow another org's report."""
+
+    async def body(client, mine, theirs):
+        payload = {"type": "bug", "description": "Il PDF esce senza logo"}
+        await client.post("/api/v1/feedback", json=payload, headers=mine.headers)
+        await client.post("/api/v1/feedback", json=payload, headers=theirs.headers)
+
+        assert len((await client.get("/api/v1/feedback", headers=mine.headers)).json()) == 1
+        assert len((await client.get("/api/v1/feedback", headers=theirs.headers)).json()) == 1
+        assert len(silent_mirror["create"]) == 2
+
+    _with_tenants(body, count=2)
+
+
 # --- status transitions drive the mirror -----------------------------------
 
 
