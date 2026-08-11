@@ -10,12 +10,13 @@ the team triages from the repo. Status changes flow back: `risolto` and
 """
 
 import logging
+import re
 import uuid
 from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,13 +33,46 @@ log = logging.getLogger(__name__)
 FeedbackType = Literal["bug", "idea", "observation"]
 FeedbackStatus = Literal["nuovo", "in_revisione", "risolto", "non_fara"]
 
+# Bounds for the context the browser attaches by itself. They cap what we
+# store; they never reject a submission — see FeedbackCreate.
+PAGE_URL_MAX = 2048
+ROUTE_MAX = 512
+USER_AGENT_MAX = 512
+
+_WEB_URL = re.compile(r"^https?://", re.IGNORECASE)
+
 
 class FeedbackCreate(BaseModel):
     type: FeedbackType
     description: str = Field(min_length=1, max_length=5000)
-    page_url: str | None = Field(default=None, max_length=2048)
-    route: str | None = Field(default=None, max_length=512)
-    user_agent: str | None = Field(default=None, max_length=512)
+    page_url: str | None = None
+    route: str | None = None
+    user_agent: str | None = None
+
+    # `description` is what the operator wrote, so an oversized one is a
+    # real 422. The three fields below are not: the browser fills them in
+    # and the operator never sees them. A 2100-character URL used to fail
+    # the whole call, and the report the operator typed was lost with it.
+    # Clamp instead, and keep the request.
+    @field_validator("route")
+    @classmethod
+    def _clamp_route(cls, value: str | None) -> str | None:
+        return None if value is None else value[:ROUTE_MAX]
+
+    @field_validator("user_agent")
+    @classmethod
+    def _clamp_user_agent(cls, value: str | None) -> str | None:
+        return None if value is None else value[:USER_AGENT_MAX]
+
+    @field_validator("page_url")
+    @classmethod
+    def _web_url_only(cls, value: str | None) -> str | None:
+        # The triage table renders this as a clickable link, so anything
+        # that is not a plain web URL is dropped rather than handed to an
+        # admin as something to click.
+        if value is None or not _WEB_URL.match(value):
+            return None
+        return value[:PAGE_URL_MAX]
 
 
 class FeedbackUpdate(BaseModel):

@@ -208,6 +208,53 @@ def test_patch_cannot_reach_another_organizations_row(silent_mirror):
     _with_tenants(body, count=2)
 
 
+# --- browser-supplied context ---------------------------------------------
+
+
+def test_oversized_browser_context_never_costs_the_operator_the_report(silent_mirror):
+    """The operator did not type the URL or the user agent — clamp, don't 422."""
+
+    async def body(client, tenant):
+        res = await client.post(
+            "/api/v1/feedback",
+            json={
+                "type": "bug",
+                "description": "Il pulsante Salva non risponde",
+                "page_url": "https://dvr-sicurezza.it/survey?q=" + "x" * 3000,
+                "route": "/survey/" + "y" * 900,
+                "user_agent": "Mozilla/5.0 " + "z" * 900,
+            },
+            headers=tenant.headers,
+        )
+        assert res.status_code == 201, res.text
+        row = res.json()
+        assert row["description"] == "Il pulsante Salva non risponde"
+        assert len(row["page_url"]) == 2048
+        assert len(row["route"]) == 512
+        assert len(row["user_agent"]) == 512
+
+    _with_tenants(body)
+
+
+def test_non_web_page_url_is_dropped_not_stored(silent_mirror):
+    """The triage table turns this into a link an admin is invited to click."""
+
+    async def body(client, tenant):
+        res = await client.post(
+            "/api/v1/feedback",
+            json={
+                "type": "bug",
+                "description": "Segnalazione con URL ostile",
+                "page_url": "javascript:alert(document.cookie)",
+            },
+            headers=tenant.headers,
+        )
+        assert res.status_code == 201
+        assert res.json()["page_url"] is None
+
+    _with_tenants(body)
+
+
 # --- status transitions drive the mirror -----------------------------------
 
 
