@@ -19,7 +19,7 @@ docs/context/REFERENCE_DATA.md section 5.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Iterable, Literal
 
 VDT_EXPOSURE_THRESHOLD_HOURS: float = 20.0
 
@@ -40,6 +40,27 @@ def classify_exposure(hours_per_week: float) -> ExposureLabel:
     if hours_per_week < 0:
         raise ValueError(f"hours_per_week must be >= 0, got {hours_per_week}")
     return "ESPOSTO" if hours_per_week >= VDT_EXPOSURE_THRESHOLD_HOURS else "NON_ESPOSTO"
+
+
+def total_weekly_hours(hours: Iterable[float | None]) -> float:
+    """Sum weekly VDT hours across a person's postazioni.
+
+    When one worker uses multiple devices/workstations, exposure is judged
+    on the TOTAL weekly hours, not per postazione (client feedback 2026-08;
+    consistent with art. 173 which classifies the *lavoratore*, not the
+    workstation). ``None`` entries count as 0 so legacy rows can't crash
+    the sum.
+    """
+    return sum(float(h or 0) for h in hours)
+
+
+def classify_total_exposure(hours: Iterable[float | None]) -> ExposureLabel:
+    """Classify a person's exposure from the SUM of hours across postazioni.
+
+    E.g. two postazioni at 12 h + 10 h => 22 h total => ESPOSTO, even though
+    neither workstation alone crosses the 20 h threshold.
+    """
+    return classify_exposure(total_weekly_hours(hours))
 
 
 def requires_health_surveillance(exposure: str) -> bool:

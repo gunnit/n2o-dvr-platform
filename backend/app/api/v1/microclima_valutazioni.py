@@ -1,7 +1,8 @@
-"""Microclima CRUD (UNI EN ISO 7730 / 7933) — one row per (azienda, ambiente,
-tipo_ambiente). Mirrors the MMC/VDT shape: list / get / create / patch / delete
-scoped by azienda. The 6 thermal inputs are stored verbatim so the doc
-generator can re-run pythermalcomfort at render time.
+"""Microclima CRUD (UNI EN ISO 7730 / 7933 / 11079) — one row per (azienda,
+ambiente, tipo_ambiente). Mirrors the MMC/VDT shape: list / get / create /
+patch / delete scoped by azienda, plus a stateless IREQ preview for the
+severe-cold flow. The 6 thermal inputs are stored verbatim so the doc
+generator can re-run the calculators at render time.
 """
 
 from __future__ import annotations
@@ -20,10 +21,13 @@ from app.models.ambiente import Ambiente
 from app.models.azienda import Azienda
 from app.models.microclima_valutazione import MicroclimaValutazione
 from app.schemas.microclima import (
+    IreqCalcRequest,
+    IreqCalcResponse,
     MicroclimaCreate,
     MicroclimaResponse,
     MicroclimaUpdate,
 )
+from app.services.microclima_calculator import calculate_ireq
 
 router = APIRouter(
     prefix="/aziende/{azienda_id}/microclima-valutazioni", tags=["microclima"]
@@ -96,6 +100,48 @@ async def create_microclima(
     await db.commit()
     await db.refresh(row)
     return row
+
+
+@router.post(
+    "/calc/ireq",
+    response_model=IreqCalcResponse,
+    # Persists nothing, but declaring the capability keeps the "unguarded
+    # writes" review list pinned; all three roles hold assessments:write, so
+    # nobody is narrowed (see test_feature_map.py).
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
+async def calculate_ireq_preview(
+    azienda_id: uuid.UUID,
+    body: IreqCalcRequest,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+) -> IreqCalcResponse:
+    """Stateless severe-cold (IREQ, UNI EN ISO 11079) live calculation.
+
+    Mirrors POST /calculate/microclima/{pmv,phs} for the freddo evaluation
+    type, but is hosted on the microclima router so the whole cold-stress
+    surface stays inside this module. It creates no rows — the frontend
+    calls it debounced while the operator edits, then persists the chosen
+    scenario via POST "" with tipo_ambiente="severo_freddo".
+
+    Classification (see `calculate_ireq` for the cited thresholds):
+      - ACCETTABILE: Icl worn >= IREQneutral (thermal balance, whole shift)
+      - LIMITE: IREQminimal <= Icl < IREQneutral (progressive slight cooling)
+      - CRITICO: Icl < IREQminimal — exposure limited to DLE minutes
+    Wind-chill frostbite bands (Annex D) escalate the level when stricter.
+    """
+    await _get_azienda_or_404(azienda_id, org_id, db)
+    return IreqCalcResponse(
+        **calculate_ireq(
+            air_temp=body.air_temp,
+            mean_radiant_temp=body.mean_radiant_temp,
+            air_velocity=body.air_velocity,
+            humidity=body.humidity,
+            metabolic_rate=body.metabolic_rate,
+            clothing_insulation=body.clothing_insulation,
+            duration_min=body.duration_min,
+        )
+    )
 
 
 @router.get("/{valutazione_id}", response_model=MicroclimaResponse)

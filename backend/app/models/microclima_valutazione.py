@@ -1,4 +1,5 @@
-"""Microclima assessment — PMV/PPD (UNI EN ISO 7730) + PHS (UNI EN ISO 7933).
+"""Microclima assessment — PMV/PPD (UNI EN ISO 7730) + PHS (UNI EN ISO 7933)
++ IREQ (UNI EN ISO 11079, severe cold).
 
 One row per ambiente.
 """
@@ -37,6 +38,11 @@ class MicroclimaValutazione(Base):
     phs_sw_tot: Mapped[float | None] = mapped_column(Numeric)  # sudorazione totale
     phs_t_re: Mapped[float | None] = mapped_column(Numeric)  # temperatura rettale
     dlim_loss50: Mapped[float | None] = mapped_column(Numeric)  # durata limite esposizione
+    # IREQ (severe cold, UNI EN ISO 11079) outputs
+    ireq_neutral: Mapped[float | None] = mapped_column(Numeric)  # isolamento richiesto (neutro) [clo]
+    ireq_minimal: Mapped[float | None] = mapped_column(Numeric)  # isolamento richiesto (minimo) [clo]
+    t_wind_chill: Mapped[float | None] = mapped_column(Numeric)  # temperatura wind chill t_wc [°C]
+    dle_freddo: Mapped[float | None] = mapped_column(Numeric)  # durata limite esposizione al freddo [min]
     livello_rischio: Mapped[str | None] = mapped_column(String)
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

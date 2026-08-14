@@ -10,7 +10,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestError, NotFoundError
@@ -23,14 +23,22 @@ from app.data.dlgs_151_2001 import (
 from app.db.session import get_db
 from app.dependencies import get_current_org, require_capability
 from app.models.azienda import Azienda
-from app.models.gestanti_valutazione import GestantiValutazione
+from app.models.gestanti_valutazione import (
+    GestantiMansioneValutazione,
+    GestantiValutazione,
+)
 from app.models.persona import Persona
 from app.schemas.gestanti import (
+    CatalogRisk,
     CrossReferenceRequest,
     CrossReferenceResponse,
     DecisionRequest,
     DecisionResponse,
     GestantiCreate,
+    GestantiMansioneOverviewItem,
+    GestantiMansioneResponse,
+    GestantiMansioneUpsert,
+    GestantiMansioniOverview,
     GestantiResponse,
     GestantiUpdate,
     RiskMatch,
@@ -83,6 +91,69 @@ def _suggest_alternative_mansione(
         if not has_any_incompatible_risk(mans):
             return mans
     return None
+
+
+def _normalize_mansione(mansione: str | None) -> str:
+    """Collapse whitespace so 'Cuoco ' and 'cuoco' upsert the same row."""
+    return " ".join((mansione or "").strip().split())
+
+
+def _catalog_risks_for(mansione: str) -> list[CatalogRisk]:
+    """Prefill: catalog matches for a mansione as CatalogRisk items."""
+    return [
+        CatalogRisk(
+            risk_key=key, allegato=info["allegato"], descrizione=info["descrizione"]
+        )
+        for key, info in find_matches_for_mansione(mansione)
+    ]
+
+
+def build_mansioni_overview(
+    persone: list[Any],
+    saved: list[Any],
+) -> list[GestantiMansioneOverviewItem]:
+    """Merge distinct mansioni from the organigramma with saved valutazioni.
+
+    Pure function (no DB) so the preventive-assessment prefill logic is unit
+    testable. ``persone`` are objects with ``.mansione``/``.sesso``; ``saved``
+    are GestantiMansioneValutazione rows (or anything model_validate accepts).
+
+    Every distinct mansione among the persone appears once — even with ZERO
+    pregnant workers, per art. 11 D.Lgs. 151/2001 the valutazione must exist
+    preventively. Saved valutazioni whose mansione no longer occurs among the
+    persone are still listed (the assessment outlives staff turnover).
+    """
+    by_key: dict[str, GestantiMansioneOverviewItem] = {}
+
+    for p in persone:
+        mans = _normalize_mansione(getattr(p, "mansione", None))
+        if not mans:
+            continue
+        key = mans.lower()
+        item = by_key.get(key)
+        if item is None:
+            item = GestantiMansioneOverviewItem(
+                mansione=mans, suggested_risks=_catalog_risks_for(mans)
+            )
+            by_key[key] = item
+        item.num_persone += 1
+        if (getattr(p, "sesso", None) or "").strip().upper() == "F":
+            item.num_lavoratrici += 1
+
+    for row in saved:
+        mans = _normalize_mansione(getattr(row, "mansione", None))
+        if not mans:
+            continue
+        key = mans.lower()
+        item = by_key.get(key)
+        if item is None:
+            item = GestantiMansioneOverviewItem(
+                mansione=mans, suggested_risks=_catalog_risks_for(mans)
+            )
+            by_key[key] = item
+        item.valutazione = GestantiMansioneResponse.model_validate(row)
+
+    return sorted(by_key.values(), key=lambda it: it.mansione.lower())
 
 
 def _index_existing_decisions(
@@ -269,6 +340,131 @@ async def record_decision(
         valutazione_id=val.id,
         persisted_decisions=list(val.rischi_vietati or []),
     )
+
+
+# ---------------------------------------------------------------------------
+# Preventive per-mansione assessment (art. 11 D.Lgs. 151/2001).
+#
+# The valutazione must exist for every mansione BEFORE any pregnancy is
+# notified — no persona attached. NOTE: these routes MUST stay registered
+# before the ``/gestanti/{valutazione_id}`` routes below, otherwise the
+# literal segment "mansioni" is captured by the UUID path param and 422s.
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/aziende/{azienda_id}/gestanti/mansioni",
+    response_model=GestantiMansioniOverview,
+)
+async def list_gestanti_mansioni(
+    azienda_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+) -> GestantiMansioniOverview:
+    """Overview of the preventive per-mansione assessment.
+
+    Prefilled from the azienda's organigramma: every distinct mansione among
+    the persone appears, each with the D.Lgs. 151/2001 catalog risks already
+    matched (the operator reviews, never re-enters). Saved valutazioni are
+    merged in; ones whose mansione no longer occurs among the persone are
+    still listed.
+    """
+    await _get_azienda(azienda_id, org_id, db)
+
+    result = await db.execute(
+        select(Persona).where(Persona.azienda_id == azienda_id)
+    )
+    persone = list(result.scalars().all())
+
+    result = await db.execute(
+        select(GestantiMansioneValutazione).where(
+            GestantiMansioneValutazione.azienda_id == azienda_id
+        )
+    )
+    saved = list(result.scalars().all())
+
+    return GestantiMansioniOverview(items=build_mansioni_overview(persone, saved))
+
+
+@router.put(
+    "/aziende/{azienda_id}/gestanti/mansioni",
+    response_model=GestantiMansioneResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
+async def upsert_gestanti_mansione(
+    azienda_id: uuid.UUID,
+    body: GestantiMansioneUpsert,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+) -> GestantiMansioneValutazione:
+    """Create or update the objective valutazione for one mansione.
+
+    Requires NO worker: the assessment is preventive (art. 11 D.Lgs.
+    151/2001). Upsert key is (azienda_id, lower(mansione)). When ``rischi``
+    is omitted (null) the server prefills the catalog matches for the
+    mansione; an explicit empty list means "nessun rischio".
+    """
+    await _get_azienda(azienda_id, org_id, db)
+
+    mansione = body.mansione  # already normalized by the schema validator
+    if body.rischi is None:
+        rischi_payload: list[dict[str, Any]] = [
+            r.model_dump() for r in _catalog_risks_for(mansione)
+        ]
+    else:
+        rischi_payload = [r.model_dump() for r in body.rischi]
+
+    result = await db.execute(
+        select(GestantiMansioneValutazione).where(
+            GestantiMansioneValutazione.azienda_id == azienda_id,
+            func.lower(GestantiMansioneValutazione.mansione) == mansione.lower(),
+        )
+    )
+    row = result.scalar_one_or_none()
+    if row:
+        row.mansione = mansione
+        row.esito = body.esito
+        row.rischi = rischi_payload
+        row.misure = body.misure
+        row.note = body.note
+    else:
+        row = GestantiMansioneValutazione(
+            azienda_id=azienda_id,
+            mansione=mansione,
+            esito=body.esito,
+            rischi=rischi_payload,
+            misure=body.misure,
+            note=body.note,
+        )
+        db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+
+@router.delete(
+    "/aziende/{azienda_id}/gestanti/mansioni/{mansione_valutazione_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
+async def delete_gestanti_mansione(
+    azienda_id: uuid.UUID,
+    mansione_valutazione_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await _get_azienda(azienda_id, org_id, db)
+    result = await db.execute(
+        select(GestantiMansioneValutazione).where(
+            GestantiMansioneValutazione.id == mansione_valutazione_id,
+            GestantiMansioneValutazione.azienda_id == azienda_id,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if not row:
+        raise NotFoundError("Valutazione mansione non trovata")
+    await db.delete(row)
+    await db.commit()
 
 
 # ---------------------------------------------------------------------------

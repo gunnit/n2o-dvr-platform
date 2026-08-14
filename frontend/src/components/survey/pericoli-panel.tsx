@@ -46,7 +46,6 @@ import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/use-api";
 import { RISK_CHIP, livelloFor } from "@/lib/ui/risk";
 import { cn } from "@/lib/utils";
-import { MeasuresPanel } from "@/components/ai/measures-panel";
 import type {
   LivelloRischio,
   PericoloLibreria,
@@ -87,21 +86,134 @@ interface PericoliPanelProps {
    * agrees with what's actually inside.
    */
   onSummaryChange?: (rischioId: string, summary: PericoliSummary) => void;
-  /**
-   * Persists the rischio-level `misure_prevenzione` text. Called by the
-   * AI MeasuresPanel after the operator accepts/edits suggestions. The
-   * parent should route this through its own batch-save pipeline so we
-   * don't bypass scheduleAmbienteSave.
-   */
-  onSaveMisure?: (rischioId: string, combinedText: string) => Promise<void>;
 }
 
 // Bulk-flag label for "come da valutazione allegata" — see
 // bulkSetReferenceAttached below (feedback #a6f06283).
 const DELEGATED_REFERENCE_LABEL = "Come da valutazione allegata";
 
+// ---------------------------------------------------------------------------
+// Special worker-category rows (client feedback 2026-08-13).
+//
+// The catalog rows for lavoratrici gestanti (OR-03), lavoratori minori
+// (OR-04) and lavoratori stranieri (OR-05) used to ship a "Vedi normativa
+// ..." marker in valutazione_riferimento, which blocked the P/D pickers and
+// printed the marker verbatim in the DVR. New rules:
+//   - gestanti:  defer to the dedicated allegato ("come da documento
+//     allegato") when the azienda has a Valutazione Rischio Gestanti,
+//     otherwise the operator scores the indice (P/D, I = 2D + P) like any
+//     other row — with a toggle to switch between the two modes;
+//   - minori:    same rule as gestanti, but no dedicated minori assessment
+//     module exists yet, so the indice picker is the only mode;
+//   - stranieri: indice picker only.
+// Legacy markers found on load are migrated in place (and saved) so
+// existing aziende stop printing "Vedi normativa" in the DVR.
+// ---------------------------------------------------------------------------
+type SpecialKind = "gestanti" | "minori" | "stranieri";
+
+const SPECIAL_KIND_BY_CODE: Record<string, SpecialKind> = {
+  "OR-03": "gestanti",
+  "OR-04": "minori",
+  "OR-05": "stranieri",
+};
+
+const LEGACY_MARKER_KIND: Record<string, SpecialKind> = {
+  "Vedi normativa specifica (D.Lgs. 151/2001)": "gestanti",
+  "Vedi normativa specifica (D.Lgs. 345/99)": "minori",
+  "Verifica linguistica/formativa a cura del preposto": "stranieri",
+};
+
+// Must match GESTANTI_ALLEGATO_RIFERIMENTO in
+// backend/app/services/document_generator/dvr_master.py so rows saved here
+// and legacy rows the generator normalizes read identically in the DVR.
+const GESTANTI_ALLEGATO_RIFERIMENTO =
+  "Come da documento allegato: Valutazione Rischio Gestanti";
+
+// Only the gestanti rows of this categoria can defer to an allegato, so the
+// gestanti-presence lookup is skipped for every other categoria.
+const CATEGORIA_ORGANIZZAZIONE = "Organizzazione del Lavoro";
+
+// Prefill for the indice mode — same starter score the other Organizzazione
+// del Lavoro catalog rows carry; the operator corrects it.
+const SPECIAL_DEFAULT_P = 2;
+const SPECIAL_DEFAULT_D = 2;
+
+function specialKindOf(
+  p: PericoloValutazione,
+  codeById: ReadonlyMap<string, string>,
+): SpecialKind | null {
+  if (p.pericolo_libreria_id) {
+    const code = codeById.get(p.pericolo_libreria_id);
+    if (code && SPECIAL_KIND_BY_CODE[code]) return SPECIAL_KIND_BY_CODE[code];
+  }
+  const rif = p.valutazione_riferimento?.trim();
+  if (rif && LEGACY_MARKER_KIND[rif]) return LEGACY_MARKER_KIND[rif];
+  return null;
+}
+
 function calcIndice(p: number, d: number): number {
   return 2 * d + p;
+}
+
+/**
+ * Bring special worker-category rows to their canonical state:
+ * gestanti + allegato presente → delegated to the allegato; every other
+ * case → scored P/D (prefilled, operator corrects). Rows whose state the
+ * operator already owns (custom riferimento, or an explicit P/D score with
+ * no legacy marker) are left untouched.
+ */
+function normalizeSpecialRows(
+  rows: PericoloValutazione[],
+  codeById: ReadonlyMap<string, string>,
+  hasGestantiAllegato: boolean,
+): { rows: PericoloValutazione[]; changed: boolean } {
+  let changed = false;
+  const next = rows.map((row) => {
+    const kind = specialKindOf(row, codeById);
+    if (!kind) return row;
+    const rif = row.valutazione_riferimento?.trim() ?? null;
+    const managed =
+      (rif != null && rif in LEGACY_MARKER_KIND) ||
+      rif === GESTANTI_ALLEGATO_RIFERIMENTO ||
+      (rif == null && row.probabilita_p == null && row.danno_d == null);
+    if (!managed) return row;
+
+    if (kind === "gestanti" && hasGestantiAllegato) {
+      if (
+        rif === GESTANTI_ALLEGATO_RIFERIMENTO &&
+        row.probabilita_p == null &&
+        row.danno_d == null
+      ) {
+        return row;
+      }
+      changed = true;
+      return {
+        ...row,
+        valutazione_riferimento: GESTANTI_ALLEGATO_RIFERIMENTO,
+        probabilita_p: null,
+        danno_d: null,
+        indice_i: null,
+        livello_rischio: null,
+      };
+    }
+
+    if (rif == null && row.probabilita_p != null && row.danno_d != null) {
+      return row;
+    }
+    changed = true;
+    const p = row.probabilita_p ?? SPECIAL_DEFAULT_P;
+    const d = row.danno_d ?? SPECIAL_DEFAULT_D;
+    const indice = calcIndice(p, d);
+    return {
+      ...row,
+      valutazione_riferimento: null,
+      probabilita_p: p,
+      danno_d: d,
+      indice_i: indice,
+      livello_rischio: getLivello(indice),
+    };
+  });
+  return { rows: changed ? next : rows, changed };
 }
 
 const getLivello = livelloFor;
@@ -113,7 +225,6 @@ export function PericoliPanel({
   valutazione,
   categoriaLong,
   onSummaryChange,
-  onSaveMisure,
 }: PericoliPanelProps) {
   const { apiFetch } = useApi();
   const [expanded, setExpanded] = useState(false);
@@ -134,91 +245,14 @@ export function PericoliPanel({
   // would otherwise render the "Nessun pericolo applicabile" copy and the
   // operator collapses/re-expands to retry. Feedback #e202bee9 (2026-05-12).
   const [loadError, setLoadError] = useState<string | null>(null);
+  // True when the azienda has at least one Valutazione Rischio Gestanti —
+  // the gestanti special row (OR-03) can then defer to the allegato instead
+  // of carrying its own P/D score. Fetched together with the pericoli, and
+  // only for the Organizzazione del Lavoro categoria.
+  const [hasGestantiAllegato, setHasGestantiAllegato] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const rischioId = valutazione.id;
-
-  // Lazy-load on first expand (avoids fetching for every applicable
-  // categoria up front when the operator only reviews a few).
-  const loadInitial = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    // Retry the reads a few times before surfacing an error. The API runs on
-    // a basic-256mb Render instance that cold-starts after idle, so the first
-    // GET when the operator opens a risk detail intermittently fails and a
-    // manual collapse/re-expand "magically fixes it". Auto-retry with backoff
-    // removes that manual workaround. Feedback #68 (2026-06-08).
-    const fetchWithRetry = async <T,>(url: string, attempts = 3): Promise<T> => {
-      let lastErr: unknown;
-      for (let i = 0; i < attempts; i++) {
-        try {
-          return await apiFetch<T>(url);
-        } catch (err) {
-          lastErr = err;
-          if (i < attempts - 1) {
-            await new Promise((r) => setTimeout(r, 400 * 2 ** i));
-          }
-        }
-      }
-      throw lastErr;
-    };
-    try {
-      const [sugg, existing] = await Promise.all([
-        fetchWithRetry<PericoloSuggestionResponse>(
-          `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/pericoli-suggeriti?categoria=${encodeURIComponent(categoriaLong)}`,
-        ),
-        fetchWithRetry<PericoloValutazione[]>(
-          `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/rischi/${rischioId}/pericoli`,
-        ),
-      ]);
-      setSuggestions(sugg.items);
-
-      if (existing.length > 0) {
-        setPericoli(existing);
-        return;
-      }
-
-      // No children yet — auto-seed from suggestions. Only rows whose
-      // ambiente actually matches OR whose equipment-keyword fired are
-      // auto-applied; the rest become available via "Aggiungi suggeriti
-      // disponibili" if the operator wants to opt in later.
-      const seedItems = sugg.items.map((s, idx) => ({
-        pericolo_libreria_id: s.pericolo.id,
-        source: "catalog" as const,
-        pericolo: s.pericolo.pericolo,
-        condizioni_esposizione: s.pericolo.condizioni_esposizione,
-        rischio: s.pericolo.rischio,
-        misure_prevenzione: s.pericolo.misure_prevenzione,
-        probabilita_p: s.pericolo.p_default,
-        danno_d: s.pericolo.d_default,
-        valutazione_riferimento: s.pericolo.valutazione_riferimento,
-        applicabile: true,
-        ordine: idx,
-      }));
-      if (seedItems.length === 0) return;
-      const saved = await apiFetch<PericoloValutazione[]>(
-        `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/rischi/${rischioId}/pericoli/batch`,
-        { method: "POST", body: JSON.stringify({ items: seedItems }) },
-      );
-      setPericoli(saved);
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Errore caricamento pericoli";
-      setLoadError(msg);
-      toast.error(msg);
-    } finally {
-      setLoading(false);
-      setLoadedOnce(true);
-    }
-  }, [apiFetch, aziendaId, ambienteId, rischioId, categoriaLong]);
-
-  useEffect(() => {
-    if (expanded && pericoli.length === 0 && !loading) {
-      void loadInitial();
-    }
-    // We intentionally only run when expanded flips.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expanded]);
 
   // Debounced save of the current pericoli list to /pericoli/batch. Replaces
   // the whole categoria's children — the API handles deletes for ids we omit.
@@ -261,6 +295,126 @@ export function PericoliPanel({
     },
     [apiFetch, aziendaId, ambienteId, rischioId],
   );
+
+  // Lazy-load on first expand (avoids fetching for every applicable
+  // categoria up front when the operator only reviews a few).
+  const loadInitial = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    // Retry the reads a few times before surfacing an error. The API runs on
+    // a basic-256mb Render instance that cold-starts after idle, so the first
+    // GET when the operator opens a risk detail intermittently fails and a
+    // manual collapse/re-expand "magically fixes it". Auto-retry with backoff
+    // removes that manual workaround. Feedback #68 (2026-06-08).
+    const fetchWithRetry = async <T,>(url: string, attempts = 3): Promise<T> => {
+      let lastErr: unknown;
+      for (let i = 0; i < attempts; i++) {
+        try {
+          return await apiFetch<T>(url);
+        } catch (err) {
+          lastErr = err;
+          if (i < attempts - 1) {
+            await new Promise((r) => setTimeout(r, 400 * 2 ** i));
+          }
+        }
+      }
+      throw lastErr;
+    };
+    try {
+      const [sugg, existing, gestantiRows] = await Promise.all([
+        fetchWithRetry<PericoloSuggestionResponse>(
+          `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/pericoli-suggeriti?categoria=${encodeURIComponent(categoriaLong)}`,
+        ),
+        fetchWithRetry<PericoloValutazione[]>(
+          `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/rischi/${rischioId}/pericoli`,
+        ),
+        // Gestanti-allegato presence drives the OR-03 row mode; a lookup
+        // failure just means "no allegato", never a blocked panel.
+        categoriaLong === CATEGORIA_ORGANIZZAZIONE
+          ? apiFetch<unknown[]>(`/api/v1/aziende/${aziendaId}/gestanti`).catch(
+              () => [] as unknown[],
+            )
+          : Promise.resolve([] as unknown[]),
+      ]);
+      setSuggestions(sugg.items);
+      const gestantiAllegato = gestantiRows.length > 0;
+      setHasGestantiAllegato(gestantiAllegato);
+      const codeById = new Map(
+        sugg.items.map((s) => [s.pericolo.id, s.pericolo.code]),
+      );
+
+      if (existing.length > 0) {
+        // Migrate legacy "Vedi normativa ..." markers in place (and persist
+        // the migration) — see normalizeSpecialRows.
+        const normalized = normalizeSpecialRows(
+          existing,
+          codeById,
+          gestantiAllegato,
+        );
+        setPericoli(normalized.rows);
+        if (normalized.changed) scheduleSave(normalized.rows);
+        return;
+      }
+
+      // No children yet — auto-seed from suggestions. Only rows whose
+      // ambiente actually matches OR whose equipment-keyword fired are
+      // auto-applied; the rest become available via "Aggiungi suggeriti
+      // disponibili" if the operator wants to opt in later.
+      // The gestanti row (OR-03) seeds in "come da documento allegato"
+      // mode when the azienda already has a Valutazione Rischio Gestanti;
+      // the toggle in the row lets the operator switch to an indice score.
+      const seedItems = sugg.items.map((s, idx) => {
+        const gestantiDelegata =
+          gestantiAllegato &&
+          SPECIAL_KIND_BY_CODE[s.pericolo.code] === "gestanti";
+        return {
+          pericolo_libreria_id: s.pericolo.id,
+          source: "catalog" as const,
+          pericolo: s.pericolo.pericolo,
+          condizioni_esposizione: s.pericolo.condizioni_esposizione,
+          rischio: s.pericolo.rischio,
+          misure_prevenzione: s.pericolo.misure_prevenzione,
+          probabilita_p: gestantiDelegata ? null : s.pericolo.p_default,
+          danno_d: gestantiDelegata ? null : s.pericolo.d_default,
+          valutazione_riferimento: gestantiDelegata
+            ? GESTANTI_ALLEGATO_RIFERIMENTO
+            : s.pericolo.valutazione_riferimento,
+          applicabile: true,
+          ordine: idx,
+        };
+      });
+      if (seedItems.length === 0) return;
+      const saved = await apiFetch<PericoloValutazione[]>(
+        `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/rischi/${rischioId}/pericoli/batch`,
+        { method: "POST", body: JSON.stringify({ items: seedItems }) },
+      );
+      // Fresh seeds still need the special-row pass: the gestanti row flips
+      // to "come da documento allegato" when the azienda already has one.
+      const normalizedSeed = normalizeSpecialRows(
+        saved,
+        codeById,
+        gestantiAllegato,
+      );
+      setPericoli(normalizedSeed.rows);
+      if (normalizedSeed.changed) scheduleSave(normalizedSeed.rows);
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Errore caricamento pericoli";
+      setLoadError(msg);
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+      setLoadedOnce(true);
+    }
+  }, [apiFetch, aziendaId, ambienteId, rischioId, categoriaLong, scheduleSave]);
+
+  useEffect(() => {
+    if (expanded && pericoli.length === 0 && !loading) {
+      void loadInitial();
+    }
+    // We intentionally only run when expanded flips.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded]);
 
   const updatePericolo = useCallback(
     (id: string, patch: Partial<PericoloValutazione>) => {
@@ -415,6 +569,37 @@ export function PericoliPanel({
     [suggestions, pericoli],
   );
 
+  // Special worker-category support — resolve the catalog code for each row
+  // so the render pass can spot the gestanti row and offer the mode toggle.
+  const codeById = useMemo(
+    () => new Map(suggestions.map((s) => [s.pericolo.id, s.pericolo.code])),
+    [suggestions],
+  );
+
+  // Gestanti row: switch between "come da documento allegato" and a direct
+  // indice score (I = 2D + P). Only offered when the azienda has the
+  // Valutazione Rischio Gestanti.
+  const toggleGestantiMode = useCallback(
+    (row: PericoloValutazione) => {
+      if (row.valutazione_riferimento === GESTANTI_ALLEGATO_RIFERIMENTO) {
+        updatePericolo(row.id, {
+          valutazione_riferimento: null,
+          probabilita_p: SPECIAL_DEFAULT_P,
+          danno_d: SPECIAL_DEFAULT_D,
+        });
+      } else {
+        updatePericolo(row.id, {
+          valutazione_riferimento: GESTANTI_ALLEGATO_RIFERIMENTO,
+          probabilita_p: null,
+          danno_d: null,
+          indice_i: null,
+          livello_rischio: null,
+        });
+      }
+    },
+    [updatePericolo],
+  );
+
   // Bulk-set valutazione_riferimento on all pericoli to defer detail to an
   // external attached assessment (feedback #a6f06283 — fire risk pattern,
   // generalised here because the same pattern helps other categorie too).
@@ -462,21 +647,6 @@ export function PericoliPanel({
 
       {expanded && (
         <div className="space-y-3 px-4 pb-4">
-          {/* US-2.6 — AI improvement measures for the rischio (above the
-              pericoli list). Mounted only when we have a parent save
-              handler; otherwise the panel can't persist what it gathers. */}
-          {onSaveMisure && (
-            <MeasuresPanel
-              aziendaId={aziendaId}
-              rischioId={valutazione.id}
-              categoriaRischio={valutazione.categoria_rischio}
-              initialText={valutazione.misure_prevenzione ?? undefined}
-              onSave={(combinedText) =>
-                onSaveMisure(valutazione.id, combinedText)
-              }
-            />
-          )}
-
           {loadError && !loading && (
             <div className="flex items-center justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
               <span>Caricamento pericoli non riuscito: {loadError}</span>
@@ -550,6 +720,9 @@ export function PericoliPanel({
                   {pericoli.map((p) => {
                     const isEditing = editingId === p.id;
                     const isDelegated = p.valutazione_riferimento != null;
+                    const showGestantiToggle =
+                      specialKindOf(p, codeById) === "gestanti" &&
+                      hasGestantiAllegato;
                     const pVal = p.probabilita_p;
                     const dVal = p.danno_d;
                     const indice =
@@ -621,6 +794,22 @@ export function PericoliPanel({
                                   >
                                     {p.valutazione_riferimento}
                                   </Badge>
+                                )}
+                                {showGestantiToggle && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="xs"
+                                    className="h-5 px-1.5 text-[9px]"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleGestantiMode(p);
+                                    }}
+                                  >
+                                    {isDelegated
+                                      ? "Scegli indice di rischio"
+                                      : "Usa documento allegato"}
+                                  </Button>
                                 )}
                               </div>
                             </div>

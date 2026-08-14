@@ -23,6 +23,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.permissions import ASSESSMENTS_WRITE
 from app.data.pee_procedures import (
+    DEFAULT_TIPOLOGIA_ALLARME,
     EVENT_CODES,
     PROCEDURE_LETTERS,
     get_standard_procedure,
@@ -60,6 +61,9 @@ class PeePlanConfigResponse(BaseModel):
     vie_fuga: str | None = None
     tempo_evacuazione_stimato_min: int | None = None
     frequenza_prove: str = "annuale"
+    # Prefilled with the most common alarm type so the operator reviews a
+    # value instead of typing one (platform principle: prefill, never re-enter).
+    tipologia_allarme: str = DEFAULT_TIPOLOGIA_ALLARME
     squadra_emergenza: list[SquadraMember] = Field(default_factory=list)
     telefoni_emergenza: dict[str, str] = Field(default_factory=dict)
 
@@ -73,6 +77,7 @@ class PeePlanConfigBody(BaseModel):
     vie_fuga: str | None = None
     tempo_evacuazione_stimato_min: int | None = None
     frequenza_prove: str | None = None
+    tipologia_allarme: str | None = None
     squadra_emergenza: list[SquadraMember] | None = None
     telefoni_emergenza: dict[str, str] | None = None
 
@@ -233,7 +238,10 @@ async def list_procedures(
         )
     )
     pee = result.scalar_one_or_none()
-    return merge_with_overrides(pee.scenari if pee else None)
+    return merge_with_overrides(
+        pee.scenari if pee else None,
+        tipologia_allarme=pee.tipologia_allarme if pee else None,
+    )
 
 
 @router.put(
@@ -293,7 +301,9 @@ async def reset_procedure(
         flag_modified(pee, "scenari")
         await db.commit()
 
-    standard = get_standard_procedure(evento, letter)
+    standard = get_standard_procedure(
+        evento, letter, tipologia_allarme=pee.tipologia_allarme if pee else None
+    )
     assert standard is not None  # validated
     return {
         "lettera": letter,
@@ -323,6 +333,7 @@ def _plan_to_response(pee: PeePlan | None) -> PeePlanConfigResponse:
         vie_fuga=pee.vie_fuga,
         tempo_evacuazione_stimato_min=pee.tempo_evacuazione_stimato_min,
         frequenza_prove=pee.frequenza_prove or "annuale",
+        tipologia_allarme=pee.tipologia_allarme or DEFAULT_TIPOLOGIA_ALLARME,
         squadra_emergenza=members,
         telefoni_emergenza=dict(pee.telefoni_emergenza or {}),
     )
@@ -367,6 +378,7 @@ async def update_pee_plan(
         "vie_fuga",
         "tempo_evacuazione_stimato_min",
         "frequenza_prove",
+        "tipologia_allarme",
     ):
         if scalar in data:
             setattr(pee, scalar, data[scalar])

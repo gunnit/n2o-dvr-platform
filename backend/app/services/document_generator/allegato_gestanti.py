@@ -8,7 +8,10 @@ from sqlalchemy import func, select
 
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
-from app.services.document_generator.data_loader import load_gestanti
+from app.services.document_generator.data_loader import (
+    load_gestanti,
+    load_gestanti_mansioni,
+)
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
     add_data_table,
@@ -33,6 +36,83 @@ def _role_nominativo(persone: list, attr: str) -> str | None:
 TEMPLATE = TEMPLATES_DIR / "ALLEGATO GESTANTI.docx"
 TIPO_DOC = "allegato_gestanti"
 
+ESITO_LABELS = {
+    "compatibile": "Compatibile",
+    "compatibile_con_limitazioni": "Compatibile con limitazioni",
+    "non_compatibile": "Non compatibile",
+}
+
+
+def _mansione_rischi_summary(rischi: list | None) -> str:
+    """Flatten the JSONB risk rows of a mansione into one printable cell.
+
+    Reuses the same row shape as ``GestantiValutazione.rischi_vietati``:
+    {risk_key, allegato, descrizione, misura?}.
+    """
+    parts: list[str] = []
+    for r in rischi or []:
+        if not isinstance(r, dict):
+            continue
+        desc = r.get("descrizione") or r.get("rischio") or r.get("risk_key") or ""
+        if not desc:
+            continue
+        allegato = r.get("allegato") or ""
+        parts.append(f"{desc} (All. {allegato})" if allegato else desc)
+    return "; ".join(parts) or "Nessun rischio rilevato"
+
+
+def render_mansioni_section(doc, mansioni_vals: list) -> None:
+    """Render the preventive per-mansione valutazione (art. 11 D.Lgs. 151/2001).
+
+    This section exists regardless of whether any lavoratrice is currently
+    pregnant: the decree requires the objective assessment for every
+    mansione in advance. ``mansioni_vals`` are objects with attributes
+    mansione / esito / rischi / misure / note.
+    """
+    add_heading(
+        doc,
+        "Valutazione preventiva dei rischi per mansione (art. 11 D.Lgs. 151/2001)",
+        level=2,
+    )
+    add_paragraph(
+        doc,
+        "La valutazione seguente e' condotta in via preventiva per ciascuna "
+        "mansione presente in azienda, indipendentemente dalla presenza di "
+        "lavoratrici in stato di gravidanza, puerperio o allattamento. In caso "
+        "di successiva comunicazione dello stato di gravidanza, le misure qui "
+        "individuate trovano immediata applicazione (artt. 11 e 12 D.Lgs. "
+        "151/2001).",
+    )
+    if not mansioni_vals:
+        add_paragraph(
+            doc,
+            "Nessuna valutazione preventiva per mansione risulta registrata.",
+            italic=True,
+        )
+        return
+
+    rows: list[list[str]] = []
+    for m in mansioni_vals:
+        esito = getattr(m, "esito", "") or ""
+        misure = (getattr(m, "misure", None) or "").strip()
+        note = (getattr(m, "note", None) or "").strip()
+        # No "\n" in cells: python-docx keeps it as a literal char that Word
+        # renders as whitespace, not as a line break.
+        misure_cell = misure or "—"
+        if note:
+            misure_cell = f"{misure} — Note: {note}" if misure else f"Note: {note}"
+        rows.append([
+            getattr(m, "mansione", "") or "—",
+            ESITO_LABELS.get(esito, esito or "—"),
+            _mansione_rischi_summary(getattr(m, "rischi", None)),
+            misure_cell,
+        ])
+    add_data_table(
+        doc,
+        ["Mansione", "Esito valutazione", "Rischi (Allegati A/B/C)", "Misure / limitazioni"],
+        rows,
+    )
+
 
 class AllegatoGestantiGenerator(BaseDocumentGenerator):
     async def generate(self) -> str:
@@ -41,6 +121,10 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
         persone = data["persone"]
         generated_at = data["generated_at"]
         gestanti = await load_gestanti(self.db, self.azienda_id)
+
+        # Preventive per-mansione valutazione (art. 11): rendered even with
+        # zero pregnant workers.
+        mansioni_vals = await load_gestanti_mansioni(self.db, self.azienda_id)
 
         # Resolve org-sicurezza nominatives once so each scheda's firma
         # table pre-fills the names; the operator only needs to add the
@@ -64,6 +148,7 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
         add_kv_table(doc, [
             ("Azienda", azienda.ragione_sociale or ""),
             ("Data valutazione", generated_at.strftime("%d/%m/%Y")),
+            ("Mansioni valutate in via preventiva", str(len(mansioni_vals))),
             ("Lavoratrici in stato di gravidanza/allattamento notificate", str(len(gestanti))),
             ("Riferimento normativo", "D.Lgs. 151/2001 (artt. 7, 11, 12; Allegati A-B-C), mod. D.Lgs. 105/2022 - Testo Unico maternità e paternità"),
         ])
@@ -72,8 +157,13 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
         add_paragraph(doc, "Il D.Lgs. 151/2001 (come modificato dal D.Lgs. 105/2022) tutela la salute delle lavoratrici in stato di gravidanza, puerperio (fino a 7 mesi dal parto) e durante l'allattamento. Gli Allegati A, B e C individuano rispettivamente i lavori vietati, quelli vietati salvo deroga e gli agenti nocivi cui non possono essere esposte.")
         add_paragraph(doc, "La presente valutazione e condotta ai sensi degli artt. 7 (lavori vietati), 11 (valutazione dei rischi) e 12 (conseguenze della valutazione) del D.Lgs. 151/2001, in connessione con gli artt. 28 e 17 del D.Lgs. 81/2008.")
 
+        # Section 1 — objective, preventive, per mansione (no worker needed).
+        render_mansioni_section(doc, mansioni_vals)
+
+        # Section 2 — worker-specific schede, only for notified pregnancies.
+        add_heading(doc, "Valutazioni specifiche delle lavoratrici notificate", level=2)
         if not gestanti:
-            add_paragraph(doc, "Non sono presenti lavoratrici in stato di gravidanza o allattamento al momento della valutazione.", italic=True)
+            add_paragraph(doc, "Non sono presenti lavoratrici in stato di gravidanza o allattamento al momento della valutazione. Resta valida la valutazione preventiva per mansione riportata sopra (art. 11 D.Lgs. 151/2001).", italic=True)
         for idx, g in enumerate(gestanti, 1):
             page_break(doc)
             nome = g.persona.nominativo if getattr(g, "persona", None) else "—"

@@ -9,7 +9,8 @@ template structure end-to-end:
   3. TOC field
   4. Introduzione (NIOSH overview, static)
   5. Anagrafica Aziendale (current azienda)
-  6. Dati Occupazionali (current persone, no codice fiscale leaked)
+  6. Dati Occupazionali — DVR Master Table 5 clone + MMC worker roster
+     (Nome e Cognome | Sesso | Età | Mansione)
   7. Organizzazione Aziendale della Sicurezza (DdL/RSPP/RLS/MC)
   8. Metodologia NIOSH (CP, A, B, C, D, E, F factor reference tables)
   9. Per-worker assessment grid (all tasks grouped by worker)
@@ -45,9 +46,14 @@ from app.data.niosh_factors import (
     compute_plr,
 )
 from app.models.documento_generato import DocumentoGenerato
+from app.services.codice_fiscale import extract_age, extract_sex
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.branding import resolve_logo_source
 from app.services.document_generator.data_loader import load_mmc
+from app.services.document_generator.dvr_master import (
+    DVRMasterGenerator,
+    _employee_persons,
+)
 from app.services.document_generator.docx_utils import (
     HEADER_BG,
     RISK_COLORS,
@@ -172,7 +178,10 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         self._add_toc(doc)
         self._add_introduzione(doc)
         self._add_anagrafica(doc, azienda)
-        self._add_dati_occupazionali(doc, persone)
+        assessed_persone = [
+            persona for persona, _tasks in mmc_groups if persona is not None
+        ]
+        self._add_dati_occupazionali(doc, persone, assessed_persone)
         self._add_organizzazione(doc, persone)
         self._add_metodologia(doc)
         self._add_per_worker_assessments(doc, mmc_groups, ambiente_by_id)
@@ -394,12 +403,36 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         page_break(doc)
 
     # ------------------------------------------------------------------
-    # Dati Occupazionali (no codice fiscale - GDPR)
+    # Dati Occupazionali
     # ------------------------------------------------------------------
 
-    def _add_dati_occupazionali(self, doc, persone: list) -> None:
+    def _add_dati_occupazionali(
+        self, doc, persone: list, assessed_persone: list | None = None
+    ) -> None:
+        """Client request (2026-08-13): the section must always carry the
+        dati occupazionali table rendered exactly like the DVR Master's
+        (Table 5, codice fiscale included), plus a second roster limited to
+        Nome e Cognome | Sesso | Età | Mansione for the workers covered by
+        the MMC assessment.
+        """
         add_heading(doc, "Dati Occupazionali", level=1)
-        if not persone:
+        employees = _employee_persons(persone)
+
+        # Table 1 — identical to the DVR Master. Delegate to the DVR
+        # renderer (its table builders are instance-state free) so the two
+        # documents can never drift apart. It renders a dash row when the
+        # roster is empty, which is exactly the "sempre la tabella" ask.
+        dvr_renderer = object.__new__(DVRMasterGenerator)
+        dvr_renderer._add_dati_occupazionali_table(doc, employees)
+        doc.add_paragraph("")
+
+        # Table 2 — MMC-specific worker roster. Prefer the workers actually
+        # associated to an MMC assessment; fall back to the full employee
+        # roster when no assessment is linked to a person yet, so the table
+        # always exists.
+        add_heading(doc, "Lavoratori oggetto della valutazione MMC", level=2)
+        roster = assessed_persone if assessed_persone else employees
+        if not roster:
             add_paragraph(
                 doc,
                 "Nessun lavoratore registrato per questa azienda.",
@@ -408,29 +441,38 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
             page_break(doc)
             return
 
-        headers = [
-            "Nominativo",
-            "Mansione",
-            "Sesso",
-            "Fascia età",
-            "Tipologia contrattuale",
-        ]
+        headers = ["Nome e Cognome", "Sesso", "Età", "Mansione"]
         rows = [
             [
                 person.nominativo or "—",
+                self._sesso_display(person),
+                self._eta_display(person),
                 person.mansione or "—",
-                person.sesso or "—",
-                person.fascia_eta or "—",
-                person.tipologia_contrattuale or "—",
             ]
-            for person in persone
+            for person in roster
         ]
-        add_data_table(
-            doc,
-            headers,
-            rows,
-        )
+        add_data_table(doc, headers, rows)
         page_break(doc)
+
+    @staticmethod
+    def _sesso_display(person) -> str:
+        """Stored sesso, else derived from the codice fiscale, else dash."""
+        return (
+            getattr(person, "sesso", None)
+            or extract_sex(getattr(person, "codice_fiscale", None))
+            or "—"
+        )
+
+    @staticmethod
+    def _eta_display(person) -> str:
+        """Age in completed years from the codice fiscale when parseable;
+        otherwise the declared fascia_eta band (the only explicit age data
+        the survey collects), otherwise a dash.
+        """
+        age = extract_age(getattr(person, "codice_fiscale", None))
+        if age is not None:
+            return str(age)
+        return getattr(person, "fascia_eta", None) or "—"
 
     # ------------------------------------------------------------------
     # Organizzazione Aziendale Sicurezza
@@ -919,17 +961,43 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
                 notice.paragraph_format.space_before = Pt(6)
                 continue
 
-            # Table: lavoratore | compito | misure
-            data_rows = []
+            # Table: lavoratore | AZIONE | misure — one row per employee
+            # (client request 2026-08-13): every lifting action of the same
+            # worker is aggregated in a single AZIONE cell (one per line),
+            # and the proposed measures are deduplicated the same way.
+            # Rows with no associated worker keep one row per assessment so
+            # unrelated anonymous evaluations are never merged together.
+            grouped: dict[object, dict] = {}
             for r in rows:
                 persona = persona_by_id.get(r.persona_id) if r.persona_id else None
+                key = (
+                    persona.id
+                    if persona is not None
+                    else ("__unassigned__", getattr(r, "id", id(r)))
+                )
+                entry = grouped.setdefault(
+                    key, {"persona": persona, "azioni": [], "misure": []}
+                )
+                entry["azioni"].append(r.compito or "—")
+                misura = r.misure_proposte or _DEFAULT_MEASURES_BY_ZONE.get(zone, "")
+                if misura and misura not in entry["misure"]:
+                    entry["misure"].append(misura)
+
+            data_rows = []
+            for entry in grouped.values():
+                persona = entry["persona"]
                 nome = (persona.nominativo if persona else "—") or "—"
-                misure = r.misure_proposte or _DEFAULT_MEASURES_BY_ZONE.get(zone, "")
-                data_rows.append([nome, r.compito or "—", misure])
+                data_rows.append(
+                    [
+                        nome,
+                        "\n".join(entry["azioni"]),
+                        "\n".join(entry["misure"]),
+                    ]
+                )
 
             tbl = add_data_table(
                 doc,
-                ["Lavoratore", "Compito", "Misure di prevenzione e protezione"],
+                ["Lavoratore", "AZIONE", "Misure di prevenzione e protezione"],
                 data_rows,
             )
             # Tint every body cell so the zone is visually obvious even when

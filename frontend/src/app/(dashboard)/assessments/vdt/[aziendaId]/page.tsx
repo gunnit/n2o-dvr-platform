@@ -201,6 +201,7 @@ export default function VdtAssessmentPage() {
         const body: Record<string, unknown> = {
           persona_id: w.persona_id,
           postazione: w.postazione.trim(),
+          attivita: w.attivita.trim() || null,
           ore_settimanali: w.ore_settimanali ?? 0,
           schermo_conforme: w.schermo_conforme,
           tastiera_separata: w.tastiera_separata,
@@ -210,9 +211,11 @@ export default function VdtAssessmentPage() {
           riflessi_assenti: w.riflessi_assenti,
           spazio_adeguato: w.spazio_adeguato,
           pause_previste: w.pause_previste,
+          // Periodicità is age-based server-side; eta_50_plus travels only
+          // as the legacy fallback (kept in sync from data_nascita).
           eta_50_plus: w.eta_50_plus,
+          data_nascita: w.data_nascita || null,
           idoneita_visiva: w.idoneita_visiva || null,
-          data_ultima_visita: w.data_ultima_visita || null,
           note: w.note || null,
         };
         const res = await fetch(

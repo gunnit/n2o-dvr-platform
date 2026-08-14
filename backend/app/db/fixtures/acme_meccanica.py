@@ -510,6 +510,7 @@ async def seed_acme(session: AsyncSession) -> Azienda:
         vie_fuga="Uscita principale nord, uscita emergenza sud officina, uscita mensa ovest",
         tempo_evacuazione_stimato_min=3,
         frequenza_prove="annuale",
+        tipologia_allarme="Sirena",
     ))
     # PEE comune (edificio condiviso) — optional second plan
     session.add(PeePlan(

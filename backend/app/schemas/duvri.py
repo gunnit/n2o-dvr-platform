@@ -117,6 +117,26 @@ class InterferenceDecisionBody(BaseModel):
     custom_text: str | None = Field(None, max_length=2000)
 
 
+class SuggestInterferenzeAIRequest(BaseModel):
+    """Context for the AI interference suggester — the *current* form state.
+
+    Sent by the DUVRI form so unsaved chip toggles and edits are respected
+    (the operator clicks "Genera con AI" mid-edit, before saving). Carries
+    only work-related, non-personal data: never contractor company names,
+    referenti, or partita IVA — see the PII contract in
+    ``app.services.ai.duvri_interferenze_suggester``.
+    """
+
+    oggetto_appalto: str | None = Field(None, max_length=4000)
+    attrezzature_appaltatore: list[AppaltatoreAttrezzatura] = Field(
+        default_factory=list, max_length=50
+    )
+    # Risk texts already on the form, so the model does not duplicate them.
+    interferenze_esistenti: list[InterferenzaItem] = Field(
+        default_factory=list, max_length=100
+    )
+
+
 class DuvriResponse(DuvriBase):
     model_config = ConfigDict(from_attributes=True)
 

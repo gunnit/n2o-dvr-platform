@@ -1,4 +1,6 @@
-"""Regression coverage for the live MMC document feedback from 2026-08-05."""
+"""Regression coverage for the live MMC document feedback
+(2026-08-05 grouping fixes + 2026-08-13 dati occupazionali / AZIONE requests).
+"""
 
 from __future__ import annotations
 
@@ -9,6 +11,7 @@ from types import SimpleNamespace
 from docx import Document
 from docx.shared import Pt
 
+from app.services.codice_fiscale import extract_age
 from app.services.document_generator.allegato_mmc import (
     AllegatoMmcGenerator,
     group_mmc_rows,
@@ -88,7 +91,7 @@ def _table_text(table) -> list[list[str]]:
     return [[cell.text for cell in row.cells] for row in table.rows]
 
 
-def test_mmc_groups_interleaved_tasks_and_keeps_tax_codes_out_of_roster():
+def test_mmc_groups_interleaved_tasks_and_renders_dvr_master_roster():
     first = _person(
         1,
         "Anna Rossi",
@@ -116,20 +119,52 @@ def test_mmc_groups_interleaved_tasks_and_keeps_tax_codes_out_of_roster():
 
     doc = Document()
     generator = object.__new__(AllegatoMmcGenerator)
-    generator._add_dati_occupazionali(doc, [second, external, first])
+    generator._add_dati_occupazionali(
+        doc, [second, external, first], [first, second]
+    )
 
-    assert len(doc.tables) == 1
-    roster = _table_text(doc.tables[0])
-    assert roster[0] == [
+    # Client request 2026-08-13: two tables — the DVR-Master-identical dati
+    # occupazionali grid (codice fiscale included) plus the reduced roster.
+    assert len(doc.tables) == 2
+
+    dvr_clone = _table_text(doc.tables[0])
+    assert dvr_clone[0] == [
         "Nominativo",
         "Mansione",
-        "Sesso",
-        "Fascia età",
+        "Ambiente di Lavoro",
+        "Codice Fiscale",
         "Tipologia contrattuale",
     ]
-    rendered = "\n".join(cell for row in roster for cell in row)
-    assert "BNCMRA90E62H501W" not in rendered
-    assert "malformed" not in rendered
+    rendered = "\n".join(cell for row in dvr_clone for cell in row)
+    # Identical to the Risk Master means the CF column IS present now.
+    assert "BNCMRA90E62H501W" in rendered
+    # External safety consultants are excluded, exactly like the DVR Master.
+    assert "DOTT. ESTERNO" not in rendered
+    assert "ANNA ROSSI" in rendered
+    assert "BRUNO BIANCHI" in rendered
+
+
+def test_mmc_worker_roster_has_exactly_name_sex_age_mansione_columns():
+    anna = _person(1, "Anna Rossi", order=1, sex=None, cf="BNCMRA90E62H501W")
+    bruno = _person(2, "Bruno Bianchi", order=2, sex="M", cf="malformed")
+
+    doc = Document()
+    generator = object.__new__(AllegatoMmcGenerator)
+    generator._add_dati_occupazionali(doc, [anna, bruno], [anna, bruno])
+
+    roster = _table_text(doc.tables[1])
+    assert roster[0] == ["Nome e Cognome", "Sesso", "Età", "Mansione"]
+    # One row per assessed worker.
+    assert len(roster) == 1 + 2
+    # Anna: sesso derived from her (valid, female) CF; età computed from it.
+    assert roster[1] == [
+        "Anna Rossi",
+        "F",
+        str(extract_age("BNCMRA90E62H501W")),
+        "Magazziniere",
+    ]
+    # Bruno: malformed CF → declared sesso kept, età falls back to the band.
+    assert roster[2] == ["Bruno Bianchi", "M", ">18", "Magazziniere"]
 
 
 def test_all_tasks_appear_in_grouped_detail_and_complete_synopsis():
@@ -170,6 +205,65 @@ def test_all_tasks_appear_in_grouped_detail_and_complete_synopsis():
         "Persona eliminata",
     ]
     assert len(table) - 1 == len(rows)
+
+
+def test_programma_attuazione_uses_azione_header_and_one_row_per_employee():
+    anna = _person(1, "Anna Rossi", order=1)
+    bruno = _person(2, "Bruno Bianchi", order=2, sex="M")
+    green_1 = _task(11, anna.id, "Prelievo cassa", created_day=1, ir=0.60)
+    green_2 = _task(12, anna.id, "Deposito cassa", created_day=2, ir=0.70)
+    red = _task(21, bruno.id, "Scarico pallet", created_day=3, ir=1.20)
+    red.misure_proposte = "Adottare transpallet elettrico."
+
+    generator = object.__new__(AllegatoMmcGenerator)
+    doc = Document()
+    generator._add_programma_attuazione(
+        doc,
+        [green_1, green_2, red],
+        {anna.id: anna, bruno.id: bruno},
+    )
+
+    green_table = _table_text(doc.tables[0])
+    assert green_table[0] == [
+        "Lavoratore",
+        "AZIONE",
+        "Misure di prevenzione e protezione",
+    ]
+    # Anna's two green lifting actions collapse into a single row, with the
+    # (identical) default zone measure deduplicated to one copy.
+    assert len(green_table) == 2
+    assert green_table[1][0] == "Anna Rossi"
+    assert green_table[1][1] == "Prelievo cassa\nDeposito cassa"
+    assert green_table[1][2].count("Mantenere le condizioni operative") == 1
+
+    red_table = _table_text(doc.tables[1])
+    assert red_table[0] == [
+        "Lavoratore",
+        "AZIONE",
+        "Misure di prevenzione e protezione",
+    ]
+    assert red_table[1] == [
+        "Bruno Bianchi",
+        "Scarico pallet",
+        "Adottare transpallet elettrico.",
+    ]
+
+
+def test_programma_attuazione_keeps_unassigned_assessments_on_separate_rows():
+    orphan_1 = _task(31, None, "Valutazione anonima", created_day=1, ir=0.60)
+    orphan_2 = _task(32, uuid.UUID(int=99), "Persona eliminata", created_day=2, ir=0.70)
+
+    generator = object.__new__(AllegatoMmcGenerator)
+    doc = Document()
+    generator._add_programma_attuazione(doc, [orphan_1, orphan_2], {})
+
+    green_table = _table_text(doc.tables[0])
+    # No associated worker → never merged into one anonymous mega-row.
+    assert [row[0] for row in green_table[1:]] == ["—", "—"]
+    assert [row[1] for row in green_table[1:]] == [
+        "Valutazione anonima",
+        "Persona eliminata",
+    ]
 
 
 def test_empty_prevention_zone_notice_has_explicit_spacing_after_long_heading():

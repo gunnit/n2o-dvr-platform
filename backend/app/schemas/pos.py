@@ -21,6 +21,52 @@ DpiMatrix = dict[str, dict[str, list[str]]]
 """{phase_key: {role_key: [dpi_code, ...]}}"""
 
 
+# --- Figure di sicurezza / subappalti sub-objects --------------------------
+
+# Canonical dropdown roles for the "Figure di sicurezza sul cantiere" card
+# (client request 2026-08-13). Keys are stable identifiers persisted in
+# ``Pos.figure_sicurezza``; Italian labels live with the generator and the
+# frontend (same split as the DPI matrix role/phase keys).
+FIGURE_SICUREZZA_RUOLI: tuple[str, ...] = (
+    "datore_lavoro",
+    "direttore_tecnico_cantiere",
+    "capocantiere_preposto",
+    "rspp",
+    "rls",
+    "medico_competente",
+    "addetto_primo_soccorso",
+    "addetto_antincendio",
+)
+
+
+class FiguraSicurezza(BaseModel):
+    """One safety figure on the cantiere.
+
+    ``persona_id`` is a Persona UUID **as string** (kept as str so the
+    JSONB payload round-trips without custom encoders); ``nominativo`` is
+    the printed name — either copied from the Persona at selection time or
+    typed free-text when the figure is external to the organigramma.
+    """
+
+    ruolo: str = Field(..., min_length=1, max_length=100)
+    persona_id: str | None = Field(None, max_length=64)
+    nominativo: str | None = Field(None, max_length=255)
+
+
+class Subappaltatore(BaseModel):
+    """One subcontractor row: company name + optional works description."""
+
+    ragione_sociale: str = Field(..., min_length=1, max_length=255)
+    lavori: str | None = None
+
+
+class SostanzaPericolosa(BaseModel):
+    """One hazardous substance row (All. XV punto 3.2.1 lettera e)."""
+
+    nome: str = Field(..., min_length=1, max_length=255)
+    uso: str | None = None
+
+
 # --- POS base / CRUD ------------------------------------------------------
 
 
@@ -54,7 +100,12 @@ class PosBase(BaseModel):
     valutazione_rumore: dict = Field(default_factory=dict)
     valutazione_vibrazioni: dict = Field(default_factory=dict)
     mezzi_attrezzature: list[dict] = Field(default_factory=list)
+    sostanze_pericolose_presenti: bool = False
     sostanze_pericolose: list[dict] = Field(default_factory=list)
+    subappalti_presenti: bool = False
+    subappaltatori: list[Subappaltatore] = Field(default_factory=list)
+    dipendenti_cantiere: list[str] = Field(default_factory=list)
+    figure_sicurezza: list[FiguraSicurezza] = Field(default_factory=list)
     dpi_matrix: DpiMatrix = Field(default_factory=dict)
     dpi_matrix_roles: list[str] = Field(default_factory=list)
     dpi_matrix_phases: list[str] = Field(default_factory=list)
@@ -88,7 +139,12 @@ class PosCreate(BaseModel):
     valutazione_rumore: dict = Field(default_factory=dict)
     valutazione_vibrazioni: dict = Field(default_factory=dict)
     mezzi_attrezzature: list[dict] = Field(default_factory=list)
+    sostanze_pericolose_presenti: bool = False
     sostanze_pericolose: list[dict] = Field(default_factory=list)
+    subappalti_presenti: bool = False
+    subappaltatori: list[Subappaltatore] = Field(default_factory=list)
+    dipendenti_cantiere: list[str] = Field(default_factory=list)
+    figure_sicurezza: list[FiguraSicurezza] = Field(default_factory=list)
     dpi_matrix: DpiMatrix | None = None
     dpi_matrix_roles: list[str] | None = None
     dpi_matrix_phases: list[str] | None = None
@@ -120,7 +176,12 @@ class PosUpdate(BaseModel):
     valutazione_rumore: dict | None = None
     valutazione_vibrazioni: dict | None = None
     mezzi_attrezzature: list[dict] | None = None
+    sostanze_pericolose_presenti: bool | None = None
     sostanze_pericolose: list[dict] | None = None
+    subappalti_presenti: bool | None = None
+    subappaltatori: list[Subappaltatore] | None = None
+    dipendenti_cantiere: list[str] | None = None
+    figure_sicurezza: list[FiguraSicurezza] | None = None
     dpi_matrix: DpiMatrix | None = None
     dpi_matrix_roles: list[str] | None = None
     dpi_matrix_phases: list[str] | None = None

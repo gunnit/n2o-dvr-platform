@@ -17,8 +17,23 @@ The data here is consumed (1) as the default pre-fill when an operator opens
 the PEE procedures review screen and (2) as the baseline the "Reset alle
 procedure standard" action restores to. Per-client customizations live on
 ``pee_plans.scenari`` (JSONB) — no migration required.
+
+Two client-driven behaviours live here as well:
+
+* **Tipologia di allarme** — the standard "A" step for *incendio* and
+  *evacuazione generale* embeds the alarm type configured on the plan
+  (``pee_plans.tipologia_allarme``) via the ``{tipologia_allarme}``
+  placeholder. Callers pass the configured value to
+  ``get_standard_procedures`` / ``merge_with_overrides``; when nothing is
+  configured the sensible default below is used.
+* **NUE 112** — per the Numero Unico di Emergenza reform, standard texts
+  reference only the NUE 112 (never 113/115/118), and
+  ``normalize_emergency_number`` maps legacy national emergency numbers to
+  "112" when rendering the emergency-contacts table. Company-internal
+  numbers pass through untouched.
 """
 
+import re
 from typing import Literal, TypedDict
 
 
@@ -60,6 +75,62 @@ PROCEDURE_TITLES: dict[str, str] = {
     "E": "Cessato allarme e ripristino",
 }
 
+# ---------------------------------------------------------------------------
+# Tipologia di allarme
+# ---------------------------------------------------------------------------
+
+#: Default alarm type prefilled in the plan config and used in generated
+#: documents when the operator has not configured one yet.
+DEFAULT_TIPOLOGIA_ALLARME = "Sirena"
+
+#: Common alarm types offered as select options in the frontend. The field
+#: itself stays free text so "Altro" custom values round-trip unchanged.
+TIPOLOGIE_ALLARME: list[str] = [
+    "Sirena",
+    "Campanella",
+    "Avviso a voce",
+    "Tromba da stadio",
+    "Segnale luminoso",
+]
+
+#: Placeholder embedded in standard texts, substituted at render time.
+TIPOLOGIA_ALLARME_PLACEHOLDER = "{tipologia_allarme}"
+
+
+def _resolve_tipologia(tipologia_allarme: str | None) -> str:
+    value = (tipologia_allarme or "").strip()
+    return value or DEFAULT_TIPOLOGIA_ALLARME
+
+
+# ---------------------------------------------------------------------------
+# NUE 112 normalization
+# ---------------------------------------------------------------------------
+
+#: Legacy national emergency numbers that the NUE reform routes through 112.
+LEGACY_EMERGENCY_NUMBERS: frozenset[str] = frozenset(
+    {"112", "113", "115", "117", "118", "1515", "1530"}
+)
+
+NUE_LABEL = "Numero Unico di Emergenza (NUE)"
+
+
+def normalize_emergency_number(value: str | None) -> str:
+    """Render legacy national emergency numbers as the NUE "112".
+
+    Only values composed *entirely* of legacy emergency numbers (e.g.
+    "115", "115 / 118") are normalized, so company-internal numbers and
+    extensions ("0521 456789", "int. 115") are never mangled.
+    """
+    raw = (value or "").strip()
+    tokens = re.findall(r"\d+", raw)
+    if (
+        tokens
+        and all(t in LEGACY_EMERGENCY_NUMBERS for t in tokens)
+        and not re.search(r"[A-Za-z]", raw)
+    ):
+        return "112"
+    return raw
+
 
 _STANDARD: dict[EventCode, EventoEmergenza] = {
     "incendio": {
@@ -72,16 +143,17 @@ _STANDARD: dict[EventCode, EventoEmergenza] = {
                 "testo": (
                     "Chi scopre il principio di incendio avverte immediatamente il "
                     "coordinatore dell'emergenza e attiva l'allarme antincendio "
-                    "tramite pulsante manuale o segnale acustico."
+                    "previsto dal piano ({tipologia_allarme})."
                 ),
             },
             {
                 "lettera": "B",
                 "titolo": PROCEDURE_TITLES["B"],
                 "testo": (
-                    "Il coordinatore allerta i Vigili del Fuoco (115) indicando "
-                    "luogo, natura dell'emergenza e eventuali persone coinvolte. "
-                    "Contestualmente attiva la squadra di emergenza interna."
+                    "Il coordinatore allerta i Vigili del Fuoco tramite il Numero "
+                    "Unico di Emergenza (NUE) 112 indicando luogo, natura "
+                    "dell'emergenza e eventuali persone coinvolte. Contestualmente "
+                    "attiva la squadra di emergenza interna."
                 ),
             },
             {
@@ -135,8 +207,8 @@ _STANDARD: dict[EventCode, EventoEmergenza] = {
                 "titolo": PROCEDURE_TITLES["B"],
                 "testo": (
                     "Il coordinatore valuta i danni strutturali visibili e "
-                    "contatta il Numero Unico Europeo (112) se sono presenti "
-                    "feriti o crolli. Allerta anche i referenti aziendali."
+                    "contatta il Numero Unico di Emergenza (NUE) 112 se sono "
+                    "presenti feriti o crolli. Allerta anche i referenti aziendali."
                 ),
             },
             {
@@ -189,7 +261,8 @@ _STANDARD: dict[EventCode, EventoEmergenza] = {
                 "testo": (
                     "Il coordinatore attiva la squadra di emergenza e, se "
                     "l'allagamento coinvolge impianti elettrici o causa rischio "
-                    "statico, allerta i Vigili del Fuoco (115)."
+                    "statico, allerta i Vigili del Fuoco tramite il Numero Unico "
+                    "di Emergenza (NUE) 112."
                 ),
             },
             {
@@ -239,9 +312,9 @@ _STANDARD: dict[EventCode, EventoEmergenza] = {
                 "lettera": "B",
                 "titolo": PROCEDURE_TITLES["B"],
                 "testo": (
-                    "Il coordinatore attiva l'evacuazione immediata e contatta "
-                    "il pronto intervento gas (803 900) e, se necessario, i "
-                    "Vigili del Fuoco (115). Interdice l'accesso all'area."
+                    "Il coordinatore attiva l'evacuazione immediata, contatta il "
+                    "Numero Unico di Emergenza (NUE) 112 e il pronto intervento "
+                    "gas del distributore locale. Interdice l'accesso all'area."
                 ),
             },
             {
@@ -283,7 +356,7 @@ _STANDARD: dict[EventCode, EventoEmergenza] = {
                 "titolo": PROCEDURE_TITLES["A"],
                 "testo": (
                     "All'attivazione del segnale di evacuazione generale "
-                    "(allarme acustico continuo), tutti i lavoratori "
+                    "({tipologia_allarme}), tutti i lavoratori "
                     "interrompono l'attivita' in sicurezza (spegnere macchine, "
                     "chiudere impianti a rischio)."
                 ),
@@ -294,7 +367,8 @@ _STANDARD: dict[EventCode, EventoEmergenza] = {
                 "testo": (
                     "Il coordinatore conferma l'evacuazione generale via "
                     "diffusione sonora o comunicazione diretta e informa, se "
-                    "necessario, gli enti esterni (112/115/118)."
+                    "necessario, gli enti esterni tramite il Numero Unico di "
+                    "Emergenza (NUE) 112."
                 ),
             },
             {
@@ -332,40 +406,65 @@ _STANDARD: dict[EventCode, EventoEmergenza] = {
 }
 
 
-def get_standard_procedures() -> list[EventoEmergenza]:
-    """Return a deep-copied list of all standard events with their A-E procedures."""
+def get_standard_procedures(
+    tipologia_allarme: str | None = None,
+) -> list[EventoEmergenza]:
+    """Return a deep-copied list of all standard events with their A-E procedures.
+
+    ``tipologia_allarme`` replaces the ``{tipologia_allarme}`` placeholder in
+    the standard texts (point A of incendio / evacuazione generale); when
+    ``None`` the default alarm type is used.
+    """
+    tipologia = _resolve_tipologia(tipologia_allarme)
     return [
         {
             "codice": e["codice"],
             "titolo": e["titolo"],
-            "procedure": [dict(p) for p in e["procedure"]],
+            "procedure": [
+                {
+                    **p,
+                    "testo": p["testo"].replace(
+                        TIPOLOGIA_ALLARME_PLACEHOLDER, tipologia
+                    ),
+                }
+                for p in e["procedure"]
+            ],
         }
         for e in _STANDARD.values()
     ]
 
 
-def get_standard_procedure(evento: str, lettera: str) -> Procedura | None:
+def get_standard_procedure(
+    evento: str, lettera: str, tipologia_allarme: str | None = None
+) -> Procedura | None:
     """Return one standard procedure by event code + letter, or None."""
     event = _STANDARD.get(evento)  # type: ignore[arg-type]
     if not event:
         return None
+    tipologia = _resolve_tipologia(tipologia_allarme)
     for p in event["procedure"]:
         if p["lettera"] == lettera.upper():
-            return dict(p)
+            return {
+                **p,
+                "testo": p["testo"].replace(TIPOLOGIA_ALLARME_PLACEHOLDER, tipologia),
+            }
     return None
 
 
 def merge_with_overrides(
     overrides: list[dict] | None,
+    tipologia_allarme: str | None = None,
 ) -> list[dict]:
     """Merge standard procedures with per-client overrides.
 
     ``overrides`` follows the same shape as ``get_standard_procedures`` output
     but each procedure may carry a ``personalizzata: True`` flag and a modified
     ``testo``. Returns a fresh list with ``personalizzata`` on every item
-    (False when the text matches the standard).
+    (False when the text matches the standard). ``tipologia_allarme`` is
+    substituted into the standard texts only — operator-personalized texts are
+    rendered verbatim.
     """
-    standard = get_standard_procedures()
+    standard = get_standard_procedures(tipologia_allarme)
     by_code: dict[str, dict] = {e["codice"]: e for e in standard}
 
     override_map: dict[tuple[str, str], str] = {}

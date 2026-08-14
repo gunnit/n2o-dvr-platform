@@ -863,43 +863,6 @@ export function RischiEditor({
     [allValutazioni, scheduleAmbienteSave, updateLocalValutazioni],
   );
 
-  /**
-   * Persist `misure_prevenzione` for a single ValutazioneRischio.
-   *
-   * Called by the AI MeasuresPanel mounted inside PericoliPanel. We bypass
-   * the debounced batch save here because the user just clicked "Salva
-   * misure" — they expect synchronous, observable persistence (and the
-   * MeasuresPanel awaits this Promise to flip its loading state).
-   */
-  const handleSaveMisure = useCallback(
-    async (rischioId: string, combinedText: string) => {
-      const target = allValutazioni.find((v) => v.id === rischioId);
-      if (!target) return;
-      try {
-        await apiFetch(
-          `/api/v1/aziende/${aziendaId}/ambienti/${target.ambiente_id}/rischi/${rischioId}`,
-          {
-            method: "PUT",
-            body: JSON.stringify({ misure_prevenzione: combinedText }),
-          },
-        );
-        const updated = allValutazioni.map((v) =>
-          v.id === rischioId ? { ...v, misure_prevenzione: combinedText } : v,
-        );
-        updateLocalValutazioni(updated);
-        toast.success("Misure salvate.");
-      } catch (err) {
-        const message =
-          err instanceof Error
-            ? err.message
-            : "Errore nel salvataggio delle misure";
-        toast.error(message);
-        throw err;
-      }
-    },
-    [allValutazioni, apiFetch, aziendaId, updateLocalValutazioni],
-  );
-
   const fetchAIRischi = useCallback(async () => {
     if (!selectedAmbiente) return;
     const ambienteId = selectedAmbiente.id;
@@ -1336,12 +1299,11 @@ export function RischiEditor({
                       {showPericoli && (
                         <TableRow className="hover:bg-transparent">
                           {/* Feedback #16 (2026-05-18): the colspan cell hosts
-                              the AI MeasuresPanel, whose long Italian titoli /
-                              descrizione strings inherit `whitespace-nowrap`
-                              from the shadcn TableCell default and were
-                              forcing the whole outer table to overflow
-                              horizontally on subsequent rows once measures
-                              had been generated. Force wrapping + min-w-0 so
+                              the pericoli drill-down, whose long Italian text
+                              strings inherit `whitespace-nowrap` from the
+                              shadcn TableCell default and were forcing the
+                              whole outer table to overflow horizontally on
+                              subsequent rows. Force wrapping + min-w-0 so
                               the drill-down stays contained. */}
                           <TableCell
                             colSpan={6}
@@ -1354,7 +1316,6 @@ export function RischiEditor({
                                 valutazione={val}
                                 categoriaLong={long as string}
                                 onSummaryChange={handlePericoliSummary}
-                                onSaveMisure={handleSaveMisure}
                               />
                             </div>
                           </TableCell>

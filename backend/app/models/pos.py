@@ -57,7 +57,30 @@ class Pos(Base):
     valutazione_rumore: Mapped[dict] = mapped_column(JSONB, default=dict)
     valutazione_vibrazioni: Mapped[dict] = mapped_column(JSONB, default=dict)
     mezzi_attrezzature: Mapped[list] = mapped_column(JSONB, default=list)
+    # Sostanze pericolose (All. XV punto 3.2.1 lettera e). The explicit flag
+    # (client request 2026-08-13) drives the printed wording: False renders
+    # the default dicitura "«impresa» non utilizzerà sostanze chimiche...",
+    # True renders the manual list below ({nome, uso}).
+    sostanze_pericolose_presenti: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     sostanze_pericolose: Mapped[list] = mapped_column(JSONB, default=list)
+    # Subappalti (client request 2026-08-13): flag + manual list of
+    # {ragione_sociale, lavori}. False prints the default "nessun subappalto"
+    # dicitura instead of an empty table.
+    subappalti_presenti: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    subappaltatori: Mapped[list] = mapped_column(JSONB, default=list)
+    # Dipendenti impegnati in cantiere — Persona ids (as strings) selected
+    # from the organigramma. Empty list keeps the legacy behaviour of
+    # printing every registered dipendente.
+    dipendenti_cantiere: Mapped[list] = mapped_column(JSONB, default=list)
+    # Figure di sicurezza sul cantiere — list of {ruolo, persona_id,
+    # nominativo}. `ruolo` is one of FIGURE_SICUREZZA_RUOLI (schemas/pos.py);
+    # the assignee is either a Persona reference or free text. Empty list →
+    # the generator derives the figures from the Persona ruolo_* flags.
+    figure_sicurezza: Mapped[list] = mapped_column(JSONB, default=list)
     # DPI matrix (US-4.8): {phase_key: {role_key: [dpi_codes]}} — operator-edited
     # copy. Starts empty; populated on first "rigenera dai default" call or via
     # cell override. See services/dpi_rules.py for the rule engine.

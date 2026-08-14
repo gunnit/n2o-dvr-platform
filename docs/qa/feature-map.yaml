@@ -22,13 +22,13 @@
 
 version: 1
 totals:
-  endpoints: 207
+  endpoints: 212
   areas: 34
   frontend_pages: 34
-  ui_api_call_sites: 93
-  capability_gated: 120
+  ui_api_call_sites: 90
+  capability_gated: 124
   billing_gated: 10
-  ai_metered: 11
+  ai_metered: 12
 endpoints_by_area:
   - area: "admin-backups"
     endpoints: 2
@@ -51,11 +51,11 @@ endpoints_by_area:
   - area: "documents"
     endpoints: 14
   - area: "duvri"
-    endpoints: 8
+    endpoints: 9
   - area: "feedback"
     endpoints: 3
   - area: "gestanti"
-    endpoints: 7
+    endpoints: 10
   - area: "haccp"
     endpoints: 5
   - area: "incendio"
@@ -63,7 +63,7 @@ endpoints_by_area:
   - area: "lookup"
     endpoints: 5
   - area: "microclima"
-    endpoints: 5
+    endpoints: 6
   - area: "misure-miglioramento"
     endpoints: 5
   - area: "mmc"
@@ -128,6 +128,7 @@ review:
     - "GET /api/v1/haccp/_meta/activity-types"
   endpoints_with_no_ui_caller:
     - "POST /api/v1/admin/backups/event"
+    - "POST /api/v1/ai-feedback"
     - "POST /api/v1/auth/login"
     - "POST /api/v1/auth/register"
     - "POST /api/v1/auth/register-direct"
@@ -139,6 +140,7 @@ review:
     - "GET /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/foto/{foto_id}/content"
     - "PATCH /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/ordine"
     - "POST /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/rischi"
+    - "PUT /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/rischi/{rischio_id}"
     - "DELETE /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/rischi/{rischio_id}/pericoli/{pericolo_id}"
     - "PUT /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/rischi/{rischio_id}/pericoli/{pericolo_id}"
     - "POST /api/v1/aziende/{azienda_id}/attrezzature/estrai-foto/{ambiente_id}"
@@ -152,9 +154,10 @@ review:
     - "GET /api/v1/aziende/{azienda_id}/biologico-valutazioni/{valutazione_id}"
     - "PATCH /api/v1/aziende/{azienda_id}/biologico-valutazioni/{valutazione_id}"
     - "GET /api/v1/aziende/{azienda_id}/documents/{document_id}/status"
-    - "GET /api/v1/aziende/{azienda_id}/gestanti"
-    - "POST /api/v1/aziende/{azienda_id}/gestanti"
     - "POST /api/v1/aziende/{azienda_id}/gestanti/cross-reference"
+    - "GET /api/v1/aziende/{azienda_id}/gestanti/mansioni"
+    - "PUT /api/v1/aziende/{azienda_id}/gestanti/mansioni"
+    - "DELETE /api/v1/aziende/{azienda_id}/gestanti/mansioni/{mansione_valutazione_id}"
     - "DELETE /api/v1/aziende/{azienda_id}/gestanti/{valutazione_id}"
     - "GET /api/v1/aziende/{azienda_id}/gestanti/{valutazione_id}"
     - "PATCH /api/v1/aziende/{azienda_id}/gestanti/{valutazione_id}"
@@ -166,6 +169,7 @@ review:
     - "PATCH /api/v1/aziende/{azienda_id}/incendio-valutazioni/{valutazione_id}"
     - "GET /api/v1/aziende/{azienda_id}/microclima-valutazioni"
     - "POST /api/v1/aziende/{azienda_id}/microclima-valutazioni"
+    - "POST /api/v1/aziende/{azienda_id}/microclima-valutazioni/calc/ireq"
     - "DELETE /api/v1/aziende/{azienda_id}/microclima-valutazioni/{valutazione_id}"
     - "GET /api/v1/aziende/{azienda_id}/microclima-valutazioni/{valutazione_id}"
     - "PATCH /api/v1/aziende/{azienda_id}/microclima-valutazioni/{valutazione_id}"
@@ -175,6 +179,11 @@ review:
     - "GET /api/v1/aziende/{azienda_id}/mmc/{mmc_id}"
     - "PATCH /api/v1/aziende/{azienda_id}/mmc/{mmc_id}"
     - "GET /api/v1/aziende/{azienda_id}/pericoli-libreria"
+    - "GET /api/v1/aziende/{azienda_id}/rischi/misure-libreria"
+    - "POST /api/v1/aziende/{azienda_id}/rischi/misure-libreria"
+    - "DELETE /api/v1/aziende/{azienda_id}/rischi/misure-libreria/{misura_id}"
+    - "PATCH /api/v1/aziende/{azienda_id}/rischi/misure-libreria/{misura_id}"
+    - "POST /api/v1/aziende/{azienda_id}/rischi/{rischio_id}/suggerisci-misure"
     - "POST /api/v1/aziende/{azienda_id}/stress/ai-misure"
     - "GET /api/v1/aziende/{azienda_id}/stress/misure"
     - "POST /api/v1/aziende/{azienda_id}/stress/misure"
@@ -258,7 +267,7 @@ endpoints:
     platform_admin: false
     billing_gates: []
     ai_credits: []
-    called_by_ui: true
+    called_by_ui: false
     in_openapi: true
   - id: "ai_feedback.get_recent_feedback"
     method: "GET"
@@ -773,7 +782,7 @@ endpoints:
     platform_admin: false
     billing_gates: []
     ai_credits: []
-    called_by_ui: true
+    called_by_ui: false
     in_openapi: true
   - id: "pericoli.list_pericoli_for_rischio"
     method: "GET"
@@ -1282,6 +1291,25 @@ endpoints:
     ai_credits: []
     called_by_ui: true
     in_openapi: true
+  - id: "duvri.suggerisci_interferenze_ai"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/duvri/interferenze/suggerisci"
+    area: "duvri"
+    source: "backend/app/api/v1/duvri.py"
+    function: "suggerisci_interferenze_ai"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits:
+      - "reasoning"
+    called_by_ui: true
+    in_openapi: true
   - id: "duvri.delete_duvri"
     method: "DELETE"
     path: "/api/v1/aziende/{azienda_id}/duvri/{duvri_id}"
@@ -1404,7 +1432,7 @@ endpoints:
     platform_admin: false
     billing_gates: []
     ai_credits: []
-    called_by_ui: false
+    called_by_ui: true
     in_openapi: true
   - id: "gestanti.create_gestanti"
     method: "POST"
@@ -1422,7 +1450,7 @@ endpoints:
     platform_admin: false
     billing_gates: []
     ai_credits: []
-    called_by_ui: false
+    called_by_ui: true
     in_openapi: true
   - id: "gestanti.cross_reference"
     method: "POST"
@@ -1430,6 +1458,59 @@ endpoints:
     area: "gestanti"
     source: "backend/app/api/v1/gestanti.py"
     function: "cross_reference"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "gestanti.list_gestanti_mansioni"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/gestanti/mansioni"
+    area: "gestanti"
+    source: "backend/app/api/v1/gestanti.py"
+    function: "list_gestanti_mansioni"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "gestanti.upsert_gestanti_mansione"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/gestanti/mansioni"
+    area: "gestanti"
+    source: "backend/app/api/v1/gestanti.py"
+    function: "upsert_gestanti_mansione"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "gestanti.delete_gestanti_mansione"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/gestanti/mansioni/{mansione_valutazione_id}"
+    area: "gestanti"
+    source: "backend/app/api/v1/gestanti.py"
+    function: "delete_gestanti_mansione"
     auth: "required"
     capabilities:
       - "assessments:write"
@@ -1696,6 +1777,24 @@ endpoints:
     area: "microclima"
     source: "backend/app/api/v1/microclima_valutazioni.py"
     function: "create_microclima"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
+    in_openapi: true
+  - id: "microclima_valutazioni.calculate_ireq_preview"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/microclima-valutazioni/calc/ireq"
+    area: "microclima"
+    source: "backend/app/api/v1/microclima_valutazioni.py"
+    function: "calculate_ireq_preview"
     auth: "required"
     capabilities:
       - "assessments:write"
@@ -2361,7 +2460,7 @@ endpoints:
     platform_admin: false
     billing_gates: []
     ai_credits: []
-    called_by_ui: true
+    called_by_ui: false
     in_openapi: true
   - id: "rischi_misure.create_misura"
     method: "POST"
@@ -2379,7 +2478,7 @@ endpoints:
     platform_admin: false
     billing_gates: []
     ai_credits: []
-    called_by_ui: true
+    called_by_ui: false
     in_openapi: true
   - id: "rischi_misure.delete_misura"
     method: "DELETE"
@@ -2397,7 +2496,7 @@ endpoints:
     platform_admin: false
     billing_gates: []
     ai_credits: []
-    called_by_ui: true
+    called_by_ui: false
     in_openapi: true
   - id: "rischi_misure.update_misura"
     method: "PATCH"
@@ -2415,7 +2514,7 @@ endpoints:
     platform_admin: false
     billing_gates: []
     ai_credits: []
-    called_by_ui: true
+    called_by_ui: false
     in_openapi: true
   - id: "rischi.suggerisci_misure"
     method: "POST"
@@ -2434,7 +2533,7 @@ endpoints:
     billing_gates: []
     ai_credits:
       - "reasoning"
-    called_by_ui: true
+    called_by_ui: false
     in_openapi: true
   - id: "aziende.sector_summary"
     method: "GET"

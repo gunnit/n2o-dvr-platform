@@ -60,6 +60,41 @@ def periodicita_label_for(over_50: bool) -> str:
     return "biennale" if over_50 else "quinquennale"
 
 
+def age_on(born: date, on: date) -> int:
+    """Whole years of age on the given date (Italian civil convention)."""
+    return on.year - born.year - ((on.month, on.day) < (born.month, born.day))
+
+
+def is_over_50(
+    *, data_nascita: date | None, eta_50_plus: bool, on: date
+) -> bool:
+    """Whether the worker counts as 50+ for the art. 176 c.3 cadence.
+
+    ``data_nascita`` is authoritative when present (client feedback 2026-08:
+    "il campo periodicità deve essere calcolato in base all'età del
+    lavoratore"); the manual ``eta_50_plus`` flag survives only as a
+    fallback for rows recorded before the birth-date field existed.
+    """
+    if data_nascita is not None:
+        return age_on(data_nascita, on) >= 50
+    return bool(eta_50_plus)
+
+
+def surveillance_periodicita(
+    *,
+    data_nascita: date | None,
+    eta_50_plus: bool,
+    idoneita_visiva: str | None,
+    on: date,
+) -> str:
+    """Art. 176 c.3 periodicità: biennale for workers aged 50+ or with
+    prescrizioni/idoneità con limitazioni, quinquennale otherwise."""
+    biennale = is_over_50(
+        data_nascita=data_nascita, eta_50_plus=eta_50_plus, on=on
+    ) or (idoneita_visiva == "con prescrizioni")
+    return "biennale" if biennale else "quinquennale"
+
+
 def cadence_years_for(over_50: bool) -> int:
     return PERIODICITA_OVER_50_ANNI if over_50 else PERIODICITA_STANDARD_ANNI
 

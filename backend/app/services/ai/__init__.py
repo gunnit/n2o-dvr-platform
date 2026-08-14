@@ -25,6 +25,11 @@ from app.services.ai.dpi_rischi_suggester import (
     DpiRischiSuggerito,
     suggest_dpi_rischi,
 )
+from app.services.ai.duvri_interferenze_suggester import (
+    InterferenzaSuggerita,
+    InterferenzeSuggerite,
+    suggest_interferenze,
+)
 from app.services.ai.rischi_suggester import (
     RischiSuggeriti,
     RischioSuggerito,
@@ -66,6 +71,10 @@ __all__ = [
     # Per-persona DPI + rischi specifici suggestions
     "suggest_dpi_rischi",
     "DpiRischiSuggerito",
+    # DUVRI rischi interferenziali suggestions
+    "suggest_interferenze",
+    "InterferenzaSuggerita",
+    "InterferenzeSuggerite",
     # Rischi suggestions per ambiente (Phase 8.3)
     "suggest_rischi",
     "RischioSuggerito",

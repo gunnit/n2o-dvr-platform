@@ -30,6 +30,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+import { MansioniPanel } from "@/components/assessments/gestanti/mansioni-panel";
 import { MatchesPanel } from "@/components/assessments/gestanti/matches-panel";
 import { RelocationDialog } from "@/components/assessments/gestanti/relocation-dialog";
 import { WorkerSelector } from "@/components/assessments/gestanti/worker-selector";
@@ -473,6 +474,12 @@ export default function GestantiAssessmentPage() {
         </Card>
       )}
 
+      {/* Sezione 1 — valutazione oggettiva per mansione (art. 11 D.Lgs.
+          151/2001): nessuna lavoratrice in gestazione richiesta. */}
+      <MansioniPanel aziendaId={aziendaId} />
+
+      {/* Sezione 2 — valutazione specifica della singola lavoratrice che ha
+          notificato lo stato di gravidanza/allattamento. */}
       <WorkerSelector
         workers={workers}
         selectedId={selectedId}

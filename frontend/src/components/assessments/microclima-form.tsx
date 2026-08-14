@@ -30,6 +30,13 @@ import { cn } from "@/lib/utils";
  */
 const PHS_CRITICAL_DLIM_MIN = 30;
 
+/**
+ * Frostbite-risk classes (ISO 11079 Annex D wind chill bands) that force the
+ * mandatory-measures banner on the cold-stress form regardless of the
+ * general-cooling balance: exposed skin can freeze within minutes.
+ */
+const IREQ_CRITICAL_FROSTBITE = ["ALTO", "ESTREMO"];
+
 // ---------------------------------------------------------------------------
 // Types — mirrors backend PmvPpdRequest/PmvPpdResponse.
 // ---------------------------------------------------------------------------
@@ -644,6 +651,7 @@ export function MicroclimaPmvForm({
 // PHS form (ISO 7933) — severe heat only.
 // ---------------------------------------------------------------------------
 
+
 export interface PhsInputs {
   air_temp: number;
   mean_radiant_temp: number;
@@ -1121,6 +1129,561 @@ export function MicroclimaPhsForm({
                 disabled={!result || result.d_lim === null || saving}
                 onClick={handleSavePhs}
               >
+                {saving ? "Salvataggio…" : "Salva nel fascicolo"}
+              </Button>
+            </div>
+          </div>
+          {saveMessage && (
+            <p
+              className={cn(
+                "text-xs",
+                saveMessage.startsWith("Errore")
+                  ? "text-destructive"
+                  : "text-[#0c6b2f]",
+              )}
+            >
+              {saveMessage}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Reset */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-4">
+        <div className="text-xs text-muted-foreground">
+          Bozza salvata automaticamente
+        </div>
+        <button
+          type="button"
+          onClick={resetDraft}
+          className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+        >
+          Ripristina valori predefiniti
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// IREQ form (ISO 11079) — severe cold only.
+// ---------------------------------------------------------------------------
+
+export interface IreqInputs {
+  air_temp: number;
+  mean_radiant_temp: number;
+  air_velocity: number;
+  humidity: number;
+  metabolic_rate: number;
+  clothing_insulation: number;
+  duration_min: number;
+}
+
+export interface IreqResult {
+  t_o: number;
+  ireq_neutral: number;
+  ireq_minimal: number;
+  icl: number;
+  delta_clo: number;
+  dle_min: number | null;
+  t_wc: number | null;
+  frostbite_risk: string; // BASSO | MODERATO | ALTO | ESTREMO | NON_APPLICABILE
+  livello: string; // ACCETTABILE | LIMITE | CRITICO
+}
+
+interface IreqPreset {
+  id: string;
+  label: string;
+  hint: string;
+  inputs: IreqInputs;
+}
+
+const IREQ_PRESETS: IreqPreset[] = [
+  {
+    id: "cella-frigorifera",
+    label: "Cella frigorifera (+2 °C)",
+    hint: "+2 °C, aria quasi ferma, lavoro moderato, giacca termica.",
+    inputs: {
+      air_temp: 2,
+      mean_radiant_temp: 2,
+      air_velocity: 0.3,
+      humidity: 85,
+      metabolic_rate: 2.0,
+      clothing_insulation: 1.5,
+      duration_min: 480,
+    },
+  },
+  {
+    id: "cella-surgelati",
+    label: "Cella surgelati (−25 °C)",
+    hint: "−25 °C, completo isotermico da cella, movimentazione merci.",
+    inputs: {
+      air_temp: -25,
+      mean_radiant_temp: -25,
+      air_velocity: 0.4,
+      humidity: 85,
+      metabolic_rate: 2.0,
+      clothing_insulation: 3.5,
+      duration_min: 480,
+    },
+  },
+  {
+    id: "esterno-invernale",
+    label: "Esterno invernale ventoso",
+    hint: "−5 °C con vento 6 m/s, lavoro fisico, abbigliamento invernale.",
+    inputs: {
+      air_temp: -5,
+      mean_radiant_temp: -5,
+      air_velocity: 6,
+      humidity: 70,
+      metabolic_rate: 2.8,
+      clothing_insulation: 2.0,
+      duration_min: 480,
+    },
+  },
+];
+
+export const DEFAULT_IREQ_INPUTS: IreqInputs = IREQ_PRESETS[0].inputs;
+
+function FrostbiteBadge({ risk }: { risk: string }) {
+  if (risk === "NON_APPLICABILE") {
+    return (
+      <Badge variant="outline" className="tabular-nums">
+        Congelamento: non applicabile
+      </Badge>
+    );
+  }
+  const tone =
+    risk === "BASSO"
+      ? "border-[rgba(16,140,61,0.4)] text-[#0c6b2f]"
+      : risk === "MODERATO"
+      ? "border-[rgba(245,158,11,0.4)] text-[#8a5c23]"
+      : "border-[rgba(199,42,58,0.4)] text-[#b01e2e]";
+  return (
+    <Badge variant="outline" className={cn("tabular-nums", tone)}>
+      Congelamento: {risk}
+    </Badge>
+  );
+}
+
+export interface MicroclimaIreqFormProps {
+  aziendaId: string;
+  onResultChange?: (result: IreqResult | null) => void;
+  onSaved?: () => void;
+}
+
+export function MicroclimaIreqForm({
+  aziendaId,
+  onResultChange,
+  onSaved,
+}: MicroclimaIreqFormProps) {
+  const storageKey = `microclima-ireq-draft-${aziendaId}`;
+
+  const [inputs, setInputs] = useState<IreqInputs>(DEFAULT_IREQ_INPUTS);
+  const [result, setResult] = useState<IreqResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [nomeArea, setNomeArea] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  const handleSaveIreq = useCallback(async () => {
+    if (!result) return;
+    setSaving(true);
+    setSaveMessage(null);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      let token: string | null = null;
+      try {
+        const s = await fetch("/api/auth/session");
+        const session = await s.json();
+        token = session?.accessToken ?? null;
+      } catch {
+        /* noop */
+      }
+      const body = JSON.stringify({
+        nome_area: nomeArea || null,
+        tipo_ambiente: "severo_freddo",
+        temperatura_aria: inputs.air_temp,
+        temperatura_radiante: inputs.mean_radiant_temp,
+        velocita_aria: inputs.air_velocity,
+        umidita_relativa: inputs.humidity,
+        metabolismo: inputs.metabolic_rate,
+        isolamento_vestiario: inputs.clothing_insulation,
+        ireq_neutral: result.ireq_neutral,
+        ireq_minimal: result.ireq_minimal,
+        t_wind_chill: result.t_wc ?? null,
+        dle_freddo: result.dle_min ?? null,
+        livello_rischio: result.livello ?? null,
+      });
+      const res = await fetch(
+        `${apiUrl}/api/v1/aziende/${aziendaId}/microclima-valutazioni`,
+        {
+          method: "POST",
+          headers: token
+            ? {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              }
+            : { "Content-Type": "application/json" },
+          body,
+        },
+      );
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`API ${res.status}: ${txt}`);
+      }
+      setSaveMessage(
+        `Salvata: ${nomeArea || "(area senza nome)"} — IREQ ${fmtNum(result.ireq_neutral, 2)} clo, livello ${result.livello}.`,
+      );
+      onSaved?.();
+    } catch (err) {
+      setSaveMessage(
+        err instanceof Error ? `Errore: ${err.message}` : "Errore sconosciuto",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }, [aziendaId, inputs, nomeArea, onSaved, result]);
+
+  // Hydrate from localStorage
+  useEffect(() => {
+    try {
+      const raw =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem(storageKey)
+          : null;
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<IreqInputs>;
+        setInputs({ ...DEFAULT_IREQ_INPUTS, ...parsed });
+      } else {
+        setInputs(DEFAULT_IREQ_INPUTS);
+      }
+    } catch {
+      setInputs(DEFAULT_IREQ_INPUTS);
+    }
+  }, [storageKey]);
+
+  // Persist on change
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(inputs));
+    } catch {
+      // ignore
+    }
+  }, [inputs, storageKey]);
+
+  // Debounced live compute via the backend (same flow as PMV/PHS; the
+  // endpoint lives on the microclima router, so it is azienda-scoped).
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      const controller = new AbortController();
+      (async () => {
+        setLoading(true);
+        setError(null);
+        try {
+          const apiUrl =
+            process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+          let token: string | null = null;
+          try {
+            const s = await fetch("/api/auth/session");
+            const session = await s.json();
+            token = session?.accessToken ?? null;
+          } catch {
+            /* noop */
+          }
+          const res = await fetch(
+            `${apiUrl}/api/v1/aziende/${aziendaId}/microclima-valutazioni/calc/ireq`,
+            {
+              method: "POST",
+              headers: token
+                ? {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                  }
+                : { "Content-Type": "application/json" },
+              body: JSON.stringify(inputs),
+              signal: controller.signal,
+            },
+          );
+          if (!res.ok) throw new Error(`API error ${res.status}`);
+          const data = (await res.json()) as IreqResult;
+          setResult(data);
+        } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          setError(err instanceof Error ? err.message : "Errore di calcolo");
+          setResult(null);
+        } finally {
+          setLoading(false);
+        }
+      })();
+      return () => controller.abort();
+    }, 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [aziendaId, inputs]);
+
+  useEffect(() => {
+    onResultChange?.(result);
+  }, [result, onResultChange]);
+
+  const setField = useCallback(<K extends keyof IreqInputs>(key: K, value: IreqInputs[K]) => {
+    setInputs((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const applyPreset = useCallback((preset: IreqPreset) => {
+    setInputs(preset.inputs);
+  }, []);
+
+  const resetDraft = useCallback(() => {
+    setInputs(DEFAULT_IREQ_INPUTS);
+    try {
+      window.localStorage.removeItem(storageKey);
+    } catch {
+      // ignore
+    }
+  }, [storageKey]);
+
+  const showCriticalBanner =
+    result &&
+    (result.livello === "CRITICO" ||
+      IREQ_CRITICAL_FROSTBITE.includes(result.frostbite_risk));
+
+  return (
+    <div className="space-y-6">
+      {/* Scope note */}
+      <Callout tone="info">
+        <p className="font-semibold">Ambito di applicazione</p>
+        <p className="mt-0.5">
+          Applicabile solo per esposizioni a freddo severo (es. celle
+          frigorifere e di surgelazione, magazzini non riscaldati, lavoro
+          all&apos;aperto in inverno). Per ambienti di comfort normale usare la
+          scheda PMV/PPD.
+        </p>
+      </Callout>
+
+      {/* Critical-exposure banner: insulation below IREQ minimo, or high
+          frostbite risk from the wind chill screening (Annex D). */}
+      {showCriticalBanner && (
+        <Callout role="alert" tone="danger">
+          <p className="font-semibold">
+            Esposizione critica – misure obbligatorie
+          </p>
+          <p className="mt-0.5">
+            {result?.dle_min !== null && result?.dle_min !== undefined
+              ? `Isolamento insufficiente: limitare l'esposizione a ${fmtNum(result.dle_min, 0)}′ (DLE), `
+              : "Rischio di congelamento della cute esposta: "}
+            prevedere pause di riscaldamento in locale temperato, indumenti con
+            isolamento ≥ {fmtNum(result?.ireq_neutral ?? null, 2)} clo,
+            protezione di mani/viso e sorveglianza sanitaria ai sensi
+            dell&apos;art. 181 D.Lgs. 81/2008.
+          </p>
+        </Callout>
+      )}
+
+      {/* Live result */}
+      <Card className="sticky top-4 z-10 shadow-sm">
+        <CardHeader className="border-b">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">
+                Stress da freddo (IREQ)
+              </CardTitle>
+              <CardDescription className="text-xs">
+                ISO 11079:2008 · IREQ = isolamento del vestiario richiesto
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <div className="text-2xl font-semibold tabular-nums">
+                  {result ? fmtNum(result.ireq_neutral, 2) : "—"}
+                </div>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  IREQ neutro (clo)
+                </div>
+              </div>
+              {result ? (
+                <LivelloBadge livello={result.livello} />
+              ) : (
+                <Badge variant="secondary" className="text-xs">
+                  {loading ? "…" : "—"}
+                </Badge>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3 pt-4">
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+            <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
+              <span className="text-muted-foreground">IREQ minimo</span>
+              <span className="font-medium tabular-nums">
+                {result ? fmtNum(result.ireq_minimal, 2, " clo") : "—"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
+              <span className="text-muted-foreground">Icl indossato</span>
+              <span className="font-medium tabular-nums">
+                {result ? fmtNum(result.icl, 2, " clo") : "—"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
+              <span className="text-muted-foreground">Wind chill</span>
+              <span className="font-medium tabular-nums">
+                {result ? fmtNum(result.t_wc, 1, " °C") : "—"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
+              <span className="text-muted-foreground">DLE</span>
+              <span className="font-medium tabular-nums">
+                {result && result.dle_min !== null
+                  ? fmtNum(result.dle_min, 0, "′")
+                  : "—"}
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {result && <FrostbiteBadge risk={result.frostbite_risk} />}
+            {result && result.delta_clo > 0 && (
+              <Badge variant="outline" className="tabular-nums">
+                Isolamento aggiuntivo consigliato: +
+                {fmtNum(result.delta_clo, 2)} clo
+              </Badge>
+            )}
+            {error && (
+              <span role="alert" className="text-[11px] text-destructive">
+                {error}
+              </span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Presets */}
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle className="text-sm">Scenari predefiniti</CardTitle>
+          <CardDescription className="text-xs">
+            Applica valori plausibili per una tipologia di ambiente freddo, poi
+            modifica.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2 pt-4">
+          {IREQ_PRESETS.map((p) => (
+            <Button
+              key={p.id}
+              variant="outline"
+              size="sm"
+              onClick={() => applyPreset(p)}
+              title={p.hint}
+            >
+              {p.label}
+            </Button>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Inputs */}
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle className="text-sm">Parametri ambientali</CardTitle>
+          <CardDescription className="text-xs">
+            Range: Ta da −50 a +10 °C, Va 0–20 m/s (vento), M 0.8–5 met, Icl
+            0–5 clo. Il calcolo segue la UNI EN ISO 11079 (IREQ + wind chill).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-x-6 gap-y-4 pt-4 md:grid-cols-2">
+          <NumericField
+            label="Temperatura aria (Ta)"
+            unit="°C"
+            value={inputs.air_temp}
+            onChange={(v) => setField("air_temp", v)}
+            min={-50}
+            max={10}
+            step={0.5}
+            hint="Celle surgelati −18/−30 °C · celle frigo 0/+4 °C."
+          />
+          <NumericField
+            label="Temperatura radiante (Tr)"
+            unit="°C"
+            value={inputs.mean_radiant_temp}
+            onChange={(v) => setField("mean_radiant_temp", v)}
+            min={-50}
+            max={15}
+            step={0.5}
+            hint="Spesso ≈ Ta in assenza di superfici molto calde/fredde."
+          />
+          <NumericField
+            label="Velocità aria / vento (Va)"
+            unit="m/s"
+            value={inputs.air_velocity}
+            onChange={(v) => setField("air_velocity", v)}
+            min={0}
+            max={20}
+            step={0.1}
+            hint="Per lavoro all'aperto inserire la velocità del vento."
+          />
+          <NumericField
+            label="Umidità relativa"
+            unit="%"
+            value={inputs.humidity}
+            onChange={(v) => setField("humidity", v)}
+            min={0}
+            max={100}
+            step={1}
+          />
+          <NumericField
+            label="Tasso metabolico (M)"
+            unit="met"
+            value={inputs.metabolic_rate}
+            onChange={(v) => setField("metabolic_rate", v)}
+            min={0.8}
+            max={5.0}
+            step={0.1}
+            hint="Lavoro leggero 1.6 · moderato 2.0 · pesante 3.0+."
+          />
+          <NumericField
+            label="Isolamento abbigliamento (Icl)"
+            unit="clo"
+            value={inputs.clothing_insulation}
+            onChange={(v) => setField("clothing_insulation", v)}
+            min={0}
+            max={5}
+            step={0.05}
+            hint="Invernale 1.5–2 clo · completo da cella 2.5–3.5 clo."
+          />
+          <NumericField
+            label="Durata esposizione"
+            unit="min"
+            value={inputs.duration_min}
+            onChange={(v) => setField("duration_min", Math.round(v))}
+            min={1}
+            max={480}
+            step={30}
+            hint="Durata turno o sessione valutata. Max 480 min."
+          />
+        </CardContent>
+      </Card>
+
+      {/* Save to dossier */}
+      <Card className="border-primary/30 bg-primary/5">
+        <CardContent className="space-y-3 py-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+            <div>
+              <Label htmlFor="ireq-nome-area" className="text-xs">
+                Nome / identificativo area
+              </Label>
+              <Input
+                id="ireq-nome-area"
+                placeholder="Es. Cella surgelati -25 °C"
+                value={nomeArea}
+                onChange={(e) => setNomeArea(e.target.value)}
+              />
+            </div>
+            <div className="flex items-end">
+              <Button disabled={!result || saving} onClick={handleSaveIreq}>
                 {saving ? "Salvataggio…" : "Salva nel fascicolo"}
               </Button>
             </div>

@@ -9,6 +9,7 @@ import asyncio
 import hashlib
 import importlib
 import os
+import re
 import sys
 import zipfile
 from pathlib import Path
@@ -412,6 +413,72 @@ def test_pee_azienda_uses_only_the_configured_drill_frequency(generated_outputs)
     assert "Prove di evacuazione con cadenza almeno annuale" not in text
 
 
+def test_pee_azienda_point_a_renders_configured_alarm_type(generated_outputs):
+    """Incendio and evacuazione generale point A carry the configured alarm.
+
+    The fixture configures tipologia_allarme="Tromba da stadio"; the standard
+    hardcoded wording must be gone.
+    """
+    ok, path, _ = generated_outputs["PEE_AZIENDA"]
+    assert ok and path
+    text = _document_text(path)
+
+    assert (
+        "attiva l'allarme antincendio previsto dal piano (Tromba da stadio)" in text
+    )
+    assert (
+        "All'attivazione del segnale di evacuazione generale (Tromba da stadio)"
+        in text
+    )
+    assert "{tipologia_allarme}" not in text
+    assert "pulsante manuale o segnale acustico" not in text
+
+    pairs = _all_key_value_pairs(Document(path))
+    assert pairs["Tipologia di allarme"] == "Tromba da stadio"
+
+
+def test_pee_azienda_emergency_numbers_render_as_nue_112(generated_outputs):
+    """Legacy 115/118 entries render as 112; internal numbers untouched."""
+    ok, path, _ = generated_outputs["PEE_AZIENDA"]
+    assert ok and path
+    doc = Document(path)
+
+    table = _find_table(doc, ("Ente/Ruolo", "Numero"))
+    assert table is not None
+    numbers = {
+        row.cells[0].text.strip(): row.cells[1].text.strip()
+        for row in table.rows[1:]
+    }
+    assert numbers["Vigili del Fuoco"] == "112"
+    assert numbers["Emergenza sanitaria"] == "112"
+    assert numbers["Referente aziendale"] == "0521 456789"
+
+    text = _document_text(path)
+    assert (
+        "Tutte le chiamate di soccorso confluiscono nel Numero Unico di "
+        "Emergenza (NUE) 112." in text
+    )
+    # No stray legacy emergency numbers in the generated scenario section.
+    section = text[
+        text.index("Procedure di emergenza per scenario"):
+        text.index("Formazione e prove di evacuazione")
+    ]
+    assert not re.search(r"\b(113|115|118)\b", section)
+
+
+def test_pee_comune_defaults_alarm_and_uses_nue(generated_outputs):
+    ok, path, _ = generated_outputs["PEE_COMUNE"]
+    assert ok and path
+    text = _document_text(path)
+
+    # No tipologia configured on the comune fixture → prefilled default.
+    assert "In caso di attivazione dell'allarme generale dell'edificio (Sirena)" in text
+
+    pairs = _all_key_value_pairs(Document(path))
+    assert pairs["Tipologia di allarme"] == "Sirena"
+    assert pairs["Numero Unico di Emergenza (NUE)"] == "112"
+
+
 def test_pee_azienda_scrubs_donor_collection_point(generated_outputs):
     ok, path, _ = generated_outputs["PEE_AZIENDA"]
     assert ok and path
@@ -555,7 +622,9 @@ def test_vdt_emits_full_template_sections(generated_outputs):
         "Indice",
         "Introduzione",
         "Anagrafica Aziendale",
-        "Dati Occupazionali",
+        # Client feedback 2026-08: the Dati Occupazionali section became the
+        # DVR-Master-style employee organigramma, always rendered.
+        "Organigramma Dipendenti",
         "Organizzazione Aziendale della Sicurezza",
         "Principali fattori di rischio",
         "La postazione di lavoro",
@@ -572,15 +641,22 @@ def test_vdt_emits_full_template_sections(generated_outputs):
 
 
 def test_vdt_quadro_sinottico_emits_classification(generated_outputs):
-    """The quadro sinottico must show every valutazione row with its
-    Esposto/Non Esposto classification — that's the per-worker summary
-    the medico competente reads first.
+    """The quadro sinottico must show one row PER WORKER with the hours
+    summed across all their postazioni and the Esposto/Non Esposto
+    classification computed on that total (client feedback 2026-08) —
+    that's the per-worker summary the medico competente reads first.
     """
     ok, path, _ = generated_outputs["ALLEGATO_VDT"]
     assert ok and path
     doc = Document(path)
 
-    sinottico_header = ("Nominativo", "Mansione", "Tempo di utilizzo (h/sett)", "Rischio VDT")
+    sinottico_header = (
+        "Nominativo",
+        "Mansione",
+        "Postazioni utilizzate",
+        "Ore totali (h/sett)",
+        "Rischio VDT",
+    )
     matched = False
     for t in doc.tables:
         if not t.rows:
@@ -589,7 +665,7 @@ def test_vdt_quadro_sinottico_emits_classification(generated_outputs):
         if header == sinottico_header:
             matched = True
             assert len(t.rows) >= 2, "quadro sinottico has no data rows"
-            risk_col = {row.cells[3].text.strip() for row in t.rows[1:]}
+            risk_col = {row.cells[4].text.strip() for row in t.rows[1:]}
             assert risk_col & {"Esposto", "Non Esposto"}, (
                 f"quadro sinottico Rischio VDT col missing classification: {risk_col}"
             )

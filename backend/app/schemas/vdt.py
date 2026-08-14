@@ -2,12 +2,14 @@
 
 One VdtValutazione row per workstation/worker. The 20 h/week threshold
 (D.Lgs. 81/2008 art. 173) is enforced server-side: ``esposto`` is always
-derived from ``ore_settimanali`` so the form can never lie.
+derived from ``ore_settimanali`` so the form can never lie. When the same
+persona has multiple rows (multiple devices), the hours are summed across
+all of them and ``esposto`` reflects the person-level total.
 
-Surveillance scheduling (art. 176) is also derived: when the caller sets
-``data_ultima_visita`` and ``eta_50_plus``, the server fills in
-``data_prossima_visita`` and ``periodicita_sorveglianza`` via the
-``vdt_surveillance`` module.
+Surveillance scheduling (art. 176) is also derived: ``periodicita_sorveglianza``
+is computed from the worker's age (``data_nascita``; legacy fallback
+``eta_50_plus``) and ``data_prossima_visita`` is materialised for the
+dashboard widgets via the ``vdt_surveillance`` module.
 """
 
 from __future__ import annotations
@@ -28,6 +30,9 @@ class VdtValutazioneBase(BaseModel):
     ambiente_id: uuid.UUID | None = None
 
     postazione: str = Field(..., min_length=1, max_length=200)
+    # Attività svolta alla postazione (client feedback 2026-08). Optional:
+    # generators fall back to the ambiente name for legacy rows.
+    attivita: str | None = Field(None, max_length=200)
     ore_settimanali: float = Field(..., ge=0, le=168)
 
     # Ergonomic checklist (REFERENCE_DATA.md VDT checklist)
@@ -40,9 +45,12 @@ class VdtValutazioneBase(BaseModel):
     spazio_adeguato: bool = True
     pause_previste: bool = True
 
-    # Surveillance
+    # Surveillance. ``data_nascita`` drives the age-based periodicità
+    # (art. 176 c.3); ``eta_50_plus`` survives as a legacy fallback for
+    # callers that don't know the birth date.
     idoneita_visiva: IdoneitaVisiva | None = None
     eta_50_plus: bool = False
+    data_nascita: date | None = None
     data_ultima_visita: date | None = None
 
     note: str | None = None
@@ -56,6 +64,7 @@ class VdtValutazioneUpdate(BaseModel):
     persona_id: uuid.UUID | None = None
     ambiente_id: uuid.UUID | None = None
     postazione: str | None = Field(None, min_length=1, max_length=200)
+    attivita: str | None = Field(None, max_length=200)
     ore_settimanali: float | None = Field(None, ge=0, le=168)
 
     schermo_conforme: bool | None = None
@@ -69,6 +78,7 @@ class VdtValutazioneUpdate(BaseModel):
 
     idoneita_visiva: IdoneitaVisiva | None = None
     eta_50_plus: bool | None = None
+    data_nascita: date | None = None
     data_ultima_visita: date | None = None
 
     note: str | None = None
@@ -83,6 +93,7 @@ class VdtValutazioneResponse(BaseModel):
     ambiente_id: uuid.UUID | None
 
     postazione: str
+    attivita: str | None
     ore_settimanali: float
     esposto: bool
 
@@ -98,6 +109,7 @@ class VdtValutazioneResponse(BaseModel):
     idoneita_visiva: str | None
     periodicita_sorveglianza: str | None
     eta_50_plus: bool
+    data_nascita: date | None
     data_ultima_visita: date | None
     data_prossima_visita: date | None
 

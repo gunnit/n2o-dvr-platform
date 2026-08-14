@@ -18,7 +18,9 @@ import { Select } from "@/components/ui/select";
 // ---------------------------------------------------------------------------
 // Domain — mirrors backend/app/services/vdt_calculator.py and
 // backend/app/schemas/vdt.py.  D.Lgs. 81/2008 Titolo VII: worker with
-// >= 20h/week VDT use = ESPOSTO.
+// >= 20h/week VDT use = ESPOSTO. When the same worker uses multiple
+// devices/postazioni, the weekly hours are SUMMED across all their rows
+// and the exposure is classified on the TOTAL (client feedback 2026-08).
 // ---------------------------------------------------------------------------
 
 export const VDT_EXPOSURE_THRESHOLD_HOURS = 20;
@@ -36,6 +38,7 @@ export interface VdtWorker {
   id: string; // client-side id only, never sent to server
   persona_id: string | null;
   postazione: string;
+  attivita: string; // ATTIVITÀ svolta alla postazione (client feedback 2026-08)
   ore_settimanali: number | null;
   // checklist
   schermo_conforme: boolean;
@@ -46,16 +49,21 @@ export interface VdtWorker {
   riflessi_assenti: boolean;
   spazio_adeguato: boolean;
   pause_previste: boolean;
-  // surveillance
+  // surveillance — periodicità is computed from the worker's age
+  // (data_nascita); eta_50_plus is derived from it and kept only because
+  // the backend still accepts it as a legacy fallback.
   eta_50_plus: boolean;
+  data_nascita: string | ""; // YYYY-MM-DD
   idoneita_visiva: IdoneitaVisiva | "";
-  data_ultima_visita: string | ""; // YYYY-MM-DD
   note: string;
 }
 
 export interface VdtWorkerResult extends VdtWorker {
   esposizione: Esposizione | null; // null = ore not yet provided
   sorveglianza_sanitaria: boolean;
+  // Person-level total across all rows of the same persona (equals the
+  // row's own hours for generic rows). Drives the classification.
+  ore_totali: number | null;
 }
 
 export interface VdtSummary {
@@ -66,31 +74,88 @@ export interface VdtSummary {
   incompleti: number; // workers without ore_settimanali or postazione
 }
 
-export function classifyWorker(worker: VdtWorker): VdtWorkerResult {
+/** Whole years of age at `on` for an ISO date string, or null if unparsable. */
+export function ageOn(birthIso: string, on: Date = new Date()): number | null {
+  if (!birthIso) return null;
+  const b = new Date(`${birthIso}T00:00:00`);
+  if (isNaN(b.getTime())) return null;
+  let age = on.getFullYear() - b.getFullYear();
+  const m = on.getMonth() - b.getMonth();
+  if (m < 0 || (m === 0 && on.getDate() < b.getDate())) age -= 1;
+  return age;
+}
+
+/** Art. 176 c.3: biennale for 50+ or "con prescrizioni", else quinquennale. */
+export function periodicitaFor(worker: VdtWorker): "biennale" | "quinquennale" {
+  const age = ageOn(worker.data_nascita);
+  const over50 = age !== null ? age >= 50 : worker.eta_50_plus;
+  return over50 || worker.idoneita_visiva === "con prescrizioni"
+    ? "biennale"
+    : "quinquennale";
+}
+
+export function classifyWorker(
+  worker: VdtWorker,
+  personTotals?: Map<string, number>,
+): VdtWorkerResult {
   if (worker.ore_settimanali == null || isNaN(worker.ore_settimanali)) {
-    return { ...worker, esposizione: null, sorveglianza_sanitaria: false };
+    return {
+      ...worker,
+      esposizione: null,
+      sorveglianza_sanitaria: false,
+      ore_totali: null,
+    };
   }
+  // One person on several devices: classify on the SUM of their hours
+  // across all rows, not on this row alone (12h + 10h => 22h => ESPOSTO).
+  const total =
+    worker.persona_id && personTotals?.has(worker.persona_id)
+      ? personTotals.get(worker.persona_id)!
+      : worker.ore_settimanali;
   const esposizione: Esposizione =
-    worker.ore_settimanali >= VDT_EXPOSURE_THRESHOLD_HOURS
-      ? "ESPOSTO"
-      : "NON_ESPOSTO";
+    total >= VDT_EXPOSURE_THRESHOLD_HOURS ? "ESPOSTO" : "NON_ESPOSTO";
   return {
     ...worker,
     esposizione,
     sorveglianza_sanitaria: esposizione === "ESPOSTO",
+    ore_totali: total,
   };
 }
 
 export function summarize(workers: VdtWorker[]): VdtSummary {
-  const classified = workers.map(classifyWorker);
+  // Person-level hour totals: same persona on multiple rows sums up.
+  const personTotals = new Map<string, number>();
+  for (const w of workers) {
+    if (
+      w.persona_id &&
+      w.ore_settimanali != null &&
+      !isNaN(w.ore_settimanali)
+    ) {
+      personTotals.set(
+        w.persona_id,
+        (personTotals.get(w.persona_id) ?? 0) + w.ore_settimanali,
+      );
+    }
+  }
+  const classified = workers.map((w) => classifyWorker(w, personTotals));
   let esposti = 0;
   let non_esposti = 0;
   let incompleti = 0;
+  // Esposti/non esposti are counted per PERSON (or per generic row), not
+  // per row — a worker on two devices is one exposure, not two.
+  const countedPersone = new Set<string>();
   for (const w of classified) {
     const missingOre = w.esposizione === null;
     const missingPost = !w.postazione.trim();
-    if (missingOre || missingPost) incompleti += 1;
-    else if (w.esposizione === "ESPOSTO") esposti += 1;
+    if (missingOre || missingPost) {
+      incompleti += 1;
+      continue;
+    }
+    if (w.persona_id) {
+      if (countedPersone.has(w.persona_id)) continue;
+      countedPersone.add(w.persona_id);
+    }
+    if (w.esposizione === "ESPOSTO") esposti += 1;
     else non_esposti += 1;
   }
   return {
@@ -111,6 +176,7 @@ function makeWorker(): VdtWorker {
     id: makeId(),
     persona_id: null,
     postazione: "",
+    attivita: "",
     ore_settimanali: null,
     schermo_conforme: true,
     tastiera_separata: true,
@@ -121,8 +187,8 @@ function makeWorker(): VdtWorker {
     spazio_adeguato: true,
     pause_previste: true,
     eta_50_plus: false,
+    data_nascita: "",
     idoneita_visiva: "",
-    data_ultima_visita: "",
     note: "",
   };
 }
@@ -215,6 +281,15 @@ export function VdtForm({
     <K extends keyof VdtWorker>(id: string, key: K, value: VdtWorker[K]) => {
       setWorkers((prev) =>
         prev.map((w) => (w.id === id ? { ...w, [key]: value } : w)),
+      );
+    },
+    [],
+  );
+
+  const updateWorkerFields = useCallback(
+    (id: string, fields: Partial<VdtWorker>) => {
+      setWorkers((prev) =>
+        prev.map((w) => (w.id === id ? { ...w, ...fields } : w)),
       );
     },
     [],
@@ -345,13 +420,21 @@ export function VdtForm({
                       <Select
                         id={`${w.id}-persona`}
                         value={w.persona_id ?? ""}
-                        onChange={(e) =>
-                          updateWorker(
-                            w.id,
-                            "persona_id",
-                            e.target.value || null,
-                          )
-                        } size="sm"
+                        onChange={(e) => {
+                          const personaId = e.target.value || null;
+                          // Prefill ATTIVITÀ from the mansione so the
+                          // operator only corrects (review, never re-enter).
+                          const mansione = personaId
+                            ? persone.find((p) => p.id === personaId)
+                                ?.mansione ?? ""
+                            : "";
+                          updateWorkerFields(w.id, {
+                            persona_id: personaId,
+                            ...(w.attivita.trim() === "" && mansione
+                              ? { attivita: mansione }
+                              : {}),
+                          });
+                        }} size="sm"
                       >
                         <option value="">— Generica —</option>
                         {persone.map((p) => (
@@ -379,6 +462,25 @@ export function VdtForm({
                         value={w.postazione}
                         onChange={(e) =>
                           updateWorker(w.id, "postazione", e.target.value)
+                        }
+                      />
+                    </div>
+
+                    <div className="min-w-[180px] flex-1 space-y-1">
+                      <Label
+                        htmlFor={`${w.id}-attivita`}
+                        className="text-[11px] text-muted-foreground"
+                      >
+                        Attività
+                      </Label>
+                      <Input
+                        id={`${w.id}-attivita`}
+                        type="text"
+                        placeholder="es. Data entry, contabilità"
+                        maxLength={200}
+                        value={w.attivita}
+                        onChange={(e) =>
+                          updateWorker(w.id, "attivita", e.target.value)
                         }
                       />
                     </div>
@@ -416,6 +518,17 @@ export function VdtForm({
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2 self-center">
+                      {w.persona_id &&
+                        w.ore_totali != null &&
+                        w.ore_settimanali != null &&
+                        w.ore_totali !== w.ore_settimanali && (
+                          <span
+                            className="text-[11px] tabular-nums text-muted-foreground"
+                            title="Somma delle ore su tutte le postazioni di questo lavoratore"
+                          >
+                            Σ {w.ore_totali} h/sett
+                          </span>
+                        )}
                       {w.esposizione === "ESPOSTO" && (
                         <span className="inline-flex items-center rounded-md bg-[rgba(239,68,68,0.16)] px-2.5 py-1 text-xs font-medium text-[#b01e2e] ring-1 ring-[rgba(239,68,68,0.34)]">
                           ESPOSTO
@@ -488,21 +601,32 @@ export function VdtForm({
                             Sorveglianza sanitaria
                           </p>
                           <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                            <label className="flex items-center gap-2 text-xs">
-                              <input
-                                type="checkbox"
-                                checked={w.eta_50_plus}
-                                onChange={(e) =>
-                                  updateWorker(
-                                    w.id,
-                                    "eta_50_plus",
-                                    e.target.checked,
-                                  )
-                                }
-                                className="h-3.5 w-3.5"
+                            <div className="space-y-1">
+                              <Label
+                                htmlFor={`${w.id}-nascita`}
+                                className="text-[11px] text-muted-foreground"
+                              >
+                                Data di nascita
+                              </Label>
+                              <Input
+                                id={`${w.id}-nascita`}
+                                type="date"
+                                value={w.data_nascita}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  const age = ageOn(v);
+                                  updateWorkerFields(w.id, {
+                                    data_nascita: v,
+                                    // Legacy fallback flag kept in sync so
+                                    // the backend derives the same cadence.
+                                    eta_50_plus:
+                                      age !== null
+                                        ? age >= 50
+                                        : w.eta_50_plus,
+                                  });
+                                }}
                               />
-                              <span>Età ≥ 50 anni (cadenza biennale)</span>
-                            </label>
+                            </div>
 
                             <div className="space-y-1">
                               <Label
@@ -532,24 +656,17 @@ export function VdtForm({
                             </div>
 
                             <div className="space-y-1">
-                              <Label
-                                htmlFor={`${w.id}-data`}
-                                className="text-[11px] text-muted-foreground"
-                              >
-                                Ultima visita
-                              </Label>
-                              <Input
-                                id={`${w.id}-data`}
-                                type="date"
-                                value={w.data_ultima_visita}
-                                onChange={(e) =>
-                                  updateWorker(
-                                    w.id,
-                                    "data_ultima_visita",
-                                    e.target.value,
-                                  )
-                                }
-                              />
+                              <span className="text-[11px] text-muted-foreground">
+                                Periodicità (calcolata dall&apos;età)
+                              </span>
+                              <p className="text-xs font-medium">
+                                {periodicitaFor(w)}
+                                {ageOn(w.data_nascita) !== null && (
+                                  <span className="ml-1 font-normal text-muted-foreground">
+                                    · {ageOn(w.data_nascita)} anni
+                                  </span>
+                                )}
+                              </p>
                             </div>
                           </div>
                         </div>

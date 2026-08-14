@@ -52,6 +52,227 @@ _ROLE_LABELS_IT: dict[str, str] = {
     "capo_cantiere": "Capo cantiere",
     "autista_mezzi": "Autista mezzi",
 }
+
+# ---------------------------------------------------------------------------
+# Figure di sicurezza sul cantiere (client request 2026-08-13)
+# ---------------------------------------------------------------------------
+
+# Italian labels for FIGURE_SICUREZZA_RUOLI (schemas/pos.py). Same key split
+# as the DPI matrix: stable keys in the DB, labels here and on the frontend.
+_FIGURE_LABELS_IT: dict[str, str] = {
+    "datore_lavoro": "Datore di Lavoro",
+    "direttore_tecnico_cantiere": "Direttore Tecnico di Cantiere",
+    "capocantiere_preposto": "Capocantiere / Preposto",
+    "rspp": "Responsabile del Servizio di Prevenzione e Protezione (RSPP)",
+    "rls": "Rappresentante dei Lavoratori per la Sicurezza (RLS)",
+    "medico_competente": "Medico Competente",
+    "addetto_primo_soccorso": "Addetto al Primo Soccorso",
+    "addetto_antincendio": "Addetto Antincendio",
+}
+
+# Mansionario boilerplate — abridged from the N2O original POS ("MANSIONARIO"
+# chapter). Rendered under the figure table for every figure present so the
+# printed POS carries the default diciture the operator expects. The original
+# texts run several pages; these are the lead paragraphs, verbatim where
+# possible. Full-length texts to be confirmed with the client.
+_MANSIONARIO_IT: dict[str, list[str]] = {
+    "datore_lavoro": [
+        "Al Datore di Lavoro competono i compiti individuati dalla vigente "
+        "normativa, ed in particolare quelli sanciti dal D.Lgs. 81/2008 e "
+        "s.m.i. in quanto titolare dei poteri illimitati di gestione e di "
+        "spesa in materia di sicurezza ed igiene del lavoro.",
+        "Ogni squadra di lavoro dovrà essere formata almeno da un preposto, "
+        "due addetti al servizio primo soccorso ed un addetto al servizio "
+        "emergenze ed antincendio (le figure possono essere "
+        "contemporaneamente coperte da un medesimo lavoratore).",
+        "Il POS può essere sottoscritto esclusivamente dal datore di lavoro "
+        "in quanto la valutazione del rischio, ai sensi e per gli effetti di "
+        "cui al D.Lgs. 81/2008 e s.m.i., non è fra le attività delegabili.",
+    ],
+    "direttore_tecnico_cantiere": [
+        "Il direttore tecnico di cantiere è una figura apicale obbligatoria "
+        "dell'affidataria, incaricata dell'organizzazione, della gestione e "
+        "della conduzione del cantiere. Mantiene i rapporti con la direzione "
+        "dei lavori, coordina e segue l'esecuzione delle prestazioni in "
+        "contratto e sovrintende all'adattamento, all'applicazione e "
+        "all'osservanza dei piani di sicurezza.",
+        "Verifica, con l'ausilio del RSPP, la rispondenza alle norme delle "
+        "attrezzature di lavoro (macchine, impianti, DPI) messe a "
+        "disposizione dei propri lavoratori e mette a disposizione dei "
+        "lavoratori i necessari DPI.",
+    ],
+    "capocantiere_preposto": [
+        "Il capocantiere rappresenta il raccordo tra la direzione generale "
+        "di cantiere e le maestranze dell'impresa esecutrice; cura "
+        "l'attuazione delle misure di sicurezza previste dalle norme in "
+        "vigore e secondo le disposizioni impartite dalla Direzione del "
+        "cantiere anche tramite il piano di sicurezza, e sospende il lavoro "
+        "qualora, a suo giudizio, la prosecuzione dello stesso si rivelasse "
+        "pericolosa per l'incolumità dei lavoratori o di terzi.",
+        "I preposti organizzano e coordinano il lavoro nelle aree di propria "
+        "competenza, rendendo edotti i lavoratori dei rischi cui sono "
+        "sottoposti ed esigendo l'osservanza delle norme antinfortunistiche; "
+        "obbligano i lavoratori ad indossare i dispositivi di protezione "
+        "individuale e sono destinatari degli obblighi di cui all'art. 19 "
+        "del D.Lgs. 81/2008 e s.m.i.",
+    ],
+    "rspp": [
+        "Il Servizio di Prevenzione e Protezione provvede "
+        "all'individuazione dei fattori di rischio, alla valutazione dei "
+        "rischi e all'individuazione delle misure per la sicurezza e la "
+        "salubrità degli ambienti di lavoro nel rispetto della normativa "
+        "vigente; elabora le procedure di sicurezza per le varie attività "
+        "aziendali, propone i programmi di informazione e formazione dei "
+        "lavoratori e partecipa alla riunione periodica di prevenzione e "
+        "protezione dai rischi.",
+    ],
+    "rls": [
+        "Il Rappresentante dei lavoratori per la sicurezza collabora con il "
+        "datore di lavoro e con il servizio di prevenzione e protezione, "
+        "sulla base della specifica conoscenza dell'organizzazione "
+        "dell'azienda e delle situazioni di rischio, alla predisposizione e "
+        "attuazione delle misure per la tutela della salute e "
+        "dell'integrità psico-fisica dei lavoratori.",
+    ],
+    "medico_competente": [
+        "Il Medico Competente collabora con il servizio di prevenzione e "
+        "protezione alla predisposizione ed all'attuazione delle misure per "
+        "la tutela della salute e dell'integrità psicofisica dei "
+        "lavoratori; effettua gli accertamenti sanitari preventivi e "
+        "periodici previsti dalla legge ed esprime i giudizi di idoneità "
+        "alla mansione specifica.",
+    ],
+    "addetto_primo_soccorso": [
+        "L'addetto al primo soccorso interviene in caso di necessità prima "
+        "dell'arrivo dei soccorsi specializzati: riconosce l'emergenza "
+        "sanitaria, allerta il sistema di soccorso (112), attua gli "
+        "interventi di primo soccorso e tiene sotto controllo la cassetta "
+        "di primo soccorso, rifornendola quando occorre.",
+    ],
+    "addetto_antincendio": [
+        "L'addetto antincendio è un lavoratore preposto ad attuare le "
+        "misure di prevenzione incendi e di lotta antincendio, nonché a "
+        "gestire le relative emergenze che si possono presentare nel "
+        "cantiere: valuta tempestivamente l'entità dell'emergenza, agisce "
+        "anche attraverso l'utilizzo di estintori se l'emergenza si "
+        "manifesta di lieve entità, attiva le procedure di emergenza e i "
+        "contatti con il soccorso esterno qualora l'emergenza non sia "
+        "facilmente controllabile e agevola l'evacuazione dei presenti "
+        "garantendo a tutti la possibilità di raggiungere il punto di "
+        "ritrovo.",
+    ],
+}
+
+# Persona.ruolo_* flag → figure key, used to prefill the figure table from
+# the organigramma when the operator hasn't picked anyone yet (platform
+# principle: prefill what the operator can correct).
+_FIGURE_PERSONA_FLAGS: list[tuple[str, str]] = [
+    ("datore_lavoro", "ruolo_datore_lavoro"),
+    ("capocantiere_preposto", "ruolo_preposto"),
+    ("rspp", "ruolo_rspp"),
+    ("rls", "ruolo_rls"),
+    ("medico_competente", "ruolo_medico_competente"),
+    ("addetto_primo_soccorso", "ruolo_primo_soccorso"),
+    ("addetto_antincendio", "ruolo_antincendio"),
+]
+
+# ---------------------------------------------------------------------------
+# Default diciture ported from the N2O original POS (Drive templates folder,
+# "POS.docx"). Verbatim except where marked. See MIGRATION-NOTES-pos.md and
+# the implementation report for which texts still need client confirmation.
+# ---------------------------------------------------------------------------
+
+_DOCUMENTAZIONE_CANTIERE_INTRO = (
+    "Si riporta di seguito un elenco indicativo e non esaustivo della "
+    "documentazione che deve essere conservata in cantiere a cura "
+    "dell'Impresa:"
+)
+
+_DOCUMENTAZIONE_CANTIERE: list[str] = [
+    "Piano operativo di sicurezza",
+    "Certificato di iscrizione C.C.I.A.A.",
+    "Modelli UNILAV",
+    "Denuncia INAIL inizio attività e variazioni",
+    "Documento Unico di Regolarità Contributiva (D.U.R.C.)",
+    "Dichiarazione organico medio annuo e tipo di contratto applicato con i dipendenti",
+    "Documento di valutazione dei rischi ex art. 17 D.Lgs. 81/2008 e s.m.i.",
+    "Designazione del Responsabile del Servizio di Prevenzione e Protezione",
+    "Adempimento dell'obbligo formativo/informativo, ex D.Lgs. 81/2008 e s.m.i.",
+    "Nomina dei coordinatori dell'emergenza ed elenco dei componenti",
+    "Registro degli infortuni debitamente vidimato",
+    "Nomina Medico Competente e registro visite mediche dipendenti ed elenco accertamenti sanitari periodici",
+    "Copia della dichiarazione di conformità dell'impianto di messa a terra e di protezione contro le scariche atmosferiche e copia della richiesta delle verifiche periodiche",
+    "Denuncia degli apparecchi di sollevamento di portata superiore a kg 200 e relative verifiche",
+    "Libretti degli apparecchi di sollevamento con portata superiore a 200 kg",
+    "Schede delle verifiche trimestrali alle funi e catene, anche per gli apparecchi di portata inferiore a kg 200",
+    "Copia dell'autorizzazione ministeriale del ponteggio metallico, ovvero disegno esecutivo e relazione di calcolo ove richiesti",
+    "Libretto rilasciato dal costruttore del ponteggio, indicante i limiti di carico e le modalità di impiego",
+    "Denuncia annuale concernente produzione, trasporto, stoccaggio dei rifiuti",
+    "Registro di carico e scarico, vidimato dall'Ufficio del Registro",
+]
+
+_MISURE_LAVORATORI_DEVONO: list[str] = [
+    "osservare con attenzione le misure di sicurezza predisposte dall'impresa;",
+    "usare con cura e costantemente i dispositivi di protezione individuale "
+    "e gli altri mezzi messi a loro disposizione;",
+    "segnalare al responsabile di cantiere gli eventuali guasti sopravvenuti "
+    "ai dispositivi di protezione individuale o la loro intollerabilità, "
+    "chiedendone la sostituzione;",
+    "avvertire immediatamente il responsabile di cantiere qualora "
+    "individuino o sospettino situazioni di pericolo;",
+    "adoperarsi direttamente, in caso di urgenza e nell'ambito delle proprie "
+    "competenze e possibilità, per eliminare o ridurre i pericoli.",
+]
+
+_MISURE_LAVORATORI_NON_DEVONO: list[str] = [
+    "rimuovere o modificare i dispositivi e gli altri mezzi di sicurezza e "
+    "di protezione senza averne ottenuta l'autorizzazione;",
+    "compiere, di propria iniziativa, operazioni o manovre che non siano di "
+    "loro competenza e che possano compromettere la sicurezza propria o di "
+    "altre persone.",
+]
+
+_MISURE_DPI_PARAGRAFI: list[str] = [
+    "Il lavoratore deve indossare i dispositivi di protezione individuale "
+    "messi a sua disposizione e rispettare le istruzioni di impiego.",
+    "Tali dispositivi devono essere custoditi in luogo adatto e "
+    "accessibile, mantenuti in condizioni di perfetta efficienza e "
+    "contrassegnati col nome dell'assegnatario.",
+    "Il lavoratore che noti un qualsiasi difetto o la mancata tolleranza "
+    "del proprio dispositivo di protezione individuale deve chiederne la "
+    "sostituzione.",
+    "Il rifiuto ad indossare il dispositivo di protezione individuale, "
+    "previsto per l'attività in atto, comporta la mancanza di idoneità al "
+    "lavoro stesso.",
+]
+
+# Adapted from the original's art. 97 passage (Direttore Tecnico chapter).
+_SUBAPPALTI_VIGILANZA = (
+    "L'impresa vigila sulla sicurezza dei lavori affidati in subappalto e "
+    "sull'applicazione delle disposizioni e delle prescrizioni del piano di "
+    "sicurezza e coordinamento, verificando la congruenza dei piani "
+    "operativi di sicurezza delle imprese subappaltatrici rispetto al "
+    "proprio, prima della trasmissione al coordinatore per l'esecuzione "
+    "(art. 97 D.Lgs. 81/2008 e s.m.i.)."
+)
+
+# Standard wording, NOT in the original (which has no dedicated subappalti
+# section) — to be confirmed with the client.
+_SUBAPPALTI_ASSENTI = (
+    "Non è previsto l'affidamento di lavorazioni in subappalto per il "
+    "presente cantiere. Qualora nel corso dei lavori si rendesse necessario "
+    "ricorrere al subappalto, il presente POS sarà aggiornato e i piani "
+    "operativi di sicurezza delle imprese subappaltatrici saranno "
+    "verificati ai sensi dell'art. 97 del D.Lgs. 81/2008 e s.m.i."
+)
+
+_DICHIARAZIONE_TESTO = (
+    "che il procedimento sulla valutazione dei rischi ex art. 17 del "
+    "D.Lgs. 81/2008 e s.m.i., è stato attuato in collaborazione con il "
+    "Servizio di Prevenzione e Protezione dai rischi, con il Medico "
+    "Competente previa consultazione del Rappresentante dei lavoratori per "
+    "la sicurezza."
+)
 from app.services.pos_phases import dependency_violations_after_ordering
 from app.schemas.pos_phase import PosPhase
 from pydantic import ValidationError
@@ -76,6 +297,10 @@ class PosGenerator(BaseDocumentGenerator):
 
         page_break(doc)
         add_heading(doc, f"POS - {azienda.ragione_sociale}", level=1)
+
+        # Default dicitura from the N2O original: elenco documentazione da
+        # conservare in cantiere (Introduzione chapter).
+        _render_documentazione_cantiere(doc)
 
         if not pos_rows:
             add_paragraph(doc, "Nessun cantiere registrato per questa azienda.", italic=True)
@@ -107,14 +332,26 @@ class PosGenerator(BaseDocumentGenerator):
                 ("Coordinatore per la sicurezza in fase di esecuzione (CSE)", p.coordinatore_sicurezza or "—"),
             ])
 
-            # Dipendenti dell'azienda — tabella ruoli operativi
-            _render_dipendenti_table(doc, persone)
+            # Figure di sicurezza sul cantiere (client request 2026-08-13).
+            # Prefilled from the organigramma when the operator hasn't
+            # assigned them yet.
+            _render_figure_sicurezza(doc, p, persone)
+
+            # Dipendenti dell'azienda — tabella ruoli operativi. When the
+            # operator selected the dipendenti presenti in cantiere, only
+            # those rows are printed.
+            _render_dipendenti_table(
+                doc, persone, getattr(p, "dipendenti_cantiere", None) or []
+            )
 
             # Modalità organizzative (All. XV punto 3.2.1 c)
             _render_modalita_organizzative(doc, p)
 
             # Organizzazione logistica
             _render_organizzazione_logistica(doc, p)
+
+            # Subappalti (client request 2026-08-13)
+            _render_subappalti(doc, p)
 
             add_heading(doc, "Fasi lavorative", level=3)
             fasi = p.fasi_lavorative or []
@@ -139,21 +376,20 @@ class PosGenerator(BaseDocumentGenerator):
             mezzi = p.mezzi_attrezzature or []
             add_data_table(doc, ["Tipo"], [[m.get("tipo", "")] for m in mezzi] or [["—"]])
 
-            add_heading(doc, "Sostanze pericolose utilizzate in cantiere", level=3)
-            sostanze = p.sostanze_pericolose or []
-            add_data_table(doc, ["Sostanza", "Uso"], [[s.get("nome", ""), s.get("uso", "")] for s in sostanze] or [["—", "—"]])
+            # Sostanze pericolose (All. XV punto 3.2.1 e) — flag-driven:
+            # renders the manual list or the original's default dicitura.
+            _render_sostanze_pericolose(doc, p, azienda.ragione_sociale or "L'impresa")
 
             # US-4.8: DPI matrix (role x phase). Only emit when the operator
             # has actually built one — we never auto-seed at generation time
             # because the matrix is a per-client override surface.
             _render_dpi_matrix(doc, p)
 
-        add_heading(doc, "Sottoscrizione", level=2)
-        add_data_table(doc, ["Ruolo", "Firma"], [
-            ["Datore di lavoro impresa esecutrice", "________________________"],
-            ["Coordinatore sicurezza in esecuzione", "________________________"],
-            ["Data", generated_at.strftime("%d/%m/%Y")],
-        ])
+        # Default diciture from the N2O original: principali misure di
+        # prevenzione + DPI, then the closing Dichiarazione with the firma
+        # block (DdL / RSPP / RLS).
+        _render_misure_prevenzione(doc)
+        _render_dichiarazione(doc, azienda, persone, generated_at)
 
         version = await self._next_version()
         output_dir = self._get_output_dir()
@@ -171,12 +407,236 @@ class PosGenerator(BaseDocumentGenerator):
 # ---------------------------------------------------------------------------
 
 
-def _render_dipendenti_table(doc, persone: list) -> None:
+def _bullet(doc, text: str) -> None:
+    """Bullet paragraph with a graceful fallback when the docx template
+    doesn't carry the "List Bullet" style (safety documents must never fail
+    to render over a missing style)."""
+    try:
+        p = doc.add_paragraph(style="List Bullet")
+        p.add_run(text)
+    except Exception:
+        add_paragraph(doc, f"• {text}")
+
+
+def _render_documentazione_cantiere(doc) -> None:
+    """Default dicitura from the N2O original: elenco della documentazione
+    che l'impresa deve conservare in cantiere."""
+    add_heading(doc, "Documentazione da conservare in cantiere", level=2)
+    add_paragraph(doc, _DOCUMENTAZIONE_CANTIERE_INTRO)
+    for item in _DOCUMENTAZIONE_CANTIERE:
+        _bullet(doc, item)
+
+
+def _figura_entries(pos, persone: list) -> tuple[list[tuple[str, str]], bool]:
+    """Resolve the printable (label, nominativo) rows for the figure table.
+
+    Operator-selected entries (``pos.figure_sicurezza``) win. When the list
+    is empty we derive assignees from the Persona ``ruolo_*`` flags so the
+    document is prefilled from the organigramma (platform principle) —
+    the second return value tells the caller the rows are auto-derived.
+    """
+    persona_by_id = {str(getattr(pe, "id", "")): pe for pe in persone}
+
+    selected = getattr(pos, "figure_sicurezza", None) or []
+    if selected:
+        rows: list[tuple[str, str]] = []
+        for f in selected:
+            if not isinstance(f, dict):
+                continue
+            ruolo = f.get("ruolo") or ""
+            label = _FIGURE_LABELS_IT.get(ruolo, ruolo.replace("_", " ").capitalize())
+            nominativo = f.get("nominativo") or ""
+            if not nominativo and f.get("persona_id"):
+                pe = persona_by_id.get(str(f["persona_id"]))
+                nominativo = getattr(pe, "nominativo", "") if pe else ""
+            rows.append((label, nominativo or "—"))
+        return rows, False
+
+    # Derive from the organigramma flags. Roles with no flagged persona
+    # still appear with "—" so the reviewer sees what is missing.
+    derived: dict[str, list[str]] = {}
+    for figura_key, flag_attr in _FIGURE_PERSONA_FLAGS:
+        names = [
+            pe.nominativo
+            for pe in persone
+            if getattr(pe, flag_attr, False) and getattr(pe, "nominativo", None)
+        ]
+        if names:
+            derived[figura_key] = names
+    rows = [
+        (label, ", ".join(derived.get(key, [])) or "—")
+        for key, label in _FIGURE_LABELS_IT.items()
+    ]
+    return rows, True
+
+
+def _render_figure_sicurezza(doc, pos, persone: list) -> None:
+    """Emit the "Figure di sicurezza sul cantiere" table + mansionario.
+
+    The mansionario paragraphs (default diciture from the N2O original) are
+    rendered for every figure that appears in the table, so the printed POS
+    always explains each role's duties.
+    """
+    rows, derived = _figura_entries(pos, persone)
+    if not rows:
+        return
+    add_heading(doc, "Figure di sicurezza sul cantiere", level=3)
+    if derived:
+        add_paragraph(
+            doc,
+            "Figure precompilate automaticamente dall'organigramma "
+            "aziendale. Il Datore di Lavoro verifica e integra le nomine "
+            "specifiche per il cantiere.",
+            italic=True,
+            size=9,
+        )
+    add_data_table(doc, ["Figura", "Nominativo"], [[label, nome] for label, nome in rows])
+
+    add_heading(doc, "Mansionario delle figure di sicurezza", level=4)
+    rendered_labels = {label for label, _ in rows}
+    for key, label in _FIGURE_LABELS_IT.items():
+        if label not in rendered_labels:
+            continue
+        paragraphs = _MANSIONARIO_IT.get(key)
+        if not paragraphs:
+            continue
+        add_paragraph(doc, label, bold=True)
+        for text in paragraphs:
+            add_paragraph(doc, text)
+
+
+def _render_subappalti(doc, pos) -> None:
+    """Emit the "Subappalti" section (client request 2026-08-13).
+
+    Flag off → default "nessun subappalto" dicitura. Flag on → table of
+    subappaltatori (ragione sociale + lavori affidati) plus the art. 97
+    vigilanza dicitura adapted from the N2O original.
+    """
+    add_heading(doc, "Subappalti", level=3)
+    presenti = bool(getattr(pos, "subappalti_presenti", False))
+    subappaltatori = getattr(pos, "subappaltatori", None) or []
+    if not presenti or not subappaltatori:
+        add_paragraph(doc, _SUBAPPALTI_ASSENTI)
+        return
+    rows = []
+    for s in subappaltatori:
+        if not isinstance(s, dict):
+            continue
+        rows.append([s.get("ragione_sociale", "") or "—", s.get("lavori", "") or "—"])
+    add_data_table(doc, ["Impresa subappaltatrice", "Lavori affidati"], rows or [["—", "—"]])
+    add_paragraph(doc, _SUBAPPALTI_VIGILANZA)
+
+
+def _render_sostanze_pericolose(doc, pos, ragione_sociale: str) -> None:
+    """Emit the "Sostanze pericolose" section (All. XV punto 3.2.1 e).
+
+    Flag-driven: when the operator declared no hazardous substances, the
+    default dicitura from the N2O original is printed instead of an empty
+    table. A populated legacy list keeps rendering even if the flag was
+    never set (pre-2026-08 rows).
+    """
+    add_heading(doc, "Sostanze pericolose utilizzate in cantiere", level=3)
+    sostanze = getattr(pos, "sostanze_pericolose", None) or []
+    presenti = bool(getattr(pos, "sostanze_pericolose_presenti", False)) or bool(sostanze)
+    if not presenti:
+        add_paragraph(
+            doc,
+            f"{ragione_sociale} non utilizzerà sostanze chimiche nelle "
+            "lavorazioni che effettuerà presso il cantiere.",
+        )
+        return
+    rows = [
+        [s.get("nome", ""), s.get("uso", "") or "—"]
+        for s in sostanze
+        if isinstance(s, dict)
+    ]
+    add_data_table(doc, ["Sostanza", "Uso"], rows or [["—", "—"]])
+    add_paragraph(
+        doc,
+        "Le schede di sicurezza (SDS) delle sostanze elencate sono "
+        "conservate in cantiere a disposizione dei lavoratori e degli "
+        "organi di vigilanza (All. XV punto 3.2.1 lettera e, D.Lgs. "
+        "81/2008 e s.m.i.).",
+    )
+
+
+def _render_misure_prevenzione(doc) -> None:
+    """Default diciture from the N2O original: principali misure di
+    prevenzione (obblighi/divieti dei lavoratori) + dispositivi di
+    protezione individuale."""
+    add_heading(doc, "Principali misure di prevenzione", level=2)
+    add_paragraph(doc, "I lavoratori devono:", bold=True)
+    for item in _MISURE_LAVORATORI_DEVONO:
+        _bullet(doc, item)
+    add_paragraph(doc, "I lavoratori non devono:", bold=True)
+    for item in _MISURE_LAVORATORI_NON_DEVONO:
+        _bullet(doc, item)
+    add_paragraph(doc, "Dispositivi di protezione individuale", bold=True)
+    for text in _MISURE_DPI_PARAGRAFI:
+        add_paragraph(doc, text)
+
+
+def _render_dichiarazione(doc, azienda, persone: list, generated_at) -> None:
+    """Closing "Dichiarazione" ported from the N2O original: DdL statement
+    + firma block (Datore di Lavoro / RSPP / RLS)."""
+    ddl = next(
+        (
+            pe.nominativo
+            for pe in persone
+            if getattr(pe, "ruolo_datore_lavoro", False)
+            and getattr(pe, "nominativo", None)
+        ),
+        None,
+    )
+    sede = ", ".join(
+        str(part)
+        for part in (
+            getattr(azienda, "sede_legale_via", None),
+            getattr(azienda, "sede_legale_citta", None),
+        )
+        if part
+    )
+    add_heading(doc, "Dichiarazione", level=2)
+    add_paragraph(
+        doc,
+        f"Il sottoscritto, {ddl or '________________'}, in qualità di "
+        f"datore di lavoro della Impresa {azienda.ragione_sociale or '—'} "
+        f"con sede a {sede or '________________'}",
+    )
+    add_paragraph(doc, "D I C H I A R A", bold=True)
+    add_paragraph(doc, _DICHIARAZIONE_TESTO)
+    add_data_table(doc, ["Ruolo", "Firma"], [
+        ["Il Datore di Lavoro", "________________________"],
+        ["Il Responsabile del S.P.P.", "________________________"],
+        ["Il Rappresentante dei lavoratori per la sicurezza", "________________________"],
+        ["Data", generated_at.strftime("%d/%m/%Y")],
+    ])
+
+
+def _render_dipendenti_table(doc, persone: list, dipendenti_cantiere: list | None = None) -> None:
     """Render the "Dipendenti dell'azienda" table required by Luca's
     2026-05-25 annotated template — Nominativo / Mansione / Primo Soccorso /
     Antincendio / Preposto. Pulled live from the azienda's Persona rows.
+
+    ``dipendenti_cantiere`` (client request 2026-08-13) is the list of
+    Persona ids the operator marked as working on this cantiere. Non-empty →
+    only those rows are printed under a cantiere-specific heading; empty →
+    legacy behaviour, every registered dipendente.
     """
+    selected_ids = {str(x) for x in (dipendenti_cantiere or []) if x}
+    if selected_ids:
+        filtered = [pe for pe in persone if str(getattr(pe, "id", "")) in selected_ids]
+        # Stale ids (persona deleted after selection) fall back to the full
+        # roster rather than printing an empty table in a safety document.
+        if filtered:
+            add_heading(doc, "Dipendenti impegnati in cantiere", level=3)
+            _render_dipendenti_rows(doc, filtered)
+            return
     add_heading(doc, "Dipendenti dell'azienda", level=3)
+    _render_dipendenti_rows(doc, persone)
+
+
+def _render_dipendenti_rows(doc, persone: list) -> None:
     if not persone:
         add_paragraph(doc, "Nessun dipendente registrato.", italic=True)
         return

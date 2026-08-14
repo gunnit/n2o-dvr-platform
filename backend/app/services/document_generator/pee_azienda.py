@@ -8,7 +8,12 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches
 from sqlalchemy import func, select
 
-from app.data.pee_procedures import merge_with_overrides
+from app.data.pee_procedures import (
+    DEFAULT_TIPOLOGIA_ALLARME,
+    NUE_LABEL,
+    merge_with_overrides,
+    normalize_emergency_number,
+)
 from app.models.ambiente import Ambiente
 from app.models.ambiente_foto import AmbienteFoto
 from app.models.documento_generato import DocumentoGenerato
@@ -141,6 +146,11 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
             doc = Document()
 
         drill_frequency = (pee.frequenza_prove if pee else None) or "non configurata"
+        # Alarm type configured on the plan; the default keeps the document
+        # coherent (and reviewable) before the operator picks one.
+        tipologia_allarme = (
+            (pee.tipologia_allarme if pee else None) or DEFAULT_TIPOLOGIA_ALLARME
+        )
         page_break(doc)
         add_heading(doc, f"PIANO DI EMERGENZA - {azienda.ragione_sociale}", level=1)
         add_kv_table(doc, [
@@ -148,6 +158,7 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
             ("Sede", format_sede(azienda, "legale")),
             ("Data emissione", generated_at.strftime("%d/%m/%Y")),
             ("Coordinatore emergenza", (pee.coordinatore_emergenza if pee else "—") or "—"),
+            ("Tipologia di allarme", tipologia_allarme),
             ("Punto di raccolta", (pee.punto_raccolta if pee else "—") or "—"),
             ("Frequenza prove", drill_frequency),
             ("Orario di lavoro dichiarato", azienda.orario_lavoro or "—"),
@@ -164,8 +175,19 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
 
         if pee:
             add_heading(doc, "Numeri telefonici di emergenza", level=2)
-            rows = [[k, v] for k, v in (pee.telefoni_emergenza or {}).items()]
-            add_data_table(doc, ["Ente/Ruolo", "Numero"], rows or [["Numero Unico Europeo", "112"]])
+            # NUE reform: legacy national emergency numbers (113/115/118/...)
+            # render as 112. Company-internal numbers pass through untouched.
+            rows = [
+                [k, normalize_emergency_number(v)]
+                for k, v in (pee.telefoni_emergenza or {}).items()
+            ]
+            add_data_table(doc, ["Ente/Ruolo", "Numero"], rows or [[NUE_LABEL, "112"]])
+            add_paragraph(
+                doc,
+                "Tutte le chiamate di soccorso confluiscono nel Numero Unico di "
+                "Emergenza (NUE) 112.",
+                italic=True,
+            )
 
             add_heading(doc, "Squadra di emergenza", level=2)
             members = pee.squadra_emergenza or []
@@ -213,7 +235,10 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
         # persisted in pee.scenari. We always render the full 5×5 grid so the
         # operator gets consistent coverage even when no overrides exist.
         add_heading(doc, "Procedure di emergenza per scenario", level=2)
-        merged_events = merge_with_overrides(pee.scenari if pee else None)
+        merged_events = merge_with_overrides(
+            pee.scenari if pee else None,
+            tipologia_allarme=pee.tipologia_allarme if pee else None,
+        )
         for event in merged_events:
             add_heading(doc, event["titolo"], level=3)
             for proc in event["procedure"]:

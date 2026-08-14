@@ -69,6 +69,62 @@ def _effective_risk_sources(parent: object) -> list:
     return [parent] if getattr(parent, "applicabile", False) else []
 
 
+# ---------------------------------------------------------------------------
+# Special worker-category riferimenti (client feedback 2026-08-13).
+#
+# The gestanti/minori/stranieri catalog rows (OR-03/04/05) used to carry the
+# markers below in ``valutazione_riferimento``, and the risk tables printed
+# them verbatim in the I column. The client asked that "Vedi normativa ..."
+# never appear: gestanti rows defer to the dedicated allegato when the
+# azienda has one, otherwise the operator scores P/D like any other row.
+# The risk UI migrates these markers on load; this mapping covers rows that
+# were never re-opened in the form after the change.
+# ---------------------------------------------------------------------------
+_LEGACY_RIFERIMENTO_MARKERS = frozenset({
+    "Vedi normativa specifica (D.Lgs. 151/2001)",   # OR-03 gestanti
+    "Vedi normativa specifica (D.Lgs. 345/99)",     # OR-04 minori
+    "Verifica linguistica/formativa a cura del preposto",  # OR-05 stranieri
+})
+
+# Must match GESTANTI_ALLEGATO_RIFERIMENTO in
+# frontend/src/components/survey/pericoli-panel.tsx so rows the form saves
+# and legacy rows normalized here read identically in the DVR.
+GESTANTI_ALLEGATO_RIFERIMENTO = (
+    "Come da documento allegato: Valutazione Rischio Gestanti"
+)
+
+_LEGACY_GESTANTI_MARKER = "Vedi normativa specifica (D.Lgs. 151/2001)"
+
+
+def _normalize_special_riferimento(
+    riferimento: str | None, *, gestanti_allegato_presente: bool
+) -> str | None:
+    """Map legacy special-category markers to their current wording.
+
+    - gestanti marker → the allegato reference when the azienda has a
+      Valutazione Rischio Gestanti, otherwise ``None`` (the row falls back
+      to its P/D score, or "—" when unscored);
+    - minori / stranieri markers → ``None`` (indice-only rows);
+    - any other "Vedi normativa ..." text → ``None`` — the DVR never prints
+      a normativa deferral in place of the risk index;
+    - everything else (e.g. "Come da documenti allegati") passes through.
+    """
+    if not riferimento:
+        return riferimento
+    text = riferimento.strip()
+    if text == _LEGACY_GESTANTI_MARKER:
+        return (
+            GESTANTI_ALLEGATO_RIFERIMENTO
+            if gestanti_allegato_presente
+            else None
+        )
+    if text in _LEGACY_RIFERIMENTO_MARKERS:
+        return None
+    if text.lower().startswith("vedi normativa"):
+        return None
+    return riferimento
+
+
 _ATTREZZATURA_RISK_LABELS = {
     "lavori_in_quota": "Lavori in quota",
     "trabattelli": "Utilizzo di trabattelli",
@@ -2656,6 +2712,13 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
             foto_by_ambiente = extras.get("foto_by_ambiente", {})
             vdt_ids = extras.get("vdt_esposti_persona_ids", set())
+            # Gestanti-allegato presence rewrites the legacy "Vedi normativa"
+            # marker on the gestanti risk row — see
+            # _normalize_special_riferimento.
+            gestanti_presente = any(
+                slug == "gestanti"
+                for slug, _ in (extras.get("allegati_presenti") or [])
+            )
             persone_by_id = {getattr(p, "id", None): p for p in persone}
             for index, ambiente in enumerate(ambienti):
                 env_attrezzature = attrezzature_by_ambiente.get(ambiente.id, [])
@@ -2679,6 +2742,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                     azienda=azienda if index == 0 else None,
                     part_heading=part_label if index == 0 else None,
                     part_label=part_label if index > 0 else None,
+                    gestanti_allegato_presente=gestanti_presente,
                 )
 
         # Trailing Part III sections — driven by persone + extras.
@@ -2747,6 +2811,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         azienda=None,
         part_heading: str | None = None,
         part_label: str | None = None,
+        gestanti_allegato_presente: bool = False,
     ) -> None:
         """Render the env section for a single environment.
 
@@ -2799,7 +2864,12 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         self._add_env_risk_checklist(doc, ambiente)
         doc.add_paragraph("")
 
-        self._add_env_risk_tables(doc, ambiente, vdt_count=vdt_count)
+        self._add_env_risk_tables(
+            doc,
+            ambiente,
+            vdt_count=vdt_count,
+            gestanti_allegato_presente=gestanti_allegato_presente,
+        )
 
     def _add_env_foto_block(
         self, doc: Document, nome_ambiente: str, foto: list
@@ -3380,7 +3450,12 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     def _add_env_risk_tables(
-        self, doc: Document, ambiente, vdt_count: int = 0
+        self,
+        doc: Document,
+        ambiente,
+        vdt_count: int = 0,
+        *,
+        gestanti_allegato_presente: bool = False,
     ) -> None:
         """Template Tables 27+ — one 5-col (PERICOLO/CONDIZIONI/RISCHIO/MISURE/I)
         table per applicable macro-category, emitted in the canonical order.
@@ -3432,6 +3507,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 by_category[cat_name],
                 inject_vdt=inject_vdt,
                 vdt_count=vdt_count,
+                gestanti_allegato_presente=gestanti_allegato_presente,
             )
             doc.add_paragraph("")
 
@@ -3442,6 +3518,8 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         risks: list,
         inject_vdt: bool = False,
         vdt_count: int = 0,
+        *,
+        gestanti_allegato_presente: bool = False,
     ) -> None:
         """5-col risk table for a single category (Template Tables 27–33 shape).
 
@@ -3524,7 +3602,10 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         for source in rows_to_emit:
             p_val = source.probabilita_p
             d_val = source.danno_d
-            riferimento = getattr(source, "valutazione_riferimento", None)
+            riferimento = _normalize_special_riferimento(
+                getattr(source, "valutazione_riferimento", None),
+                gestanti_allegato_presente=gestanti_allegato_presente,
+            )
             if p_val is not None and d_val is not None:
                 result = calculate_risk_index(p_val, d_val)
                 indice = result["indice_i"]

@@ -24,6 +24,10 @@ class PeePlan(Base):
     addetti_primo_soccorso: Mapped[list] = mapped_column(JSONB, default=list)
     addetti_antincendio: Mapped[list] = mapped_column(JSONB, default=list)
     coordinatore_emergenza: Mapped[str | None] = mapped_column(String)
+    # Alarm signal type (sirena, campanella, avviso a voce, ...) rendered at
+    # point A of the incendio / evacuazione generale procedures. NULL means
+    # "not configured yet" — readers fall back to DEFAULT_TIPOLOGIA_ALLARME.
+    tipologia_allarme: Mapped[str | None] = mapped_column(String)
     # Contact numbers
     telefoni_emergenza: Mapped[dict] = mapped_column(JSONB, default=dict)
     # Scenario procedures A-E

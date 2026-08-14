@@ -45,6 +45,36 @@ from app.services.pericolo_suggester import normalize_ambiente_tipo, suggest_per
 router = APIRouter(prefix="/aziende/{azienda_id}", tags=["pericoli"])
 
 
+# ---------------------------------------------------------------------------
+# Special worker-category catalog rows (client feedback 2026-08-13).
+#
+# OR-03 (gestanti), OR-04 (minori) and OR-05 (stranieri) used to ship with a
+# "Vedi normativa ..." / "Verifica linguistica ..." marker instead of P/D
+# defaults. The client asked that the marker never surface: the operator
+# scores the indice (I = 2*D + P) like any other row, and the gestanti row
+# may defer to the dedicated allegato at the valutazione level instead.
+#
+# pericoli_catalog.json now carries the new values, but deployed databases
+# were seeded from the old catalog by the 0a1b2c migration, so we normalize
+# at read time rather than shipping a data migration.
+# ---------------------------------------------------------------------------
+_SPECIAL_CATEGORY_CODES = frozenset({"OR-03", "OR-04", "OR-05"})
+_SPECIAL_DEFAULT_P = 2
+_SPECIAL_DEFAULT_D = 2
+
+
+def _normalize_special_catalog_row(
+    row: PericoloLibreriaResponse,
+) -> PericoloLibreriaResponse:
+    if row.code in _SPECIAL_CATEGORY_CODES:
+        row.valutazione_riferimento = None
+        if row.p_default is None:
+            row.p_default = _SPECIAL_DEFAULT_P
+        if row.d_default is None:
+            row.d_default = _SPECIAL_DEFAULT_D
+    return row
+
+
 async def _verify_azienda(
     azienda_id: uuid.UUID, org_id: uuid.UUID, db: AsyncSession
 ) -> Azienda:
@@ -164,7 +194,9 @@ async def list_pericoli_suggeriti(
     )
     items = [
         PericoloSuggestionItem(
-            pericolo=PericoloLibreriaResponse.model_validate(r["pericolo"]),
+            pericolo=_normalize_special_catalog_row(
+                PericoloLibreriaResponse.model_validate(r["pericolo"])
+            ),
             matches_ambiente=r["matches_ambiente"],
             triggered_by_attrezzature=r["triggered_by_attrezzature"],
         )
@@ -197,7 +229,12 @@ async def list_pericoli_libreria(
     if categoria:
         q = q.where(PericoloLibreria.categoria == categoria)
     rows = (await db.execute(q)).scalars().all()
-    return rows
+    # Validate into response models before normalizing — mutating the ORM
+    # rows would risk flushing the normalization back to the catalog table.
+    return [
+        _normalize_special_catalog_row(PericoloLibreriaResponse.model_validate(r))
+        for r in rows
+    ]
 
 
 # ---------------------------------------------------------------------------

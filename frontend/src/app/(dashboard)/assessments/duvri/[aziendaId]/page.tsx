@@ -11,6 +11,7 @@ import {
   Plus,
   RotateCcw,
   Search,
+  Sparkles,
   ThumbsDown,
   Trash2,
   X,
@@ -131,6 +132,19 @@ interface AnalyzeResponse {
   suggestions: InterferenceSuggestion[];
   no_interference_detected: boolean;
   contractor_equipment: string[];
+}
+
+interface AiInterferenzaSuggestion {
+  titolo: string;
+  rischio: string;
+  misure: string;
+  dpi: string[];
+  riferimento: string;
+}
+
+interface AiSuggestResponse {
+  items: AiInterferenzaSuggestion[];
+  sintesi: string;
 }
 
 const EQUIPMENT_LABELS: Record<string, string> = {
@@ -258,6 +272,15 @@ export default function DuvriListPage() {
   const [analyzeData, setAnalyzeData] = useState<AnalyzeResponse | null>(null);
   const [analyzeLoading, setAnalyzeLoading] = useState(false);
   const [decisionPending, setDecisionPending] = useState<string | null>(null);
+
+  // AI-suggested interferenze inside the form (client request: the AI button
+  // in the "Interferenze identificate" section works off the current chips).
+  const [aiSuggestions, setAiSuggestions] = useState<
+    AiInterferenzaSuggestion[] | null
+  >(null);
+  const [aiSintesi, setAiSintesi] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -387,22 +410,31 @@ export default function DuvriListPage() {
     }
   };
 
+  const resetAiSuggestions = () => {
+    setAiSuggestions(null);
+    setAiSintesi(null);
+    setAiError(null);
+  };
+
   const openCreate = () => {
     setForm(EMPTY_FORM);
     setEditing(null);
     setCreating(true);
+    resetAiSuggestions();
   };
 
   const openEdit = (d: DuvriResponse) => {
     setForm(toFormState(d));
     setEditing(d);
     setCreating(false);
+    resetAiSuggestions();
   };
 
   const closeForm = () => {
     setEditing(null);
     setCreating(false);
     setForm(EMPTY_FORM);
+    resetAiSuggestions();
   };
 
   const isFormOpen = creating || editing !== null;
@@ -482,6 +514,65 @@ export default function DuvriListPage() {
       ...f,
       interferenze: f.interferenze.filter((_, i) => i !== idx),
     }));
+  };
+
+  // Ask the AI for additional rischi interferenziali based on the *current*
+  // form state (chips + oggetto + interferenze already listed) — unsaved
+  // edits count, so it also works while creating a new DUVRI.
+  const generateAiInterferenze = async () => {
+    if (form.attrezzature_appaltatore.length === 0) {
+      setAiError(
+        "Seleziona almeno un'attrezzatura/attività dell'appaltatore prima di generare con AI."
+      );
+      return;
+    }
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const payload = toPayload(form);
+      const res = await apiFetch<AiSuggestResponse>(
+        `/api/v1/aziende/${aziendaId}/duvri/interferenze/suggerisci`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            oggetto_appalto: payload.oggetto_appalto || null,
+            attrezzature_appaltatore: payload.attrezzature_appaltatore,
+            interferenze_esistenti: payload.interferenze,
+          }),
+        }
+      );
+      setAiSuggestions(res.items);
+      setAiSintesi(res.sintesi);
+    } catch (err) {
+      setAiError(
+        err instanceof Error ? err.message : "Generazione AI non riuscita."
+      );
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  // Accept: the suggestion becomes a normal, fully editable interferenza row
+  // in the form. Nothing reaches the document without the operator saving.
+  const acceptAiSuggestion = (idx: number) => {
+    const s = aiSuggestions?.[idx];
+    if (!s) return;
+    setForm((f) => ({
+      ...f,
+      interferenze: [
+        ...f.interferenze,
+        { rischio: s.rischio, misure: s.misure, dpi: s.dpi.join(", ") },
+      ],
+    }));
+    setAiSuggestions((prev) =>
+      prev ? prev.filter((_, i) => i !== idx) : prev
+    );
+  };
+
+  const dismissAiSuggestion = (idx: number) => {
+    setAiSuggestions((prev) =>
+      prev ? prev.filter((_, i) => i !== idx) : prev
+    );
   };
 
   return (
@@ -823,16 +914,112 @@ export default function DuvriListPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Interferenze identificate</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={addInterferenza}
-                >
-                  <Plus className="mr-1 h-3 w-3" />
-                  Aggiungi interferenza
-                </Button>
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={generateAiInterferenze}
+                    disabled={
+                      aiLoading || form.attrezzature_appaltatore.length === 0
+                    }
+                    title={
+                      form.attrezzature_appaltatore.length === 0
+                        ? "Seleziona prima le attrezzature/attività dell'appaltatore"
+                        : "Genera i rischi interferenziali con AI in base alle attrezzature/attività selezionate"
+                    }
+                  >
+                    {aiLoading ? (
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="mr-1 h-3 w-3" />
+                    )}
+                    {aiLoading ? "Generazione…" : "Genera con AI"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={addInterferenza}
+                  >
+                    <Plus className="mr-1 h-3 w-3" />
+                    Aggiungi interferenza
+                  </Button>
+                </div>
               </div>
+
+              {aiError && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                  {aiError}
+                </div>
+              )}
+
+              {aiSuggestions !== null && (
+                <div className="space-y-2 rounded-md border border-[#d8ccf1] bg-[#faf8ff] p-3">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-[#5b21b6]" />
+                    <p className="text-xs font-medium">
+                      Suggerimenti AI — rivedi e accetta quelli pertinenti
+                    </p>
+                  </div>
+                  {aiSintesi && (
+                    <p className="text-xs text-muted-foreground">{aiSintesi}</p>
+                  )}
+                  {aiSuggestions.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Nessun ulteriore rischio interferenziale suggerito.
+                      Le interferenze già identificate coprono il contesto.
+                    </p>
+                  )}
+                  {aiSuggestions.map((s, idx) => (
+                    <div
+                      key={`${s.titolo}-${idx}`}
+                      className="space-y-1 rounded-md border border-input bg-background p-3"
+                    >
+                      <p className="text-sm font-medium">{s.titolo}</p>
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium">Rischio: </span>
+                        {s.rischio}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium">Misure: </span>
+                        {s.misure}
+                      </p>
+                      {s.dpi.length > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-medium">DPI: </span>
+                          {s.dpi.join(", ")}
+                        </p>
+                      )}
+                      {s.riferimento && (
+                        <p className="text-[11px] italic text-muted-foreground">
+                          Rif. {s.riferimento}
+                        </p>
+                      )}
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => acceptAiSuggestion(idx)}
+                        >
+                          <Check className="mr-1 h-3.5 w-3.5" />
+                          Accetta
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => dismissAiSuggestion(idx)}
+                        >
+                          <ThumbsDown className="mr-1 h-3.5 w-3.5" />
+                          Ignora
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {form.interferenze.length === 0 && (
                 <p className="text-xs text-muted-foreground">
                   Nessuna interferenza ancora aggiunta. Useremo l&apos;analisi

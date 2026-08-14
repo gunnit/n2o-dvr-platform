@@ -11,7 +11,10 @@ from sqlalchemy.orm import selectinload
 
 from app.models.biologico_valutazione import BiologicoValutazione
 from app.models.duvri import Duvri
-from app.models.gestanti_valutazione import GestantiValutazione
+from app.models.gestanti_valutazione import (
+    GestantiMansioneValutazione,
+    GestantiValutazione,
+)
 from app.models.haccp_form import HaccpConfig, HaccpFormState
 from app.models.incendio_valutazione import IncendioValutazione
 from app.models.microclima_valutazione import MicroclimaValutazione
@@ -56,6 +59,21 @@ async def load_gestanti(db: AsyncSession, azienda_id: uuid.UUID) -> list[Gestant
         select(GestantiValutazione)
         .options(selectinload(GestantiValutazione.persona))
         .where(GestantiValutazione.azienda_id == azienda_id)
+    )
+    return list(r.scalars().all())
+
+
+async def load_gestanti_mansioni(
+    db: AsyncSession, azienda_id: uuid.UUID
+) -> list[GestantiMansioneValutazione]:
+    """Preventive per-mansione valutazioni (art. 11 D.Lgs. 151/2001).
+
+    No relationships — plain rows, ordered by mansione for stable output.
+    """
+    r = await db.execute(
+        select(GestantiMansioneValutazione)
+        .where(GestantiMansioneValutazione.azienda_id == azienda_id)
+        .order_by(GestantiMansioneValutazione.mansione)
     )
     return list(r.scalars().all())
 

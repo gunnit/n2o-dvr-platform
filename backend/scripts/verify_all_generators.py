@@ -164,6 +164,20 @@ def build_fixture() -> dict:
            firma_rspp="Luca Bianchi",
            firma_medico_competente="Dott. Paolo Neri"),
     ]
+    # Preventive per-mansione valutazione (art. 11 D.Lgs. 151/2001) — exists
+    # regardless of any pregnancy notification.
+    gestanti_mansioni_rows = [
+        mk(mansione="Saldatrice",
+           esito="compatibile_con_limitazioni",
+           rischi=[{"risk_key": "noise_exposure", "allegato": "C", "descrizione": "Esposizione a rumore"}],
+           misure="Adibizione temporanea a mansioni compatibili in caso di gravidanza.",
+           note=None),
+        mk(mansione="Impiegata amministrativa",
+           esito="compatibile",
+           rischi=[],
+           misure=None,
+           note=None),
+    ]
     biologico_rows = [mk(
         settore="alimentare",
         agenti_identificati=[{"nome": "Salmonella spp.", "gruppo": "2", "via": "ingestione", "patologia": "Salmonellosi"}],
@@ -209,19 +223,26 @@ def build_fixture() -> dict:
         addetti_primo_soccorso=[{"nome": "Roberto Moretti", "ruolo": "Primo soccorso"}],
         addetti_antincendio=[{"nome": "Marco Esposito", "ruolo": "Antincendio"}],
         coordinatore_emergenza="Franco Gialli",
-        telefoni_emergenza={"112": "Numero unico europeo", "115": "Vigili del fuoco"},
-        scenari=[{"codice": "A", "titolo": "Incendio", "procedura": "Chiamare 115, evacuare."}],
+        # Legacy numbers on purpose: the generator must render them as NUE 112,
+        # while the internal referent number passes through untouched.
+        telefoni_emergenza={
+            "Vigili del Fuoco": "115",
+            "Emergenza sanitaria": "118",
+            "Referente aziendale": "0521 456789",
+        },
+        scenari=[{"codice": "A", "titolo": "Incendio", "procedura": "Chiamare il 112, evacuare."}],
         punto_raccolta="Piazzale ingresso",
         vie_fuga="Uscita nord, uscita sud officina",
         tempo_evacuazione_stimato_min=3,
         frequenza_prove="semestrale",
+        tipologia_allarme="Tromba da stadio",
     )
     pee_comune_row = mk(
         tipo="comune",
         squadra_emergenza=[],
         addetti_primo_soccorso=[], addetti_antincendio=[],
         coordinatore_emergenza="Franco Gialli",
-        telefoni_emergenza={"112": "Numero unico europeo"},
+        telefoni_emergenza={"Numero Unico di Emergenza (NUE)": "112"},
         scenari=[],
         punto_raccolta="Piazzale condominiale",
         vie_fuga="Scale antincendio",
@@ -277,6 +298,7 @@ def build_fixture() -> dict:
         "incendio": incendio_rows,
         "microclima": micro_rows,
         "gestanti": gestanti_rows,
+        "gestanti_mansioni": gestanti_mansioni_rows,
         "biologico": biologico_rows,
         "haccp_config": haccp_config,
         "haccp_forms": haccp_forms,
@@ -371,6 +393,7 @@ def patch_generators(fixture: dict, output_dir: str):
     async def li(db, aid): return fixture["incendio"]
     async def lmc(db, aid): return fixture["microclima"]
     async def lg(db, aid): return fixture["gestanti"]
+    async def lgm(db, aid): return fixture["gestanti_mansioni"]
     async def lb(db, aid, settore=None):
         if settore is None or settore == "alimentare":
             return fixture["biologico"]
@@ -387,6 +410,7 @@ def patch_generators(fixture: dict, output_dir: str):
     data_loader.load_incendio = li
     data_loader.load_microclima = lmc
     data_loader.load_gestanti = lg
+    data_loader.load_gestanti_mansioni = lgm
     data_loader.load_biologico = lb
     data_loader.load_haccp = lh
     data_loader.load_pee = lpee
@@ -397,7 +421,8 @@ def patch_generators(fixture: dict, output_dir: str):
         (g_mmc, ("load_mmc", lm)), (g_vdt, ("load_vdt", lv)),
         (g_stress, ("load_stress", ls)), (g_inc, ("load_incendio", li)),
         (g_micro, ("load_microclima", lmc)), (g_micros, ("load_microclima", lmc)),
-        (g_gest, ("load_gestanti", lg)), (g_duvri, ("load_duvri", ld)),
+        (g_gest, ("load_gestanti", lg)), (g_gest, ("load_gestanti_mansioni", lgm)),
+        (g_duvri, ("load_duvri", ld)),
         (g_pos, ("load_pos", lp)), (g_haccp, ("load_haccp", lh)),
         (g_haccpf, ("load_haccp", lh)), (g_peea, ("load_pee", lpee)),
         (g_peec, ("load_pee", lpee)),

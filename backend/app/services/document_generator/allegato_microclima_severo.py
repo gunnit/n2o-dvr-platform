@@ -1,4 +1,10 @@
-"""Allegato Microclima Severo - UNI EN ISO 7933 (PHS - Predicted Heat Strain)."""
+"""Allegato Microclima Severo.
+
+Covers both severe-environment evaluation types:
+- caldo severo: UNI EN ISO 7933 (PHS - Predicted Heat Strain)
+- freddo severo: UNI EN ISO 11079 (IREQ - required clothing insulation,
+  wind chill / frostbite screening per Annex D)
+"""
 
 import os
 
@@ -52,6 +58,48 @@ def _severity(d_lim_min: float | None) -> str:
     return "Esposizione non ammessa senza DPI/misure rinfrescanti"
 
 
+def _compute_ireq(t_air, t_rad, v_air, rh, met, clo) -> dict:
+    """Try the ISO 11079 calculator service; fall back to a conservative
+    closed-form estimate (same house style as the PHS fallback above)."""
+    try:
+        from app.services.microclima_calculator import calculate_ireq
+
+        return calculate_ireq(
+            air_temp=float(t_air),
+            mean_radiant_temp=float(t_rad),
+            air_velocity=float(v_air),
+            humidity=float(rh),
+            metabolic_rate=float(met),
+            clothing_insulation=float(clo),
+        )
+    except Exception:
+        # Heuristic fallback: dry heat balance at 33 °C skin temperature,
+        # 85% of metabolic heat available, still-air layer 0.7 clo.
+        m_net = max(10.0, float(met) * 58.15 * 0.85)
+        t_o = (float(t_air) + float(t_rad)) / 2.0
+        req_clo = max(0.0, (33.0 - t_o) / m_net / 0.155 - 0.7)
+        livello = "ACCETTABILE" if float(clo) >= req_clo else "CRITICO"
+        return {
+            "t_o": round(t_o, 1),
+            "ireq_neutral": round(req_clo, 2),
+            "ireq_minimal": round(req_clo * 0.9, 2),
+            "icl": float(clo),
+            "delta_clo": round(max(0.0, req_clo - float(clo)), 2),
+            "dle_min": None,
+            "t_wc": None,
+            "frostbite_risk": "NON_APPLICABILE",
+            "livello": livello,
+        }
+
+
+def _severity_freddo(livello: str | None) -> str:
+    return {
+        "ACCETTABILE": "Isolamento adeguato per l'intero turno",
+        "LIMITE": "Aumentare l'isolamento o prevedere pause di riscaldamento",
+        "CRITICO": "Esposizione limitata (DLE) - misure obbligatorie",
+    }.get(livello or "", "—")
+
+
 class AllegatoMicroclimaSeveroGenerator(BaseDocumentGenerator):
     async def generate(self) -> str:
         data = await self.load_data()
@@ -60,20 +108,21 @@ class AllegatoMicroclimaSeveroGenerator(BaseDocumentGenerator):
         micro = await load_microclima(self.db, self.azienda_id)
         ambienti_map = {a.id: a for a in data["ambienti"]}
 
-        # PHS (UNI EN ISO 7933) models heat strain only — cold-severe rows must
-        # NOT be scored with it. Render heat here; flag cold for a separate
-        # ISO 11079 (IREQ/WCI) assessment.
+        # PHS (UNI EN ISO 7933) models heat strain only — cold-severe rows are
+        # scored with IREQ (UNI EN ISO 11079) in Parte II below.
         severe_rows = [m for m in micro if (m.tipo_ambiente or "") == "severo_caldo"]
         cold_rows = [m for m in micro if (m.tipo_ambiente or "") == "severo_freddo"]
 
         doc = Document()
-        add_heading(doc, "ALLEGATO RISCHIO MICROCLIMA - AMBIENTI SEVERI (CALDO)", level=1)
+        add_heading(doc, "ALLEGATO RISCHIO MICROCLIMA - AMBIENTI SEVERI (CALDO E FREDDO)", level=1)
         add_kv_table(doc, [
             ("Azienda", azienda.ragione_sociale or ""),
             ("Data valutazione", generated_at.strftime("%d/%m/%Y")),
-            ("Riferimento normativo", "UNI EN ISO 7933:2005 - Determinazione dello stress termico - Indice PHS"),
+            ("Riferimento normativo (caldo)", "UNI EN ISO 7933:2005 - Determinazione dello stress termico - Indice PHS"),
+            ("Riferimento normativo (freddo)", "UNI EN ISO 11079:2008 - Determinazione e interpretazione dello stress da freddo - Indici IREQ e raffreddamento localizzato"),
         ])
 
+        add_heading(doc, "PARTE I - STRESS DA CALDO (PHS)", level=2)
         add_heading(doc, "Metodologia", level=2)
         add_paragraph(doc, "L'indice PHS (Predicted Heat Strain) stima la sudorazione totale (sw_tot in g/h), la temperatura rettale prevista (t_re) e la durata massima di esposizione accettabile con il 50% di probabilità di rientrare nei limiti di perdita idrica (dlim_loss50 in minuti).")
 
@@ -108,9 +157,55 @@ class AllegatoMicroclimaSeveroGenerator(BaseDocumentGenerator):
         add_heading(doc, "Misure organizzative e di protezione", level=2)
         add_paragraph(doc, "Per ambienti con stress termico severo: idratazione frequente (>= 250 ml/h), pause in zona rinfrescata ogni 45 minuti, rotazione personale, monitoraggio sintomi, formazione sul riconoscimento del colpo di calore, sorveglianza sanitaria specifica.")
 
-        if cold_rows:
-            add_heading(doc, "Ambienti a rischio da freddo severo", level=2)
-            add_paragraph(doc, f"Sono stati rilevati {len(cold_rows)} ambiente/i classificati a freddo severo. La valutazione del freddo severo richiede gli indici IREQ (isolamento termico richiesto) e WCI (wind chill index) secondo la norma UNI EN ISO 11079 e non e riconducibile al modello PHS, specifico per lo stress da caldo, adottato nel presente allegato; tali ambienti sono pertanto oggetto di valutazione separata.")
+        # ------------------------------------------------------------------
+        # Parte II — severe cold (IREQ, UNI EN ISO 11079)
+        # ------------------------------------------------------------------
+        add_heading(doc, "PARTE II - STRESS DA FREDDO (IREQ)", level=2)
+
+        add_heading(doc, "Metodologia", level=2)
+        add_paragraph(doc, "La norma UNI EN ISO 11079 valuta il raffreddamento generale del corpo mediante l'indice IREQ (Insulation REQuired): l'isolamento termico del vestiario necessario a mantenere l'equilibrio termico nelle condizioni ambientali e metaboliche rilevate. IREQ neutro corrisponde all'equilibrio in condizioni di neutralita termica; IREQ minimo al massimo raffreddamento corporeo accettabile. Se l'isolamento del vestiario indossato (Icl) e inferiore a IREQ minimo, l'esposizione deve essere limitata nel tempo (DLE - Durata Limite di Esposizione, calcolata con debito termico ammesso di 40 Wh/m2). Il raffreddamento localizzato viene valutato mediante la temperatura wind chill (t_wc, Appendice D della norma).")
+
+        add_heading(doc, "Soglie di classificazione", level=2)
+        add_data_table(doc, ["Condizione", "Classificazione"], [
+            ["Icl >= IREQ neutro", "ACCETTABILE - isolamento adeguato all'intero turno"],
+            ["IREQ minimo <= Icl < IREQ neutro", "LIMITE - raffreddamento progressivo lieve"],
+            ["Icl < IREQ minimo", "CRITICO - esposizione limitata alla DLE"],
+        ])
+        add_data_table(doc, ["Wind chill t_wc", "Rischio congelamento (ISO 11079 App. D)"], [
+            ["> -25 C", "BASSO - disagio da freddo"],
+            ["da -25 C a -35 C", "MODERATO - congelamento cute esposta entro ~30 min"],
+            ["da -35 C a -60 C", "ALTO - congelamento entro ~10 min"],
+            ["<= -60 C", "ESTREMO - congelamento entro ~2 min"],
+        ])
+
+        add_heading(doc, "Valutazione per ambiente a freddo severo", level=2)
+        if not cold_rows:
+            add_paragraph(doc, "Nessun ambiente a rischio da freddo severo registrato.", italic=True)
+        else:
+            rows = []
+            for m in cold_rows:
+                amb_name = ambienti_map[m.ambiente_id].nome if m.ambiente_id in ambienti_map else (m.nome_area or "—")
+                r = _compute_ireq(m.temperatura_aria, m.temperatura_radiante, m.velocita_aria, m.umidita_relativa, m.metabolismo, m.isolamento_vestiario)
+                rows.append([
+                    amb_name,
+                    f"{float(m.temperatura_aria):.1f}",
+                    f"{float(m.velocita_aria):.1f}",
+                    f"{float(m.metabolismo):.2f}",
+                    f"{float(m.isolamento_vestiario):.2f}",
+                    f"{r['ireq_neutral']:.2f}",
+                    f"{r['ireq_minimal']:.2f}",
+                    f"{r['t_wc']:.1f}" if r.get("t_wc") is not None else "—",
+                    f"{r['dle_min']:.0f}" if r.get("dle_min") is not None else "—",
+                    r.get("livello") or "—",
+                ])
+            add_data_table(doc, ["Ambiente", "t_aria C", "v_aria m/s", "met", "Icl clo", "IREQ neutro", "IREQ min", "t_wc C", "DLE min", "Classificazione"], rows)
+            for m in cold_rows:
+                r = _compute_ireq(m.temperatura_aria, m.temperatura_radiante, m.velocita_aria, m.umidita_relativa, m.metabolismo, m.isolamento_vestiario)
+                amb_name = ambienti_map[m.ambiente_id].nome if m.ambiente_id in ambienti_map else (m.nome_area or "—")
+                add_paragraph(doc, f"{amb_name}: {_severity_freddo(r.get('livello'))}." + (f" Isolamento supplementare consigliato: +{r['delta_clo']:.2f} clo." if r.get("delta_clo") else ""))
+
+        add_heading(doc, "Misure organizzative e di protezione contro il freddo", level=2)
+        add_paragraph(doc, "Per ambienti con stress da freddo severo: indumenti di protezione contro il freddo con isolamento adeguato all'IREQ calcolato (abbigliamento multistrato, antivento), protezione di mani, piedi e capo, pause di riscaldamento in locale temperato con bevande calde, limitazione dell'esposizione alla DLE in caso di isolamento insufficiente, rotazione del personale, protezione della cute esposta quando la temperatura wind chill scende sotto -25 C, formazione sul riconoscimento di ipotermia e congelamento, sorveglianza sanitaria specifica (art. 181 D.Lgs. 81/2008).")
 
         version = await self._next_version()
         output_dir = self._get_output_dir()

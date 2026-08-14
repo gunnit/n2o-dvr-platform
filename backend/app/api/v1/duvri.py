@@ -10,6 +10,7 @@ so the frontend can show the AC3 sync banner.
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from typing import Any
 
@@ -17,6 +18,8 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.billing.entitlements import Entitlements, get_entitlements
+from app.billing.metering import metered
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.permissions import ASSESSMENTS_WRITE
 from app.data.duvri_interference_rules import (
@@ -26,6 +29,7 @@ from app.data.duvri_interference_rules import (
 )
 from app.db.session import get_db
 from app.dependencies import get_current_org, require_capability
+from app.models.ambiente import Ambiente
 from app.models.azienda import Azienda
 from app.models.duvri import Duvri
 from app.schemas.duvri import (
@@ -35,7 +39,9 @@ from app.schemas.duvri import (
     DuvriUpdate,
     InterferenceDecisionBody,
     InterferenceSuggestion,
+    SuggestInterferenzeAIRequest,
 )
+from app.services.ai import InterferenzeSuggerite, suggest_interferenze
 from sqlalchemy.orm.attributes import flag_modified
 
 router = APIRouter(prefix="/aziende/{azienda_id}/duvri", tags=["duvri"])
@@ -253,6 +259,94 @@ async def analyze_interferences(
         no_interference_detected=len(suggestions) == 0,
         contractor_equipment=equipment_types,
     )
+
+
+@router.post(
+    "/interferenze/suggerisci",
+    response_model=InterferenzeSuggerite,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
+async def suggerisci_interferenze_ai(
+    azienda_id: uuid.UUID,
+    body: SuggestInterferenzeAIRequest,
+    org_id: uuid.UUID = Depends(get_current_org),
+    ent: Entitlements = Depends(get_entitlements),
+    db: AsyncSession = Depends(get_db),
+) -> InterferenzeSuggerite:
+    """AI-suggest additional rischi interferenziali from the form context.
+
+    The body carries the *current* form state (equipment chips, oggetto,
+    interferenze already listed) so unsaved edits are respected and the
+    endpoint also works while the operator is still creating the DUVRI.
+    The committente's ambienti provide the "luoghi" context; the static
+    rules that fire for the selected equipment are passed to the model so
+    it complements the rules engine instead of replaying it.
+
+    Never persists — accepted suggestions land through the normal DUVRI
+    create/update path after operator review.
+
+    Inputs to the model: equipment/activity labels, works description,
+    ambiente names, existing risk texts. No PII (no contractor names,
+    referenti, or partita IVA) is ever sent.
+    """
+    await _get_azienda_or_404(azienda_id, org_id, db)
+    if not body.attrezzature_appaltatore:
+        raise BadRequestError(
+            "Seleziona almeno un'attrezzatura/attività dell'appaltatore "
+            "prima di generare le interferenze con AI."
+        )
+
+    # Luoghi context: the committente's ambienti (work-related only).
+    ambienti = (
+        (
+            await db.execute(
+                select(Ambiente).where(Ambiente.azienda_id == azienda_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    luoghi = [
+        f"{amb.nome or '—'} (tipo: {amb.tipo or '—'})" for amb in ambienti
+    ]
+
+    attrezzature = [
+        (a.tipo, a.descrizione) for a in body.attrezzature_appaltatore
+    ]
+    equipment_types = [tipo for tipo, _ in attrezzature]
+    regole_standard = [
+        f"{rule['titolo']}: {rule['rischio']}"
+        for rule in evaluate_rules(equipment_types)
+    ]
+    esistenti = [
+        i.rischio.strip() for i in body.interferenze_esistenti if i.rischio.strip()
+    ]
+
+    # MB-2.4 — the endpoint persists nothing, so there is no row id to key
+    # on (the DUVRI may not even be saved yet). Azienda plus a digest of the
+    # form context is the right key: a re-run with the same chips/oggetto is
+    # free, asking again after changing them is genuinely new work.
+    context_digest = hashlib.sha1(
+        "|".join(
+            sorted(equipment_types)
+            + sorted(esistenti)
+            + [(body.oggetto_appalto or "").strip()]
+        ).encode()
+    ).hexdigest()[:12]
+    async with metered(
+        org_id,
+        "reasoning",
+        f"duvri-interferenze:{azienda_id}:{context_digest}",
+        db,
+        ent,
+    ):
+        return await suggest_interferenze(
+            oggetto_appalto=body.oggetto_appalto,
+            attrezzature=attrezzature,
+            luoghi=luoghi,
+            interferenze_esistenti=esistenti,
+            regole_standard_attive=regole_standard,
+        )
 
 
 @router.post(

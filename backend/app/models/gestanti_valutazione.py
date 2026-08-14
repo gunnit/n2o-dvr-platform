@@ -1,14 +1,22 @@
 """Gestanti/Puerpere/Allattamento assessment — D.Lgs. 151/2001.
 
-One row per persona (lavoratrice) che ha notificato. Mappa rischi vietati
-e misure di adeguamento.
+Two complementary tables:
+
+``GestantiValutazione`` — one row per persona (lavoratrice) che ha
+notificato lo stato di gravidanza. Mappa rischi vietati e misure di
+adeguamento for that specific worker.
+
+``GestantiMansioneValutazione`` — one row per (azienda, mansione): the
+*preventive* objective assessment required by art. 11 D.Lgs. 151/2001,
+which must exist for every mansione regardless of whether any worker is
+currently pregnant. No persona attached.
 """
 
 import uuid
 from datetime import datetime, date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, Date, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -39,5 +47,37 @@ class GestantiValutazione(Base):
     firma_datore_lavoro: Mapped[str | None] = mapped_column(String)
     firma_rspp: Mapped[str | None] = mapped_column(String)
     firma_medico_competente: Mapped[str | None] = mapped_column(String)
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class GestantiMansioneValutazione(Base):
+    """Preventive per-mansione assessment (art. 11 D.Lgs. 151/2001).
+
+    Exists independently of any pregnancy notification: the operator
+    assesses each mansione's compatibility with gravidanza/puerperio/
+    allattamento so the tutela is already documented when (if ever) a
+    worker notifies. ``rischi`` reuses the same JSONB row shape as
+    ``GestantiValutazione.rischi_vietati``:
+    ``{risk_key, allegato, descrizione, misura?}``.
+    """
+
+    __tablename__ = "gestanti_mansioni_valutazioni"
+    __table_args__ = (
+        UniqueConstraint(
+            "azienda_id", "mansione", name="uq_gestanti_mansioni_azienda_mansione"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    azienda_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("aziende.id", ondelete="CASCADE"))
+    mansione: Mapped[str] = mapped_column(String, nullable=False)
+    # compatibile / compatibile_con_limitazioni / non_compatibile
+    esito: Mapped[str] = mapped_column(String, default="compatibile")
+    # Matched catalog risks (same dict shape as rischi_vietati rows).
+    rischi: Mapped[list] = mapped_column(JSONB, default=list)
+    # Misure di prevenzione/limitazioni adopted for the mansione. Required
+    # by the API when esito != "compatibile".
+    misure: Mapped[str | None] = mapped_column(Text)
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

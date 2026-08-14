@@ -14,7 +14,7 @@
       "misure_prevenzione": "Prevention measures and DPI (column 4)",
       "p_default": "Probability default 1-4, null when 'Come da documenti allegati' or n/a",
       "d_default": "Damage default 1-4, null when delegated to allegato",
-      "valutazione_riferimento": "Marker text when scoring lives elsewhere ('Come da documenti allegati', 'Vedi normativa specifica')",
+      "valutazione_riferimento": "Marker text when scoring lives elsewhere ('Come da documenti allegati')",
       "ambiente_tipi": "[FUTURE — Phase 3 tagging] Environment types this pericolo applies to. null = applies to all",
       "attrezzatura_keywords": "[FUTURE — Phase 3 tagging] Equipment keywords that imply this pericolo"
     },
@@ -33,7 +33,7 @@
     },
     "notes": [
       "Rows where the 5th column says 'Come da documenti allegati' have p_default=null,d_default=null and valutazione_riferimento set — these categories (Incendio, Chimici, most Fisici, Biologici, Cancerogeni) are scored in their own allegato.",
-      "Rows for gestanti/minori/stranieri (OL-03/04/05) have no P/D in the source PDF (compliance-driven, not P/D-scored) — valutazione_riferimento captures the legal reference.",
+      "Rows for gestanti/minori/stranieri (OR-03/04/05) had no P/D in the source PDF and used to carry a 'Vedi normativa ...' marker. Client feedback 2026-08-13: never print that marker — these rows now ship starter P/D (operator scores the indice); the gestanti row can defer to the Allegato Gestanti at the valutazione level instead. Deployed DBs seeded from the old catalog are normalized at read time in api/v1/pericoli.py.",
       "Pericoli CH-03 and CH-04 appear as apparent duplicates ('Agenti chimici pericolosi per inalazione') in the source PDF — preserved verbatim, flag for Luca to review.",
       "ambiente_tipi tagged conservatively (when in doubt, include) — operator can override in UI.",
       "attrezzatura_keywords are case-insensitive substrings matched against attrezzatura.descrizione."
@@ -2124,9 +2124,9 @@
       "condizioni_esposizione": "Durante le ordinarie attività lavorative.",
       "rischio": "Infortuni vari. Malori dovuti a stati di panico. Tensione nervosa, irritabilità, ansia. Disturbi alla gravidanza.",
       "misure_prevenzione": "Le lavoratrici che si trovano in dette situazioni vengono informate in merito a quanto previsto dal D.Lgs. 151/2001. Dette lavoratrici secondo procedura non vengono impiegate per attività non previste dal D.Lgs. 151/2001 e di tanto vengono formalmente informati i preposti.",
-      "p_default": null,
-      "d_default": null,
-      "valutazione_riferimento": "Vedi normativa specifica (D.Lgs. 151/2001)",
+      "p_default": 2,
+      "d_default": 2,
+      "valutazione_riferimento": null,
       "ambiente_tipi": [
         "ufficio",
         "magazzino",
@@ -2148,9 +2148,9 @@
       "condizioni_esposizione": "Durante le ordinarie attività lavorative.",
       "rischio": "Infortuni vari.",
       "misure_prevenzione": "Rispetto dell'età minima per l'ammissione al lavoro fissata dalla legge. I minori ed i preposti vengono informati di quanto previsto D.Lgs. 345/99.",
-      "p_default": null,
-      "d_default": null,
-      "valutazione_riferimento": "Vedi normativa specifica (D.Lgs. 345/99)",
+      "p_default": 2,
+      "d_default": 2,
+      "valutazione_riferimento": null,
       "ambiente_tipi": [
         "ufficio",
         "magazzino",
@@ -2172,9 +2172,9 @@
       "condizioni_esposizione": "Durante le ordinarie attività lavorative.",
       "rischio": "Infortuni vari.",
       "misure_prevenzione": "Verifica periodica e continua a cura del preposto del livello di conoscenza della normativa nazionale e delle procedure aziendali per la sicurezza.",
-      "p_default": null,
-      "d_default": null,
-      "valutazione_riferimento": "Verifica linguistica/formativa a cura del preposto",
+      "p_default": 2,
+      "d_default": 2,
+      "valutazione_riferimento": null,
       "ambiente_tipi": [
         "ufficio",
         "magazzino",

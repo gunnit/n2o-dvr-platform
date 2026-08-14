@@ -51,10 +51,11 @@ class PericoloLibreria(Base):
     # separate allegato (most Incendio/Chimici/Biologici/Cancerogeni rows).
     p_default: Mapped[int | None] = mapped_column(Integer)
     d_default: Mapped[int | None] = mapped_column(Integer)
-    # Free-text marker for rows that delegate to allegati or normativa
-    # (e.g. "Come da documenti allegati", "Vedi normativa specifica
-    # (D.Lgs. 151/2001)"). Surface this in the UI so the operator knows
-    # the row is informational here.
+    # Free-text marker for rows whose scoring lives in a dedicated allegato
+    # (e.g. "Come da documenti allegati"). Surface this in the UI so the
+    # operator knows the row is informational here. Legacy "Vedi normativa
+    # ..." markers on OR-03/04/05 are normalized away at read time
+    # (api/v1/pericoli.py) per client feedback 2026-08-13.
     valutazione_riferimento: Mapped[str | None] = mapped_column(Text)
 
     # Filter controls (Phase 3 tagging — see scripts/tag_pericoli_catalog.py).

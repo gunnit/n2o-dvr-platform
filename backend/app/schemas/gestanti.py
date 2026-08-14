@@ -10,12 +10,17 @@ import uuid
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.data.dlgs_151_2001 import Allegato
 
 
 Stato = Literal["gestante", "puerpera", "allattamento"]
+
+# Esito della valutazione preventiva per mansione (art. 11 D.Lgs. 151/2001).
+EsitoMansione = Literal[
+    "compatibile", "compatibile_con_limitazioni", "non_compatibile"
+]
 
 
 class CrossReferenceRequest(BaseModel):
@@ -164,3 +169,101 @@ class GestantiResponse(BaseModel):
     firma_medico_competente: str | None
     note: str | None
     created_at: datetime
+
+
+# -----------------------------------------------------------------------------
+# Preventive per-mansione assessment (art. 11 D.Lgs. 151/2001) — objective
+# valutazione with NO worker attached. One row per (azienda, mansione).
+# -----------------------------------------------------------------------------
+
+
+class CatalogRisk(BaseModel):
+    """One D.Lgs. 151/2001 catalog entry, as prefixed into the mansione form."""
+
+    risk_key: str
+    allegato: Allegato
+    descrizione: str
+
+
+class MansioneRischio(CatalogRisk):
+    """A risk retained by the operator for a mansione, with optional misura.
+
+    Same JSONB row shape as ``GestantiValutazione.rischi_vietati`` (the
+    generator's row-mapping already understands ``misura``).
+    """
+
+    misura: str | None = None
+
+
+class GestantiMansioneUpsert(BaseModel):
+    mansione: str = Field(..., min_length=2, max_length=200)
+    esito: EsitoMansione = "compatibile"
+    rischi: list[MansioneRischio] | None = Field(
+        None,
+        description=(
+            "Rischi confermati dall'operatore. Se omesso (null) il server "
+            "prefilla i rischi suggeriti dal catalogo D.Lgs. 151/2001 per la "
+            "mansione; una lista vuota significa 'nessun rischio'."
+        ),
+    )
+    misure: str | None = Field(
+        None,
+        description=(
+            "Misure di prevenzione/limitazioni. Obbligatorie quando esito != "
+            "'compatibile'."
+        ),
+    )
+    note: str | None = None
+
+    @field_validator("mansione")
+    @classmethod
+    def _normalize_mansione(cls, v: str) -> str:
+        v = " ".join(v.strip().split())
+        if len(v) < 2:
+            raise ValueError("La mansione deve contenere almeno 2 caratteri.")
+        return v
+
+    @model_validator(mode="after")
+    def _misure_required_unless_compatibile(self) -> "GestantiMansioneUpsert":
+        if self.esito != "compatibile":
+            if not self.misure or len(self.misure.strip()) < 10:
+                raise ValueError(
+                    "Le misure/limitazioni sono obbligatorie (almeno 10 "
+                    "caratteri) quando l'esito non e' 'compatibile'."
+                )
+        return self
+
+
+class GestantiMansioneResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    azienda_id: uuid.UUID
+    mansione: str
+    esito: str
+    rischi: list[Any]
+    misure: str | None
+    note: str | None
+    created_at: datetime
+
+
+class GestantiMansioneOverviewItem(BaseModel):
+    mansione: str
+    num_persone: int = Field(
+        0, description="Persone (di ogni sesso) censite con questa mansione."
+    )
+    num_lavoratrici: int = Field(
+        0, description="Lavoratrici (sesso F) censite con questa mansione."
+    )
+    suggested_risks: list[CatalogRisk] = Field(
+        default_factory=list,
+        description=(
+            "Rischi suggeriti dal catalogo D.Lgs. 151/2001 per la mansione "
+            "(prefill: l'operatore rivede, non reinserisce)."
+        ),
+    )
+    valutazione: GestantiMansioneResponse | None = None
+
+
+class GestantiMansioniOverview(BaseModel):
+    items: list[GestantiMansioneOverviewItem]

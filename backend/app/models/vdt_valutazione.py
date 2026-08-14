@@ -1,7 +1,12 @@
 """VDT (Videoterminali) risk assessment — display screen equipment.
 
 Lavoratore esposto se uso VDT >= 20 ore/settimana (D.Lgs. 81/2008 art. 173).
-One row per workstation/worker.
+One row per workstation/worker. When the same persona uses more than one
+device/postazione, the weekly hours are SUMMED across all of that persona's
+rows and ``esposto`` reflects the person-level total on every row (client
+feedback 2026-08: "se una persona utilizza più device, il programma deve
+fare la somma delle ore"). The API keeps the flag in sync on every
+create/update/delete via ``_resync_persona_exposure``.
 """
 
 from __future__ import annotations
@@ -37,6 +42,11 @@ class VdtValutazione(Base):
     persona_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("persone.id", ondelete="SET NULL"))
     ambiente_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("ambienti.id", ondelete="SET NULL"))
     postazione: Mapped[str] = mapped_column(String, nullable=False)
+    # Free-text activity carried out at this postazione (client feedback
+    # 2026-08: the "Ambienti di lavoro" column becomes "ATTIVITÀ" with an
+    # operator-editable field). Nullable — legacy rows fall back to the
+    # ambiente name at render time.
+    attivita: Mapped[str | None] = mapped_column(String)
     ore_settimanali: Mapped[float] = mapped_column(Numeric, default=0)
     esposto: Mapped[bool] = mapped_column(Boolean, default=False)  # >=20h/week
     # Checklist items (see REFERENCE_DATA.md VDT checklist)
@@ -57,5 +67,10 @@ class VdtValutazione(Base):
     data_ultima_visita: Mapped[date | None] = mapped_column(Date)
     data_prossima_visita: Mapped[date | None] = mapped_column(Date)
     eta_50_plus: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Worker's birth date — drives the age-based periodicità (art. 176 c.3:
+    # biennale >= 50 anni, quinquennale otherwise). When present it takes
+    # precedence over the legacy eta_50_plus flag, which is kept for rows
+    # created before this column existed.
+    data_nascita: Mapped[date | None] = mapped_column(Date)
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

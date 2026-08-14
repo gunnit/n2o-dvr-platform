@@ -8,6 +8,11 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches
 from sqlalchemy import func, select
 
+from app.data.pee_procedures import (
+    DEFAULT_TIPOLOGIA_ALLARME,
+    NUE_LABEL,
+    normalize_emergency_number,
+)
 from app.models.ambiente import Ambiente
 from app.models.ambiente_foto import AmbienteFoto
 from app.models.documento_generato import DocumentoGenerato
@@ -79,19 +84,34 @@ class PeeComuneGenerator(BaseDocumentGenerator):
         add_heading(doc, "Obiettivo", level=2)
         add_paragraph(doc, "Il presente piano descrive la gestione coordinata delle emergenze in edificio condiviso, con attribuzione di ruoli e procedure tra le diverse aziende occupanti e l'amministratore condominiale.")
 
+        tipologia_allarme = (
+            (pee.tipologia_allarme if pee else None) or DEFAULT_TIPOLOGIA_ALLARME
+        )
         if pee:
             add_heading(doc, "Numeri di emergenza", level=2)
-            tel = pee.telefoni_emergenza or {"Numero Unico Europeo": "112"}
-            add_data_table(doc, ["Ente/Ruolo", "Numero"], [[k, v] for k, v in tel.items()])
+            # NUE reform: legacy national emergency numbers render as 112.
+            tel = pee.telefoni_emergenza or {NUE_LABEL: "112"}
+            add_data_table(
+                doc,
+                ["Ente/Ruolo", "Numero"],
+                [[k, normalize_emergency_number(v)] for k, v in tel.items()],
+            )
+            add_paragraph(
+                doc,
+                "Tutte le chiamate di soccorso confluiscono nel Numero Unico di "
+                "Emergenza (NUE) 112.",
+                italic=True,
+            )
             add_heading(doc, "Coordinamento emergenze", level=2)
             add_kv_table(doc, [
                 ("Coordinatore emergenza", pee.coordinatore_emergenza or "—"),
+                ("Tipologia di allarme", tipologia_allarme),
                 ("Punto di raccolta", pee.punto_raccolta or "—"),
                 ("Vie di fuga", pee.vie_fuga or "—"),
             ])
 
         add_heading(doc, "Procedure comuni multi-tenant", level=2)
-        add_paragraph(doc, "In caso di attivazione dell'allarme generale dell'edificio, tutte le aziende interrompono le attività, attivano il proprio coordinatore locale e procedono all'evacuazione verso il punto di raccolta condominiale.")
+        add_paragraph(doc, f"In caso di attivazione dell'allarme generale dell'edificio ({tipologia_allarme}), tutte le aziende interrompono le attività, attivano il proprio coordinatore locale e procedono all'evacuazione verso il punto di raccolta condominiale.")
 
         # Planimetria (US-4.1 AC3): embed the uploaded floor plan if one exists,
         # otherwise a placeholder. Condominial buildings tend to share a single

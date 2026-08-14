@@ -11,6 +11,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import {
+  MicroclimaIreqForm,
   MicroclimaPhsForm,
   MicroclimaPmvForm,
 } from "@/components/assessments/microclima-form";
@@ -24,6 +25,8 @@ interface ServerRow {
   ppd: number | null;
   livello_rischio: string | null;
   dlim_loss50: number | null;
+  ireq_neutral: number | null;
+  dle_freddo: number | null;
   created_at: string;
 }
 
@@ -134,7 +137,7 @@ export default function MicroclimaAssessmentPage() {
         <div>
           <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
             <Badge variant="secondary">Allegato Microclima</Badge>
-            <span>D.Lgs. 81/2008 · ISO 7730 / ISO 7933</span>
+            <span>D.Lgs. 81/2008 · ISO 7730 / ISO 7933 / ISO 11079</span>
           </div>
           <h1 className="mt-2 type-h1">Valutazione Microclima</h1>
           <p className="text-sm text-muted-foreground">{pageSubtitle}</p>
@@ -164,9 +167,13 @@ export default function MicroclimaAssessmentPage() {
                       ? r.pmv !== null
                         ? `PMV ${r.pmv.toFixed(2)} · PPD ${r.ppd?.toFixed(1)}%`
                         : "—"
-                      : r.dlim_loss50 !== null
-                        ? `d_lim ${Math.round(r.dlim_loss50)}'`
-                        : "—"}
+                      : r.tipo_ambiente === "severo_freddo"
+                        ? r.ireq_neutral !== null
+                          ? `IREQ ${r.ireq_neutral.toFixed(2)} clo${r.dle_freddo !== null ? ` · DLE ${Math.round(r.dle_freddo)}'` : ""}`
+                          : "—"
+                        : r.dlim_loss50 !== null
+                          ? `d_lim ${Math.round(r.dlim_loss50)}'`
+                          : "—"}
                   </span>
                 </li>
               ))}
@@ -178,7 +185,8 @@ export default function MicroclimaAssessmentPage() {
       <Tabs defaultValue="pmv">
         <TabsList>
           <TabsTrigger value="pmv">Comfort (PMV/PPD)</TabsTrigger>
-          <TabsTrigger value="phs">Stress termico (PHS)</TabsTrigger>
+          <TabsTrigger value="phs">Stress da caldo (PHS)</TabsTrigger>
+          <TabsTrigger value="ireq">Stress da freddo (IREQ)</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pmv" className="mt-4">
@@ -187,6 +195,10 @@ export default function MicroclimaAssessmentPage() {
 
         <TabsContent value="phs" className="mt-4">
           <MicroclimaPhsForm aziendaId={aziendaId} onSaved={refetchSaved} />
+        </TabsContent>
+
+        <TabsContent value="ireq" className="mt-4">
+          <MicroclimaIreqForm aziendaId={aziendaId} onSaved={refetchSaved} />
         </TabsContent>
       </Tabs>
 

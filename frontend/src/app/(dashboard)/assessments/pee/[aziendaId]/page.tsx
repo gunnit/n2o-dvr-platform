@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/select";
 import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
 
@@ -63,9 +64,21 @@ interface PeePlanConfig {
   vie_fuga: string | null;
   tempo_evacuazione_stimato_min: number | null;
   frequenza_prove: string;
+  tipologia_allarme: string;
   squadra_emergenza: SquadraMember[];
   telefoni_emergenza: Record<string, string>;
 }
+
+// Common alarm types (mirrors backend TIPOLOGIE_ALLARME). "Altro" switches to
+// free text; whatever the operator types is stored verbatim.
+const ALARM_OPTIONS = [
+  "Sirena",
+  "Campanella",
+  "Avviso a voce",
+  "Tromba da stadio",
+  "Segnale luminoso",
+];
+const ALARM_OTHER = "__altro__";
 
 const emptyPlan: PeePlanConfig = {
   coordinatore_emergenza: null,
@@ -73,6 +86,7 @@ const emptyPlan: PeePlanConfig = {
   vie_fuga: null,
   tempo_evacuazione_stimato_min: null,
   frequenza_prove: "annuale",
+  tipologia_allarme: "Sirena",
   squadra_emergenza: [],
   telefoni_emergenza: {},
 };
@@ -213,6 +227,7 @@ export default function PeeProceduresPage() {
             tempo_evacuazione_stimato_min:
               planDraft.tempo_evacuazione_stimato_min ?? null,
             frequenza_prove: planDraft.frequenza_prove || "annuale",
+            tipologia_allarme: planDraft.tipologia_allarme.trim() || null,
             squadra_emergenza: cleanedSquadra,
             telefoni_emergenza: cleanedTelefoni,
           }),
@@ -353,8 +368,9 @@ export default function PeeProceduresPage() {
             <div>
               <CardTitle>Configurazione piano di emergenza</CardTitle>
               <CardDescription>
-                Coordinatore, squadra, punto di raccolta, vie di fuga e numeri
-                telefonici utilizzati al momento della generazione del PEE.
+                Coordinatore, squadra, tipologia di allarme, punto di raccolta,
+                vie di fuga e numeri telefonici utilizzati al momento della
+                generazione del PEE.
               </CardDescription>
             </div>
             {!planEditing && (
@@ -467,6 +483,50 @@ export default function PeeProceduresPage() {
                 </p>
               )}
             </div>
+            <div className="space-y-2">
+              <Label>Tipologia di allarme</Label>
+              {planEditing ? (
+                <div className="space-y-2">
+                  <Select
+                    value={
+                      ALARM_OPTIONS.includes(planDraft.tipologia_allarme)
+                        ? planDraft.tipologia_allarme
+                        : ALARM_OTHER
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setPlanDraft((p) => ({
+                        ...p,
+                        tipologia_allarme: v === ALARM_OTHER ? "" : v,
+                      }));
+                    }}
+                  >
+                    {ALARM_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                    <option value={ALARM_OTHER}>Altro (specificare)</option>
+                  </Select>
+                  {!ALARM_OPTIONS.includes(planDraft.tipologia_allarme) && (
+                    <Input
+                      value={planDraft.tipologia_allarme}
+                      onChange={(e) =>
+                        setPlanDraft((p) => ({
+                          ...p,
+                          tipologia_allarme: e.target.value,
+                        }))
+                      }
+                      placeholder="Descrivi la tipologia di allarme"
+                    />
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {plan.tipologia_allarme}
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Squadra di emergenza */}
@@ -548,7 +608,7 @@ export default function PeeProceduresPage() {
             ).length === 0 ? (
               <p className="text-xs text-muted-foreground italic">
                 Nessun numero configurato (al momento della generazione verrà
-                incluso almeno il Numero Unico Europeo 112).
+                incluso almeno il Numero Unico di Emergenza (NUE) 112).
               </p>
             ) : (
               <div className="space-y-2">
@@ -602,6 +662,11 @@ export default function PeeProceduresPage() {
                 )}
               </div>
             )}
+            <p className="text-xs text-muted-foreground">
+              I numeri nazionali di emergenza (113, 115, 118…) vengono riportati
+              nel documento come Numero Unico di Emergenza (NUE) 112. I numeri
+              dei referenti aziendali restano invariati.
+            </p>
           </div>
         </CardContent>
         {planEditing && (

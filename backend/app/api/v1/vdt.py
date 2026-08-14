@@ -1,10 +1,18 @@
 """VDT (Videoterminali) CRUD endpoints (US-3.4 / US-3.5).
 
 One VdtValutazione row per (worker, workstation). Server derives:
-  - ``esposto`` from ``ore_settimanali`` (>= 20 h/week per art. 173)
-  - ``periodicita_sorveglianza`` from ``eta_50_plus`` (biennale / quinquennale)
+  - ``esposto`` from ``ore_settimanali`` (>= 20 h/week per art. 173).
+    When the same persona has multiple rows (multiple devices), the hours
+    are SUMMED across all of them and ``esposto`` reflects the person-level
+    total on every row (client feedback 2026-08). Every create/update/delete
+    re-syncs the persona's rows so the materialised flags never go stale.
+  - ``periodicita_sorveglianza`` from the worker's age (``data_nascita``;
+    legacy fallback ``eta_50_plus``) and idoneità (art. 176 c.3: biennale
+    for 50+ or con prescrizioni, quinquennale otherwise)
   - ``data_prossima_visita`` from ``data_ultima_visita`` (or today as anchor)
-    when the worker is esposto.
+    when the worker is esposto — still materialised for the dashboard
+    "Visite in scadenza / scadute" widgets even though the VDT document no
+    longer prints the visit dates.
 
 Mirrors the MMC pattern: input is the single source of truth, derived
 fields cannot drift from it.
@@ -32,11 +40,11 @@ from app.schemas.vdt import (
     VdtValutazioneResponse,
     VdtValutazioneUpdate,
 )
-from app.services.vdt_calculator import classify_exposure
+from app.services.vdt_calculator import classify_exposure, classify_total_exposure
 from app.services.vdt_surveillance import (
     cadence_years_for,
     compute_next_visit,
-    periodicita_label_for,
+    surveillance_periodicita,
 )
 
 router = APIRouter(prefix="/aziende/{azienda_id}/vdt", tags=["vdt"])
@@ -73,28 +81,89 @@ async def _validate_persona(
         raise BadRequestError("persona_id non appartiene a questa azienda")
 
 
+def _apply_surveillance(out: dict[str, Any], esposto: bool) -> None:
+    """Fill periodicita_sorveglianza + data_prossima_visita in ``out``.
+
+    Periodicità is age-based (art. 176 c.3): ``data_nascita`` wins when
+    present, the legacy ``eta_50_plus`` flag is the fallback, and
+    "con prescrizioni" forces biennale regardless of age.
+    """
+    if not esposto:
+        out["periodicita_sorveglianza"] = None
+        out["data_prossima_visita"] = None
+        return
+
+    today = datetime.now(timezone.utc).date()
+    periodicita = surveillance_periodicita(
+        data_nascita=out.get("data_nascita"),
+        eta_50_plus=bool(out.get("eta_50_plus") or False),
+        idoneita_visiva=out.get("idoneita_visiva"),
+        on=today,
+    )
+    out["periodicita_sorveglianza"] = periodicita
+    schedule = compute_next_visit(
+        data_ultima_visita=out.get("data_ultima_visita"),
+        over_50=(periodicita == "biennale"),
+        today=today,
+    )
+    # Only auto-fill data_prossima_visita; leave data_ultima_visita alone.
+    out["data_prossima_visita"] = schedule.data_prossima_visita
+
+
 def _apply_derived(payload: dict[str, Any]) -> dict[str, Any]:
-    """Fill in esposto + surveillance fields from the input."""
+    """Fill in esposto + surveillance fields from a single row's input.
+
+    Person-level hour summing across multiple rows is handled afterwards by
+    :func:`_resync_persona_exposure`; this helper is the whole story only
+    for generic rows (persona_id is None).
+    """
     out = dict(payload)
     ore = float(out.get("ore_settimanali") or 0)
     esposto = classify_exposure(ore) == "ESPOSTO"
     out["esposto"] = esposto
-
-    over_50 = bool(out.get("eta_50_plus") or False)
-    if esposto:
-        out["periodicita_sorveglianza"] = periodicita_label_for(over_50)
-        today = datetime.now(timezone.utc).date()
-        schedule = compute_next_visit(
-            data_ultima_visita=out.get("data_ultima_visita"),
-            over_50=over_50,
-            today=today,
-        )
-        # Only auto-fill data_prossima_visita; leave data_ultima_visita alone.
-        out["data_prossima_visita"] = schedule.data_prossima_visita
-    else:
-        out["periodicita_sorveglianza"] = None
-        out["data_prossima_visita"] = None
+    _apply_surveillance(out, esposto)
     return out
+
+
+async def _resync_persona_exposure(
+    db: AsyncSession, azienda_id: uuid.UUID, persona_id: uuid.UUID | None
+) -> None:
+    """Re-derive ``esposto`` (and surveillance fields) across ALL rows of a
+    persona from the SUM of their weekly hours.
+
+    One person on two devices at 12 h + 10 h totals 22 h/week and is
+    therefore esposto even though neither row alone crosses the 20 h
+    threshold (art. 173 classifies the lavoratore, not the workstation).
+    No-op for generic rows (persona_id None) — those stay per-row.
+    """
+    if persona_id is None:
+        return
+    result = await db.execute(
+        select(VdtValutazione).where(
+            VdtValutazione.azienda_id == azienda_id,
+            VdtValutazione.persona_id == persona_id,
+        )
+    )
+    rows = list(result.scalars().all())
+    if not rows:
+        return
+    esposto = (
+        classify_total_exposure(
+            float(r.ore_settimanali or 0) for r in rows
+        )
+        == "ESPOSTO"
+    )
+    for row in rows:
+        derived: dict[str, Any] = {
+            "eta_50_plus": row.eta_50_plus,
+            "data_nascita": row.data_nascita,
+            "idoneita_visiva": row.idoneita_visiva,
+            "data_ultima_visita": row.data_ultima_visita,
+        }
+        _apply_surveillance(derived, esposto)
+        row.esposto = esposto
+        row.periodicita_sorveglianza = derived["periodicita_sorveglianza"]
+        row.data_prossima_visita = derived["data_prossima_visita"]
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +206,10 @@ async def create_vdt(
     enriched = _apply_derived(payload)
     row = VdtValutazione(azienda_id=azienda_id, **enriched)
     db.add(row)
+    # Person-level hour summing: this new row may tip the persona's total
+    # over the 20 h threshold, flipping esposto on their other rows too.
+    await db.flush()
+    await _resync_persona_exposure(db, azienda_id, row.persona_id)
     await db.commit()
     await db.refresh(row)
     return row
@@ -187,10 +260,14 @@ async def update_vdt(
     if "persona_id" in updates:
         await _validate_persona(azienda_id, updates.get("persona_id"), db)
 
+    previous_persona_id = row.persona_id
+
     # Merge with current state so _apply_derived sees everything.
     current = {
         "ore_settimanali": float(row.ore_settimanali) if row.ore_settimanali is not None else 0.0,
         "eta_50_plus": row.eta_50_plus,
+        "data_nascita": row.data_nascita,
+        "idoneita_visiva": row.idoneita_visiva,
         "data_ultima_visita": row.data_ultima_visita,
     }
     current.update({k: v for k, v in updates.items() if k in current})
@@ -200,6 +277,13 @@ async def update_vdt(
         setattr(row, k, v)
     for k in ("esposto", "periodicita_sorveglianza", "data_prossima_visita"):
         setattr(row, k, derived[k])
+
+    # Person-level hour summing across all of the persona's rows. When the
+    # row moved between persone, re-sync both sides.
+    await db.flush()
+    await _resync_persona_exposure(db, azienda_id, row.persona_id)
+    if previous_persona_id != row.persona_id:
+        await _resync_persona_exposure(db, azienda_id, previous_persona_id)
 
     await db.commit()
     await db.refresh(row)
@@ -226,7 +310,12 @@ async def delete_vdt(
     row = result.scalar_one_or_none()
     if not row:
         raise NotFoundError("Valutazione VDT non trovata")
+    persona_id = row.persona_id
     await db.delete(row)
+    # Removing a device can drop the persona's summed hours back under the
+    # 20 h threshold — re-derive the surviving rows.
+    await db.flush()
+    await _resync_persona_exposure(db, azienda_id, persona_id)
     await db.commit()
 
 

@@ -36,6 +36,10 @@ import {
   PosInfoEditor,
   type PosInfoFields,
 } from "@/components/assessments/pos/pos-info-cards";
+import {
+  PosCantiereEditor,
+  type PosCantiereFields,
+} from "@/components/assessments/pos/pos-cantiere-cards";
 
 /**
  * POS DPI matrix editor (US-4.8).
@@ -79,7 +83,7 @@ interface DpiMatrix {
   [phase: string]: { [role: string]: string[] };
 }
 
-interface Pos extends PosInfoFields {
+interface Pos extends PosInfoFields, PosCantiereFields {
   id: string;
   azienda_id: string;
   cantiere_indirizzo: string;
@@ -90,6 +94,21 @@ interface Pos extends PosInfoFields {
   // back via PUT /pos/{id}/fasi by <PhaseBuilder>. Optional so legacy
   // rows still parse.
   fasi_lavorative?: PhaseValues[];
+}
+
+/** Pull the cantiere subset (client request 2026-08-13) for its editor. */
+function cantiereFieldsOf(p: Pos): PosCantiereFields {
+  return {
+    cantiere_indirizzo: p.cantiere_indirizzo ?? "",
+    data_inizio: p.data_inizio ?? null,
+    data_fine: p.data_fine ?? null,
+    subappalti_presenti: p.subappalti_presenti ?? false,
+    subappaltatori: p.subappaltatori ?? [],
+    dipendenti_cantiere: p.dipendenti_cantiere ?? [],
+    figure_sicurezza: p.figure_sicurezza ?? [],
+    sostanze_pericolose_presenti: p.sostanze_pericolose_presenti ?? false,
+    sostanze_pericolose: p.sostanze_pericolose ?? [],
+  };
 }
 
 /** Pull the editable subset out of the full POS row for the info editor. */
@@ -510,6 +529,14 @@ export default function PosDpiMatrixPage() {
       {/* Anagrafica + dipendenti — read-only summary linking back to
           azienda/persone pages (Luca's 2026-05-25 POS template Groups A & B). */}
       <PosAnagraficaSummary aziendaId={aziendaId} />
+
+      {/* Dati cantiere, figure di sicurezza, dipendenti in cantiere,
+          subappalti, sostanze pericolose (client request 2026-08-13). */}
+      <PosCantiereEditor
+        aziendaId={aziendaId}
+        posId={pos.id}
+        initial={cantiereFieldsOf(pos)}
+      />
 
       {/* Editable info cards: soggetti di riferimento, modalità
           organizzative, organizzazione logistica (Groups D, E, F). */}
