@@ -16,6 +16,10 @@ celery_app = Celery(
 )
 
 celery_app.conf.update(
+    # pythermalcomfort imports and JIT-loads a large model set. Load the
+    # compatibility wrapper once in the parent process before the prefork pool
+    # starts so concurrent document jobs do not cold-load it independently.
+    imports=("app.services.microclima_calculator",),
     task_track_started=True,
     task_serializer="json",
     accept_content=["json"],

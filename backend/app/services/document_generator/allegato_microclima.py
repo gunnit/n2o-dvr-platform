@@ -17,22 +17,23 @@ from app.services.document_generator.docx_utils import (
     page_break,
     slugify,
 )
+from app.services.microclima_calculator import calculate_pmv_ppd
 
 TIPO_DOC = "allegato_microclima"
 
 
 def _compute_pmv_ppd(t_air, t_rad, v_air, rh, met, clo) -> tuple[float | None, float | None]:
-    """Try pythermalcomfort; fall back to a simple heuristic if missing."""
+    """Use the shared current-version ISO model, with a safe fallback."""
     try:
-        from pythermalcomfort.models import pmv_ppd
-        result = pmv_ppd(
-            tdb=float(t_air), tr=float(t_rad), vr=float(v_air), rh=float(rh),
-            met=float(met), clo=float(clo), standard="ISO",
+        result = calculate_pmv_ppd(
+            air_temp=float(t_air),
+            mean_radiant_temp=float(t_rad),
+            air_velocity=float(v_air),
+            humidity=float(rh),
+            metabolic_rate=float(met),
+            clothing_insulation=float(clo),
         )
-        # pythermalcomfort returns dict or object with pmv/ppd keys
-        if isinstance(result, dict):
-            return float(result.get("pmv", 0)), float(result.get("ppd", 0))
-        return float(getattr(result, "pmv", 0)), float(getattr(result, "ppd", 0))
+        return float(result["pmv"]), float(result["ppd"])
     except Exception:
         # Simplified fallback: linear distance from 22 C optimal
         pmv = (float(t_air) - 22.0) * 0.25

@@ -10,7 +10,7 @@ openai>=2.11.0
 google-api-python-client>=2.130.0
 google-auth>=2.30.0
 celery[redis]>=5.4.0
-pythermalcomfort>=2.10.0
+pythermalcomfort==4.4.2
 python-multipart>=0.0.9
 pillow>=10.3.0
 pillow-heif==1.5.0

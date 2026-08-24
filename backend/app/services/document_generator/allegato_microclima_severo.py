@@ -6,6 +6,7 @@ Covers both severe-environment evaluation types:
   wind chill / frostbite screening per Annex D)
 """
 
+import math
 import os
 
 from docx import Document
@@ -21,27 +22,32 @@ from app.services.document_generator.docx_utils import (
     add_paragraph,
     slugify,
 )
+from app.services.microclima_calculator import calculate_phs
 
 TIPO_DOC = "allegato_microclima_severo"
 
 
 def _compute_phs(t_air, t_rad, v_air, rh, met, clo) -> tuple[float | None, float | None, float | None]:
-    """Try pythermalcomfort; fall back to conservative estimates."""
+    """Use the shared current-version PHS model, with a safe fallback."""
     try:
-        from pythermalcomfort.models import phs
-        r = phs(
-            tdb=float(t_air), tr=float(t_rad), v=float(v_air), rh=float(rh),
-            met=float(met) * 58.2,  # convert met to W/m^2
-            clo=float(clo),
-            posture=2, weight=75, height=1.75, drink=1, duration=480,
+        result = calculate_phs(
+            air_temp=float(t_air),
+            mean_radiant_temp=float(t_rad),
+            air_velocity=float(v_air),
+            humidity=float(rh),
+            metabolic_rate=float(met),
+            clothing_insulation=float(clo),
+            posture="standing",
+            duration_min=480,
         )
-        if isinstance(r, dict):
-            return (
-                float(r.get("sw_tot", 0)) if r.get("sw_tot") is not None else None,
-                float(r.get("t_re", 0)) if r.get("t_re") is not None else None,
-                float(r.get("d_lim_loss_50", 0)) if r.get("d_lim_loss_50") is not None else None,
-            )
-        return (float(getattr(r, "sw_tot", 0)), float(getattr(r, "t_re", 0)), float(getattr(r, "d_lim_loss_50", 0)))
+        values = (
+            float(result["sweat_loss_g"]),
+            float(result["t_re"]),
+            float(result["d_lim"]),
+        )
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError("PHS returned a non-finite result")
+        return values
     except Exception:
         # Heuristic fallback
         excess = max(0.0, float(t_air) - 28.0)
@@ -118,16 +124,16 @@ class AllegatoMicroclimaSeveroGenerator(BaseDocumentGenerator):
         add_kv_table(doc, [
             ("Azienda", azienda.ragione_sociale or ""),
             ("Data valutazione", generated_at.strftime("%d/%m/%Y")),
-            ("Riferimento normativo (caldo)", "UNI EN ISO 7933:2005 - Determinazione dello stress termico - Indice PHS"),
+            ("Riferimento normativo (caldo)", "UNI EN ISO 7933:2023 - Determinazione dello stress termico - Indice PHS"),
             ("Riferimento normativo (freddo)", "UNI EN ISO 11079:2008 - Determinazione e interpretazione dello stress da freddo - Indici IREQ e raffreddamento localizzato"),
         ])
 
         add_heading(doc, "PARTE I - STRESS DA CALDO (PHS)", level=2)
         add_heading(doc, "Metodologia", level=2)
-        add_paragraph(doc, "L'indice PHS (Predicted Heat Strain) stima la sudorazione totale (sw_tot in g/h), la temperatura rettale prevista (t_re) e la durata massima di esposizione accettabile con il 50% di probabilità di rientrare nei limiti di perdita idrica (dlim_loss50 in minuti).")
+        add_paragraph(doc, "L'indice PHS (Predicted Heat Strain) stima la perdita totale di sudore (in g), la temperatura rettale prevista (t_re) e il limite di esposizione più restrittivo tra temperatura rettale e perdita idrica (d_lim in minuti).")
 
         add_heading(doc, "Soglie di azione", level=2)
-        add_data_table(doc, ["d_lim_loss50", "Classificazione"], [
+        add_data_table(doc, ["d_lim", "Classificazione"], [
             [">= 480 min (intera giornata)", "ACCETTABILE"],
             ["240-480 min", "TURNI RIDOTTI / PAUSE"],
             ["< 240 min", "ESPOSIZIONE NON AMMESSA senza DPI"],
@@ -152,7 +158,12 @@ class AllegatoMicroclimaSeveroGenerator(BaseDocumentGenerator):
                     f"{dlim:.0f}" if dlim is not None else "—",
                     _severity(dlim),
                 ])
-            add_data_table(doc, ["Ambiente", "t_aria", "t_rad", "RH%", "met", "sw_tot g/h", "t_re C", "d_lim min", "Classificazione"], rows)
+            add_data_table(
+                doc,
+                ["Ambiente", "t_aria", "t_rad", "RH%", "met", "Perdita sudore g", "t_re C", "d_lim min", "Classificazione"],
+                rows,
+                column_widths_cm=[1.8, 1.1, 1.1, 0.9, 0.9, 1.7, 1.1, 1.1, 5.3],
+            )
 
         add_heading(doc, "Misure organizzative e di protezione", level=2)
         add_paragraph(doc, "Per ambienti con stress termico severo: idratazione frequente (>= 250 ml/h), pause in zona rinfrescata ogni 45 minuti, rotazione personale, monitoraggio sintomi, formazione sul riconoscimento del colpo di calore, sorveglianza sanitaria specifica.")

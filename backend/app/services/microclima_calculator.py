@@ -1,18 +1,18 @@
 """
 Microclima (thermal comfort / thermal stress) calculator.
 
-Wraps the `pythermalcomfort` library (v3.x API) to compute:
+Wraps the pinned `pythermalcomfort` 4.4.2 API to compute:
 
 - PMV/PPD per ISO 7730:2006 — comfort zones for normal indoor environments.
 - PHS per ISO 7933:2023 — predicted heat strain for severe heat exposure.
 - IREQ per UNI EN ISO 11079:2008 — required clothing insulation for severe
   cold exposure (pragmatic closed-form implementation, see `calculate_ireq`).
 
-The library's 3.x API exposes `pythermalcomfort.models.pmv_ppd_iso(tdb, tr,
+The library exposes `pythermalcomfort.models.pmv_ppd_iso(tdb, tr,
 vr, rh, met, clo, ...)` and `pythermalcomfort.models.phs(tdb, tr, v, rh, met,
-clo, posture, ...)` which return dataclass instances. There is no IREQ model
-in the library; the wind-chill temperature (ISO 11079 Annex D / JAG-TI) does
-exist as `pythermalcomfort.models.wind_chill_temperature`.
+clo, posture, ...)` which return dataclass instances. This module retains the
+repository's established ISO 11079:2008 IREQ calculation while using the
+library's wind-chill temperature model (ISO 11079 Annex D / JAG-TI).
 
 References:
 - docs/context/FORMULAS_AND_CALCULATIONS.md sections 6-7
@@ -24,9 +24,23 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from pythermalcomfort.models import phs as _phs_model
-from pythermalcomfort.models import pmv_ppd_iso as _pmv_ppd_iso
-from pythermalcomfort.models import wind_chill_temperature as _wct_model
+try:
+    from pythermalcomfort.models import phs as _phs_model
+    from pythermalcomfort.models import pmv_ppd_iso as _pmv_ppd_iso
+    from pythermalcomfort.models import wind_chill_temperature as _wct_model
+except Exception as exc:  # preserve document fallbacks if the optional model fails
+    _phs_model = None
+    _pmv_ppd_iso = None
+    _wct_model = None
+    _THERMAL_MODEL_IMPORT_ERROR: Exception | None = exc
+else:
+    _THERMAL_MODEL_IMPORT_ERROR = None
+
+
+def _require_thermal_model(model, name: str):
+    if model is None:
+        raise RuntimeError(f"pythermalcomfort model {name} is unavailable") from _THERMAL_MODEL_IMPORT_ERROR
+    return model
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +114,7 @@ def calculate_pmv_ppd(
         dict with keys: pmv, ppd, sensation (Italian), category (A|B|C|
         FUORI_SOGLIA), compliant (bool).
     """
-    result = _pmv_ppd_iso(
+    result = _require_thermal_model(_pmv_ppd_iso, "pmv_ppd_iso")(
         tdb=air_temp,
         tr=mean_radiant_temp,
         vr=air_velocity,
@@ -172,7 +186,7 @@ def calculate_phs(
             f"posture must be 'sitting'|'standing'|'crouching', got {posture!r}"
         )
 
-    result = _phs_model(
+    result = _require_thermal_model(_phs_model, "phs")(
         tdb=air_temp,
         tr=mean_radiant_temp,
         v=air_velocity,
@@ -280,7 +294,8 @@ def _wind_chill_c(air_temp: float, air_velocity: float) -> float | None:
     v10_kmh = air_velocity * 1.5 * 3.6
     if v10_kmh < 4.8:
         return round(air_temp, 1)
-    return float(_wct_model(tdb=air_temp, v=v10_kmh, round_output=True).wct)
+    model = _require_thermal_model(_wct_model, "wind_chill_temperature")
+    return float(model(tdb=air_temp, v=v10_kmh, round_output=True).wct)
 
 
 def _frostbite_class(t_wc: float | None) -> str:

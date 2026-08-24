@@ -415,8 +415,17 @@ def _try_set_table_style(table) -> bool:
         return False
 
 
-def add_data_table(doc: Document, headers: list[str], data_rows: list[list[str]]) -> None:
+def add_data_table(
+    doc: Document,
+    headers: list[str],
+    data_rows: list[list[str]],
+    *,
+    column_widths_cm: list[float] | None = None,
+):
     """Table with styled header + rows."""
+    if column_widths_cm is not None and len(column_widths_cm) != len(headers):
+        raise ValueError("column_widths_cm must contain one width per header")
+
     table = doc.add_table(rows=1, cols=len(headers))
     style_applied = _try_set_table_style(table)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -433,6 +442,15 @@ def add_data_table(doc: Document, headers: list[str], data_rows: list[list[str]]
             for p in row.cells[i].paragraphs:
                 for r in p.runs:
                     r.font.size = Pt(9)
+
+    if column_widths_cm is not None:
+        table.autofit = False
+        for column, width_cm in zip(table.columns, column_widths_cm):
+            width = Cm(width_cm)
+            column.width = width
+            for cell in column.cells:
+                cell.width = width
+
     if not style_applied:
         _apply_cell_borders_all(table)
     return table
