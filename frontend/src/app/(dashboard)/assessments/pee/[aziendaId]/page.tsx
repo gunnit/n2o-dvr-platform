@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { Loader2, Pencil, Plus, RotateCcw, Save, Trash2, X } from "lucide-react";
 
@@ -56,6 +56,19 @@ interface EventoProcedure {
 interface SquadraMember {
   nome: string;
   ruolo: string;
+}
+
+/**
+ * Editing row for `telefoni_emergenza`. The wire format is a Record keyed by
+ * the ente label, but the label is exactly what the operator types — using it
+ * as the React key remounts the row on every keystroke and steals focus. While
+ * editing we therefore keep an array with a stable synthetic id and only fold
+ * it back into a Record on save.
+ */
+interface TelefonoRow {
+  id: number;
+  ente: string;
+  numero: string;
 }
 
 interface PeePlanConfig {
@@ -114,6 +127,19 @@ export default function PeeProceduresPage() {
   const [planDraft, setPlanDraft] = useState<PeePlanConfig>(emptyPlan);
   const [planEditing, setPlanEditing] = useState(false);
   const [planSaving, setPlanSaving] = useState(false);
+  // Phone rows live outside planDraft while editing — see TelefonoRow.
+  const [telefoniRows, setTelefoniRows] = useState<TelefonoRow[]>([]);
+  const telefonoIdRef = useRef(0);
+
+  const rowsFromRecord = useCallback(
+    (record: Record<string, string>): TelefonoRow[] =>
+      Object.entries(record).map(([ente, numero]) => ({
+        id: (telefonoIdRef.current += 1),
+        ente,
+        numero,
+      })),
+    [],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -143,11 +169,13 @@ export default function PeeProceduresPage() {
 
   const startPlanEdit = () => {
     setPlanDraft(plan);
+    setTelefoniRows(rowsFromRecord(plan.telefoni_emergenza));
     setPlanEditing(true);
   };
 
   const cancelPlanEdit = () => {
     setPlanDraft(plan);
+    setTelefoniRows(rowsFromRecord(plan.telefoni_emergenza));
     setPlanEditing(false);
   };
 
@@ -174,33 +202,21 @@ export default function PeeProceduresPage() {
     }));
   };
 
-  const updateTelefono = (key: string, value: string) => {
-    setPlanDraft((prev) => ({
-      ...prev,
-      telefoni_emergenza: { ...prev.telefoni_emergenza, [key]: value },
-    }));
+  const updateTelefonoRow = (id: number, patch: Partial<TelefonoRow>) => {
+    setTelefoniRows((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, ...patch } : row)),
+    );
   };
 
-  const removeTelefono = (key: string) => {
-    setPlanDraft((prev) => {
-      const next = { ...prev.telefoni_emergenza };
-      delete next[key];
-      return { ...prev, telefoni_emergenza: next };
-    });
+  const removeTelefono = (id: number) => {
+    setTelefoniRows((prev) => prev.filter((row) => row.id !== id));
   };
 
   const addTelefono = () => {
-    // Start with a placeholder key so the row renders; user can rename it.
-    let idx = 1;
-    while (
-      Object.prototype.hasOwnProperty.call(
-        planDraft.telefoni_emergenza,
-        `Contatto ${idx}`,
-      )
-    ) {
-      idx += 1;
-    }
-    updateTelefono(`Contatto ${idx}`, "");
+    setTelefoniRows((prev) => [
+      ...prev,
+      { id: (telefonoIdRef.current += 1), ente: "", numero: "" },
+    ]);
   };
 
   const savePlan = async () => {
@@ -209,9 +225,12 @@ export default function PeeProceduresPage() {
     const cleanedSquadra = planDraft.squadra_emergenza.filter(
       (m) => m.nome.trim() && m.ruolo.trim(),
     );
+    // Rows with the same ente collapse onto one key — last one entered wins.
     const cleanedTelefoni: Record<string, string> = {};
-    for (const [k, v] of Object.entries(planDraft.telefoni_emergenza)) {
-      if (k.trim() && v.trim()) cleanedTelefoni[k.trim()] = v.trim();
+    for (const row of telefoniRows) {
+      const ente = row.ente.trim();
+      const numero = row.numero.trim();
+      if (ente && numero) cleanedTelefoni[ente] = numero;
     }
     setPlanSaving(true);
     try {
@@ -235,6 +254,7 @@ export default function PeeProceduresPage() {
       );
       setPlan(saved);
       setPlanDraft(saved);
+      setTelefoniRows(rowsFromRecord(saved.telefoni_emergenza));
       setPlanEditing(false);
     } catch (err) {
       setLoadError(
@@ -603,63 +623,60 @@ export default function PeeProceduresPage() {
                 </Button>
               )}
             </div>
-            {Object.keys(
-              planEditing ? planDraft.telefoni_emergenza : plan.telefoni_emergenza,
-            ).length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">
-                Nessun numero configurato (al momento della generazione verrà
-                incluso almeno il Numero Unico di Emergenza (NUE) 112).
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {Object.entries(
-                  planEditing
-                    ? planDraft.telefoni_emergenza
-                    : plan.telefoni_emergenza,
-                ).map(([k, v]) =>
-                  planEditing ? (
-                    <div key={k} className="flex gap-2">
+            {planEditing ? (
+              telefoniRows.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">
+                  Nessun numero configurato (al momento della generazione verrà
+                  incluso almeno il Numero Unico di Emergenza (NUE) 112).
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {telefoniRows.map((row) => (
+                    <div key={row.id} className="flex gap-2">
                       <Input
-                        value={k}
-                        onChange={(e) => {
-                          // Renaming the key is a delete-then-add to keep
-                          // React row identity sane while the user types.
-                          const newKey = e.target.value;
-                          setPlanDraft((prev) => {
-                            const next = { ...prev.telefoni_emergenza };
-                            delete next[k];
-                            next[newKey] = v;
-                            return { ...prev, telefoni_emergenza: next };
-                          });
-                        }}
+                        value={row.ente}
+                        onChange={(e) =>
+                          updateTelefonoRow(row.id, { ente: e.target.value })
+                        }
                         placeholder="Ente / Ruolo"
                         className="flex-1"
                       />
                       <Input
-                        value={v}
-                        onChange={(e) => updateTelefono(k, e.target.value)}
+                        value={row.numero}
+                        onChange={(e) =>
+                          updateTelefonoRow(row.id, { numero: e.target.value })
+                        }
                         placeholder="Numero"
                         className="flex-1"
                       />
                       <Button
                         size="icon-sm"
                         variant="ghost"
-                        onClick={() => removeTelefono(k)}
+                        onClick={() => removeTelefono(row.id)}
                         aria-label="Rimuovi"
                       >
                         <Trash2 className="h-3.5 w-3.5 text-destructive" />
                       </Button>
                     </div>
-                  ) : (
-                    <div
-                      key={k}
-                      className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-1.5 text-sm"
-                    >
-                      <span className="text-muted-foreground">{k}</span>
-                      <span className="font-mono">{v}</span>
-                    </div>
-                  ),
-                )}
+                  ))}
+                </div>
+              )
+            ) : Object.keys(plan.telefoni_emergenza).length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">
+                Nessun numero configurato (al momento della generazione verrà
+                incluso almeno il Numero Unico di Emergenza (NUE) 112).
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {Object.entries(plan.telefoni_emergenza).map(([k, v]) => (
+                  <div
+                    key={k}
+                    className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+                  >
+                    <span className="text-muted-foreground">{k}</span>
+                    <span className="font-mono">{v}</span>
+                  </div>
+                ))}
               </div>
             )}
             <p className="text-xs text-muted-foreground">
