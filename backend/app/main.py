@@ -99,9 +99,28 @@ async def _warn_on_unescapable_paywall() -> None:
     )
 
 
+async def _reclaim_abandoned_generations() -> None:
+    """Close out generations whose worker died before they finished.
+
+    A redeploy or an OOM kill takes the in-flight Celery message with it, and
+    nothing redelivers the task — so the row keeps saying "in corso" in the
+    Documenti tab with no error and no retry. Running the sweep here means the
+    very restart that orphaned a row is also what cleans it up.
+    """
+    from app.db.session import async_session_factory
+    from app.services.document_recovery import reclaim_abandoned_generations
+
+    try:
+        async with async_session_factory() as db:
+            await reclaim_abandoned_generations(db)
+    except Exception:  # pragma: no cover — never block startup on housekeeping
+        logger.exception("could not reclaim abandoned document generations")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await _warn_on_unescapable_paywall()
+    await _reclaim_abandoned_generations()
     yield
 
 
