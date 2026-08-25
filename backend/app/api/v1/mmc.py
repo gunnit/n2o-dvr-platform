@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.permissions import ASSESSMENTS_WRITE
 from app.data.niosh_cp import get_default_cp
-from app.data.niosh_factors import classify_ir, compute_plr
+from app.data.niosh_factors import classify_lift, compute_plr
 from app.db.session import get_db
 from app.dependencies import get_current_org, require_capability
 from app.models.azienda import Azienda
@@ -121,9 +121,8 @@ def _apply_niosh(payload: dict[str, Any]) -> dict[str, Any]:
 
     peso = float(out.get("peso_kg") or 0)
     plr = float(out.get("plr") or 0)
-    ir = peso / plr if plr > 0 else 0.0
+    ir, livello = classify_lift(peso, plr)
     out["indice_ir"] = round(ir, 4)
-    livello = classify_ir(ir)
     out["livello_rischio"] = livello
     out["area_classificazione"] = {
         "VERDE": "Verde",

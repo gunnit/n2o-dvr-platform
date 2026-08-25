@@ -7,6 +7,7 @@ the persistence router, and the document generator is caught here.
 
 from app.data.niosh_factors import (
     classify_ir,
+    classify_lift,
     compute_plr,
     durata_band,
     factor_a,
@@ -217,3 +218,49 @@ def test_compute_plr_extreme_freq_collapses_plr():
         durata_min=120,
     )
     assert out["plr"] == 0.0
+
+
+def test_classify_lift_normal_range_matches_classify_ir():
+    """With a positive PLR, classify_lift is just IR = peso / PLR."""
+    ir, livello = classify_lift(10.0, 20.0)
+    assert ir == 0.5
+    assert livello == "VERDE"
+
+    ir, livello = classify_lift(18.0, 20.0)
+    assert ir == 0.9
+    assert livello == "GIALLO"
+
+    ir, livello = classify_lift(30.0, 20.0)
+    assert ir == 1.5
+    assert livello == "ROSSO"
+
+
+def test_classify_lift_zero_plr_is_rosso_not_verde():
+    """PLR = 0 means no acceptable weight — it must never read as VERDE.
+
+    Reachable whenever a multiplier collapses (see
+    test_compute_plr_extreme_freq_collapses_plr). The old
+    ``ir = peso / plr if plr > 0 else 0.0`` fed 0.0 into classify_ir and
+    stamped the safest label on the least acceptable lift there is.
+    """
+    ir, livello = classify_lift(15.0, 0.0)
+    assert livello == "ROSSO"
+    # IR stays numeric so the stored column and the annex cell keep working;
+    # every renderer prints "—" for the index when PLR is 0.
+    assert ir == 0.0
+
+
+def test_classify_lift_zero_plr_from_real_factor_collapse():
+    """End-to-end: the 20 atti/min lift from the factor test lands ROSSO."""
+    out = compute_plr(
+        cp=25.0,
+        altezza_cm=75,
+        dislocazione_cm=25,
+        distanza_cm=25,
+        giudizio_presa="Buono",
+        angolo_gradi=0,
+        frequenza_atti_min=20,
+        durata_min=120,
+    )
+    _ir, livello = classify_lift(10.0, out["plr"])
+    assert livello == "ROSSO"

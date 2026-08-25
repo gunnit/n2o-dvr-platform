@@ -43,6 +43,7 @@ from app.data.niosh_factors import (
     FACTOR_E,
     FACTOR_F_TABLE,
     classify_ir,
+    classify_lift,
     compute_plr,
 )
 from app.models.documento_generato import DocumentoGenerato
@@ -895,8 +896,7 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         )
         peso = float(r.peso_kg or 0)
         plr = float(out["plr"])
-        ir = peso / plr if plr > 0 else 0.0
-        livello = classify_ir(ir)
+        ir, livello = classify_lift(peso, plr)
         return {
             "cp": cp,
             "fattore_a": out["fattore_a"],

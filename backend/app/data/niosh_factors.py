@@ -217,3 +217,23 @@ def classify_ir(ir: float) -> str:
     if ir <= 1.0:
         return "GIALLO"
     return "ROSSO"
+
+
+def classify_lift(peso_kg: float, plr: float) -> tuple[float, str]:
+    """Return ``(IR, livello)`` for a single lift.
+
+    ``PLR == 0`` is not "no risk", it is "no acceptable weight": one of the
+    multipliers has collapsed to zero — V > 175 cm (A), dislocazione >= 175 cm
+    (B), H >= 63 cm (C), asimmetria >= 180 deg (D), or a lifting frequency
+    above the limit for the duration band (F). IR = peso / 0 is undefined, and
+    feeding a bare 0.0 into `classify_ir` returns VERDE, i.e. it prints the
+    safest label on the least acceptable lift there is.
+
+    IR still comes back as 0.0 so the stored column and the table cell stay
+    numeric — every caller already renders "—" for the index when PLR is 0 —
+    but the level is ROSSO.
+    """
+    if plr > 0:
+        ir = peso_kg / plr
+        return ir, classify_ir(ir)
+    return 0.0, "ROSSO"
