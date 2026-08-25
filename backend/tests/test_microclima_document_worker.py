@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 from docx import Document
 from docx.shared import Cm
 
@@ -54,15 +55,15 @@ def test_severe_heat_document_falls_back_for_non_finite_phs_results():
     assert result == pytest.approx((1500.0, 37.0, 480.0))
 
 
-def test_celery_parent_preloads_thermal_models_before_pool_fork():
-    """Celery's real loader must import the thermal wrapper at startup."""
+def test_celery_parent_keeps_thermal_models_lazy_on_starter_worker():
+    """The 512 MB worker parent must not retain the thermal model before fork."""
     script = """
 import sys
 from app.celery_app import celery_app
 
 celery_app.loader.import_default_modules()
 raise SystemExit(
-    0 if "app.services.microclima_calculator" in sys.modules else 1
+    0 if "app.services.microclima_calculator" not in sys.modules else 1
 )
 """
     env = os.environ.copy()
@@ -79,6 +80,41 @@ raise SystemExit(
     )
 
     assert completed.returncode == 0, completed.stderr
+
+
+def test_starter_worker_serializes_memory_heavy_document_tasks():
+    """One child keeps lazy thermal imports within the Starter memory budget."""
+    script = """
+from app.celery_app import celery_app
+
+raise SystemExit(0 if celery_app.conf.worker_concurrency == 1 else 1)
+"""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(BACKEND_ROOT)
+
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=BACKEND_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_render_worker_does_not_override_serial_concurrency():
+    """The production command must preserve the one-child memory budget."""
+    blueprint = yaml.safe_load((BACKEND_ROOT / "render.yaml").read_text())
+    worker = next(
+        service
+        for service in blueprint["services"]
+        if service["name"] == "n2o-dvr-worker"
+    )
+
+    assert worker["startCommand"].endswith("--concurrency=1")
 
 
 def test_worker_startup_preserves_document_fallback_if_dependency_import_fails():
