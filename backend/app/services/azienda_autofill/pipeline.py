@@ -20,7 +20,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from app.config import settings
-from app.core.exceptions import AIError
+from app.core.exceptions import AIError, NotFoundError
 from app.schemas.azienda import (
     AziendaAutofillFieldMeta,
     AziendaAutofillResponse,
@@ -446,11 +446,24 @@ async def autofill_from_piva(partita_iva: str) -> AziendaAutofillResponse:
         warnings=warnings,
     )
 
-    # Catastrophic case: nothing came back from any source.
+    # Nothing came back from any source. This is a routine outcome — a P.IVA
+    # that isn't VIES-registered and has no web footprint — not a gateway
+    # failure, so it answers 404, not the 502 it used to. Two reasons the
+    # distinction matters: the operator's toast now reads as "not found"
+    # rather than "the service is broken", and a real upstream outage stops
+    # being buried under expected misses in the Render error logs.
+    # Still an exception, so `metered` releases the 15 credits — a lookup
+    # that produced nothing is not billed.
     if not response.values:
-        raise AIError(
+        detail = (
             "Nessun dato trovato per questa P.IVA. Verifica il numero o "
             "compila il modulo manualmente."
         )
+        if warnings:
+            detail += " " + " ".join(warnings)
+        logger.info(
+            "Autofill found no data for %s (warnings: %s)", partita_iva, warnings
+        )
+        raise NotFoundError(detail)
 
     return response
