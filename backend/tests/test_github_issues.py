@@ -169,3 +169,60 @@ async def test_build_title_is_generic_and_type_derived():
     )
     title = github_issues._build_title(fb.type)
     assert title == "[Idea] Nuova segnalazione DVR"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [401, 403])
+async def test_create_issue_credential_failure_logs_error(
+    monkeypatch, configure_github, caplog, status_code
+):
+    """A dead token must reach the error feed, not hide in the warnings.
+
+    Between 2026-06-10 and 2026-08-25 GITHUB_TOKEN answered 401 for every
+    segnalazione. The mirror logged at WARNING and the POST still returned
+    201, so 38 August reports were accepted while silently never reaching
+    the triage board. 401/403 is a standing condition — it fails identically
+    for every subsequent submission — so it is an error, not a warning.
+    """
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(status_code, json={"message": "Bad credentials"})
+
+    _install_transport(monkeypatch, handler)
+    with caplog.at_level("WARNING", logger="app.services.github_issues"):
+        number, url = await github_issues.create_issue_from_feedback(_make_fb())
+
+    assert (number, url) == (None, None)
+    errors = [r for r in caplog.records if r.levelname == "ERROR"]
+    assert len(errors) == 1, "a credential failure must be logged at ERROR"
+    assert "GITHUB_TOKEN" in errors[0].getMessage()
+
+
+@pytest.mark.asyncio
+async def test_create_issue_transient_failure_stays_a_warning(
+    monkeypatch, configure_github, caplog
+):
+    """A 422 is per-request — the next submission may well succeed."""
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(422, json={"message": "Validation failed"})
+
+    _install_transport(monkeypatch, handler)
+    with caplog.at_level("WARNING", logger="app.services.github_issues"):
+        await github_issues.create_issue_from_feedback(_make_fb())
+
+    assert not [r for r in caplog.records if r.levelname == "ERROR"]
+    assert [r for r in caplog.records if r.levelname == "WARNING"]
+
+
+@pytest.mark.asyncio
+async def test_close_issue_credential_failure_logs_error(
+    monkeypatch, configure_github, caplog
+):
+    """Status sync is mirrored too — a dead token breaks it just as quietly."""
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"message": "Bad credentials"})
+
+    _install_transport(monkeypatch, handler)
+    with caplog.at_level("WARNING", logger="app.services.github_issues"):
+        await github_issues.close_issue(42, "completed")
+
+    assert [r for r in caplog.records if r.levelname == "ERROR"]

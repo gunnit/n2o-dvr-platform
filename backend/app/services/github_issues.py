@@ -38,6 +38,44 @@ def _is_configured() -> bool:
     return bool(settings.GITHUB_TOKEN and settings.GITHUB_REPO)
 
 
+def _log_http_failure(operation: str, resp: httpx.Response, context: str) -> None:
+    """Report a non-2xx mirror response at a severity that matches the cause.
+
+    A 401/403 is not a transient hiccup: the token is expired, revoked or
+    lacks `issues:write`, and it will keep failing for every subsequent
+    segnalazione until a human rotates it. Between 2026-06-10 and 2026-08-25
+    that happened and nothing surfaced it — the mirror logged at WARNING,
+    the POST still returned 201, and 38 segnalazioni were accepted while
+    never reaching the board the team triages from. ERROR puts credential
+    failures in Render's error feed, where a dead token is noticed in days
+    rather than months.
+
+    Everything else (422, 5xx, rate limits) stays a warning: those are
+    per-request and the next submission may well succeed.
+    """
+    detail = resp.text[:300]
+    if resp.status_code in (401, 403):
+        log.error(
+            "github_issues: %s DENIED %s for %s — GITHUB_TOKEN is invalid, expired "
+            "or missing issues:write on %s. Feedback is still being saved but is "
+            "NOT reaching GitHub; rotate the token and backfill with "
+            "scripts/backfill_feedback_issues.py. Response: %s",
+            operation,
+            resp.status_code,
+            context,
+            settings.GITHUB_REPO,
+            detail,
+        )
+    else:
+        log.warning(
+            "github_issues: %s returned %s for %s: %s",
+            operation,
+            resp.status_code,
+            context,
+            detail,
+        )
+
+
 def _headers() -> dict[str, str]:
     return {
         "Accept": "application/vnd.github+json",
@@ -96,13 +134,7 @@ async def create_issue_from_feedback(fb: UserFeedback) -> tuple[int | None, str 
         return None, None
 
     if resp.status_code >= 300:
-        log.warning(
-            "github_issues: %s returned %s for feedback %s: %s",
-            url,
-            resp.status_code,
-            fb.id,
-            resp.text[:300],
-        )
+        _log_http_failure("create", resp, f"feedback {fb.id}")
         return None, None
 
     data = resp.json()
@@ -140,12 +172,7 @@ async def close_issue(issue_number: int, reason: CloseReason) -> None:
         return
 
     if resp.status_code >= 300:
-        log.warning(
-            "github_issues: close #%s returned %s: %s",
-            issue_number,
-            resp.status_code,
-            resp.text[:300],
-        )
+        _log_http_failure("close", resp, f"issue #{issue_number}")
         return
     log.info("github_issues: closed #%s as %s", issue_number, reason)
 
@@ -166,9 +193,4 @@ async def reopen_issue(issue_number: int) -> None:
         return
 
     if resp.status_code >= 300:
-        log.warning(
-            "github_issues: reopen #%s returned %s: %s",
-            issue_number,
-            resp.status_code,
-            resp.text[:300],
-        )
+        _log_http_failure("reopen", resp, f"issue #{issue_number}")

@@ -102,6 +102,48 @@ def credit_weight(kind: str) -> int:
     return CREDIT_WEIGHTS.get(kind, 1)
 
 
+def _denial_detail(ent: Entitlements) -> str:
+    """Why the spend was refused, in terms the operator can act on.
+
+    Three different states all fail the same allowance test, and until now
+    they all said "crediti esauriti":
+
+    * **No subscription resolved.** ``no_subscription`` sets
+      ``ai_credits_year=0`` deliberately (MB-6.2) so an unsubscribed tenant
+      cannot spend our OpenAI budget. Zero allowance means the very first
+      credit is refused. The AI endpoints meter but never call
+      ``ensure_subscription_active``, so this branch — not the subscription
+      gate — is what actually speaks to the operator, and "hai finito i
+      crediti" is simply false: nothing was ever granted to finish.
+    * **Lapsed subscription.** Credits were granted, the period is over.
+    * **Genuinely exhausted.** The only case the old wording described.
+
+    A segnalazione on 2026-07-31 read "MI DICE CHE HO FINITO I CREDITI MA IN
+    REALTA' LI HO", days after the billing rollout. With one message for
+    three causes there was no way to tell from the report which had fired.
+    Naming the state makes the next occurrence self-diagnosing, and points
+    the first two at the fix that actually helps.
+    """
+    if not ent.subscribed:
+        return (
+            "Nessun piano attivo per questa organizzazione, quindi non ci sono "
+            "crediti AI disponibili. Se hai già sottoscritto un piano, ricarica "
+            "la pagina tra un minuto: la conferma del pagamento potrebbe non "
+            "essere ancora arrivata. Altrimenti attiva un piano per continuare."
+        )
+    if not ent.is_active:
+        return (
+            f"L'abbonamento non è attivo (stato: {ent.status}), quindi i crediti "
+            "AI non sono utilizzabili. Rinnova il piano per riprendere a usare "
+            "le funzioni AI. I documenti già generati restano consultabili e "
+            "scaricabili."
+        )
+    return (
+        "Crediti AI esauriti per il periodo corrente. "
+        "Acquista un pacchetto aggiuntivo o effettua l'upgrade del piano."
+    )
+
+
 async def spend_credits(
     org_id: uuid.UUID,
     kind: str,
@@ -164,12 +206,15 @@ async def spend_credits(
             text("DELETE FROM ai_usage_events WHERE idempotency_key = :key"),
             {"key": idem_key},
         )
+        logger.info(
+            "402 reason=credits org=%s plan=%s status=%s subscribed=%s "
+            "detail=need %d of %s allowance kind=%s",
+            org_id, ent.plan_code, ent.status, ent.subscribed,
+            weight, ent.ai_credits_year, kind,
+        )
         raise HTTPException(
             status_code=_PAYMENT_REQUIRED,
-            detail=(
-                "Crediti AI esauriti per il periodo corrente. "
-                "Acquista un pacchetto aggiuntivo o effettua l'upgrade del piano."
-            ),
+            detail=_denial_detail(ent),
         )
 
     logger.info(
