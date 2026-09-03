@@ -140,11 +140,13 @@ che tocca a voi, perché riguarda il documento firmato e la vostra prassi.
 
 ## In sintesi
 
-- **21 segnalazioni** sono già risolte e online — le marco come tali appena mi
-  confermi i due punti della sezione 1.
-- **2** si sbloccano rinnovando un servizio esterno.
-- **11** aspettano una tua risposta: le 4 di contenuto, le 5 di prodotto, quella
-  sui crediti e quella legale.
+Sono 34 segnalazioni aperte in tutto:
+
+- **21** sono già risolte e online — le marco come tali appena mi confermi i due
+  punti della sezione 1.
+- **2** dipendono da un rinnovo, non da sviluppo (compilazione automatica e
+  messaggio sui crediti).
+- **11** aspettano una tua decisione: 4 di contenuto, 6 di prodotto, 1 legale.
 
 Se preferisci, sentiamoci mezz'ora: le domande della sezione 3 si chiudono più
 in fretta a voce che via email.
