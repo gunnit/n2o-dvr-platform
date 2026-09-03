@@ -485,6 +485,13 @@ def add_running_header_footer(
     for index, section in enumerate(doc.sections):
         width_cm = (section.page_width - section.left_margin - section.right_margin) / 360000
         section.different_first_page_header_footer = bool(cover_is_clean and index == 0)
+        # Donor templates set the footer distance to 0 (DUVRI) so their
+        # letterhead sat on the page edge; the running header/footer needs
+        # room, and a 0 distance is also where renderers start to struggle.
+        for attr in ("header_distance", "footer_distance"):
+            current = getattr(section, attr, None)
+            if current is None or current < Cm(0.8):
+                setattr(section, attr, Cm(1.0))
         parts = (
             section.header, section.footer,
             section.first_page_header, section.first_page_footer,
