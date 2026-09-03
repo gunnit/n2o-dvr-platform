@@ -150,6 +150,19 @@ def slugify(text: str, max_length: int = 40) -> str:
 # Cell shading (table header background)
 # ---------------------------------------------------------------------------
 
+def insert_in_order(parent, child, successors: tuple[str, ...]) -> None:
+    """Insert ``child`` into ``parent`` before the first existing element
+    whose tag is in ``successors`` (schema order), else append. Word
+    validates child order inside property elements; appending blindly can
+    make it report the file as corrupt."""
+    tags = {qn(f"w:{t}") for t in successors}
+    anchor = next((el for el in parent if el.tag in tags), None)
+    if anchor is not None:
+        anchor.addprevious(child)
+    else:
+        parent.append(child)
+
+
 def shade_cell(cell, color_hex: str) -> None:
     """Set background shading on a table cell via raw w:shd XML.
 
@@ -166,7 +179,7 @@ def shade_cell(cell, color_hex: str) -> None:
     shd.set(qn("w:val"), "clear")
     shd.set(qn("w:color"), "auto")
     shd.set(qn("w:fill"), color_hex)
-    tc_pr.append(shd)
+    insert_in_order(tc_pr, shd, ("noWrap", "tcMar", "textDirection", "tcFitText", "vAlign", "hideMark", "headers", "cellIns", "cellDel", "cellMerge", "tcPrChange"))
 
 
 def style_header_row(row, bg_hex: str = BRAND_NAVY_HEX, text_color: RGBColor = HEADER_TEXT) -> None:
@@ -175,7 +188,7 @@ def style_header_row(row, bg_hex: str = BRAND_NAVY_HEX, text_color: RGBColor = H
     from docx.oxml import OxmlElement
     tr_pr = row._tr.get_or_add_trPr()
     if tr_pr.find(qn("w:tblHeader")) is None:
-        tr_pr.append(OxmlElement("w:tblHeader"))
+        insert_in_order(tr_pr, OxmlElement("w:tblHeader"), ("tblCellSpacing", "jc", "hidden", "ins", "del", "trPrChange"))
     for cell in row.cells:
         shade_cell(cell, bg_hex)
         for paragraph in cell.paragraphs:
@@ -445,7 +458,14 @@ def set_table_borders(table, color_hex: str = BRAND_RULE_HEX, size: int = 4) -> 
         b.set(qn("w:space"), "0")
         b.set(qn("w:color"), color_hex)
         borders.append(b)
-    tbl_pr.append(borders)
+    # Word validates child order inside tblPr: tblBorders must precede shd,
+    # tblLayout, tblCellMar, tblLook. Insert before the first of those.
+    successors = [qn(f"w:{t}") for t in ("shd", "tblLayout", "tblCellMar", "tblLook", "tblCaption", "tblDescription")]
+    anchor = next((child for child in tbl_pr if child.tag in successors), None)
+    if anchor is not None:
+        anchor.addprevious(borders)
+    else:
+        tbl_pr.append(borders)
 
 
 def keep_row_together(row) -> None:
@@ -453,7 +473,7 @@ def keep_row_together(row) -> None:
     from docx.oxml import OxmlElement
     tr_pr = row._tr.get_or_add_trPr()
     if tr_pr.find(qn("w:cantSplit")) is None:
-        tr_pr.append(OxmlElement("w:cantSplit"))
+        insert_in_order(tr_pr, OxmlElement("w:cantSplit"), ("trHeight", "tblHeader", "tblCellSpacing", "jc", "hidden", "ins", "del", "trPrChange"))
 
 
 def add_kv_table(doc: Document, rows: Iterable[tuple[str, str]], *, width_label_cm: float = 5.0, width_value_cm: float = 11.0) -> None:
@@ -475,7 +495,6 @@ def add_kv_table(doc: Document, rows: Iterable[tuple[str, str]], *, width_label_
             for r in p.runs:
                 r.font.size = Pt(TYPE_SCALE["table"])
         shade_cell(cells[0], BRAND_SURFACE_HEX)
-        keep_row_together(row)
     if not style_applied:
         _apply_cell_borders_all(table)
     set_table_borders(table)
@@ -511,9 +530,11 @@ def add_data_table(
         hdr.cells[i].text = h
     style_header_row(hdr)
 
+    # No cantSplit on data rows: a keep-together row taller than a page makes
+    # LibreOffice loop forever (the DUVRI interferenze cells hit this), and
+    # Word splits such rows regardless.
     for n, row_data in enumerate(data_rows):
         row = table.add_row()
-        keep_row_together(row)
         zebra = n % 2 == 1
         for i, cell_val in enumerate(row_data):
             row.cells[i].text = "" if cell_val is None else str(cell_val)

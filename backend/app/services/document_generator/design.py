@@ -40,6 +40,7 @@ from app.services.document_generator.docx_utils import (
     add_data_table,
     fill_label_table,
     format_sede,
+    insert_in_order,
     reset_table_rows,
 )
 
@@ -53,6 +54,16 @@ MARGIN_RIGHT_CM = 2.0
 TEXT_WIDTH_CM = PAGE_W_CM - MARGIN_LEFT_CM - MARGIN_RIGHT_CM
 
 _BACKSLASH = chr(92)
+
+# CT_PPr child sequence (ECMA-376 17.3.1.26); used to insert in schema order.
+_PPR_ORDER = [
+    "pStyle", "keepNext", "keepLines", "pageBreakBefore", "framePr", "widowControl", "numPr",
+    "suppressLineNumbers", "pBdr", "shd", "tabs", "suppressAutoHyphens", "kinsoku", "wordWrap",
+    "overflowPunct", "topLinePunct", "autoSpaceDE", "autoSpaceDN", "bidi", "adjustRightInd",
+    "snapToGrid", "spacing", "ind", "contextualSpacing", "mirrorIndents", "suppressOverlap", "jc",
+    "textDirection", "textAlignment", "textboxTightWrap", "outlineLvl", "divId", "cnfStyle", "rPr",
+    "sectPr", "pPrChange",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +116,9 @@ def _keep_with_next(style) -> None:
     for tag in ("w:keepNext", "w:keepLines"):
         for existing in ppr.findall(qn(tag)):
             ppr.remove(existing)
-        ppr.append(OxmlElement(tag))
+    after_keep_next = _PPR_ORDER[_PPR_ORDER.index("keepLines"):]
+    insert_in_order(ppr, OxmlElement("w:keepNext"), tuple(after_keep_next))
+    insert_in_order(ppr, OxmlElement("w:keepLines"), tuple(_PPR_ORDER[_PPR_ORDER.index("pageBreakBefore"):]))
 
 
 def setup_document(doc: Document, *, landscape: bool = False) -> None:
@@ -167,7 +180,7 @@ def _paragraph_border(paragraph, edge: str, color_hex: str = BRAND_RULE_HEX, siz
     pbdr = ppr.find(qn("w:pBdr"))
     if pbdr is None:
         pbdr = OxmlElement("w:pBdr")
-        ppr.append(pbdr)
+        insert_in_order(ppr, pbdr, tuple(_PPR_ORDER[_PPR_ORDER.index("shd"):]))
     el = OxmlElement(f"w:{edge}")
     el.set(qn("w:val"), "single")
     el.set(qn("w:sz"), str(size))
@@ -226,7 +239,7 @@ def _centered(
         rpr = run._r.get_or_add_rPr()
         sp = OxmlElement("w:spacing")
         sp.set(qn("w:val"), str(int(spacing * 20)))
-        rpr.append(sp)
+        insert_in_order(rpr, sp, ("w", "kern", "position", "sz", "szCs", "highlight", "u", "effect", "bdr", "shd", "fitText", "vertAlign", "rtl", "cs", "em", "lang", "eastAsianLayout", "specVanish", "oMath"))
     if space_after is not None:
         p.paragraph_format.space_after = Pt(space_after)
     return p
@@ -800,11 +813,16 @@ def prune_orphan_parts(doc: Document) -> int:
             continue
         inner_used = _referenced_ids(element)
         for rId, sub in list(part.rels.items()):
-            if sub.is_external:
+            kind = sub.reltype.rsplit("/", 1)[-1]
+            if rId in inner_used or kind not in ("image", "hyperlink"):
                 continue
-            if sub.reltype.rsplit("/", 1)[-1] == "image" and rId not in inner_used:
+            # A cleared donor footer keeps its mailto: relationship even
+            # though no run points at it any more; drop it with the images.
+            if sub.is_external:
+                part.rels.pop(rId, None)
+            else:
                 part.drop_rel(rId)
-                dropped += 1
+            dropped += 1
     return dropped
 
 
