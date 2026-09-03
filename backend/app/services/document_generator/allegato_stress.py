@@ -8,15 +8,19 @@ from sqlalchemy import func, select
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_stress
+from app.services.document_generator.design import finish_document, insert_logo_at_top
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
     add_data_table,
     add_heading,
     add_kv_table,
     add_paragraph,
+    find_table_index,
     page_break,
+    remove_body_after,
     scrub_n2o_legacy_donor,
     slugify,
+    strip_body_images,
 )
 from app.services.stress_calculator import (
     FINAL_THRESHOLDS,
@@ -33,6 +37,22 @@ TIPO_DOC = "allegato_stress"
 
 
 class AllegatoStressGenerator(BaseDocumentGenerator):
+    @staticmethod
+    def _cut_donor_tail(doc: Document) -> None:
+        """Drop the donor's own assessment from the template body.
+
+        The last generic element is the blank "ORARIO DI LAVORO" checklist
+        form that closes the INAIL method chapter; everything after it is
+        N2O's filled assessment (scores, premises, staff roster with codici
+        fiscali, officers, measures, scanned signatures). The cover stamp is
+        an image too, so every body picture goes as well — the consultancy
+        mark returns via the running header/footer.
+        """
+        last_generic = find_table_index(doc, "ORARIO DI LAVORO", occurrence=1)
+        if last_generic is not None:
+            remove_body_after(doc, last_generic)
+        strip_body_images(doc)
+
     async def generate(self) -> str:
         data = await self.load_data()
         azienda = data["azienda"]
@@ -41,12 +61,17 @@ class AllegatoStressGenerator(BaseDocumentGenerator):
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
-            # The template was authored from a real N2O self-assessment: its
-            # body carries N2O's anagrafica, DdL declaration and a consultancy
-            # self-description as the *assessed* company. Scrub the donor
-            # identity to the client and drop the donor-only prose (the generator
-            # appends the client's own anagrafica + assessment + sottoscrizione
-            # below). Header/footer letterhead is intentionally preserved.
+            # The template was authored from a real N2O self-assessment. Its
+            # front matter and the INAIL method chapter (through the last blank
+            # "ORARIO DI LAVORO" form) are generic; everything after — N2O's
+            # filled checklists and scores, its company description with a
+            # Street View photo and a satellite map, a 14-person staff roster
+            # with codici fiscali, its safety officers by name, its measures and
+            # four scanned signatures — is the donor's and is cut here by
+            # structure (audit 2026-09-03). The generator appends the client's
+            # own assessment below, so nothing the client needs is lost.
+            self._cut_donor_tail(doc)
+            insert_logo_at_top(doc, self.branding)
             scrub_n2o_legacy_donor(
                 doc,
                 azienda,
@@ -137,6 +162,18 @@ class AllegatoStressGenerator(BaseDocumentGenerator):
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")
+        # Audit 2026-09-03: the donor template's header/footer carried the
+        # legacy N2O letterhead and literal placeholders; rewrite them from
+        # the organization's branding and set honest file properties.
+        finish_document(
+            doc,
+            title='Valutazione del Rischio Stress Lavoro-Correlato',
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=generated_at,
+            fill_cover=True,
+        )
         doc.save(filepath)
         return filepath
 

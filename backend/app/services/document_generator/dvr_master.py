@@ -37,6 +37,8 @@ from docx.table import Table
 
 from app.data.regional_regulations import get_regulations_for_comune
 from app.services.document_generator.base import BaseDocumentGenerator
+from app.services.document_generator.design import finish_document, setup_document
+from app.services.document_generator.docx_utils import HEADER_BG, LIGHT_GRAY, RISK_COLORS
 from app.services.reference_data import (
     HAZARD_LIBRARY,
     RISK_CATEGORIES,
@@ -821,16 +823,15 @@ _RISK_LEVEL_TABLE_ROWS = [
 # Color palette for risk levels
 # ---------------------------------------------------------------------------
 
+# Shared brand tokens (docx_utils): the DVR used to carry its own Material
+# indigo/amber palette; audit 2026-09-03 aligned every document to the app.
 _RISK_COLORS = {
-    "ACCETTABILE": RGBColor(0x4C, 0xAF, 0x50),   # Green
-    "MODESTO": RGBColor(0xFF, 0xC1, 0x07),        # Amber
-    "GRAVE": RGBColor(0xFF, 0x98, 0x00),           # Orange
-    "GRAVISSIMO": RGBColor(0xF4, 0x43, 0x36),      # Red
+    key: RISK_COLORS[key] for key in ("ACCETTABILE", "MODESTO", "GRAVE", "GRAVISSIMO")
 }
 
-_HEADER_BG = RGBColor(0x1A, 0x23, 0x7E)           # Dark blue for table headers
+_HEADER_BG = HEADER_BG                             # Brand navy for table headers
 _HEADER_TEXT = RGBColor(0xFF, 0xFF, 0xFF)          # White text on headers
-_LIGHT_GRAY = RGBColor(0xF5, 0xF5, 0xF5)          # Alternating row background
+_LIGHT_GRAY = LIGHT_GRAY                           # Alternating row background
 _DVR_VERA_LOGO_PATH: Path = Path(__file__).resolve().parents[3] / "assets" / "n2o_vera_dvr.png"
 
 
@@ -1037,6 +1038,18 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         # esploso con paginazione e piu dettagliato"). After F9 the
         # field re-resolves with page numbers from the real headings.
         self._finalize_table_of_contents(doc, *toc_anchors)
+
+        # Running header (title | client) and footer (consultancy · revision |
+        # Pagina X di Y) on every page but the cover, plus honest file
+        # properties. The cover itself stays exactly as Luca specified.
+        finish_document(
+            doc,
+            title="Documento di Valutazione dei Rischi",
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=data["generated_at"],
+        )
 
         # Save with the filename pattern required by US-2.8 AC2:
         # DVR_<ragione_sociale>_<YYYYMMDD>_v<N>.docx.
@@ -1336,6 +1349,10 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         """
         from docx.oxml import OxmlElement
 
+        # A4, binding margins, Calibri, navy headings: the shared design
+        # system. The DVR keeps a denser 10pt body because it runs to ~90
+        # pages with wide risk tables.
+        setup_document(doc)
         style = doc.styles["Normal"]
         font = style.font
         font.name = "Calibri"
@@ -1358,12 +1375,6 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                     pPr.remove(existing)
                 pPr.append(OxmlElement(tag))
 
-        # Page margins
-        for section in doc.sections:
-            section.top_margin = Cm(2.5)
-            section.bottom_margin = Cm(2.5)
-            section.left_margin = Cm(2.5)
-            section.right_margin = Cm(2.0)
 
     # ------------------------------------------------------------------
     # Cover page

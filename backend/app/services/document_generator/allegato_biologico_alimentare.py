@@ -12,6 +12,7 @@ class AllegatoBiologicoAlimentareGenerator(BaseDocumentGenerator):
         return await build_biologico_document(
             self,
             settore_key="alimentare",
+            settore_label="Alimentare",
             titolo="ALLEGATO RISCHIO BIOLOGICO ALIMENTARE",
             agenti_default=ALIMENTARE_AGENTI,
             misure_default=ALIMENTARE_MISURE,

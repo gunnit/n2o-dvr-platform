@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_duvri
+from app.services.document_generator.design import finish_document
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
     add_data_table,
@@ -289,6 +290,29 @@ class DuvriGenerator(BaseDocumentGenerator):
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")
+        # Audit 2026-09-03: the donor template's header/footer carried the
+        # legacy N2O letterhead and literal placeholders; rewrite them from
+        # the organization's branding and set honest file properties.
+        finish_document(
+            doc,
+            title='DUVRI - Valutazione dei Rischi da Interferenze',
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=generated_at,
+            fill_cover=True,
+            cover_values={
+                "Oggetto dell'appalto": (duvri_rows[0].oggetto_appalto or '') if duvri_rows else '',
+                'Azienda Committente': azienda.ragione_sociale or '',
+                "Committente dell'opera": azienda.ragione_sociale or '',
+                'Descrizione delle attività appaltate': (duvri_rows[0].oggetto_appalto or '') if duvri_rows else '',
+                'Datore di Lavoro Committente': next(
+                    ((getattr(p, 'nominativo', None) or '') for p in (data.get('persone') or []) if getattr(p, 'ruolo_datore_lavoro', False)),
+                    '',
+                ),
+                "Indirizzo presso cui si svolgerà l'appalto": format_sede(azienda, 'operativa') if format_sede(azienda, 'operativa') != '—' else format_sede(azienda, 'legale'),
+            },
+        )
         doc.save(filepath)
         return filepath
 

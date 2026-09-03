@@ -12,6 +12,7 @@ class AllegatoBiologicoAsiloGenerator(BaseDocumentGenerator):
         return await build_biologico_document(
             self,
             settore_key="asilo",
+            settore_label="Asilo nido / scuola dell'infanzia",
             titolo="ALLEGATO RISCHIO BIOLOGICO - ASILO NIDO / SCUOLA INFANZIA",
             agenti_default=ASILO_AGENTI,
             misure_default=ASILO_MISURE,

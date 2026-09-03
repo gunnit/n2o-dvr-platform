@@ -22,20 +22,47 @@ from docx.shared import Cm, Pt, RGBColor
 
 
 # ---------------------------------------------------------------------------
-# Colors shared with DVR Master palette
+# Design tokens — one palette for all 17 documents, mirroring the web app
+# (frontend/src/app/globals.css) so product and paperwork read as one family.
+# Document audit 2026-09-03: generators had drifted to Material indigo #1A237E
+# for headers and stock Word blue for headings; the app is N2O navy #003d74.
+# Print wants firmer rules than the screen border token, hence BRAND_RULE.
 # ---------------------------------------------------------------------------
 
+BRAND_NAVY = RGBColor(0x00, 0x3D, 0x74)      # --color-primary: headings, table headers
+BRAND_NAVY_HEX = "003D74"
+BRAND_DEEP = RGBColor(0x06, 0x1B, 0x31)      # --color-heading: body ink
+BRAND_SLATE = RGBColor(0x64, 0x74, 0x8D)     # --color-body: captions, secondary lines
+BRAND_SURFACE_HEX = "F6F9FC"                 # --color-surface-low: zebra rows, label cells
+BRAND_RULE_HEX = "C9D3DF"                    # hairlines and table borders (print-firm)
+FONT_FAMILY = "Calibri"                      # universal in Word; Carlito on LibreOffice
+
+# Type scale in points. Body 10.5 keeps ~13 words per line on A4 text width.
+TYPE_SCALE = {
+    "cover_title": 26,
+    "cover_subtitle": 12,
+    "cover_client": 18,
+    "h1": 16,
+    "h2": 13,
+    "h3": 11,
+    "body": 10.5,
+    "table": 9.5,
+    "small": 8.5,
+}
+
+# Risk scale = the app's risk chips (--color-risk-*), so a GRAVE cell in the
+# document is the same orange as the GRAVE chip on screen.
 RISK_COLORS = {
-    "ACCETTABILE": RGBColor(0x4C, 0xAF, 0x50),
-    "MODESTO": RGBColor(0xFF, 0xC1, 0x07),
-    "GRAVE": RGBColor(0xFF, 0x98, 0x00),
-    "GRAVISSIMO": RGBColor(0xF4, 0x43, 0x36),
-    "BASSO": RGBColor(0x4C, 0xAF, 0x50),
-    "MEDIO": RGBColor(0xFF, 0xC1, 0x07),
-    "ALTO": RGBColor(0xF4, 0x43, 0x36),
-    "VERDE": RGBColor(0x4C, 0xAF, 0x50),
-    "GIALLO": RGBColor(0xFF, 0xC1, 0x07),
-    "ROSSO": RGBColor(0xF4, 0x43, 0x36),
+    "ACCETTABILE": RGBColor(0x15, 0xBE, 0x53),
+    "MODESTO": RGBColor(0xF5, 0x9E, 0x0B),
+    "GRAVE": RGBColor(0xF9, 0x73, 0x16),
+    "GRAVISSIMO": RGBColor(0xEF, 0x44, 0x44),
+    "BASSO": RGBColor(0x15, 0xBE, 0x53),
+    "MEDIO": RGBColor(0xF5, 0x9E, 0x0B),
+    "ALTO": RGBColor(0xEF, 0x44, 0x44),
+    "VERDE": RGBColor(0x15, 0xBE, 0x53),
+    "GIALLO": RGBColor(0xF5, 0x9E, 0x0B),
+    "ROSSO": RGBColor(0xEF, 0x44, 0x44),
 }
 
 
@@ -79,9 +106,12 @@ def format_sede(azienda, which: str = "legale") -> str:
     parts = [p for p in [via, seg if seg != "—" else ""] if p]
     return ", ".join(parts) if parts else "—"
 
-HEADER_BG = RGBColor(0x1A, 0x23, 0x7E)
+# Legacy names kept for the generators that import them; they now resolve to
+# the brand tokens above so no call site has to change to pick up the palette.
+HEADER_BG = BRAND_NAVY
+HEADER_BG_HEX = BRAND_NAVY_HEX
 HEADER_TEXT = RGBColor(0xFF, 0xFF, 0xFF)
-LIGHT_GRAY = RGBColor(0xF5, 0xF5, 0xF5)
+LIGHT_GRAY = RGBColor(0xF6, 0xF9, 0xFC)
 
 
 # ---------------------------------------------------------------------------
@@ -121,9 +151,17 @@ def slugify(text: str, max_length: int = 40) -> str:
 # ---------------------------------------------------------------------------
 
 def shade_cell(cell, color_hex: str) -> None:
-    """Set background shading on a table cell via raw w:shd XML."""
+    """Set background shading on a table cell via raw w:shd XML.
+
+    Replaces any shading already on the cell: zebra striping is applied by
+    :func:`add_data_table` first and a generator may then colour a risk cell,
+    and the last call must win deterministically (stacked ``w:shd`` elements
+    render differently in Word and LibreOffice).
+    """
     from docx.oxml import OxmlElement
     tc_pr = cell._tc.get_or_add_tcPr()
+    for existing in tc_pr.findall(qn("w:shd")):
+        tc_pr.remove(existing)
     shd = OxmlElement("w:shd")
     shd.set(qn("w:val"), "clear")
     shd.set(qn("w:color"), "auto")
@@ -131,8 +169,13 @@ def shade_cell(cell, color_hex: str) -> None:
     tc_pr.append(shd)
 
 
-def style_header_row(row, bg_hex: str = "1A237E", text_color: RGBColor = HEADER_TEXT) -> None:
-    """Bold white text on dark header background."""
+def style_header_row(row, bg_hex: str = BRAND_NAVY_HEX, text_color: RGBColor = HEADER_TEXT) -> None:
+    """Bold white text on the brand-navy header background; repeats on every
+    page the table spans, so a long table never prints headless."""
+    from docx.oxml import OxmlElement
+    tr_pr = row._tr.get_or_add_trPr()
+    if tr_pr.find(qn("w:tblHeader")) is None:
+        tr_pr.append(OxmlElement("w:tblHeader"))
     for cell in row.cells:
         shade_cell(cell, bg_hex)
         for paragraph in cell.paragraphs:
@@ -140,7 +183,7 @@ def style_header_row(row, bg_hex: str = "1A237E", text_color: RGBColor = HEADER_
             for run in paragraph.runs:
                 run.font.bold = True
                 run.font.color.rgb = text_color
-                run.font.size = Pt(10)
+                run.font.size = Pt(TYPE_SCALE["table"])
 
 
 # ---------------------------------------------------------------------------
@@ -324,14 +367,14 @@ def add_consultancy_letterhead(doc: Document, branding, *, center: bool = True) 
     :class:`~app.services.document_generator.branding.Branding`.
     """
     align = WD_ALIGN_PARAGRAPH.CENTER if center else WD_ALIGN_PARAGRAPH.LEFT
-    gray = RGBColor(0x66, 0x66, 0x66)
+    gray = BRAND_SLATE
 
     name_p = doc.add_paragraph()
     name_p.alignment = align
     name_run = name_p.add_run((branding.firm_name or "").upper())
     name_run.bold = True
-    name_run.font.size = Pt(11)
-    name_run.font.color.rgb = HEADER_BG
+    name_run.font.size = Pt(TYPE_SCALE["body"])
+    name_run.font.color.rgb = BRAND_NAVY
 
     lines: list[str] = []
     addr = branding.address_line()
@@ -384,25 +427,58 @@ def _apply_cell_borders_all(table) -> None:
                 tc_borders.append(b)
 
 
+def set_table_borders(table, color_hex: str = BRAND_RULE_HEX, size: int = 4) -> None:
+    """Thin borders in the brand rule colour on every edge, inside and out.
+
+    Overrides the black ``Table Grid`` borders so tables sit quietly on the
+    page instead of shouting; ``size`` is in eighths of a point.
+    """
+    from docx.oxml import OxmlElement
+    tbl_pr = table._tbl.tblPr
+    for existing in tbl_pr.findall(qn("w:tblBorders")):
+        tbl_pr.remove(existing)
+    borders = OxmlElement("w:tblBorders")
+    for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        b = OxmlElement(f"w:{edge}")
+        b.set(qn("w:val"), "single")
+        b.set(qn("w:sz"), str(size))
+        b.set(qn("w:space"), "0")
+        b.set(qn("w:color"), color_hex)
+        borders.append(b)
+    tbl_pr.append(borders)
+
+
+def keep_row_together(row) -> None:
+    """Forbid a row from splitting across a page break."""
+    from docx.oxml import OxmlElement
+    tr_pr = row._tr.get_or_add_trPr()
+    if tr_pr.find(qn("w:cantSplit")) is None:
+        tr_pr.append(OxmlElement("w:cantSplit"))
+
+
 def add_kv_table(doc: Document, rows: Iterable[tuple[str, str]], *, width_label_cm: float = 5.0, width_value_cm: float = 11.0) -> None:
-    """2-column key/value table."""
+    """2-column key/value table: bold label on a tinted cell, plain value."""
     table = doc.add_table(rows=0, cols=2)
     style_applied = _try_set_table_style(table)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     for k, v in rows:
-        row = table.add_row().cells
-        row[0].text = str(k)
-        row[1].text = str(v) if v is not None else ""
-        for p in row[0].paragraphs:
+        row = table.add_row()
+        cells = row.cells
+        cells[0].text = str(k)
+        cells[1].text = str(v) if v is not None else ""
+        for p in cells[0].paragraphs:
             for r in p.runs:
                 r.font.bold = True
-                r.font.size = Pt(10)
-        for p in row[1].paragraphs:
+                r.font.size = Pt(TYPE_SCALE["table"])
+                r.font.color.rgb = BRAND_DEEP
+        for p in cells[1].paragraphs:
             for r in p.runs:
-                r.font.size = Pt(10)
-        shade_cell(row[0], "F5F5F5")
+                r.font.size = Pt(TYPE_SCALE["table"])
+        shade_cell(cells[0], BRAND_SURFACE_HEX)
+        keep_row_together(row)
     if not style_applied:
         _apply_cell_borders_all(table)
+    set_table_borders(table)
     return table
 
 
@@ -435,13 +511,17 @@ def add_data_table(
         hdr.cells[i].text = h
     style_header_row(hdr)
 
-    for row_data in data_rows:
+    for n, row_data in enumerate(data_rows):
         row = table.add_row()
+        keep_row_together(row)
+        zebra = n % 2 == 1
         for i, cell_val in enumerate(row_data):
             row.cells[i].text = "" if cell_val is None else str(cell_val)
             for p in row.cells[i].paragraphs:
                 for r in p.runs:
-                    r.font.size = Pt(9)
+                    r.font.size = Pt(TYPE_SCALE["table"])
+            if zebra:
+                shade_cell(row.cells[i], BRAND_SURFACE_HEX)
 
     if column_widths_cm is not None:
         table.autofit = False
@@ -453,8 +533,263 @@ def add_data_table(
 
     if not style_applied:
         _apply_cell_borders_all(table)
+    set_table_borders(table)
     return table
 
 
 def page_break(doc: Document) -> None:
     doc.add_page_break()
+
+
+# ---------------------------------------------------------------------------
+# Donor-template surgery (audit 2026-09-03)
+#
+# Several attachments open a real completed client document and append the
+# generated assessment after it. The donor half carried personal data — a
+# staff roster with codici fiscali, scanned signatures, Street View photos —
+# that no string substitution can remove. These helpers cut it out by
+# structure, before the generator appends anything of its own.
+# ---------------------------------------------------------------------------
+
+def _body_children(doc: Document) -> list:
+    return list(doc.element.body)
+
+
+def _table_header_text(tbl_el, doc: Document) -> str:
+    from docx.table import Table
+    table = Table(tbl_el, doc)
+    if not table.rows:
+        return ""
+    return " | ".join((c.text or "").strip() for c in table.rows[0].cells)
+
+
+def _norm_text(text: str) -> str:
+    """Case-, whitespace- and apostrophe-insensitive comparison key."""
+    text = (text or "").replace(chr(0x2019), "'").replace(chr(0x2018), "'").replace(chr(0xA0), " ")
+    return " ".join(text.split()).strip().lower()
+
+
+def find_table_index(doc: Document, header_prefix: str, *, occurrence: int = 1) -> int | None:
+    """Body index of the n-th table whose first row starts with ``header_prefix``."""
+    seen = 0
+    for i, el in enumerate(_body_children(doc)):
+        if el.tag != qn("w:tbl"):
+            continue
+        if _norm_text(_table_header_text(el, doc)).startswith(_norm_text(header_prefix)):
+            seen += 1
+            if seen == occurrence:
+                return i
+    return None
+
+
+def remove_body_after(doc: Document, index: int) -> int:
+    """Delete every body element after ``index`` (the final ``sectPr`` is kept).
+
+    Returns the number of elements removed. Use it to drop a donor document's
+    tail — its results, company description, roster and signatures — while
+    keeping the front matter and method chapters that are genuinely generic.
+    """
+    body = doc.element.body
+    removed = 0
+    for el in _body_children(doc)[index + 1 :]:
+        if el.tag == qn("w:sectPr"):
+            continue
+        body.remove(el)
+        removed += 1
+    return removed
+
+
+def remove_tables_with_header(doc: Document, needles: Iterable[str]) -> int:
+    """Remove body tables whose first row contains ALL of ``needles``."""
+    wanted = [n.lower() for n in needles]
+    body = doc.element.body
+    removed = 0
+    for el in _body_children(doc):
+        if el.tag != qn("w:tbl"):
+            continue
+        head = _table_header_text(el, doc).lower()
+        if all(n in head for n in wanted):
+            body.remove(el)
+            removed += 1
+    return removed
+
+
+def strip_body_images(doc: Document) -> int:
+    """Remove every inline picture from the body (headers/footers untouched).
+
+    Donor templates embed scanned signatures, stamps and photographs of the
+    donor's premises; none of them belong in another company's document.
+    Text boxes and plain shapes are kept — a VML text box is also a ``w:pict``
+    and in the legacy templates it holds the cover title. Returns the number
+    of pictures removed.
+    """
+    removed = 0
+    for tag in ("w:drawing", "w:pict"):
+        for el in list(doc.element.body.iter(qn(tag))):
+            has_textbox = el.find(".//" + qn("w:txbxContent")) is not None
+            has_picture = (
+                el.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}blip") is not None
+                or el.find(".//{urn:schemas-microsoft-com:vml}imagedata") is not None
+            )
+            if has_textbox or not has_picture:
+                continue
+            parent = el.getparent()
+            if parent is not None:
+                parent.remove(el)
+                removed += 1
+    return removed
+
+
+def reset_table_rows(doc: Document, header_prefix: str, rows: list[list[str]], *, occurrence: int = 1) -> bool:
+    """Keep a table's header row, drop the rest, and write ``rows`` in its
+    place — used to replace a donor's revision history with this emission."""
+    from docx.table import Table
+    idx = find_table_index(doc, header_prefix, occurrence=occurrence)
+    if idx is None:
+        return False
+    table = Table(_body_children(doc)[idx], doc)
+    body_rows = list(table.rows)[1:]
+    # Write in place rather than deleting rows: donor tables merge cells
+    # vertically, and deleting a row can orphan a vMerge continuation, which
+    # Word tolerates but LibreOffice chokes on. Surplus rows are blanked, so
+    # the template's form keeps its shape (six revision lines, five empty).
+    for r_index, row in enumerate(body_rows):
+        values = rows[r_index] if r_index < len(rows) else []
+        cells = row.cells
+        seen = []
+        for c_index, cell in enumerate(cells):
+            if any(cell._tc is s for s in seen):
+                continue
+            seen.append(cell._tc)
+            value = values[c_index] if c_index < len(values) else ""
+            _set_cell_text_keep_format(cell, "" if value is None else str(value))
+    for values in rows[len(body_rows):]:
+        cells = table.add_row().cells
+        for cell, value in zip(cells, values):
+            cell.text = "" if value is None else str(value)
+            for p in cell.paragraphs:
+                for r in p.runs:
+                    r.font.size = Pt(TYPE_SCALE["table"])
+    return True
+
+
+def _set_cell_text_keep_format(cell, text: str) -> None:
+    """Write ``text`` into a cell, reusing the first run's formatting."""
+    paragraphs = cell.paragraphs
+    if not paragraphs:
+        cell.text = text
+        return
+    first = paragraphs[0]
+    if first.runs:
+        first.runs[0].text = text
+        for run in first.runs[1:]:
+            run.text = ""
+    else:
+        first.add_run(text)
+    for extra in paragraphs[1:]:
+        extra._p.getparent().remove(extra._p)
+
+
+def fill_label_table(doc: Document, values: dict) -> int:
+    """Fill empty value cells next to (or under) matching labels in body tables.
+
+    A label matches when the cell text, stripped of a trailing colon, equals a
+    key (case, whitespace and apostrophe variants ignored). Two donor layouts
+    are handled:
+
+    - ``label | value`` rows: the cell to the right is written if empty. When
+      the label cell is vertically merged over several rows (the "Sede Legale"
+      cells that hold street and comune on two lines), each row takes the next
+      item of a list value, so pass ``["Via Roma 1", "20100 Milano (MI)"]``.
+    - stacked rows: a one-cell label row followed by a one-cell empty row.
+
+    Each label is filled in the first table where it appears and skipped in
+    later ones: a DUVRI carries the same "Ragione Sociale / Sede Legale" form
+    for the committente and again for the appaltatore, and only the first is
+    the client. Values may be strings or lists of strings. Returns the number
+    of cells filled.
+    """
+    wanted: dict[str, list[str]] = {}
+    for k, v in values.items():
+        items = [x for x in (v if isinstance(v, (list, tuple)) else [v]) if x]
+        if items:
+            wanted[_norm_text(k).rstrip(":").strip()] = [str(x) for x in items]
+    if not wanted:
+        return 0
+
+    def norm(cell) -> str:
+        return _norm_text(cell.text).rstrip(":").strip()
+
+    filled = 0
+    done: set[str] = set()
+
+    class _Seen:
+        # Vertically merged label cells return the same <w:tc> for every row
+        # they span. Hold the element references so identity is stable —
+        # python-docx/lxml recycle proxy objects, so id() alone lies.
+        def __init__(self):
+            self.entries: list[tuple[object, int]] = []
+
+        def bump(self, el) -> int:
+            for k, (seen_el, n) in enumerate(self.entries):
+                if seen_el is el:
+                    self.entries[k] = (seen_el, n + 1)
+                    return n
+            self.entries.append((el, 1))
+            return 0
+
+    for table in doc.tables:
+        rows = list(table.rows)
+        used = _Seen()
+        touched: set[str] = set()
+        for r_index, row in enumerate(rows):
+            cells = row.cells
+            # stacked layout: single-cell label row, single-cell empty row below
+            if len(set(id(c._tc) for c in cells)) == 1:
+                label = norm(cells[0])
+                if label in wanted and label not in done and r_index + 1 < len(rows):
+                    below = rows[r_index + 1].cells
+                    if len(set(id(c._tc) for c in below)) == 1 and not (below[0].text or "").strip():
+                        _set_cell_text_keep_format(below[0], wanted[label][0])
+                        filled += 1
+                        touched.add(label)
+                continue
+            for i in range(len(cells) - 1):
+                label = norm(cells[i])
+                if label not in wanted or label in done:
+                    continue
+                target = cells[i + 1]
+                if target._tc is cells[i]._tc:
+                    continue
+                # Position of this row within the merged label: the first
+                # row takes the street, the second the comune, even when a
+                # donor scrub already wrote the first line.
+                n = used.bump(cells[i]._tc)
+                if (target.text or "").strip():
+                    touched.add(label)
+                    break
+                items = wanted[label]
+                if n >= len(items):
+                    break
+                _set_cell_text_keep_format(target, items[n])
+                filled += 1
+                touched.add(label)
+                break
+        done |= touched
+    return filled
+
+
+def recolor_white_text(doc: Document, to: RGBColor = BRAND_NAVY) -> int:
+    """Turn white runs navy. Donor covers set white type over a background
+    picture that is no longer there, so the title printed white on white."""
+    changed = 0
+    for p in doc.paragraphs:
+        for r in p.runs:
+            try:
+                rgb = r.font.color.rgb
+            except Exception:
+                rgb = None
+            if rgb is not None and str(rgb).upper() == "FFFFFF":
+                r.font.color.rgb = to
+                changed += 1
+    return changed

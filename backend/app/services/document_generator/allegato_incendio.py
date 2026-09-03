@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_incendio
+from app.services.document_generator.design import finish_document
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
     add_data_table,
@@ -202,6 +203,18 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")
+        # Audit 2026-09-03: the donor template's header/footer carried the
+        # legacy N2O letterhead and literal placeholders; rewrite them from
+        # the organization's branding and set honest file properties.
+        finish_document(
+            doc,
+            title='Valutazione del Rischio Incendio',
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=generated_at,
+            fill_cover=True,
+        )
         doc.save(filepath)
         return filepath
 

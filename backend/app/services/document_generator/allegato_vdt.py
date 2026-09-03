@@ -44,6 +44,14 @@ from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.branding import resolve_logo_source
 from app.services.document_generator.data_loader import load_vdt
+from app.services.document_generator.design import (
+    add_cover,
+    add_revision_table,
+    add_toc,
+    finalize_toc,
+    finish_document,
+    setup_document,
+)
 from app.services.document_generator.docx_utils import (
     HEADER_BG,
     add_data_table,
@@ -65,6 +73,7 @@ from app.services.vdt_calculator import (
 from app.services.vdt_surveillance import age_on, surveillance_periodicita
 
 TIPO_DOC = "allegato_vdt"
+DOC_TITLE = "Allegato Rischio VDT"
 
 _EXPOSURE_COLORS = {
     "Esposto": "F4CCCC",      # rose — surveillance triggered
@@ -124,11 +133,23 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         persona_by_id = {p.id: p for p in persone}
 
         doc = Document()
-        self._setup_styles(doc)
+        setup_document(doc)
 
-        self._add_cover(doc, azienda, generated_at, version)
-        self._add_revision_table(doc, generated_at, version)
-        self._add_toc(doc)
+        # Shared cover / storico / indice (audit 2026-09-03): same furniture as
+        # every other attachment, org logo instead of the invisible white mark,
+        # "Revisione 00" for a first issue like the DVR.
+        add_cover(
+            doc,
+            title=DOC_TITLE,
+            subtitle="Valutazione del Rischio da Videoterminali",
+            legal_basis="ai sensi del Titolo VII D.Lgs. 81/2008 e s.m.i. (D.Lgs. 106/09)",
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=generated_at,
+        )
+        add_revision_table(doc, version, generated_at)
+        toc_anchors = add_toc(doc)
         self._add_introduzione(doc)
         self._add_anagrafica(doc, azienda)
         self._add_organigramma(doc, persone)
@@ -145,6 +166,16 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         self._add_dichiarazione_ddl(doc, azienda, persone)
         self._add_signature_block(doc, persone)
 
+        finalize_toc(doc, *toc_anchors)
+        finish_document(
+            doc,
+            title=DOC_TITLE,
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=generated_at,
+        )
+
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")
@@ -157,148 +188,6 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
 
     async def _next_version(self) -> int:
         return await self.resolve_version([TIPO_DOC, "ALLEGATO_VDT"])
-
-    # ------------------------------------------------------------------
-    # Style setup
-    # ------------------------------------------------------------------
-
-    def _setup_styles(self, doc: Document) -> None:
-        for s in doc.sections:
-            s.top_margin = Cm(2.0)
-            s.bottom_margin = Cm(2.0)
-            s.left_margin = Cm(2.5)
-            s.right_margin = Cm(2.0)
-        try:
-            normal = doc.styles["Normal"]
-            normal.font.name = "Calibri"
-            normal.font.size = Pt(11)
-        except Exception:
-            pass
-
-    # ------------------------------------------------------------------
-    # Cover
-    # ------------------------------------------------------------------
-
-    def _add_cover(self, doc, azienda, generated_at: datetime, version: int) -> None:
-        for _ in range(2):
-            doc.add_paragraph("")
-
-        logo_src = resolve_logo_source(self.branding)
-        if logo_src is not None:
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            try:
-                p.add_run().add_picture(logo_src, width=Inches(2.0))
-            except Exception:
-                p.add_run("[LOGO AZIENDALE]").italic = True
-
-        doc.add_paragraph("")
-
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run("ALLEGATO RISCHIO VDT")
-        run.bold = True
-        run.font.size = Pt(22)
-        run.font.color.rgb = HEADER_BG
-
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run("Valutazione del Rischio da Videoterminali")
-        run.font.size = Pt(13)
-        run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(
-            "ai sensi del Titolo VII D.Lgs. 81/2008 e s.m.i. (D.Lgs. 106/09)"
-        )
-        run.font.size = Pt(11)
-        run.italic = True
-        run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-
-        for _ in range(3):
-            doc.add_paragraph("")
-
-        ragione = (azienda.ragione_sociale or "—").upper()
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(ragione)
-        run.bold = True
-        run.font.size = Pt(18)
-
-        sede_legale = format_sede(azienda, "legale")
-        if sede_legale and sede_legale != "—":
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run(sede_legale)
-            run.font.size = Pt(12)
-            run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-
-        ident_bits = []
-        if getattr(azienda, "partita_iva", None):
-            ident_bits.append(f"P.IVA {azienda.partita_iva}")
-        if getattr(azienda, "codice_ateco", None):
-            ident_bits.append(f"ATECO {azienda.codice_ateco}")
-        if ident_bits:
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run(" · ".join(ident_bits))
-            run.font.size = Pt(11)
-            run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-
-        for _ in range(3):
-            doc.add_paragraph("")
-
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(
-            f"Revisione {version:02d} - {generated_at.strftime('%d/%m/%Y')}"
-        )
-        run.bold = True
-        run.font.size = Pt(12)
-
-        page_break(doc)
-
-    # ------------------------------------------------------------------
-    # Revision history
-    # ------------------------------------------------------------------
-
-    def _add_revision_table(self, doc, generated_at: datetime, version: int) -> None:
-        add_heading(doc, "Storico delle Revisioni", level=2)
-        headers = ["Rev.", "Motivazione", "Data"]
-        rows = [[
-            f"{version:02d}",
-            "Emissione" if version == 1 else "Aggiornamento",
-            generated_at.strftime("%d/%m/%Y"),
-        ]]
-        add_data_table(doc, headers, rows)
-        doc.add_paragraph("")
-
-    # ------------------------------------------------------------------
-    # TOC
-    # ------------------------------------------------------------------
-
-    def _add_toc(self, doc) -> None:
-        add_heading(doc, "Indice", level=1)
-        p = doc.add_paragraph()
-        run = p.add_run()
-        fld_begin = OxmlElement("w:fldChar")
-        fld_begin.set(qn("w:fldCharType"), "begin")
-        run._r.append(fld_begin)
-        instr = OxmlElement("w:instrText")
-        instr.set(qn("xml:space"), "preserve")
-        instr.text = ' TOC \\o "1-3" \\h \\z \\u '
-        run._r.append(instr)
-        fld_end = OxmlElement("w:fldChar")
-        fld_end.set(qn("w:fldCharType"), "end")
-        run._r.append(fld_end)
-        add_paragraph(
-            doc,
-            "(Premere Ctrl+A poi F9 per aggiornare l'indice)",
-            italic=True,
-            size=9,
-        )
-        page_break(doc)
 
     # ------------------------------------------------------------------
     # Introduzione

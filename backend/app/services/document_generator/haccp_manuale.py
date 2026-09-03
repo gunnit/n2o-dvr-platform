@@ -16,7 +16,9 @@ from sqlalchemy import func, select
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_haccp
+from app.services.document_generator.design import finish_document
 from app.services.document_generator.docx_utils import (
+    scrub_body,
     TEMPLATES_DIR,
     add_data_table,
     add_heading,
@@ -73,6 +75,19 @@ class HaccpManualeGenerator(BaseDocumentGenerator):
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
             replace_placeholders(doc, {"RAGIONE SOCIALE": azienda.ragione_sociale or "", "[AZIENDA]": azienda.ragione_sociale or ""})
+            # Audit 2026-09-03: the template is a third-party restaurant's
+            # manual. Swap its identity for the client's wherever it is
+            # named. (The cover is white type on a black full-page shape;
+            # that is legible as it is, so the runs are left white.)
+            _via = (getattr(azienda, 'sede_legale_via', None) or '').strip()
+            _citta = (getattr(azienda, 'sede_legale_citta', None) or '').strip()
+            scrub_body(doc, {
+                'SAMSARA & VOLTA ROSSA': azienda.ragione_sociale or '',
+                'SAMSARA': azienda.ragione_sociale or '',
+                'VOLTA ROSSA': '',
+                'via Increa, 70': _via,
+                'Brugherio': _citta,
+            })
         else:
             doc = Document()
 
@@ -162,6 +177,18 @@ class HaccpManualeGenerator(BaseDocumentGenerator):
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")
+        # Audit 2026-09-03: the donor template's header/footer carried the
+        # legacy N2O letterhead and literal placeholders; rewrite them from
+        # the organization's branding and set honest file properties.
+        finish_document(
+            doc,
+            title='Manuale di Autocontrollo HACCP',
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=generated_at,
+            fill_cover=True,
+        )
         doc.save(filepath)
         return filepath
 

@@ -12,6 +12,7 @@ from app.services.document_generator.data_loader import (
     load_gestanti,
     load_gestanti_mansioni,
 )
+from app.services.document_generator.design import finish_document, insert_logo_at_top
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
     add_data_table,
@@ -19,7 +20,9 @@ from app.services.document_generator.docx_utils import (
     add_kv_table,
     add_paragraph,
     page_break,
+    reset_table_rows,
     scrub_n2o_legacy_donor,
+    strip_body_images,
     slugify,
 )
 
@@ -140,6 +143,14 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
             # never present). Scrub the donor identity to the client; the
             # header/footer letterhead is preserved.
             scrub_n2o_legacy_donor(doc, azienda)
+            # Audit 2026-09-03: the body repeats the legacy ENNE.DUE.O logo
+            # (cover and chapter heads) and ends with a donor-era
+            # acknowledgment roster. Strip the pictures, put the
+            # organization's mark above the title, and leave the roster
+            # as ten blank rows for the client's own workers to sign.
+            strip_body_images(doc)
+            insert_logo_at_top(doc, self.branding)
+            reset_table_rows(doc, "Nome e cognome | Mansione", [["", "", "", ""] for _ in range(10)])
         else:
             doc = Document()
 
@@ -234,6 +245,18 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")
+        # Audit 2026-09-03: the donor template's header/footer carried the
+        # legacy N2O letterhead and literal placeholders; rewrite them from
+        # the organization's branding and set honest file properties.
+        finish_document(
+            doc,
+            title='Valutazione del Rischio Lavoratrici Gestanti',
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=generated_at,
+            fill_cover=True,
+        )
         doc.save(filepath)
         return filepath
 

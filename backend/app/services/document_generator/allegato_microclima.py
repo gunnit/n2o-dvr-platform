@@ -8,6 +8,12 @@ from sqlalchemy import func, select
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_microclima
+from app.services.document_generator.design import (
+    add_cover,
+    add_revision_table,
+    finish_document,
+    setup_document,
+)
 from app.services.document_generator.docx_utils import (
     add_data_table,
     add_heading,
@@ -20,6 +26,12 @@ from app.services.document_generator.docx_utils import (
 from app.services.microclima_calculator import calculate_pmv_ppd
 
 TIPO_DOC = "allegato_microclima"
+DOC_TITLE = "Allegato Rischio Microclima"
+
+
+def _it(value: float, digits: int) -> str:
+    """Italian decimal notation (comma), e.g. 21,0."""
+    return f"{value:.{digits}f}".replace(".", ",")
 
 
 def _compute_pmv_ppd(t_air, t_rad, v_air, rh, met, clo) -> tuple[float | None, float | None]:
@@ -60,12 +72,28 @@ class AllegatoMicroclimaGenerator(BaseDocumentGenerator):
         generated_at = data["generated_at"]
         micro = await load_microclima(self.db, self.azienda_id)
         ambienti_map = {a.id: a for a in data["ambienti"]}
+        version = await self._next_version()
 
         # Filter moderato (the severo-caldo variant is handled separately)
         moderate_rows = [m for m in micro if (m.tipo_ambiente or "moderato") == "moderato"]
 
         doc = Document()
-        add_heading(doc, "ALLEGATO RISCHIO MICROCLIMA - AMBIENTI MODERATI", level=1)
+        setup_document(doc)
+        # Audit 2026-09-03: this annex shipped as one US-Letter page with no
+        # cover, header, footer or logo. It now carries the shared furniture.
+        add_cover(
+            doc,
+            title=DOC_TITLE,
+            subtitle="Ambienti termici moderati — indici PMV/PPD",
+            legal_basis="ai sensi del D.Lgs. 81/2008 Titolo VIII, art. 180 e UNI EN ISO 7730:2006",
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=generated_at,
+        )
+        add_revision_table(doc, version, generated_at)
+
+        add_heading(doc, "Dati generali", level=1)
         add_kv_table(doc, [
             ("Azienda", azienda.ragione_sociale or ""),
             ("Sede", format_sede(azienda, "legale")),
@@ -73,7 +101,7 @@ class AllegatoMicroclimaGenerator(BaseDocumentGenerator):
             ("Riferimento normativo", "UNI EN ISO 7730:2006 - Ergonomia ambienti termici moderati"),
         ])
 
-        add_heading(doc, "Metodologia", level=2)
+        add_heading(doc, "Metodologia", level=1)
         add_paragraph(doc, "La norma UNI EN ISO 7730 definisce il comfort termico mediante gli indici PMV (Predicted Mean Vote, scala -3..+3) e PPD (Predicted Percentage of Dissatisfied). I parametri considerati sono: temperatura dell'aria (tdb), temperatura radiante media (tr), velocità dell'aria (var), umidità relativa (RH), metabolismo (met) e isolamento del vestiario (clo).")
 
         add_data_table(doc, ["Categoria", "PPD", "Giudizio"], [
@@ -81,9 +109,9 @@ class AllegatoMicroclimaGenerator(BaseDocumentGenerator):
             ["B", "< 10%", "Comfort buono"],
             ["C", "< 15%", "Comfort accettabile"],
             ["—", ">= 15%", "Necessarie azioni correttive"],
-        ])
+        ], column_widths_cm=[3.0, 3.5, 10.0])
 
-        add_heading(doc, "Parametri per ambiente", level=2)
+        add_heading(doc, "Parametri per ambiente", level=1)
         if not moderate_rows:
             add_paragraph(doc, "Nessun ambiente valutato nella fascia moderata.", italic=True)
         else:
@@ -93,22 +121,35 @@ class AllegatoMicroclimaGenerator(BaseDocumentGenerator):
                 pmv, ppd = _compute_pmv_ppd(m.temperatura_aria, m.temperatura_radiante, m.velocita_aria, m.umidita_relativa, m.metabolismo, m.isolamento_vestiario)
                 rows.append([
                     amb_name,
-                    f"{float(m.temperatura_aria):.1f}",
-                    f"{float(m.temperatura_radiante):.1f}",
-                    f"{float(m.velocita_aria):.2f}",
-                    f"{float(m.umidita_relativa):.0f}",
-                    f"{float(m.metabolismo):.2f}",
-                    f"{float(m.isolamento_vestiario):.2f}",
-                    f"{pmv:.2f}" if pmv is not None else "—",
-                    f"{ppd:.1f}%" if ppd is not None else "—",
+                    _it(float(m.temperatura_aria), 1),
+                    _it(float(m.temperatura_radiante), 1),
+                    _it(float(m.velocita_aria), 2),
+                    _it(float(m.umidita_relativa), 0),
+                    _it(float(m.metabolismo), 2),
+                    _it(float(m.isolamento_vestiario), 2),
+                    _it(pmv, 2) if pmv is not None else "—",
+                    f"{_it(ppd, 1)}%" if ppd is not None else "—",
                     _comfort_category(ppd),
                 ])
-            add_data_table(doc, ["Ambiente", "t_aria (C)", "t_rad (C)", "v_aria (m/s)", "RH %", "met", "clo", "PMV", "PPD", "Categoria"], rows)
+            add_data_table(
+                doc,
+                ["Ambiente", "tₐ (°C)", "tᵣ (°C)", "vₐ (m/s)", "UR (%)", "met", "clo", "PMV", "PPD", "Categoria"],
+                rows,
+                column_widths_cm=[3.8, 1.3, 1.3, 1.5, 1.2, 1.1, 1.1, 1.2, 1.4, 2.6],
+            )
 
-        add_heading(doc, "Misure correttive suggerite", level=2)
+        add_heading(doc, "Misure correttive suggerite", level=1)
         add_paragraph(doc, "Per ambienti con PPD >= 15%: adeguare il sistema di climatizzazione, rivedere l'isolamento del vestiario, introdurre schermature solari o umidificatori, verificare la velocità dell'aria nelle postazioni.")
 
-        version = await self._next_version()
+        finish_document(
+            doc,
+            title=DOC_TITLE,
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=generated_at,
+        )
+
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")

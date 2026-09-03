@@ -12,6 +12,7 @@ class AllegatoBiologicoDentistiGenerator(BaseDocumentGenerator):
         return await build_biologico_document(
             self,
             settore_key="dentisti",
+            settore_label="Studio odontoiatrico",
             titolo="ALLEGATO RISCHIO BIOLOGICO - STUDIO ODONTOIATRICO",
             agenti_default=DENTISTI_AGENTI,
             misure_default=DENTISTI_MISURE,
