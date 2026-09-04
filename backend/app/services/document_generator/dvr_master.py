@@ -891,6 +891,38 @@ def _is_external_safety_consultant(person: object) -> bool:
     )
 
 
+def _unique_keep_order(values) -> list[str]:
+    """De-duplicate strings preserving first occurrence, dropping blanks."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for v in values:
+        if v and v not in seen:
+            seen.add(v)
+            out.append(v)
+    return out
+
+
+def _format_protocol_periodicita_cell(prot: object | None) -> str:
+    """§4.3 last column: the saved protocol's periodicità + accertamenti,
+    or the MC scaffold when no protocol has been recorded."""
+    if prot is None:
+        return "[DA COMPILARE — MC]"
+    periodicita = (getattr(prot, "periodicita", None) or "").strip()
+    parts = [periodicita.capitalize() if periodicita else "[DA COMPILARE — MC]"]
+    accertamenti = []
+    for a in getattr(prot, "accertamenti", None) or []:
+        if not isinstance(a, dict):
+            continue
+        esame = (a.get("esame") or "").strip()
+        if not esame:
+            continue
+        cadenza = (a.get("periodicita") or "").strip()
+        accertamenti.append(f"{esame} ({cadenza})" if cadenza else esame)
+    if accertamenti:
+        parts.append("Accertamenti: " + "; ".join(accertamenti))
+    return "\n".join(parts)
+
+
 def _employee_persons(persons: list) -> list:
     """Exclude external safety consultants from the employee population."""
     return [person for person in persons if not _is_external_safety_consultant(person)]
@@ -1183,11 +1215,24 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         if not misure:
             misure = await self._auto_seed_misure(data)
 
+        # Protocolli sanitari per mansione (segnalazione 2026-08-25) — the
+        # MC-reviewed accertamenti / periodicita' / malattie correlate that
+        # §4.3 prefers over its "[DA COMPILARE — MC]" scaffold.
+        from app.models.protocollo_sanitario import ProtocolloSanitarioMansione
+
+        r = await self.db.execute(
+            select(ProtocolloSanitarioMansione)
+            .where(ProtocolloSanitarioMansione.azienda_id == self.azienda_id)
+            .order_by(ProtocolloSanitarioMansione.mansione)
+        )
+        protocolli_sanitari = list(r.scalars().all())
+
         return {
             "foto_by_ambiente": foto_by_ambiente,
             "vdt_esposti_persona_ids": vdt_esposti_persona_ids,
             "allegati_presenti": allegati_presenti,
             "misure_miglioramento": misure,
+            "protocolli_sanitari": protocolli_sanitari,
         }
 
     async def _auto_seed_misure(self, data: dict) -> list:
@@ -3746,7 +3791,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         for spec in _PART_IV_PROCEDURAL_SECTIONS:
             self._add_procedural_section(doc, spec)
             if spec.heading.startswith("4.3"):
-                self._add_sorveglianza_protocol_table(doc, employee_persons)
+                self._add_sorveglianza_protocol_table(
+                    doc,
+                    employee_persons,
+                    extras.get("protocolli_sanitari") or [],
+                )
 
         # Cross-reference applicable allegati by name (audit F-016).
         self._add_allegati_cross_references(
@@ -3760,21 +3809,30 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         self._add_signature_table(doc, persone)
 
     def _add_sorveglianza_protocol_table(
-        self, doc: Document, persone: list
+        self, doc: Document, persone: list, protocolli: list | None = None
     ) -> None:
         """Render the per-mansione Sorveglianza Sanitaria protocol table,
-        aggregating per-persona DPI + rischi flags up to mansione (union).
+        aggregating per-persona DPI + rischi flags up to mansione (union),
+        followed by the "Malattie professionali correlate" table.
 
-        4 columns: Mansione | Rischi specifici | DPI assegnati | Periodicità'
-        (compilata dal Medico Competente). Periodicità' is left as a
-        placeholder because the actual cadence is a medical decision the
-        MC must make per mansione (art. 41 D.Lgs. 81/2008) — we render the
-        scaffold so the MC has a structured form to fill, not invented
-        values that look authoritative.
+        4 columns: Mansione | Rischi specifici | DPI assegnati | Periodicità
+        (compilata dal Medico Competente). When a saved protocollo
+        sanitario exists for the mansione (``protocolli``, rows of
+        ``ProtocolloSanitarioMansione`` loaded by ``_load_dvr_extras``) the
+        last column shows its periodicità and accertamenti; otherwise it
+        stays the "[DA COMPILARE — MC]" scaffold, because the cadence is a
+        medical decision the MC must make per mansione (art. 41 D.Lgs.
+        81/2008) and we do not invent values that look authoritative.
+
+        The second table lists, per mansione, the occupational diseases the
+        role is exposed to: the saved ``malattie_correlate`` when a protocol
+        exists, else the reference-table rows matching the mansione's rischi
+        codes (D.M. 9/4/2008), explicitly marked "da confermare dal MC".
 
         Falls back to a transparent "no data" paragraph when no persona
-        carries any DPI/rischi flags for the azienda.
+        carries any DPI/rischi flags and no protocol is saved.
         """
+        from app.data.malattie_professionali import malattie_per_rischi
         from app.services.reference_data import (
             DPI_CATALOG,
             RISCHI_SPECIFICI_CATALOG,
@@ -3785,23 +3843,45 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             level=3,
         )
 
-        # Aggregate per-persona codes up to mansione (union).
+        # Aggregate per-persona codes up to mansione (union), keyed
+        # case-insensitively so "Saldatore" and "saldatore" are one row.
+        display: dict[str, str] = {}
         mansione_dpi: dict[str, set[str]] = {}
         mansione_rischi: dict[str, set[str]] = {}
         for p in persone:
-            nome = (p.mansione or "").strip()
+            nome = " ".join((p.mansione or "").split())
             if not nome:
                 continue
+            key = nome.lower()
+            display.setdefault(key, nome)
             dpi_codes = list(getattr(p, "dpi_codes", None) or [])
             rs_codes = list(getattr(p, "rischi_specifici_codes", None) or [])
             if dpi_codes:
-                mansione_dpi.setdefault(nome, set()).update(dpi_codes)
+                mansione_dpi.setdefault(key, set()).update(dpi_codes)
             if rs_codes:
-                mansione_rischi.setdefault(nome, set()).update(rs_codes)
+                mansione_rischi.setdefault(key, set()).update(rs_codes)
 
-        all_mansioni = sorted(set(mansione_dpi.keys()) | set(mansione_rischi.keys()))
+        saved: dict[str, object] = {}
+        for prot in protocolli or []:
+            nome = " ".join((getattr(prot, "mansione", None) or "").split())
+            if not nome:
+                continue
+            key = nome.lower()
+            saved[key] = prot
+            display.setdefault(key, nome)
+            # The protocol's own snapshot keeps the row meaningful even when
+            # the persone flags were cleared after the MC reviewed it.
+            for item in getattr(prot, "rischi_specifici", None) or []:
+                code = item.get("code") if isinstance(item, dict) else None
+                if code:
+                    mansione_rischi.setdefault(key, set()).add(code)
 
-        if not all_mansioni:
+        all_keys = sorted(
+            set(mansione_dpi) | set(mansione_rischi) | set(saved),
+            key=lambda k: display[k],
+        )
+
+        if not all_keys:
             p = doc.add_paragraph()
             run = p.add_run(
                 "Nessuna mansione con sorveglianza sanitaria configurata. "
@@ -3822,20 +3902,21 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         ]
 
         rows: list[list[str]] = []
-        for nome in all_mansioni:
+        for key in all_keys:
+            nome = display[key]
             rischi_labels = sorted(
                 RISCHI_SPECIFICI_CATALOG.get(c, {}).get("etichetta", c)
-                for c in mansione_rischi.get(nome, set())
+                for c in mansione_rischi.get(key, set())
             )
             dpi_labels = sorted(
                 DPI_CATALOG.get(c, {}).get("etichetta", c)
-                for c in mansione_dpi.get(nome, set())
+                for c in mansione_dpi.get(key, set())
             )
             rows.append([
                 nome.upper(),
                 "; ".join(rischi_labels) if rischi_labels else "—",
                 "; ".join(dpi_labels) if dpi_labels else "—",
-                "[DA COMPILARE — MC]",
+                _format_protocol_periodicita_cell(saved.get(key)),
             ])
 
         self._add_data_table(doc, headers, rows)
@@ -3850,6 +3931,57 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         nrun.font.size = Pt(9)
         nrun.font.italic = True
         nrun.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+        doc.add_paragraph("")
+
+        # --- Malattie professionali correlate per mansione ---------------
+        doc.add_heading("Malattie professionali correlate per mansione", level=3)
+        headers2 = ["Mansione", "Malattie correlate", "Riferimento tabellare"]
+        rows2: list[list[str]] = []
+        for key in all_keys:
+            nome = display[key]
+            prot = saved.get(key)
+            saved_malattie = [
+                m for m in (getattr(prot, "malattie_correlate", None) or [])
+                if isinstance(m, dict) and (m.get("malattia") or "").strip()
+            ] if prot is not None else []
+            if saved_malattie:
+                names = [m["malattia"].strip() for m in saved_malattie]
+                refs = _unique_keep_order(
+                    (m.get("riferimento") or "").strip() for m in saved_malattie
+                )
+                rows2.append([
+                    nome.upper(),
+                    "; ".join(names),
+                    "; ".join(refs) if refs else "—",
+                ])
+                continue
+            ref_rows = malattie_per_rischi(mansione_rischi.get(key, set()))
+            if ref_rows:
+                names = [r["malattia"] for r in ref_rows]
+                refs = _unique_keep_order(r["tabella"] for r in ref_rows)
+                rows2.append([
+                    nome.upper(),
+                    "; ".join(names),
+                    "; ".join(refs) + " — da confermare dal MC",
+                ])
+            else:
+                rows2.append([
+                    nome.upper(),
+                    "Nessuna malattia tabellata correlata ai rischi specifici censiti",
+                    "da confermare dal MC",
+                ])
+        self._add_data_table(doc, headers2, rows2)
+        note2 = doc.add_paragraph()
+        n2run = note2.add_run(
+            "Fonte: D.M. 9 aprile 2008 (tabelle delle malattie professionali "
+            "nell'industria e nell'agricoltura) e D.M. 10 giugno 2014 (elenco "
+            "delle malattie con obbligo di denuncia ex art. 139 DPR 1124/1965). "
+            "Le voci contrassegnate \"da confermare dal MC\" derivano dai rischi "
+            "specifici censiti per la mansione e non da un giudizio medico."
+        )
+        n2run.font.size = Pt(9)
+        n2run.font.italic = True
+        n2run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
         doc.add_paragraph("")
 
     def _add_allegati_cross_references(

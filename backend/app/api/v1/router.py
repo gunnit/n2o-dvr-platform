@@ -25,6 +25,7 @@ from app.api.v1.pee_procedures import router as pee_procedures_router
 from app.api.v1.pericoli import router as pericoli_router
 from app.api.v1.persone import router as persone_router
 from app.api.v1.pos import router as pos_router
+from app.api.v1.protocollo_sanitario import router as protocollo_sanitario_router
 from app.api.v1.rischi import router as rischi_router
 from app.api.v1.rischi_misure import router as rischi_misure_router
 from app.api.v1.sorveglianza import router as sorveglianza_router
@@ -64,6 +65,7 @@ api_router.include_router(mmc_router)
 api_router.include_router(duvri_router)
 api_router.include_router(sorveglianza_router)
 api_router.include_router(pos_router)
+api_router.include_router(protocollo_sanitario_router)
 api_router.include_router(stress_misure_router)
 api_router.include_router(stress_ai_router)
 api_router.include_router(stress_valutazione_router)

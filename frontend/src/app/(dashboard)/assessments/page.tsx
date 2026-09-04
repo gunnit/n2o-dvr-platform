@@ -17,6 +17,7 @@ import {
   Monitor,
   Package,
   ShieldAlert,
+  Stethoscope,
   Thermometer,
   Utensils,
   type LucideIcon,
@@ -124,6 +125,17 @@ const assessmentTypes: AssessmentType[] = [
     description: "Valutazione per lavoratrici madri · mansioni compatibili.",
     icon: Baby,
     accent: "rose",
+  },
+  {
+    // Feeds DVR §4.3 (sorveglianza sanitaria), hence the dvr_master gate.
+    slug: "protocollo-sanitario",
+    docTypes: ["dvr_master"],
+    title: "Protocollo Sanitario",
+    metodo: "Art. 41 D.Lgs. 81/2008 · D.M. 9/4/2008",
+    description:
+      "Accertamenti e periodicità per mansione · malattie professionali correlate · compilabile con AI.",
+    icon: Stethoscope,
+    accent: "sky",
   },
   {
     slug: "pos",

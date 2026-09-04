@@ -27,6 +27,7 @@ from app.models.rischio_chimico_esposizione import RischioChimicoEsposizione
 from app.models.stress_misura_libreria import StressMisuraLibreria
 from app.models.rischio_misura_libreria import RischioMisuraLibreria
 from app.models.misura_miglioramento import MisuraMiglioramento
+from app.models.protocollo_sanitario import ProtocolloSanitarioMansione
 
 # Complementary document models
 from app.models.haccp_form import HaccpConfig, HaccpFormState
@@ -77,6 +78,7 @@ __all__ = [
     "StressMisuraLibreria",
     "RischioMisuraLibreria",
     "MisuraMiglioramento",
+    "ProtocolloSanitarioMansione",
     "HaccpConfig",
     "HaccpFormState",
     "PeePlan",

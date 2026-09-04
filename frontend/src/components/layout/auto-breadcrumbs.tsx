@@ -35,6 +35,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   vdt: "VDT",
   incendio: "Incendio",
   microclima: "Microclima",
+  "protocollo-sanitario": "Protocollo sanitario",
 };
 
 // Fully-qualified paths that have their own index page. Intermediate paths

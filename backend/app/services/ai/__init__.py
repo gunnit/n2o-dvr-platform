@@ -12,6 +12,14 @@ from app.services.ai.attrezzature_vision_extractor import (
     AttrezzatureIdentificate,
     extract_attrezzature_from_photos,
 )
+from app.services.ai.gestanti_suggester import (
+    GestantiMansioneSuggerita,
+    suggest_gestanti_mansione,
+)
+from app.services.ai.protocollo_sanitario_suggester import (
+    ProtocolloSuggerito,
+    suggest_protocollo,
+)
 from app.services.ai.client import (
     extract_from_images,
     extract_from_pdf,
@@ -75,6 +83,12 @@ __all__ = [
     # Scheda ambiente proposal (from ambiente photos) — incendio + PEE
     "extract_scheda_from_photos",
     "SchedaAmbienteEstratta",
+    # Gestanti per-mansione proposal (esito is a proposal, never persisted)
+    "suggest_gestanti_mansione",
+    "GestantiMansioneSuggerita",
+    # Protocollo sanitario per mansione (accertamenti, periodicità, malattie)
+    "suggest_protocollo",
+    "ProtocolloSuggerito",
     # Per-persona DPI + rischi specifici suggestions
     "suggest_dpi_rischi",
     "DpiRischiSuggerito",
