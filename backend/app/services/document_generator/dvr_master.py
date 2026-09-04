@@ -1247,67 +1247,90 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             "Fattori Ergonomici",
         }
 
-        def _classify_responsabile(amb, categoria: str, indice: int) -> str:
-            # Severity escalation: GRAVISSIMO always escalates to DdL.
-            if indice >= 9:
-                return ddl_name
-            if categoria in ddl_categories:
-                return ddl_name
-            if categoria in preposto_categories:
-                return _resolve_preposto(amb)
-            return rspp_name
+        # One row per categoria, not per pericolo (segnalazione 2026-08-21,
+        # "molte misure me le ripete"): the procedura/risorse template is
+        # per categoria, so per-pericolo rows printed the same measure once
+        # per pericolo and again for every ambiente it appeared in. Each
+        # grouped row lists the pericoli it covers (with their ambiente) in
+        # the "Rischio" column; tempi, priorita and the provenance link
+        # follow the most severe pericolo in the group; the responsabile
+        # column names every preposto involved when the categoria is theirs.
+        from app.services.misure_dedupe import join_risk_labels
 
-        seeded: list[MisuraMiglioramento] = []
-        ordine = 0
+        grouped: dict[str, dict] = {}
         for amb in ambienti:
             for v in getattr(amb, "valutazioni_rischio", None) or []:
                 cat_long = normalize_categoria_to_long(
                     getattr(v, "categoria_rischio", "") or ""
                 ) or "Generico"
-                template = _MISURA_TEMPLATE_BY_CATEGORIA.get(
-                    cat_long, _MISURA_TEMPLATE_DEFAULT
-                )
                 for per in getattr(v, "pericoli", None) or []:
                     indice = getattr(per, "indice_i", None)
                     if indice is None or indice < 5:
                         continue
                     if not getattr(per, "applicabile", True):
                         continue
-                    livello = getattr(per, "livello_rischio", None) or ""
-                    if indice >= 9:
-                        tempi = "Immediatamente (entro 30 giorni)"
-                    elif indice >= 7:
-                        tempi = "Entro 6 mesi"
-                    else:
-                        tempi = "Entro 12 mesi (ciclo annuale)"
+                    entry = grouped.setdefault(
+                        cat_long,
+                        {"labels": "", "top": per, "top_indice": -1, "preposti": []},
+                    )
+                    pericolo_text = (per.pericolo or "").strip() or cat_long
+                    entry["labels"] = join_risk_labels(
+                        entry["labels"],
+                        f"{pericolo_text} ({(amb.nome or '').upper()})",
+                    )
+                    if indice > entry["top_indice"]:
+                        entry["top"] = per
+                        entry["top_indice"] = indice
+                    if cat_long in preposto_categories:
+                        preposto = _resolve_preposto(amb)
+                        if preposto not in entry["preposti"]:
+                            entry["preposti"].append(preposto)
 
-                    pericolo_text = (per.pericolo or "").strip()
-                    misura_text = (
-                        f"Riduzione del rischio in {(amb.nome or '').upper()}: "
-                        f"{pericolo_text or cat_long}"
-                    )
-                    # Procedura/risorse from the categoria template are a
-                    # starting point, not a finished plan. Mark them with a
-                    # DA COMPILARE prefix so an inspector immediately sees
-                    # which rows still need the RSPP to write the specific
-                    # procedure for the actual pericolo (audit F-002,
-                    # 2026-04-29 rerun). The marker disappears the moment
-                    # the operator edits the row via the API.
-                    da_compilare = "[DA COMPILARE — RSPP] "
-                    misura = MisuraMiglioramento(
-                        azienda_id=self.azienda_id,
-                        pericolo_valutazione_id=per.id,
-                        misura=misura_text,
-                        procedura=da_compilare + template["procedura"],
-                        risorse=da_compilare + template["risorse"],
-                        responsabile=_classify_responsabile(amb, cat_long, indice),
-                        scadenza=tempi,
-                        priorita=livello,
-                        ordine=ordine,
-                    )
-                    self.db.add(misura)
-                    seeded.append(misura)
-                    ordine += 1
+        seeded: list[MisuraMiglioramento] = []
+        ordine = 0
+        for cat_long, entry in grouped.items():
+            per = entry["top"]
+            indice = entry["top_indice"]
+            template = _MISURA_TEMPLATE_BY_CATEGORIA.get(
+                cat_long, _MISURA_TEMPLATE_DEFAULT
+            )
+            livello = getattr(per, "livello_rischio", None) or ""
+            if indice >= 9:
+                tempi = "Immediatamente (entro 30 giorni)"
+            elif indice >= 7:
+                tempi = "Entro 6 mesi"
+            else:
+                tempi = "Entro 12 mesi (ciclo annuale)"
+
+            if indice >= 9 or cat_long in ddl_categories:
+                responsabile = ddl_name
+            elif cat_long in preposto_categories:
+                responsabile = "; ".join(entry["preposti"]) or _resolve_preposto(None)
+            else:
+                responsabile = rspp_name
+
+            misura_text = f"Riduzione del rischio — {cat_long}: {entry['labels']}"
+            # Procedura/risorse from the categoria template are a starting
+            # point, not a finished plan. Mark them with a DA COMPILARE
+            # prefix so an inspector immediately sees which rows still need
+            # the RSPP to write the specific procedure for the actual
+            # pericoli (audit F-002, 2026-04-29 rerun). The marker
+            # disappears the moment the operator edits the row via the API.
+            da_compilare = "[DA COMPILARE — RSPP] "
+            misura = MisuraMiglioramento(
+                azienda_id=self.azienda_id,
+                pericolo_valutazione_id=per.id,
+                misura=misura_text,
+                procedura=da_compilare + template["procedura"],
+                risorse=da_compilare + template["risorse"],
+                responsabile=responsabile,
+                scadenza=tempi,
+                priorita=livello,
+                ordine=ordine,
+            )
+            self.db.add(misura)
+            seeded.append(misura)
+            ordine += 1
 
         if seeded:
             await self.db.flush()

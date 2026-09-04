@@ -35,6 +35,7 @@ from app.schemas.misura_miglioramento import (
     MisuraMiglioramentoUpdate,
 )
 from app.services.ai import suggest_measures
+from app.services.misure_dedupe import join_risk_labels, normalize_measure_key
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +155,10 @@ async def delete_misura(
 
 class GeneraDaRischiResponse(BaseModel):
     generated: int
+    # Suggestions folded into an existing row because the measure was the
+    # same (segnalazione 2026-08-21) — counted so the UI can say why fewer
+    # rows appeared than pericoli were evaluated.
+    merged: int = 0
     skipped: int
     pericoli_considered: int
     rows: list[MisuraMiglioramentoResponse]
@@ -301,7 +306,31 @@ async def genera_da_rischi(
     if failed_ids:
         await db.commit()
 
+    # Segnalazione 2026-08-21 ("molte misure me le ripete"): the suggester
+    # runs per pericolo, so a measure several pericoli share came back once
+    # each. Rows are keyed by normalised title — the azienda's existing rows
+    # first, then the ones created in this batch — and a repeat joins the
+    # row it matches by adding its pericolo to the "Rischio" column instead
+    # of becoming a new line.
+    existing_rows = list(
+        (
+            await db.execute(
+                select(MisuraMiglioramento).where(
+                    MisuraMiglioramento.azienda_id == azienda_id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    row_by_key: dict[str, MisuraMiglioramento] = {}
+    for existing in existing_rows:
+        key = normalize_measure_key(existing.misura_miglioramento)
+        if key and key not in row_by_key:
+            row_by_key[key] = existing
+
     new_rows: list[MisuraMiglioramento] = []
+    merged = 0
     ordine = next_ordine
     for per, misure in results:
         # Build a concise risk label from the pericolo so the "Rischio"
@@ -315,6 +344,15 @@ async def genera_da_rischi(
         risk_label = " — ".join(risk_label_parts) if risk_label_parts else "Rischio non specificato"
 
         for m in misure:
+            key = normalize_measure_key(m.titolo)
+            target = row_by_key.get(key) if key else None
+            if target is not None:
+                target.misura = join_risk_labels(target.misura, risk_label)
+                if _livello_rank(per.livello_rischio) > _livello_rank(target.priorita):
+                    target.priorita = per.livello_rischio
+                merged += 1
+                continue
+
             # Concatenate the AI's structured fields into the T109 grid:
             # misura = risk description (UI: "Rischio")
             # misura_miglioramento = AI-generated measure (UI: "Misura di Miglioramento")
@@ -342,6 +380,8 @@ async def genera_da_rischi(
             )
             db.add(row)
             new_rows.append(row)
+            if key:
+                row_by_key[key] = row
             ordine += 1
 
     await db.commit()
@@ -350,7 +390,16 @@ async def genera_da_rischi(
 
     return GeneraDaRischiResponse(
         generated=len(new_rows),
+        merged=merged,
         skipped=skipped,
         pericoli_considered=len(pericoli),
         rows=[MisuraMiglioramentoResponse.model_validate(r) for r in new_rows],
     )
+
+
+_LIVELLO_RANK = {"ACCETTABILE": 0, "MODESTO": 1, "GRAVE": 2, "GRAVISSIMO": 3}
+
+
+def _livello_rank(livello: str | None) -> int:
+    """Order risk levels so a merged row keeps the most severe priorita."""
+    return _LIVELLO_RANK.get((livello or "").strip().upper(), -1)

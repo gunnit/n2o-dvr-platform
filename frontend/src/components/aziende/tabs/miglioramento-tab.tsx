@@ -451,6 +451,7 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
     try {
       const res = await apiFetch<{
         generated: number;
+        merged: number;
         skipped: number;
         pericoli_considered: number;
       }>(
@@ -462,14 +463,24 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
         toast.info(
           "Nessun pericolo con indice ≥ 5: valuta prima i rischi, poi riprova.",
         );
-      } else if (res.generated === 0 && res.skipped > 0) {
+      } else if (res.generated === 0 && res.merged === 0 && res.skipped > 0) {
         toast.info(
           `Tutti i ${res.skipped} pericoli sopra soglia hanno già delle misure. Elimina le righe esistenti per rigenerare.`,
         );
       } else {
-        toast.success(
-          `${res.generated} misure generate (${res.skipped} pericoli saltati perché già coperti).`,
-        );
+        // Segnalazione 2026-08-21: a measure shared by several pericoli is
+        // one row that lists them, not one row per pericolo — say so, or
+        // "3 misure generate" reads as if the AI dropped the rest.
+        const parts = [`${res.generated} misure generate`];
+        if (res.merged > 0) {
+          parts.push(
+            `${res.merged} unite a misure già presenti (stessa misura, pericoli diversi)`,
+          );
+        }
+        if (res.skipped > 0) {
+          parts.push(`${res.skipped} pericoli saltati perché già coperti`);
+        }
+        toast.success(parts.join(" · ") + ".");
       }
     } catch (err) {
       toast.error(

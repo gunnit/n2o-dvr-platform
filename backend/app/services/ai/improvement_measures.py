@@ -92,6 +92,14 @@ Regole:
 - Italiano tecnico-consulenziale, senza fronzoli.
 - Misure CONCRETE (es. "installare aspirazione localizzata sul banco di
   saldatura") non generiche (es. "ridurre l'esposizione").
+- Ogni misura deve essere specifica del pericolo indicato. Non proporre
+  misure valide per qualsiasi rischio ("formazione generale dei
+  lavoratori", "informazione sui rischi", "vigilanza del preposto") a meno
+  che non siano l'unica misura pertinente; in quel caso indica l'oggetto
+  specifico (es. "formazione all'uso della PLE", non "formazione").
+- Il titolo deve essere una formulazione stabile e riutilizzabile: la
+  stessa misura, proposta per pericoli diversi, deve avere lo stesso
+  titolo, cosi' il programma la elenca una volta sola.
 - Ordina per priorita' decrescente.
 - Cita l'articolo del D.Lgs. 81/2008 quando pertinente (es. "art. 71" per
   attrezzature, "art. 77" per DPI, "art. 36-37" per formazione)."""
