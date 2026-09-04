@@ -234,6 +234,25 @@ class GestantiMansioneUpsert(BaseModel):
         return self
 
 
+class GestantiMansioneSuggestRequest(BaseModel):
+    """Body of POST .../gestanti/mansioni/suggerisci — the mansione only.
+
+    No persona, no worker: the AI reasons on the mansione's DVR context,
+    never on a lavoratrice (her gestanti row is health data and stays out
+    of the prompt).
+    """
+
+    mansione: str = Field(..., min_length=2, max_length=200)
+
+    @field_validator("mansione")
+    @classmethod
+    def _normalize_mansione(cls, v: str) -> str:
+        v = " ".join(v.strip().split())
+        if len(v) < 2:
+            raise ValueError("La mansione deve contenere almeno 2 caratteri.")
+        return v
+
+
 class GestantiMansioneResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

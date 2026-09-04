@@ -10,9 +10,13 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, status
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.billing.entitlements import Entitlements, get_entitlements
+from app.billing.metering import metered
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.permissions import ASSESSMENTS_WRITE
 from app.data.dlgs_151_2001 import (
@@ -22,29 +26,60 @@ from app.data.dlgs_151_2001 import (
 )
 from app.db.session import get_db
 from app.dependencies import get_current_org, require_capability
+from app.models.ambiente import Ambiente
+from app.models.attrezzatura import Attrezzatura
 from app.models.azienda import Azienda
 from app.models.gestanti_valutazione import (
     GestantiMansioneValutazione,
     GestantiValutazione,
 )
 from app.models.persona import Persona
+from app.models.persone_ambienti import persone_ambienti
+from app.models.valutazione_rischio import ValutazioneRischio
 from app.schemas.gestanti import (
     CatalogRisk,
     CrossReferenceRequest,
     CrossReferenceResponse,
     DecisionRequest,
     DecisionResponse,
+    EsitoMansione,
     GestantiCreate,
     GestantiMansioneOverviewItem,
     GestantiMansioneResponse,
+    GestantiMansioneSuggestRequest,
     GestantiMansioneUpsert,
     GestantiMansioniOverview,
     GestantiResponse,
     GestantiUpdate,
     RiskMatch,
 )
+from app.services.ai.gestanti_suggester import (
+    PericoloContesto,
+    suggest_gestanti_mansione,
+)
 
 router = APIRouter(tags=["gestanti"])
+
+
+class GestantiMansioneSuggestResponse(BaseModel):
+    """AI proposal for one mansione, as returned by .../mansioni/suggerisci.
+
+    Flat: the suggester's fields plus ``rischi_dettaglio`` (the catalog rows
+    for the proposed keys, so the UI can render Allegato + descrizione
+    without its own copy of the catalog) and ``pericoli_considerati``.
+    Never persisted — the operator applies it in the form and saves through
+    PUT /gestanti/mansioni.
+    """
+
+    mansione: str
+    rischi: list[str]
+    rischi_dettaglio: list[CatalogRisk]
+    rischi_aggiuntivi: list[str]
+    limitazioni: list[str]
+    esito_proposto: EsitoMansione
+    motivazione: str
+    riferimenti_normativi: list[str]
+    pericoli_considerati: int
 
 
 # ---------------------------------------------------------------------------
@@ -465,6 +500,158 @@ async def delete_gestanti_mansione(
         raise NotFoundError("Valutazione mansione non trovata")
     await db.delete(row)
     await db.commit()
+
+
+async def _load_mansione_context(
+    azienda_id: uuid.UUID, mansione: str, db: AsyncSession
+) -> tuple[list[PericoloContesto], list[Attrezzatura]]:
+    """DVR context for one mansione, shaped for the AI prompt. No PII.
+
+    Ambienti: the ones assigned (persone_ambienti) to the persone holding
+    the mansione; when none is assigned, every ambiente of the azienda, so
+    the model still has something to reason from (the DPI suggester's
+    fallback). From those ambienti: the applicabile pericoli — child rows
+    first, the legacy single-block fields for older valutazioni — and the
+    attrezzature. Persone are read for id + mansione only; the per-persona
+    gestanti rows (health data) are never touched.
+    """
+    key = mansione.lower()
+    result = await db.execute(
+        select(Persona.id, Persona.mansione).where(Persona.azienda_id == azienda_id)
+    )
+    persona_ids = [
+        pid for pid, mans in result.all() if _normalize_mansione(mans).lower() == key
+    ]
+
+    by_id: dict[uuid.UUID, Ambiente] = {}
+    if persona_ids:
+        result = await db.execute(
+            select(Ambiente)
+            .join(persone_ambienti, persone_ambienti.c.ambiente_id == Ambiente.id)
+            .where(
+                persone_ambienti.c.persona_id.in_(persona_ids),
+                Ambiente.azienda_id == azienda_id,
+            )
+        )
+        for amb in result.scalars().all():
+            by_id.setdefault(amb.id, amb)
+    if not by_id:
+        result = await db.execute(
+            select(Ambiente).where(Ambiente.azienda_id == azienda_id)
+        )
+        for amb in result.scalars().all():
+            by_id.setdefault(amb.id, amb)
+    if not by_id:
+        return [], []
+    ambiente_ids = list(by_id)
+
+    result = await db.execute(
+        select(ValutazioneRischio)
+        .options(selectinload(ValutazioneRischio.pericoli))
+        .where(
+            ValutazioneRischio.ambiente_id.in_(ambiente_ids),
+            ValutazioneRischio.applicabile.is_(True),
+        )
+    )
+    pericoli: list[PericoloContesto] = []
+    for val in result.scalars().all():
+        amb = by_id.get(val.ambiente_id)
+        nome = (amb.nome if amb else None) or "Ambiente"
+        children = [
+            p
+            for p in (val.pericoli or [])
+            if p.applicabile and (p.pericolo or "").strip()
+        ]
+        if children:
+            for p in children:
+                pericoli.append(
+                    PericoloContesto(
+                        ambiente=nome,
+                        categoria=val.categoria_rischio,
+                        pericolo=p.pericolo.strip(),
+                        condizioni=p.condizioni_esposizione,
+                        livello=p.livello_rischio,
+                    )
+                )
+        elif (val.pericolo or "").strip():
+            pericoli.append(
+                PericoloContesto(
+                    ambiente=nome,
+                    categoria=val.categoria_rischio,
+                    pericolo=val.pericolo.strip(),
+                    condizioni=val.condizioni_esposizione,
+                    livello=val.livello_rischio,
+                )
+            )
+
+    result = await db.execute(
+        select(Attrezzatura).where(Attrezzatura.ambiente_id.in_(ambiente_ids))
+    )
+    attrezzature = list(result.scalars().all())
+    return pericoli, attrezzature
+
+
+@router.post(
+    "/aziende/{azienda_id}/gestanti/mansioni/suggerisci",
+    response_model=GestantiMansioneSuggestResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
+async def suggerisci_gestanti_mansione(
+    azienda_id: uuid.UUID,
+    body: GestantiMansioneSuggestRequest,
+    org_id: uuid.UUID = Depends(get_current_org),
+    ent: Entitlements = Depends(get_entitlements),
+    db: AsyncSession = Depends(get_db),
+) -> GestantiMansioneSuggestResponse:
+    """AI-propose the D.Lgs. 151/2001 valutazione for one mansione.
+
+    Segnalazione 2026-08-25: "un tasto AI che riconosce per ogni mansione i
+    rischi a cui e' sottoposta una lavoratrice gestante e mi va a introdurre
+    delle limitazioni [...] o mi definisce la lavoratrice non compatibile".
+
+    The model sees the mansione, the azienda's activity, the pericoli
+    assessed for the ambienti where that mansione works, the attrezzature
+    and the catalog vocabulary — never a lavoratrice's name, codice
+    fiscale or pregnancy data. It returns a PROPOSAL (rischi from the
+    catalog, extra risks, limitazioni, esito, motivazione, riferimenti).
+    Nothing is persisted here: the operator applies it in the form and
+    confirms through PUT /gestanti/mansioni. ``non_compatibile`` is a
+    suggestion to the RSPP / medico competente until that save.
+    """
+    azienda = await _get_azienda(azienda_id, org_id, db)
+    mansione = body.mansione  # normalized by the schema validator
+    pericoli, attrezzature = await _load_mansione_context(azienda_id, mansione, db)
+
+    # MB-2.4 — charged before the call, keyed on the mansione so re-running
+    # the suggester for the same one is one billable action, not one per
+    # click. Same key shape the upsert uses (azienda + lower(mansione)).
+    mansione_key = mansione.lower()
+    async with metered(org_id, "reasoning", f"gestanti-mansione:{azienda_id}:{mansione_key}", db, ent):
+        suggestion = await suggest_gestanti_mansione(
+            mansione, azienda, pericoli, attrezzature
+        )
+
+    # Keys are already validated against INCOMPATIBLE_RISKS by the suggester;
+    # resolve them so the UI can render Allegato + descrizione.
+    dettaglio = [
+        CatalogRisk(
+            risk_key=k,
+            allegato=INCOMPATIBLE_RISKS[k]["allegato"],
+            descrizione=INCOMPATIBLE_RISKS[k]["descrizione"],
+        )
+        for k in suggestion.rischi
+    ]
+    return GestantiMansioneSuggestResponse(
+        mansione=mansione,
+        rischi=suggestion.rischi,
+        rischi_dettaglio=dettaglio,
+        rischi_aggiuntivi=suggestion.rischi_aggiuntivi,
+        limitazioni=suggestion.limitazioni,
+        esito_proposto=suggestion.esito_proposto,
+        motivazione=suggestion.motivazione,
+        riferimenti_normativi=suggestion.riferimenti_normativi,
+        pericoli_considerati=len(pericoli),
+    )
 
 
 # ---------------------------------------------------------------------------

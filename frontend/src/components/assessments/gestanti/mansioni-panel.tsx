@@ -9,11 +9,28 @@
  * (distinct mansioni) with the D.Lgs. 151/2001 catalog matches already
  * ticked — the operator reviews, never re-enters. Missing mansioni can be
  * added by hand.
+ *
+ * "Suggerisci con AI" (segnalazione 2026-08-25): per mansione, the model
+ * reads the pericoli assessed in the DVR for the ambienti where that
+ * mansione works and PROPOSES rischi, limitazioni and an esito. The
+ * proposal is held for review; "Applica" copies it into the form fields
+ * (marked with an AI provenance badge until saved) and nothing reaches the
+ * server until the operator presses "Salva valutazione mansione".
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Plus, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  CheckCircle2,
+  Loader2,
+  OctagonAlert,
+  Plus,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 
+import { AIBadge, type AIProvenance } from "@/components/ai/ai-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +43,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { TONE_CHIP, TONE_SURFACE } from "@/lib/ui/tones";
 import { cn } from "@/lib/utils";
 import { throwApiError } from "@/lib/api-errors";
 
@@ -33,6 +51,7 @@ import { AllegatoBadge } from "./allegato-badge";
 import type {
   CatalogRisk,
   EsitoMansione,
+  GestantiMansioneSuggestion,
   MansioneOverviewItem,
   MansioniOverview,
 } from "./types";
@@ -43,6 +62,14 @@ const ESITO_LABELS: Record<EsitoMansione, string> = {
   compatibile: "Compatibile",
   compatibile_con_limitazioni: "Compatibile con limitazioni",
   non_compatibile: "Non compatibile",
+};
+
+// Badge tone per esito — `non_compatibile` is the one the operator must not
+// miss, so it gets the danger chip plus an icon in the proposal block.
+const ESITO_VARIANT: Record<EsitoMansione, "success" | "warning" | "danger"> = {
+  compatibile: "success",
+  compatibile_con_limitazioni: "warning",
+  non_compatibile: "danger",
 };
 
 async function authHeaders(): Promise<HeadersInit> {
@@ -64,6 +91,18 @@ interface EditState {
   selected: Record<string, boolean>;
   misure: string;
   note: string;
+  /**
+   * Catalog risks brought in by an applied AI proposal that are neither a
+   * keyword match nor already saved — they must still render as tickable
+   * rows and be sent on save.
+   */
+  extraRisks: CatalogRisk[];
+  /**
+   * Set when an AI proposal was applied: "ai" until the operator touches a
+   * field, then "edited". Cleared on save/close — provenance is a review
+   * cue for this editing session, not a persisted attribute.
+   */
+  provenance: AIProvenance | null;
 }
 
 function initialEditState(item: MansioneOverviewItem): EditState {
@@ -85,14 +124,25 @@ function initialEditState(item: MansioneOverviewItem): EditState {
     selected,
     misure: saved?.misure ?? "",
     note: saved?.note ?? "",
+    extraRisks: [],
+    provenance: null,
   };
 }
 
-/** Union of suggested catalog risks and already-persisted ones, by risk_key. */
-function riskUniverse(item: MansioneOverviewItem): CatalogRisk[] {
+/**
+ * Union of suggested catalog risks, already-persisted ones and any the AI
+ * proposal added, by risk_key.
+ */
+function riskUniverse(
+  item: MansioneOverviewItem,
+  extra: CatalogRisk[] = [],
+): CatalogRisk[] {
   const seen = new Map<string, CatalogRisk>();
   for (const r of item.suggested_risks) seen.set(r.risk_key, r);
   for (const r of item.valutazione?.rischi ?? []) {
+    if (!seen.has(r.risk_key)) seen.set(r.risk_key, r);
+  }
+  for (const r of extra) {
     if (!seen.has(r.risk_key)) seen.set(r.risk_key, r);
   }
   return [...seen.values()];
@@ -109,6 +159,12 @@ export function MansioniPanel({ aziendaId }: { aziendaId: string }) {
   const [edit, setEdit] = useState<EditState | null>(null);
   const [busy, setBusy] = useState(false);
   const [rowMessage, setRowMessage] = useState<string | null>(null);
+
+  // AI proposal for the open mansione — held for review, never auto-applied.
+  const [aiProposal, setAiProposal] =
+    useState<GestantiMansioneSuggestion | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const [newMansione, setNewMansione] = useState("");
   const [adding, setAdding] = useState(false);
@@ -139,16 +195,40 @@ export function MansioniPanel({ aziendaId }: { aziendaId: string }) {
     if (aziendaId) refetch();
   }, [aziendaId, refetch]);
 
-  const openEditor = useCallback((item: MansioneOverviewItem) => {
-    setOpenKey(item.mansione.toLowerCase());
-    setEdit(initialEditState(item));
-    setRowMessage(null);
+  const clearAi = useCallback(() => {
+    setAiProposal(null);
+    setAiError(null);
   }, []);
+
+  const openEditor = useCallback(
+    (item: MansioneOverviewItem) => {
+      setOpenKey(item.mansione.toLowerCase());
+      setEdit(initialEditState(item));
+      setRowMessage(null);
+      clearAi();
+    },
+    [clearAi],
+  );
 
   const closeEditor = useCallback(() => {
     setOpenKey(null);
     setEdit(null);
     setRowMessage(null);
+    clearAi();
+  }, [clearAi]);
+
+  // Field updates after an applied proposal downgrade provenance to
+  // "edited" — the badge then says the AI draft was reviewed by hand.
+  const updateEdit = useCallback((patch: Partial<EditState>) => {
+    setEdit((prev) =>
+      prev
+        ? {
+            ...prev,
+            ...patch,
+            provenance: prev.provenance === "ai" ? "edited" : prev.provenance,
+          }
+        : prev,
+    );
   }, []);
 
   const misureMissing =
@@ -162,7 +242,7 @@ export function MansioniPanel({ aziendaId }: { aziendaId: string }) {
       setBusy(true);
       setRowMessage(null);
       try {
-        const universe = riskUniverse(item);
+        const universe = riskUniverse(item, edit.extraRisks);
         const rischi = universe
           .filter((r) => edit.selected[r.risk_key])
           .map((r) => ({
@@ -223,6 +303,87 @@ export function MansioniPanel({ aziendaId }: { aziendaId: string }) {
     [aziendaId, closeEditor, refetch],
   );
 
+  // Ask the AI for a proposal on one mansione. Opens the row's editor if it
+  // is not already open so the proposal lands next to the fields it targets.
+  // Nothing is written: the answer waits for "Applica", then for "Salva".
+  const suggestWithAi = useCallback(
+    async (item: MansioneOverviewItem) => {
+      const key = item.mansione.toLowerCase();
+      if (openKey !== key) openEditor(item);
+      setAiProposal(null);
+      setAiError(null);
+      setAiLoading(true);
+      try {
+        const headers = await authHeaders();
+        const res = await fetch(
+          `${API_URL}/api/v1/aziende/${aziendaId}/gestanti/mansioni/suggerisci`,
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ mansione: item.mansione }),
+          },
+        );
+        if (!res.ok) await throwApiError(res);
+        const data = (await res.json()) as GestantiMansioneSuggestion;
+        setAiProposal(data);
+      } catch (err) {
+        setAiError(
+          err instanceof Error ? err.message : "Errore nella generazione AI",
+        );
+      } finally {
+        setAiLoading(false);
+      }
+    },
+    [aziendaId, openEditor, openKey],
+  );
+
+  // Copy the held proposal into the form. Replaces the tick set, esito and
+  // misure (the AI's limitazioni, one per line); the note keeps the extra
+  // risks and the riferimenti so they reach the allegato. The operator can
+  // still change everything before saving.
+  const applyAiProposal = useCallback(
+    (item: MansioneOverviewItem) => {
+      if (!aiProposal || !edit) return;
+      const known = new Set(
+        riskUniverse(item, edit.extraRisks).map((r) => r.risk_key),
+      );
+      const extraRisks = [
+        ...edit.extraRisks,
+        ...aiProposal.rischi_dettaglio.filter((r) => !known.has(r.risk_key)),
+      ];
+      const selected: Record<string, boolean> = {};
+      for (const r of riskUniverse(item, extraRisks)) {
+        selected[r.risk_key] = false;
+      }
+      for (const k of aiProposal.rischi) selected[k] = true;
+
+      const noteParts: string[] = [];
+      if (aiProposal.rischi_aggiuntivi.length > 0) {
+        noteParts.push(
+          `Rischi aggiuntivi (AI): ${aiProposal.rischi_aggiuntivi.join("; ")}`,
+        );
+      }
+      if (aiProposal.riferimenti_normativi.length > 0) {
+        noteParts.push(`Rif.: ${aiProposal.riferimenti_normativi.join("; ")}`);
+      }
+
+      setEdit({
+        ...edit,
+        esito: aiProposal.esito_proposto,
+        selected,
+        extraRisks,
+        misure:
+          aiProposal.limitazioni.length > 0
+            ? aiProposal.limitazioni.join("\n")
+            : edit.misure,
+        note: noteParts.length > 0 ? noteParts.join(" · ") : edit.note,
+        provenance: "ai",
+      });
+      setAiProposal(null);
+    },
+    [aiProposal, edit],
+  );
+
   const addMansione = useCallback(async () => {
     const mansione = newMansione.trim().replace(/\s+/g, " ");
     if (mansione.length < 2) return;
@@ -252,6 +413,7 @@ export function MansioniPanel({ aziendaId }: { aziendaId: string }) {
       // Editor state is rebuilt from the refetched item below via effect-less
       // lazy init: find it in the fresh list on next render.
       setEdit(null);
+      clearAi();
     } catch (err) {
       setError(
         err instanceof Error ? `Errore: ${err.message}` : "Errore sconosciuto",
@@ -259,7 +421,7 @@ export function MansioniPanel({ aziendaId }: { aziendaId: string }) {
     } finally {
       setAdding(false);
     }
-  }, [aziendaId, newMansione, refetch]);
+  }, [aziendaId, clearAi, newMansione, refetch]);
 
   // After addMansione refetch, openKey points at an item without edit state:
   // hydrate it lazily so the freshly added mansione opens in the editor with
@@ -316,7 +478,8 @@ export function MansioniPanel({ aziendaId }: { aziendaId: string }) {
           {items.map((item) => {
             const key = item.mansione.toLowerCase();
             const isOpen = openKey === key;
-            const universe = riskUniverse(item);
+            const universe = riskUniverse(item, isOpen ? edit?.extraRisks : []);
+            const aiBusyHere = aiLoading && isOpen;
             return (
               <li key={key} className="p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -373,6 +536,32 @@ export function MansioniPanel({ aziendaId }: { aziendaId: string }) {
                     )}
                     <Button
                       size="sm"
+                      variant="outline"
+                      className={cn(
+                        TONE_CHIP.ai,
+                        "hover:bg-[rgba(124,58,237,0.16)] hover:text-[#5b21b6]",
+                      )}
+                      disabled={busy || aiLoading}
+                      onClick={() => suggestWithAi(item)}
+                      title="L'AI legge i pericoli valutati nel DVR per questa mansione e propone rischi, limitazioni ed esito. Nulla viene salvato senza la tua conferma."
+                    >
+                      {aiBusyHere ? (
+                        <>
+                          <Loader2
+                            className="mr-1 size-4 animate-spin"
+                            aria-hidden
+                          />
+                          Analisi…
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="mr-1 size-4" aria-hidden />
+                          Suggerisci con AI
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
                       variant={isOpen ? "default" : "outline"}
                       onClick={() => (isOpen ? closeEditor() : openEditor(item))}
                     >
@@ -387,17 +576,175 @@ export function MansioniPanel({ aziendaId }: { aziendaId: string }) {
 
                 {isOpen && edit && (
                   <div className="mt-3 space-y-3 rounded-md bg-muted/40 p-3">
+                    {aiError && (
+                      <p className="text-xs text-destructive" role="alert">
+                        Suggerimento AI non disponibile: {aiError}
+                      </p>
+                    )}
+
+                    {aiProposal && (
+                      <div
+                        className={cn(
+                          "space-y-3 rounded-md border p-3",
+                          TONE_SURFACE.ai,
+                        )}
+                        data-testid="gestanti-ai-proposal"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <AIBadge provenance="ai" size="xs" label="Proposta AI" />
+                            <span className="text-xs font-medium">
+                              Esito proposto:
+                            </span>
+                            <Badge
+                              variant={ESITO_VARIANT[aiProposal.esito_proposto]}
+                              className={cn(
+                                aiProposal.esito_proposto === "non_compatibile" &&
+                                  "font-semibold uppercase tracking-wide",
+                              )}
+                            >
+                              {aiProposal.esito_proposto === "non_compatibile" && (
+                                <OctagonAlert className="mr-1" aria-hidden />
+                              )}
+                              {ESITO_LABELS[aiProposal.esito_proposto]}
+                              {" (proposta)"}
+                            </Badge>
+                          </div>
+                          <span className="text-[11px] text-muted-foreground">
+                            {aiProposal.pericoli_considerati} pericol
+                            {aiProposal.pericoli_considerati === 1 ? "o" : "i"} del
+                            DVR considerat
+                            {aiProposal.pericoli_considerati === 1 ? "o" : "i"}
+                          </span>
+                        </div>
+
+                        {aiProposal.motivazione && (
+                          <p className="text-xs">{aiProposal.motivazione}</p>
+                        )}
+
+                        <div className="grid gap-1">
+                          <span className="text-[11px] font-semibold uppercase tracking-wide">
+                            Rischi D.Lgs. 151/2001 individuati
+                          </span>
+                          {aiProposal.rischi_dettaglio.length === 0 ? (
+                            <p className="text-xs">
+                              Nessun rischio del catalogo per questa mansione.
+                            </p>
+                          ) : (
+                            <ul className="space-y-1">
+                              {aiProposal.rischi_dettaglio.map((r) => (
+                                <li
+                                  key={r.risk_key}
+                                  className="flex items-start gap-2 text-xs"
+                                >
+                                  <Check
+                                    className="mt-0.5 size-3.5 shrink-0"
+                                    aria-hidden
+                                  />
+                                  <span className="flex flex-wrap items-center gap-2">
+                                    <AllegatoBadge allegato={r.allegato} />
+                                    <span>{r.descrizione}</span>
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+
+                        {aiProposal.rischi_aggiuntivi.length > 0 && (
+                          <div className="grid gap-1">
+                            <span className="text-[11px] font-semibold uppercase tracking-wide">
+                              Rischi aggiuntivi (fuori catalogo)
+                            </span>
+                            <ul className="list-disc space-y-0.5 pl-5 text-xs">
+                              {aiProposal.rischi_aggiuntivi.map((r) => (
+                                <li key={r}>{r}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        <div className="grid gap-1">
+                          <span className="text-[11px] font-semibold uppercase tracking-wide">
+                            Limitazioni proposte
+                          </span>
+                          {aiProposal.limitazioni.length === 0 ? (
+                            <p className="text-xs">Nessuna limitazione proposta.</p>
+                          ) : (
+                            <ul className="list-disc space-y-0.5 pl-5 text-xs">
+                              {aiProposal.limitazioni.map((l) => (
+                                <li key={l}>{l}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+
+                        {aiProposal.riferimenti_normativi.length > 0 && (
+                          <p className="text-[11px]">
+                            <span className="font-semibold">Riferimenti: </span>
+                            {aiProposal.riferimenti_normativi.join(" · ")}
+                          </p>
+                        )}
+
+                        <p className="text-[11px] text-muted-foreground">
+                          L&apos;esito è una proposta per RSPP e medico
+                          competente. &quot;Applica&quot; compila i campi qui
+                          sotto; nulla viene salvato finché non premi
+                          &quot;Salva valutazione mansione&quot;.
+                        </p>
+
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => applyAiProposal(item)}
+                          >
+                            <Check className="mr-1 size-4" aria-hidden />
+                            Applica
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy}
+                            onClick={clearAi}
+                          >
+                            Scarta
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {edit.provenance && (
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <AIBadge
+                          provenance={edit.provenance}
+                          size="xs"
+                          label={
+                            edit.provenance === "ai"
+                              ? "Compilato da AI"
+                              : "AI, rivisto"
+                          }
+                        />
+                        <span>
+                          Campi compilati dalla proposta AI: controlla e salva
+                          per confermare.
+                        </span>
+                      </div>
+                    )}
+
                     <div className="grid gap-2 md:max-w-xs">
-                      <Label htmlFor={`esito-${key}`}>Esito valutazione</Label>
+                      <Label htmlFor={`esito-${key}`}>
+                        Esito valutazione
+                        {edit.provenance && (
+                          <AIBadge provenance={edit.provenance} size="xs" label="AI" />
+                        )}
+                      </Label>
                       <Select
                         id={`esito-${key}`}
                         size="sm"
                         value={edit.esito}
                         onChange={(e) =>
-                          setEdit({
-                            ...edit,
-                            esito: e.target.value as EsitoMansione,
-                          })
+                          updateEdit({ esito: e.target.value as EsitoMansione })
                         }
                       >
                         <option value="compatibile">Compatibile</option>
@@ -409,7 +756,12 @@ export function MansioniPanel({ aziendaId }: { aziendaId: string }) {
                     </div>
 
                     <div className="grid gap-2">
-                      <Label>Rischi D.Lgs. 151/2001 (prefilati dal catalogo)</Label>
+                      <Label>
+                        Rischi D.Lgs. 151/2001 (prefilati dal catalogo)
+                        {edit.provenance && (
+                          <AIBadge provenance={edit.provenance} size="xs" label="AI" />
+                        )}
+                      </Label>
                       {universe.length === 0 ? (
                         <p className="text-xs text-muted-foreground">
                           Nessun rischio suggerito dal catalogo per questa
@@ -425,8 +777,7 @@ export function MansioniPanel({ aziendaId }: { aziendaId: string }) {
                                   className="mt-1"
                                   checked={!!edit.selected[r.risk_key]}
                                   onChange={(e) =>
-                                    setEdit({
-                                      ...edit,
+                                    updateEdit({
                                       selected: {
                                         ...edit.selected,
                                         [r.risk_key]: e.target.checked,
@@ -451,15 +802,16 @@ export function MansioniPanel({ aziendaId }: { aziendaId: string }) {
                         {edit.esito !== "compatibile" && (
                           <span className="text-destructive"> *</span>
                         )}
+                        {edit.provenance && (
+                          <AIBadge provenance={edit.provenance} size="xs" label="AI" />
+                        )}
                       </Label>
                       <Textarea
                         id={`misure-${key}`}
                         rows={3}
                         value={edit.misure}
                         placeholder="Es. esonero dalla movimentazione carichi; adibizione a postazione seduta…"
-                        onChange={(e) =>
-                          setEdit({ ...edit, misure: e.target.value })
-                        }
+                        onChange={(e) => updateEdit({ misure: e.target.value })}
                       />
                       {misureMissing && (
                         <p className="text-xs text-destructive">
@@ -470,13 +822,16 @@ export function MansioniPanel({ aziendaId }: { aziendaId: string }) {
                     </div>
 
                     <div className="grid gap-2">
-                      <Label htmlFor={`note-${key}`}>Note (facoltative)</Label>
+                      <Label htmlFor={`note-${key}`}>
+                        Note (facoltative)
+                        {edit.provenance && (
+                          <AIBadge provenance={edit.provenance} size="xs" label="AI" />
+                        )}
+                      </Label>
                       <Input
                         id={`note-${key}`}
                         value={edit.note}
-                        onChange={(e) =>
-                          setEdit({ ...edit, note: e.target.value })
-                        }
+                        onChange={(e) => updateEdit({ note: e.target.value })}
                       />
                     </div>
 

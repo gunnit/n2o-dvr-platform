@@ -71,3 +71,27 @@ export interface MansioneOverviewItem {
 export interface MansioniOverview {
   items: MansioneOverviewItem[];
 }
+
+/**
+ * POST .../gestanti/mansioni/suggerisci — the AI proposal for one mansione.
+ *
+ * Never persisted by the server: "Applica" copies it into the form, the
+ * operator reviews and saves through PUT .../gestanti/mansioni. A
+ * `non_compatibile` esito is a suggestion for the RSPP / medico competente
+ * until that save.
+ */
+export interface GestantiMansioneSuggestion {
+  mansione: string;
+  /** INCOMPATIBLE_RISKS keys, already validated server-side. */
+  rischi: string[];
+  /** The catalog rows for `rischi`, so the UI needs no catalog copy. */
+  rischi_dettaglio: CatalogRisk[];
+  /** Free-text exposures the catalog has no key for. */
+  rischi_aggiuntivi: string[];
+  limitazioni: string[];
+  esito_proposto: EsitoMansione;
+  motivazione: string;
+  riferimenti_normativi: string[];
+  /** How many assessed DVR hazards the model reasoned over. */
+  pericoli_considerati: number;
+}
