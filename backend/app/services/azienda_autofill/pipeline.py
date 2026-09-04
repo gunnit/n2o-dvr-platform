@@ -398,7 +398,11 @@ async def autofill_from_piva(partita_iva: str) -> AziendaAutofillResponse:
         warnings.append("VIES: P.IVA non valida o non registrata.")
 
     if not serper:
-        warnings.append("Ricerca Google non disponibile (Serper key mancante o errore).")
+        warnings.append(
+            "Ricerca web non disponibile: compilati solo i dati ufficiali "
+            "(VIES / Registro Imprese). CAP e sede operativa non vengono "
+            "proposti: inseriscili a mano."
+        )
 
     if openapi_reg is None:
         # Only warn when the key was configured (a transport / auth
@@ -421,19 +425,30 @@ async def autofill_from_piva(partita_iva: str) -> AziendaAutofillResponse:
     if homepage_url and firecrawl_scrape is None:
         warnings.append(f"Scrape del sito {homepage_url} non riuscito.")
 
-    # Run the AI consolidator over whatever we have.
+    # Run the AI consolidator over whatever we have — but only when there is
+    # web text to consolidate. With no Serper results there are no snippets,
+    # no deterministic facts and no homepage to scrape, so the model would
+    # see VIES alone and could only echo it or guess. The guess is what the
+    # operator reported on 2026-08-19 ("CAP e sede operativa ... molto
+    # impreciso") while Serper was out of credits: skipping the call leaves
+    # those fields empty for the operator instead of plausibly wrong.
     consolidated: ConsolidatedAzienda | None = None
-    try:
-        consolidated = await consolidate(
-            partita_iva=partita_iva,
-            vies=vies,
-            facts=facts,
-            serper_results=serper,
-            firecrawl_scrape=firecrawl_scrape,
+    if not serper:
+        logger.info(
+            "Autofill for %s: no web sources, skipping AI consolidator", partita_iva
         )
-    except AIError as exc:
-        logger.warning("Autofill AI consolidator failed for %s: %s", partita_iva, exc)
-        warnings.append(f"AI non disponibile: {exc}")
+    else:
+        try:
+            consolidated = await consolidate(
+                partita_iva=partita_iva,
+                vies=vies,
+                facts=facts,
+                serper_results=serper,
+                firecrawl_scrape=firecrawl_scrape,
+            )
+        except AIError as exc:
+            logger.warning("Autofill AI consolidator failed for %s: %s", partita_iva, exc)
+            warnings.append(f"AI non disponibile: {exc}")
 
     response = _build_response(
         partita_iva=partita_iva,

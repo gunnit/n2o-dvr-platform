@@ -66,7 +66,21 @@ async def search_piva(partita_iva: str) -> list[SerperResult]:
         return []
 
     if response.status_code != 200:
-        logger.warning("Serper returned %d for %s", response.status_code, partita_iva)
+        if response.status_code in (400, 401, 402, 403):
+            # serper.dev answers 400 "Not enough credits" when the quota is
+            # gone and 401/403 on a bad key. Neither is transient and both
+            # silently degrade every autofill to VIES-only (Aug 2026 audit),
+            # so they log at ERROR with the remedy instead of blending into
+            # the per-lookup warnings.
+            logger.error(
+                "Serper returned %d for %s — renew credits or the key at "
+                "https://serper.dev (SERPER_API_KEY on n2o-dvr-api). "
+                "Autofill is running on VIES / Registro Imprese only.",
+                response.status_code,
+                partita_iva,
+            )
+        else:
+            logger.warning("Serper returned %d for %s", response.status_code, partita_iva)
         return []
 
     try:
