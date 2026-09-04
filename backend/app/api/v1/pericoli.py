@@ -190,22 +190,25 @@ async def list_pericoli_suggeriti(
     ).scalars().all()
 
     raw = await suggest_pericoli(
-        db, ambiente, list(attrezzature), categoria=categoria
+        db, ambiente, list(attrezzature), categoria=categoria, include_excluded=True
     )
-    items = [
-        PericoloSuggestionItem(
+    items: list[PericoloSuggestionItem] = []
+    excluded: list[PericoloSuggestionItem] = []
+    for r in raw:
+        item = PericoloSuggestionItem(
             pericolo=_normalize_special_catalog_row(
                 PericoloLibreriaResponse.model_validate(r["pericolo"])
             ),
             matches_ambiente=r["matches_ambiente"],
             triggered_by_attrezzature=r["triggered_by_attrezzature"],
+            exclusion_reason=r.get("exclusion_reason"),
         )
-        for r in raw
-    ]
+        (excluded if r.get("excluded") else items).append(item)
     return PericoloSuggestionResponse(
         ambiente_tipo=normalize_ambiente_tipo(ambiente.tipo),
         attrezzature_count=len(attrezzature),
         items=items,
+        excluded=excluded,
     )
 
 

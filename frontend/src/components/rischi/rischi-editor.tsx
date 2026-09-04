@@ -56,6 +56,22 @@ import {
 } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Callout } from "@/components/ui/callout";
+
+// Shape of POST .../rischi/suggerisci — held for review before it is
+// applied (see aiProposalByAmbiente).
+interface AiRischiProposalItem {
+  categoria_rischio: string;
+  applicabile: boolean;
+  pericolo: string;
+  probabilita_p: number;
+  danno_d: number;
+  motivazione: string;
+}
+
+interface AiRischiProposal {
+  items: AiRischiProposalItem[];
+  sintesi: string;
+}
 import {
   RISK_BAR,
   RISK_CHIP,
@@ -593,6 +609,16 @@ export function RischiEditor({
   const [aiSintesiByAmbiente, setAiSintesiByAmbiente] = useState<
     Record<string, string>
   >({});
+  // Review step (meeting 2026-09-04): the AI answer is held here until the
+  // operator applies it. Categories the AI would exclude are listed in
+  // their own group with the motivazione, and any of them can be kept
+  // before applying — the "rischi esclusi con ripristino" table.
+  const [aiProposalByAmbiente, setAiProposalByAmbiente] = useState<
+    Record<string, AiRischiProposal>
+  >({});
+  const [aiProposalSelection, setAiProposalSelection] = useState<
+    Record<string, Record<string, boolean>>
+  >({});
 
   const saveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
@@ -863,33 +889,75 @@ export function RischiEditor({
     [allValutazioni, scheduleAmbienteSave, updateLocalValutazioni],
   );
 
+  // Ask the AI and hold the answer for review. Nothing is written until the
+  // operator presses "Applica" in the proposal panel (meeting 2026-09-04:
+  // the categories the AI excludes must be visible and restorable, not
+  // silently unticked).
   const fetchAIRischi = useCallback(async () => {
     if (!selectedAmbiente) return;
     const ambienteId = selectedAmbiente.id;
     setAiLoadingByAmbiente((prev) => ({ ...prev, [ambienteId]: true }));
     try {
-      const response = await apiFetch<{
-        items: Array<{
-          categoria_rischio: string;
-          applicabile: boolean;
-          pericolo: string;
-          probabilita_p: number;
-          danno_d: number;
-          motivazione: string;
-        }>;
-        sintesi: string;
-      }>(
+      const response = await apiFetch<AiRischiProposal>(
         `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/rischi/suggerisci`,
         { method: "POST" },
       );
+      setAiProposalByAmbiente((prev) => ({ ...prev, [ambienteId]: response }));
+      // Every proposed change starts selected; the operator unticks what
+      // they disagree with. Unticking an exclusion keeps the category as it
+      // is today — that is the "ripristina".
+      setAiProposalSelection((prev) => ({
+        ...prev,
+        [ambienteId]: Object.fromEntries(
+          response.items.map((i) => [i.categoria_rischio, true]),
+        ),
+      }));
+      const esclusi = response.items.filter((i) => !i.applicabile).length;
+      toast.info(
+        esclusi > 0
+          ? `Proposta AI pronta: ${response.items.length - esclusi} categorie applicabili, ${esclusi} escluse. Controlla e applica.`
+          : `Proposta AI pronta: ${response.items.length} categorie. Controlla e applica.`,
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Errore nella generazione AI",
+      );
+    } finally {
+      setAiLoadingByAmbiente((prev) => ({ ...prev, [ambienteId]: false }));
+    }
+  }, [apiFetch, aziendaId, selectedAmbiente]);
+
+  const discardAIProposal = useCallback((ambienteId: string) => {
+    setAiProposalByAmbiente((prev) => {
+      const next = { ...prev };
+      delete next[ambienteId];
+      return next;
+    });
+  }, []);
+
+  // Apply only the ticked categories of the held proposal to the rows of
+  // that ambiente, then save — the merge the button used to do on its own.
+  const applyAIProposal = useCallback(
+    (ambienteId: string) => {
+      const proposal = aiProposalByAmbiente[ambienteId];
+      if (!proposal) return;
+      const selection = aiProposalSelection[ambienteId] ?? {};
       const byCat = new Map(
-        response.items.map((s) => [s.categoria_rischio, s]),
+        proposal.items
+          .filter((s) => selection[s.categoria_rischio] !== false)
+          .map((s) => [s.categoria_rischio, s]),
       );
       let mergedCount = 0;
+      let keptCount = 0;
       const updated = allValutazioni.map((v) => {
         if (v.ambiente_id !== ambienteId) return v;
         const ai = byCat.get(v.categoria_rischio);
-        if (!ai) return v;
+        if (!ai) {
+          if (proposal.items.some((s) => s.categoria_rischio === v.categoria_rischio)) {
+            keptCount += 1;
+          }
+          return v;
+        }
         const p = ai.probabilita_p;
         const d = ai.danno_d;
         const indice = calcIndice(p, d);
@@ -908,33 +976,28 @@ export function RischiEditor({
         };
       });
       updateLocalValutazioni(updated);
-      const ambienteRows = updated.filter(
-        (v) => v.ambiente_id === ambienteId,
-      );
+      const ambienteRows = updated.filter((v) => v.ambiente_id === ambienteId);
       scheduleAmbienteSave(ambienteId, ambienteRows);
       setAiSintesiByAmbiente((prev) => ({
         ...prev,
-        [ambienteId]: response.sintesi,
+        [ambienteId]: proposal.sintesi,
       }));
-      const applicabili = response.items.filter((i) => i.applicabile).length;
+      discardAIProposal(ambienteId);
       toast.success(
-        `AI: ${applicabili} categorie applicabili, ${mergedCount} righe aggiornate.`,
+        keptCount > 0
+          ? `AI applicata: ${mergedCount} categorie aggiornate, ${keptCount} lasciate come sono.`
+          : `AI applicata: ${mergedCount} categorie aggiornate.`,
       );
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Errore nella generazione AI",
-      );
-    } finally {
-      setAiLoadingByAmbiente((prev) => ({ ...prev, [ambienteId]: false }));
-    }
-  }, [
-    apiFetch,
-    aziendaId,
-    selectedAmbiente,
-    allValutazioni,
-    scheduleAmbienteSave,
-    updateLocalValutazioni,
-  ]);
+    },
+    [
+      aiProposalByAmbiente,
+      aiProposalSelection,
+      allValutazioni,
+      discardAIProposal,
+      scheduleAmbienteSave,
+      updateLocalValutazioni,
+    ],
+  );
 
   const applyDefaults = useCallback(() => {
     if (!selectedAmbiente) return;
@@ -1082,6 +1145,128 @@ export function RischiEditor({
             its standard padding, so the toolbar still breathes. */}
         <CardContent className="p-0 sm:p-0">
           <div className="space-y-4 px-6 pb-6">
+            {/* Review step for the AI proposal (meeting 2026-09-04): the
+                categories it would exclude are listed with the motivazione
+                and can be kept before anything is applied. */}
+            {selectedAmbiente &&
+              aiProposalByAmbiente[selectedAmbiente.id] &&
+              (() => {
+                const ambienteId = selectedAmbiente.id;
+                const proposal = aiProposalByAmbiente[ambienteId];
+                const selection = aiProposalSelection[ambienteId] ?? {};
+                const applicabili = proposal.items.filter((i) => i.applicabile);
+                const esclusi = proposal.items.filter((i) => !i.applicabile);
+                const toggle = (cat: string) =>
+                  setAiProposalSelection((prev) => ({
+                    ...prev,
+                    [ambienteId]: {
+                      ...(prev[ambienteId] ?? {}),
+                      [cat]: !(prev[ambienteId]?.[cat] ?? true),
+                    },
+                  }));
+                const renderRow = (item: AiRischiProposalItem) => (
+                  <li
+                    key={item.categoria_rischio}
+                    className="flex items-start gap-2 rounded border bg-background px-2 py-1.5"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-3.5 w-3.5 accent-primary"
+                      checked={selection[item.categoria_rischio] !== false}
+                      onChange={() => toggle(item.categoria_rischio)}
+                      aria-label={
+                        item.applicabile
+                          ? `Applica la proposta per ${item.categoria_rischio}`
+                          : `Accetta l'esclusione di ${item.categoria_rischio}`
+                      }
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-medium">
+                          {item.categoria_rischio}
+                        </span>
+                        {item.applicabile ? (
+                          <Badge variant="outline" className="text-[9px]">
+                            P {item.probabilita_p} · D {item.danno_d} · I{" "}
+                            {calcIndice(item.probabilita_p, item.danno_d)}
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-[9px]">
+                            escluso
+                          </Badge>
+                        )}
+                      </div>
+                      {item.applicabile && item.pericolo && (
+                        <div className="text-[11px]">{item.pericolo}</div>
+                      )}
+                      {item.motivazione && (
+                        <div className="text-[11px] text-muted-foreground">
+                          {item.motivazione}
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                );
+                return (
+                  <div
+                    className={cn(
+                      "space-y-3 rounded-lg border p-3 text-xs",
+                      TONE_SURFACE.ai,
+                    )}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-1.5 font-medium">
+                          <Sparkles className="h-3.5 w-3.5" strokeWidth={1.9} />
+                          Proposta AI da confermare
+                        </div>
+                        {proposal.sintesi && (
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">
+                            {proposal.sintesi}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => applyAIProposal(ambienteId)}
+                        >
+                          <Check className="mr-1 h-3.5 w-3.5" />
+                          Applica selezionate
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => discardAIProposal(ambienteId)}
+                        >
+                          Scarta
+                        </Button>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="mb-1 font-medium">
+                        Categorie applicabili ({applicabili.length})
+                      </div>
+                      <ul className="space-y-1">{applicabili.map(renderRow)}</ul>
+                    </div>
+                    {esclusi.length > 0 && (
+                      <div>
+                        <div className="mb-1 font-medium">
+                          Rischi esclusi dall&apos;AI ({esclusi.length})
+                        </div>
+                        <p className="mb-1 text-[11px] text-muted-foreground">
+                          Spunta = accetti l&apos;esclusione. Togli la spunta per
+                          ripristinare la categoria così com&apos;è oggi.
+                        </p>
+                        <ul className="space-y-1">{esclusi.map(renderRow)}</ul>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
             {/* Phase 8.3 — AI sintesi banner for the current ambiente */}
             {selectedAmbiente && aiSintesiByAmbiente[selectedAmbiente.id] && (
               <Callout

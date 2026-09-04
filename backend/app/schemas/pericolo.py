@@ -38,12 +38,17 @@ class PericoloSuggestionItem(BaseModel):
     pericolo: PericoloLibreriaResponse
     matches_ambiente: bool
     triggered_by_attrezzature: list[str] = []
+    # Set only on rows in ``excluded`` — why the filter left them out.
+    exclusion_reason: str | None = None
 
 
 class PericoloSuggestionResponse(BaseModel):
     ambiente_tipo: str | None
     attrezzature_count: int
     items: list[PericoloSuggestionItem]
+    # Catalog rows of the categoria the filter rejected (segnalazione
+    # 2026-08-19): shown in their own table so the operator can restore any.
+    excluded: list[PericoloSuggestionItem] = []
 
 
 class PericoloValutazioneBase(BaseModel):

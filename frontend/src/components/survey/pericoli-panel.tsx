@@ -230,6 +230,10 @@ export function PericoliPanel({
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<PericoloSuggestionItem[]>([]);
+  // Catalog rows of this categoria the automatic filter left out
+  // (segnalazione 2026-08-19): listed with the reason and a "Ripristina"
+  // button, so "suggerimento automatico" never hides a risk for good.
+  const [excluded, setExcluded] = useState<PericoloSuggestionItem[]>([]);
   const [pericoli, setPericoli] = useState<PericoloValutazione[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   // True once we have either loaded pericoli from the backend or the user
@@ -337,6 +341,7 @@ export function PericoliPanel({
           : Promise.resolve([] as unknown[]),
       ]);
       setSuggestions(sugg.items);
+      setExcluded(sugg.excluded ?? []);
       const gestantiAllegato = gestantiRows.length > 0;
       setHasGestantiAllegato(gestantiAllegato);
       const codeById = new Map(
@@ -569,6 +574,16 @@ export function PericoliPanel({
     [suggestions, pericoli],
   );
 
+  // Excluded catalog rows not yet restored into this categoria.
+  const availableExcluded = useMemo(
+    () =>
+      excluded.filter(
+        (s) =>
+          !pericoli.some((p) => p.pericolo_libreria_id === s.pericolo.id),
+      ),
+    [excluded, pericoli],
+  );
+
   // Special worker-category support — resolve the catalog code for each row
   // so the render pass can spot the gestanti row and offer the mode toggle.
   const codeById = useMemo(
@@ -590,6 +605,31 @@ export function PericoliPanel({
       } else {
         updatePericolo(row.id, {
           valutazione_riferimento: GESTANTI_ALLEGATO_RIFERIMENTO,
+          probabilita_p: null,
+          danno_d: null,
+          indice_i: null,
+          livello_rischio: null,
+        });
+      }
+    },
+    [updatePericolo],
+  );
+
+  // Per-row "come da documenti allegati" (segnalazione 2026-08-19): the
+  // operator picks the modality voce per voce, not for the whole categoria.
+  // Delegating clears the indice so the DVR prints the riferimento instead
+  // of a stale P/D; switching back restores the starter score for review.
+  const toggleDelegated = useCallback(
+    (row: PericoloValutazione) => {
+      if (row.valutazione_riferimento != null) {
+        updatePericolo(row.id, {
+          valutazione_riferimento: null,
+          probabilita_p: SPECIAL_DEFAULT_P,
+          danno_d: SPECIAL_DEFAULT_D,
+        });
+      } else {
+        updatePericolo(row.id, {
+          valutazione_riferimento: DELEGATED_REFERENCE_LABEL,
           probabilita_p: null,
           danno_d: null,
           indice_i: null,
@@ -811,6 +851,27 @@ export function PericoliPanel({
                                       : "Usa documento allegato"}
                                   </Button>
                                 )}
+                                {!showGestantiToggle && p.applicabile && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="xs"
+                                    className="h-5 px-1.5 text-[9px]"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleDelegated(p);
+                                    }}
+                                    title={
+                                      isDelegated
+                                        ? "Torna alla valutazione con indice di rischio (P, D, I)"
+                                        : "Rinvia questo pericolo alla valutazione allegata"
+                                    }
+                                  >
+                                    {isDelegated
+                                      ? "Scegli indice di rischio"
+                                      : "Come da documenti allegati"}
+                                  </Button>
+                                )}
                               </div>
                             </div>
                           </td>
@@ -963,6 +1024,50 @@ export function PericoliPanel({
                         onClick={() => addSuggestion(s)}
                       >
                         Aggiungi
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            {/* Segnalazione 2026-08-19: every catalog risk of the categoria
+                stays reachable, including the ones the automatic filter
+                left out — each with the reason and a Ripristina button. */}
+            {availableExcluded.length > 0 && (
+              <details className="text-xs">
+                <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                  {availableExcluded.length} esclusi dal suggerimento
+                  automatico — ripristinabili
+                </summary>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Rischi del catalogo di questa categoria che il filtro (tipo
+                  di ambiente + attrezzature) ha lasciato fuori. Se uno
+                  riguarda davvero questo ambiente, ripristinalo.
+                </p>
+                <ul className="mt-2 space-y-1">
+                  {availableExcluded.map((s) => (
+                    <li
+                      key={s.pericolo.id}
+                      className="flex items-start justify-between gap-2 rounded border border-dashed bg-background px-2 py-1.5"
+                    >
+                      <div className="flex-1">
+                        <div className="text-xs font-medium">
+                          {s.pericolo.pericolo}
+                        </div>
+                        {s.exclusion_reason && (
+                          <div className="mt-0.5 text-[11px] text-muted-foreground">
+                            {s.exclusion_reason}
+                          </div>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => addSuggestion(s)}
+                      >
+                        Ripristina
                       </Button>
                     </li>
                   ))}

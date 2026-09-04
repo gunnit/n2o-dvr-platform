@@ -128,17 +128,62 @@ def _attrezzatura_match(
     return matches
 
 
+def exclusion_reason(row, bucket: str) -> str:
+    """Why a catalog row was left out for an ambiente of type ``bucket``.
+
+    Shown next to the "Ripristina" button (segnalazione 2026-08-19: the
+    operator wants to see every risk of the categoria, not only the ones
+    the automatic filter kept), so it names the rule, not a code.
+    """
+    tipi = ", ".join(row.ambiente_tipi or []) or "specifici"
+    keywords = list(row.attrezzatura_keywords or [])
+    if keywords:
+        shown = ", ".join(keywords[:3])
+        return (
+            f"Previsto per ambienti di tipo {tipi} o con attrezzature quali "
+            f"{shown}; questo ambiente è di tipo {bucket} e non ne ha."
+        )
+    return f"Previsto per ambienti di tipo {tipi}; questo ambiente è di tipo {bucket}."
+
+
+def classify_catalog_row(
+    row, bucket: str, attrezzature: Iterable[Attrezzatura]
+) -> dict:
+    """Apply the filter rules to one catalog row and say what happened.
+
+    ``excluded`` is True when neither the ambiente type nor any attrezzatura
+    keyword matched — the row the old filter silently dropped.
+    """
+    # ambiente_tipi == [] → universal
+    ambiente_match = not row.ambiente_tipi or bucket in row.ambiente_tipi
+    att_hits = _attrezzatura_match(
+        list(row.attrezzatura_keywords or []), attrezzature
+    )
+    excluded = not ambiente_match and not att_hits
+    return {
+        "pericolo": row,
+        "matches_ambiente": ambiente_match,
+        "triggered_by_attrezzature": att_hits,
+        "excluded": excluded,
+        "exclusion_reason": exclusion_reason(row, bucket) if excluded else None,
+    }
+
+
 async def suggest_pericoli(
     db: AsyncSession,
     ambiente: Ambiente,
     attrezzature: list[Attrezzatura],
     *,
     categoria: str | None = None,
+    include_excluded: bool = False,
 ) -> list[dict]:
-    """Return [{pericolo, matches_ambiente, triggered_by_attrezzature}, ...].
+    """Return [{pericolo, matches_ambiente, triggered_by_attrezzature, excluded,
+    exclusion_reason}, ...].
 
     When ``categoria`` is provided, only that category's catalog rows are
     considered. Otherwise the full catalog is returned (caller groups).
+    With ``include_excluded`` the rows the filter rejected come back too,
+    flagged ``excluded`` with a reason, so the UI can offer to restore them.
 
     Ordering: the catalog row order (Strutture first, codes ascending
     within categoria) — preserved by sorting on ``code``.
@@ -154,21 +199,8 @@ async def suggest_pericoli(
 
     out: list[dict] = []
     for row in rows:
-        # ambiente_tipi == [] → universal
-        ambiente_match = (
-            not row.ambiente_tipi
-            or bucket in row.ambiente_tipi
-        )
-        att_hits = _attrezzatura_match(
-            list(row.attrezzatura_keywords or []), attrezzature
-        )
-        if not ambiente_match and not att_hits:
+        info = classify_catalog_row(row, bucket, attrezzature)
+        if info["excluded"] and not include_excluded:
             continue
-        out.append(
-            {
-                "pericolo": row,
-                "matches_ambiente": ambiente_match,
-                "triggered_by_attrezzature": att_hits,
-            }
-        )
+        out.append(info)
     return out
