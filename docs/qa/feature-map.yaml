@@ -22,13 +22,13 @@
 
 version: 1
 totals:
-  endpoints: 213
-  areas: 34
-  frontend_pages: 34
-  ui_api_call_sites: 92
-  capability_gated: 125
+  endpoints: 219
+  areas: 35
+  frontend_pages: 35
+  ui_api_call_sites: 93
+  capability_gated: 130
   billing_gated: 10
-  ai_metered: 13
+  ai_metered: 15
 endpoints_by_area:
   - area: "admin-backups"
     endpoints: 2
@@ -41,7 +41,7 @@ endpoints_by_area:
   - area: "auth"
     endpoints: 6
   - area: "aziende"
-    endpoints: 12
+    endpoints: 13
   - area: "billing"
     endpoints: 13
   - area: "biologico"
@@ -55,7 +55,7 @@ endpoints_by_area:
   - area: "feedback"
     endpoints: 3
   - area: "gestanti"
-    endpoints: 10
+    endpoints: 11
   - area: "haccp"
     endpoints: 5
   - area: "incendio"
@@ -78,6 +78,8 @@ endpoints_by_area:
     endpoints: 6
   - area: "pos"
     endpoints: 10
+  - area: "protocollo-sanitario"
+    endpoints: 4
   - area: "rischi"
     endpoints: 6
   - area: "rischi-misure-libreria"
@@ -133,6 +135,7 @@ review:
     - "POST /api/v1/auth/register"
     - "POST /api/v1/auth/register-direct"
     - "POST /api/v1/aziende/autofill"
+    - "POST /api/v1/aziende/visura/estrai"
     - "DELETE /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/foto/{foto_id}"
     - "GET /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/foto/{foto_id}/content"
     - "PATCH /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/ordine"
@@ -154,6 +157,7 @@ review:
     - "POST /api/v1/aziende/{azienda_id}/gestanti/cross-reference"
     - "GET /api/v1/aziende/{azienda_id}/gestanti/mansioni"
     - "PUT /api/v1/aziende/{azienda_id}/gestanti/mansioni"
+    - "POST /api/v1/aziende/{azienda_id}/gestanti/mansioni/suggerisci"
     - "DELETE /api/v1/aziende/{azienda_id}/gestanti/mansioni/{mansione_valutazione_id}"
     - "DELETE /api/v1/aziende/{azienda_id}/gestanti/{valutazione_id}"
     - "GET /api/v1/aziende/{azienda_id}/gestanti/{valutazione_id}"
@@ -176,6 +180,8 @@ review:
     - "GET /api/v1/aziende/{azienda_id}/mmc/{mmc_id}"
     - "PATCH /api/v1/aziende/{azienda_id}/mmc/{mmc_id}"
     - "GET /api/v1/aziende/{azienda_id}/pericoli-libreria"
+    - "POST /api/v1/aziende/{azienda_id}/protocollo-sanitario/mansioni/suggerisci"
+    - "DELETE /api/v1/aziende/{azienda_id}/protocollo-sanitario/mansioni/{protocollo_id}"
     - "GET /api/v1/aziende/{azienda_id}/rischi/misure-libreria"
     - "POST /api/v1/aziende/{azienda_id}/rischi/misure-libreria"
     - "DELETE /api/v1/aziende/{azienda_id}/rischi/misure-libreria/{misura_id}"
@@ -463,6 +469,24 @@ endpoints:
     billing_gates: []
     ai_credits: []
     called_by_ui: true
+    in_openapi: true
+  - id: "aziende.estrai_visura"
+    method: "POST"
+    path: "/api/v1/aziende/visura/estrai"
+    area: "aziende"
+    source: "backend/app/api/v1/aziende.py"
+    function: "estrai_visura"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
     in_openapi: true
   - id: "aziende.delete_azienda"
     method: "DELETE"
@@ -1521,6 +1545,25 @@ endpoints:
     ai_credits: []
     called_by_ui: false
     in_openapi: true
+  - id: "gestanti.suggerisci_gestanti_mansione"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/gestanti/mansioni/suggerisci"
+    area: "gestanti"
+    source: "backend/app/api/v1/gestanti.py"
+    function: "suggerisci_gestanti_mansione"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits:
+      - "reasoning"
+    called_by_ui: false
+    in_openapi: true
   - id: "gestanti.delete_gestanti_mansione"
     method: "DELETE"
     path: "/api/v1/aziende/{azienda_id}/gestanti/mansioni/{mansione_valutazione_id}"
@@ -2443,6 +2486,78 @@ endpoints:
     billing_gates: []
     ai_credits: []
     called_by_ui: true
+    in_openapi: true
+  - id: "protocollo_sanitario.list_protocolli_mansioni"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/protocollo-sanitario/mansioni"
+    area: "protocollo-sanitario"
+    source: "backend/app/api/v1/protocollo_sanitario.py"
+    function: "list_protocolli_mansioni"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "protocollo_sanitario.upsert_protocollo_mansione"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/protocollo-sanitario/mansioni"
+    area: "protocollo-sanitario"
+    source: "backend/app/api/v1/protocollo_sanitario.py"
+    function: "upsert_protocollo_mansione"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "protocollo_sanitario.suggerisci_protocollo_mansione"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/protocollo-sanitario/mansioni/suggerisci"
+    area: "protocollo-sanitario"
+    source: "backend/app/api/v1/protocollo_sanitario.py"
+    function: "suggerisci_protocollo_mansione"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits:
+      - "reasoning"
+    called_by_ui: false
+    in_openapi: true
+  - id: "protocollo_sanitario.delete_protocollo_mansione"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/protocollo-sanitario/mansioni/{protocollo_id}"
+    area: "protocollo-sanitario"
+    source: "backend/app/api/v1/protocollo_sanitario.py"
+    function: "delete_protocollo_mansione"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: false
     in_openapi: true
   - id: "rischi.list_rischi"
     method: "GET"
@@ -3949,6 +4064,8 @@ frontend_pages:
     file: "frontend/src/app/(dashboard)/assessments/pee/[aziendaId]/page.tsx"
   - route: "/assessments/pos/[aziendaId]"
     file: "frontend/src/app/(dashboard)/assessments/pos/[aziendaId]/page.tsx"
+  - route: "/assessments/protocollo-sanitario/[aziendaId]"
+    file: "frontend/src/app/(dashboard)/assessments/protocollo-sanitario/[aziendaId]/page.tsx"
   - route: "/assessments/risk/[aziendaId]"
     file: "frontend/src/app/(dashboard)/assessments/risk/[aziendaId]/page.tsx"
   - route: "/assessments/stress/[aziendaId]"
