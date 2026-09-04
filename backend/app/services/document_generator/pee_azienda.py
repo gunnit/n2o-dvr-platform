@@ -32,6 +32,7 @@ from app.services.document_generator.docx_utils import (
     scrub_body,
     slugify,
 )
+from app.services.document_generator.schede_ambienti import add_schede_ambienti
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +201,11 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
             add_heading(doc, "Vie di fuga e punto di raccolta", level=2)
             add_paragraph(doc, pee.vie_fuga or "Vie di fuga indicate dalla segnaletica di sicurezza UNI EN ISO 7010.")
             add_paragraph(doc, f"Punto di raccolta: {pee.punto_raccolta or '—'}")
+
+        # Segnalazione 2026-08-25: per-ambiente scheda (descrizione con
+        # metratura e materiali, persone max, sorgenti di innesco) — the
+        # same table the allegato incendio prints, from the same fields.
+        add_schede_ambienti(doc, data.get("ambienti") or [])
 
         # Planimetria (US-4.1 AC3): embed the uploaded floor plan if one exists
         # among ambienti_foto (filename containing "planimetria"); otherwise

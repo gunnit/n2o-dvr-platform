@@ -25,6 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
+import { SchedeAmbientiSection } from "@/components/ambienti/schede-ambienti-section";
 import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
 
@@ -707,6 +708,11 @@ export default function PeeProceduresPage() {
           </CardFooter>
         )}
       </Card>
+
+      {/* Segnalazione 2026-08-25: per-ambiente scheda (descrizione,
+          materiali, persone max, sorgenti di innesco) — the same fields
+          the allegato incendio uses, entered once on the Ambiente. */}
+      <SchedeAmbientiSection aziendaId={aziendaId} />
 
       <div className="space-y-4">
         {events.map((evt) => (

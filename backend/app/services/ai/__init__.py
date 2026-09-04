@@ -3,6 +3,10 @@ from app.services.ai.attrezzature_suggester import (
     AttrezzatureSuggerite,
     suggest_attrezzature,
 )
+from app.services.ai.ambiente_scheda_vision import (
+    SchedaAmbienteEstratta,
+    extract_scheda_from_photos,
+)
 from app.services.ai.attrezzature_vision_extractor import (
     AttrezzaturaIdentificata,
     AttrezzatureIdentificate,
@@ -68,6 +72,9 @@ __all__ = [
     "extract_attrezzature_from_photos",
     "AttrezzaturaIdentificata",
     "AttrezzatureIdentificate",
+    # Scheda ambiente proposal (from ambiente photos) — incendio + PEE
+    "extract_scheda_from_photos",
+    "SchedaAmbienteEstratta",
     # Per-persona DPI + rischi specifici suggestions
     "suggest_dpi_rischi",
     "DpiRischiSuggerito",

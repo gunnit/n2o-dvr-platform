@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 import uuid
 from pathlib import Path
@@ -6,9 +7,12 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.billing.entitlements import Entitlements, get_entitlements
+from app.billing.metering import metered
 from app.config import settings
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.permissions import SURVEY_WRITE
@@ -24,6 +28,7 @@ from app.schemas.ambiente import (
     AmbienteUpdate,
 )
 from app.schemas.ambiente_foto import AmbienteFotoResponse
+from app.services.ai import extract_scheda_from_photos
 from app.services.ambiente_photo import (
     DocumentImageNormalizationError,
     MAX_ORIGINAL_IMAGE_BYTES,
@@ -136,6 +141,91 @@ async def update_ambiente(
     await db.commit()
     await db.refresh(ambiente)
     return ambiente
+
+
+# Formats OpenAI's input_image accepts; HEIC is skipped, as for the
+# attrezzature extraction, rather than failing the whole call.
+_OPENAI_VISION_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+
+
+class SchedaEstrattaResponse(BaseModel):
+    """AI proposal for the scheda ambiente — never persisted by this call."""
+
+    descrizione_locale: str
+    materiali_presenti: str
+    sorgenti_innesco: str
+    motivazione: str
+    photos_used: int
+
+
+@router.post(
+    "/{ambiente_id}/scheda/estrai-foto",
+    response_model=SchedaEstrattaResponse,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
+async def estrai_scheda_da_foto(
+    azienda_id: uuid.UUID,
+    ambiente_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    ent: Entitlements = Depends(get_entitlements),
+    db: AsyncSession = Depends(get_db),
+):
+    """Propose descrizione, materiali and sorgenti di innesco from the photos.
+
+    Segnalazioni 2026-08-25 (incendio + PEE): the operator asked for the
+    scheda ambiente to be recognised from the photos already uploaded.
+    This returns a proposal the operator reads next to the photos and
+    saves through ``PUT /{ambiente_id}``; nothing is written here, and
+    ``max_persone`` is deliberately not proposed.
+
+    400 when no usable photo is attached.
+    """
+    azienda = await _get_azienda(azienda_id, org_id, db)
+    ambiente = (
+        await db.execute(
+            select(Ambiente).where(
+                Ambiente.id == ambiente_id, Ambiente.azienda_id == azienda_id
+            )
+        )
+    ).scalar_one_or_none()
+    if ambiente is None:
+        raise NotFoundError("Ambiente not found")
+
+    foto_rows = (
+        await db.execute(
+            select(AmbienteFoto).where(AmbienteFoto.ambiente_id == ambiente_id)
+        )
+    ).scalars().all()
+    usable_paths: list[Path] = []
+    for foto in foto_rows:
+        if foto.content_type not in _OPENAI_VISION_MIME_TYPES or not foto.file_path:
+            continue
+        path = Path(foto.file_path)
+        if path.is_file():
+            usable_paths.append(path)
+    if not usable_paths:
+        raise BadRequestError(
+            "Nessuna foto utilizzabile per questo ambiente (formati supportati: "
+            "JPEG, PNG, WebP, GIF). Carica almeno una foto prima di compilare "
+            "la scheda con AI."
+        )
+
+    # MB-2.4 — vision costs 4x a text suggester. Keyed on the exact photo
+    # set, so a retry of the same photos is free and a new photo is new work.
+    photos_digest = hashlib.sha1(
+        ",".join(sorted(str(p) for p in usable_paths)).encode()
+    ).hexdigest()[:12]
+    async with metered(
+        org_id, "vision", f"ambiente-scheda-vision:{ambiente_id}:{photos_digest}", db, ent
+    ):
+        scheda = await extract_scheda_from_photos(ambiente, azienda, list(usable_paths))
+    return SchedaEstrattaResponse(
+        descrizione_locale=scheda.descrizione_locale,
+        materiali_presenti=scheda.materiali_presenti,
+        sorgenti_innesco=scheda.sorgenti_innesco,
+        motivazione=scheda.motivazione,
+        photos_used=len(usable_paths),
+    )
 
 
 @router.patch(

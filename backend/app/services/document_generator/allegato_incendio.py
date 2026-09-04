@@ -19,6 +19,7 @@ from app.services.document_generator.docx_utils import (
     scrub_body,
     slugify,
 )
+from app.services.document_generator.schede_ambienti import add_schede_ambienti
 
 TEMPLATE = TEMPLATES_DIR / "ALLEGATO RISCHIO INCENDIO.docx"
 TIPO_DOC = "allegato_incendio"
@@ -118,6 +119,13 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
                     str(v.idranti_presenti),
                 ])
             add_data_table(doc, headers, rows)
+
+        # Segnalazione 2026-08-25: per-ambiente scheda (descrizione con
+        # metratura e materiali, persone max, sorgenti di innesco). Same
+        # table as the PEE, from the same ambiente fields.
+        add_schede_ambienti(
+            doc, data["ambienti"], heading="Schede degli ambienti", level=2
+        )
 
         # Company-wide aggregate (worst-case across areas + counts).
         if incendi:

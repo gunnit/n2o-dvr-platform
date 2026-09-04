@@ -22,20 +22,20 @@
 
 version: 1
 totals:
-  endpoints: 212
+  endpoints: 213
   areas: 34
   frontend_pages: 34
-  ui_api_call_sites: 90
-  capability_gated: 124
+  ui_api_call_sites: 92
+  capability_gated: 125
   billing_gated: 10
-  ai_metered: 12
+  ai_metered: 13
 endpoints_by_area:
   - area: "admin-backups"
     endpoints: 2
   - area: "ai-feedback"
     endpoints: 3
   - area: "ambienti"
-    endpoints: 10
+    endpoints: 11
   - area: "attrezzature"
     endpoints: 7
   - area: "auth"
@@ -133,9 +133,6 @@ review:
     - "POST /api/v1/auth/register"
     - "POST /api/v1/auth/register-direct"
     - "POST /api/v1/aziende/autofill"
-    - "DELETE /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}"
-    - "GET /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}"
-    - "PUT /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}"
     - "DELETE /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/foto/{foto_id}"
     - "GET /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/foto/{foto_id}/content"
     - "PATCH /api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/ordine"
@@ -569,7 +566,7 @@ endpoints:
     platform_admin: false
     billing_gates: []
     ai_credits: []
-    called_by_ui: false
+    called_by_ui: true
     in_openapi: true
   - id: "ambienti.get_ambiente"
     method: "GET"
@@ -586,7 +583,7 @@ endpoints:
     platform_admin: false
     billing_gates: []
     ai_credits: []
-    called_by_ui: false
+    called_by_ui: true
     in_openapi: true
   - id: "ambienti.update_ambiente"
     method: "PUT"
@@ -604,7 +601,7 @@ endpoints:
     platform_admin: false
     billing_gates: []
     ai_credits: []
-    called_by_ui: false
+    called_by_ui: true
     in_openapi: true
   - id: "ambienti.list_ambiente_foto"
     method: "GET"
@@ -872,6 +869,25 @@ endpoints:
     billing_gates: []
     ai_credits: []
     called_by_ui: false
+    in_openapi: true
+  - id: "ambienti.estrai_scheda_da_foto"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/scheda/estrai-foto"
+    area: "ambienti"
+    source: "backend/app/api/v1/ambienti.py"
+    function: "estrai_scheda_da_foto"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits:
+      - "vision"
+    called_by_ui: true
     in_openapi: true
   - id: "attrezzature.list_attrezzature"
     method: "GET"

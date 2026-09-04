@@ -19,6 +19,15 @@ class Ambiente(Base):
     superficie_mq: Mapped[float | None] = mapped_column(Numeric)
     preposto_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("persone.id"))
     descrizione_attivita: Mapped[str | None] = mapped_column(Text)
+    # Scheda ambiente (segnalazioni 2026-08-25, incendio + PEE): the same
+    # three facts both allegati need, entered once here so the operator
+    # never types them twice. ``superficie_mq`` above is the metratura.
+    # ``max_persone`` is always operator-entered; the other three can be
+    # proposed from the ambiente photos (vision) and confirmed.
+    descrizione_locale: Mapped[str | None] = mapped_column(Text)
+    materiali_presenti: Mapped[str | None] = mapped_column(Text)
+    max_persone: Mapped[int | None] = mapped_column(Integer)
+    sorgenti_innesco: Mapped[str | None] = mapped_column(Text)
     # Operator-controlled display order within an azienda. Feedback #22
     # (2026-05-18): the list endpoint had no ordering, so insertion order
     # was effectively random — operators want both predictable ordering

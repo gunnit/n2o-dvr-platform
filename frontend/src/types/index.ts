@@ -120,6 +120,12 @@ export interface Ambiente {
   superficie_mq: number | null;
   preposto_id: string | null;
   descrizione_attivita: string | null;
+  // Scheda ambiente shared by the incendio and PEE allegati (segnalazioni
+  // 2026-08-25): description, materials, max occupancy, ignition sources.
+  descrizione_locale: string | null;
+  materiali_presenti: string | null;
+  max_persone: number | null;
+  sorgenti_innesco: string | null;
   // Operator-controlled position in the survey list. Server-assigned on
   // create (max+1) and editable via PATCH .../ordine — see feedback #22.
   ordine: number;
@@ -170,12 +176,17 @@ export interface PericoloSuggestionItem {
   pericolo: PericoloLibreria;
   matches_ambiente: boolean;
   triggered_by_attrezzature: string[];
+  // Only on rows in `excluded`: why the catalog filter left the row out.
+  exclusion_reason?: string | null;
 }
 
 export interface PericoloSuggestionResponse {
   ambiente_tipo: string | null;
   attrezzature_count: number;
   items: PericoloSuggestionItem[];
+  // Catalog rows of the categoria the filter rejected (segnalazione
+  // 2026-08-19) — offered for restore in the panel.
+  excluded?: PericoloSuggestionItem[];
 }
 
 export interface PericoloValutazione {

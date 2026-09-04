@@ -97,6 +97,10 @@ function createEmptyAmbiente(aziendaId: string, ordine: number): Ambiente {
     superficie_mq: null,
     preposto_id: null,
     descrizione_attivita: null,
+    descrizione_locale: null,
+    materiali_presenti: null,
+    max_persone: null,
+    sorgenti_innesco: null,
     ordine,
   };
 }

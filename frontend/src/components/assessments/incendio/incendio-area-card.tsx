@@ -20,6 +20,7 @@ import {
 import { IncendioMeasures } from "./incendio-measures";
 import { incendioAreaNameIsReadOnly } from "./incendio-roundtrip";
 import { Select } from "@/components/ui/select";
+import { SchedaAmbienteFields } from "@/components/ambienti/scheda-ambiente-fields";
 
 // ---------------------------------------------------------------------------
 // Parameter copy — Italian labels from REFERENCE_DATA.md section 4.1.
@@ -401,6 +402,18 @@ export function IncendioAreaCard({
             />
           </div>
         </div>
+
+        {/* Segnalazione 2026-08-25: the scheda ambiente (descrizione,
+            materiali, persone max, sorgenti di innesco) lives on the
+            linked Ambiente so the PEE reads the same facts. Only offered
+            when the area is linked — a manual "Altro" area has no row to
+            hold them. */}
+        {(() => {
+          const linked = current?.ambiente_id
+            ? ambienti.find((amb) => amb.id === current.ambiente_id)
+            : undefined;
+          return linked ? <SchedaAmbienteFields ambiente={linked} /> : null;
+        })()}
 
         {result?.complete && result.livello && (
           <IncendioMeasures
