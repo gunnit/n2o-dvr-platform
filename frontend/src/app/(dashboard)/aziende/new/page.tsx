@@ -1,11 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { AlertTriangle, Check, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  FileUp,
+  Loader2,
+  Plus,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -90,6 +99,23 @@ const EMPTY_FORM: AziendaFormState = {
 };
 
 type AiMeta = Partial<Record<keyof AziendaFormState, AziendaAutofillFieldMeta>>;
+
+// Client call 2026-09-04: the visura camerale can be dropped at the START
+// of the censimento, next to the P.IVA autofill. POST /aziende/visura/estrai
+// answers with the same envelope as /aziende/autofill, so one merge path
+// serves both; the file itself is kept and attached to the azienda right
+// after creation (POST /aziende/{id}/visura — the Panoramica tab's upload).
+const VISURA_MAX_BYTES = 10 * 1024 * 1024;
+
+// The fields the "Dati amministrativi" toggle hides. When the visura yields
+// any of them the section opens by itself, otherwise the prefilled values
+// would be silently dropped on submit (the toggle forces them to null).
+const ADMIN_FIELDS: ReadonlyArray<keyof AziendaFormState> = [
+  "capitale_sociale",
+  "rea",
+  "data_costituzione",
+  "numero_dipendenti_dichiarati",
+];
 
 // Feedback issue #11 (2026-05-14): clients with more than one operating
 // location need to declare them all. We keep a single primary
@@ -182,6 +208,11 @@ export default function NewAziendaPage() {
   const [form, setForm] = useState<AziendaFormState>(EMPTY_FORM);
   const [aiMeta, setAiMeta] = useState<AiMeta>({});
   const [aiLoading, setAiLoading] = useState(false);
+  // Visura camerale chosen before the azienda exists: parsed immediately for
+  // the prefill, then uploaded against the new id once creation succeeds.
+  const [visuraFile, setVisuraFile] = useState<File | null>(null);
+  const [visuraLoading, setVisuraLoading] = useState(false);
+  const visuraInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<AziendaFieldErrors>({});
@@ -365,71 +396,151 @@ export default function NewAziendaPage() {
         await throwApiError(res);
       }
       const data: AziendaAutofillResponse = await res.json();
-
-      // Apply: only fill EMPTY fields (preserve operator edits) and stamp
-      // a meta entry for each filled field. ``values`` is keyed by Azienda
-      // field names, which line up with our form state — narrow at the
-      // boundary.
-      setForm((prev) => {
-        const next = { ...prev };
-        for (const [key, raw] of Object.entries(data.values)) {
-          if (raw == null) continue;
-          // Issue #11: extras come back as a list — they don't belong in
-          // the scalar form state, they go to sediExtra below.
-          if (Array.isArray(raw)) continue;
-          const k = key as keyof AziendaFormState;
-          if (!(k in next)) continue;
-          if (next[k] !== "") continue; // don't overwrite operator edits
-          next[k] = String(raw);
-        }
-        return next;
-      });
-      // Issue #11: route additional sedi operative (from openapi.com
-      // Registro Imprese unità locali) into the sediExtra state. Only
-      // fills the list when it's currently empty — never overwrites
-      // operator-entered rows.
-      const extrasFromApi = data.values.sedi_operative_extra;
-      if (Array.isArray(extrasFromApi) && extrasFromApi.length > 0) {
-        setSediExtra((prev) =>
-          prev.length === 0
-            ? extrasFromApi.map((s) => ({
-                via: s.via || "",
-                citta: s.citta || "",
-                comune: s.comune || "",
-                provincia: s.provincia || "",
-                cap: s.cap || "",
-              }))
-            : prev,
-        );
-      }
-      setAiMeta((prev) => {
-        const next: AiMeta = { ...prev };
-        for (const [key, m] of Object.entries(data.meta)) {
-          const k = key as keyof AziendaFormState;
-          // Only badge fields we actually applied (i.e. were empty). The
-          // setForm above used the same condition; we mirror it here by
-          // checking the *current* form snapshot via ref-via-state.
-          // Simpler: badge unconditionally; the worst case is a stale badge
-          // on a field the operator pre-filled — acceptable, and the
-          // setField clear-on-edit handler will remove it on next touch.
-          next[k] = m;
-        }
-        return next;
-      });
-
-      if (data.warnings.length > 0) {
-        toast.warning(data.warnings.join(" "));
-      } else {
-        toast.success(
-          `Compilati ${Object.keys(data.values).length} campi — verifica i dati prima di salvare.`,
-        );
-      }
+      applyAutofill(data);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Errore durante la compilazione AI",
       );
     } finally {
       setAiLoading(false);
+    }
+  }
+
+  // Shared by the P.IVA autofill and the visura parse — both answer with an
+  // AziendaAutofillResponse and both must respect what the operator already
+  // typed.
+  function applyAutofill(data: AziendaAutofillResponse) {
+    // Apply: only fill EMPTY fields (preserve operator edits) and stamp
+    // a meta entry for each filled field. ``values`` is keyed by Azienda
+    // field names, which line up with our form state — narrow at the
+    // boundary.
+    setForm((prev) => {
+      const next = { ...prev };
+      for (const [key, raw] of Object.entries(data.values)) {
+        if (raw == null) continue;
+        // Issue #11: extras come back as a list — they don't belong in
+        // the scalar form state, they go to sediExtra below.
+        if (Array.isArray(raw)) continue;
+        const k = key as keyof AziendaFormState;
+        if (!(k in next)) continue;
+        if (next[k] !== "") continue; // don't overwrite operator edits
+        next[k] = String(raw);
+      }
+      return next;
+    });
+    // Issue #11: route additional sedi operative (from openapi.com
+    // Registro Imprese unità locali) into the sediExtra state. Only
+    // fills the list when it's currently empty — never overwrites
+    // operator-entered rows.
+    const extrasFromApi = data.values.sedi_operative_extra;
+    if (Array.isArray(extrasFromApi) && extrasFromApi.length > 0) {
+      setSediExtra((prev) =>
+        prev.length === 0
+          ? extrasFromApi.map((s) => ({
+              via: s.via || "",
+              citta: s.citta || "",
+              comune: s.comune || "",
+              provincia: s.provincia || "",
+              cap: s.cap || "",
+            }))
+          : prev,
+      );
+    }
+    setAiMeta((prev) => {
+      const next: AiMeta = { ...prev };
+      for (const [key, m] of Object.entries(data.meta)) {
+        const k = key as keyof AziendaFormState;
+        // Only badge fields we actually applied (i.e. were empty). The
+        // setForm above used the same condition; we mirror it here by
+        // checking the *current* form snapshot via ref-via-state.
+        // Simpler: badge unconditionally; the worst case is a stale badge
+        // on a field the operator pre-filled — acceptable, and the
+        // setField clear-on-edit handler will remove it on next touch.
+        next[k] = m;
+      }
+      return next;
+    });
+    // Prefilled administrative data is only sent when its section is open.
+    if (ADMIN_FIELDS.some((f) => data.values[f] != null && data.values[f] !== "")) {
+      setAdminOpen(true);
+    }
+
+    if (data.warnings.length > 0) {
+      toast.warning(data.warnings.join(" "));
+    } else {
+      toast.success(
+        `Compilati ${Object.keys(data.values).length} campi — verifica i dati prima di salvare.`,
+      );
+    }
+  }
+
+  async function handleVisuraSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    // Reset the input so choosing the same file again re-fires onChange.
+    e.target.value = "";
+    if (!file || visuraLoading) return;
+    const isPdf =
+      file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    if (!isPdf) {
+      toast.error("Solo file PDF ammessi");
+      return;
+    }
+    if (file.size > VISURA_MAX_BYTES) {
+      toast.error("Visura troppo grande (max 10 MB)");
+      return;
+    }
+    setVisuraLoading(true);
+    try {
+      const sessionRes = await fetch("/api/auth/session");
+      const sessionData = await sessionRes.json();
+      const token = sessionData?.accessToken;
+      if (!token) {
+        toast.error("Sessione scaduta, effettua nuovamente il login");
+        return;
+      }
+      const formData = new FormData();
+      formData.append("file", file);
+      // No Content-Type header: the browser must set the multipart boundary.
+      const res = await fetch(`${API_URL}/api/v1/aziende/visura/estrai`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!res.ok) {
+        await throwApiError(res);
+      }
+      const data: AziendaAutofillResponse = await res.json();
+      setVisuraFile(file);
+      applyAutofill(data);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Errore durante la lettura della visura",
+      );
+    } finally {
+      setVisuraLoading(false);
+    }
+  }
+
+  // Best effort, after a successful creation: the azienda exists either way
+  // and the operator can re-upload from the Panoramica tab if this fails.
+  async function attachVisura(aziendaId: string, file: File, token: string) {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`${API_URL}/api/v1/aziende/${aziendaId}/visura`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!res.ok) {
+        await throwApiError(res);
+      }
+    } catch (err) {
+      toast.warning(
+        `Azienda creata, ma la visura non è stata allegata (${
+          err instanceof Error ? err.message : "errore di rete"
+        }). Puoi ricaricarla dalla scheda azienda.`,
+      );
     }
   }
 
@@ -547,6 +658,10 @@ export default function NewAziendaPage() {
       if (!res.ok) {
         await throwApiError(res);
       }
+      const created: { id: string } = await res.json();
+      if (visuraFile) {
+        await attachVisura(created.id, visuraFile, token);
+      }
       router.push("/aziende");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Errore nella creazione");
@@ -567,7 +682,12 @@ export default function NewAziendaPage() {
             <Sparkles className="h-3.5 w-3.5" strokeWidth={2.5} />
             Compila con AI
           </span>{" "}
-          per pre-compilare i campi dai registri pubblici.
+          per pre-compilare i campi dai registri pubblici, oppure{" "}
+          <span className="inline-flex items-center gap-1 font-medium text-primary">
+            <FileUp className="h-3.5 w-3.5" strokeWidth={2.5} />
+            Carica visura
+          </span>{" "}
+          per leggerli dalla visura camerale in PDF.
         </p>
       </div>
 
@@ -608,7 +728,9 @@ export default function NewAziendaPage() {
                   </div>
                   {aiMeta.partita_iva && <AiBadge meta={aiMeta.partita_iva} />}
                 </div>
-                <div className="flex gap-2">
+                {/* Wraps so the two actions drop under the input on a phone
+                    instead of squeezing it. */}
+                <div className="flex flex-wrap gap-2">
                   <Input
                     id="partita_iva"
                     value={form.partita_iva}
@@ -618,7 +740,7 @@ export default function NewAziendaPage() {
                       checkExistingPiva(e.target.value);
                     }}
                     inputMode="numeric"
-                    className={`flex-1 ${fieldErrors.partita_iva ? "border-destructive" : ""}`}
+                    className={`min-w-[12rem] flex-1 ${fieldErrors.partita_iva ? "border-destructive" : ""}`}
                     aria-invalid={!!fieldErrors.partita_iva || undefined}
                     aria-describedby={
                       fieldErrors.partita_iva ? "partita_iva-error" : undefined
@@ -628,7 +750,7 @@ export default function NewAziendaPage() {
                     type="button"
                     variant="outline"
                     onClick={handleAutofill}
-                    disabled={!pivaValid || aiLoading}
+                    disabled={!pivaValid || aiLoading || visuraLoading}
                     title={
                       pivaValid
                         ? "Cerca i dati dell'azienda nei registri pubblici e nel web"
@@ -643,8 +765,56 @@ export default function NewAziendaPage() {
                     )}
                     {aiLoading ? "Cerco..." : "Compila con AI"}
                   </Button>
+                  <input
+                    ref={visuraInputRef}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    className="sr-only"
+                    onChange={handleVisuraSelected}
+                    data-testid="visura-file-input"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => visuraInputRef.current?.click()}
+                    disabled={aiLoading || visuraLoading}
+                    title="Leggi i dati dell'azienda dalla visura camerale in PDF (max 10 MB). Il file viene allegato all'azienda al salvataggio."
+                    className="shrink-0 gap-1.5"
+                  >
+                    {visuraLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileUp className="h-4 w-4" strokeWidth={2} />
+                    )}
+                    {visuraLoading
+                      ? "Leggo..."
+                      : visuraFile
+                        ? "Sostituisci visura"
+                        : "Carica visura"}
+                  </Button>
                 </div>
                 <FieldError id="partita_iva-error">{fieldErrors.partita_iva}</FieldError>
+                {visuraFile && !visuraLoading && (
+                  <div
+                    role="status"
+                    className="flex items-center gap-2 rounded-md border border-[#e5edf5] bg-[#f6f9fc] px-3 py-2 text-xs text-[#64748d]"
+                  >
+                    <FileUp className="h-3.5 w-3.5 flex-shrink-0 text-primary" strokeWidth={2} />
+                    <span className="min-w-0 flex-1 truncate">
+                      Visura <span className="font-medium text-foreground">{visuraFile.name}</span>{" "}
+                      — verrà allegata all&apos;azienda al salvataggio.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setVisuraFile(null)}
+                      className="flex-shrink-0 rounded p-0.5 text-[#64748d] hover:bg-[#e5edf5] hover:text-foreground"
+                      title="Non allegare la visura"
+                      aria-label="Rimuovi visura"
+                    >
+                      <X className="h-3.5 w-3.5" strokeWidth={2} />
+                    </button>
+                  </div>
+                )}
                 {/* The registry lookup routinely takes 25–30 seconds. With only
                     a spinner and "Cerco..." to go on, an operator on a site
                     visit concludes it has hung and reloads — losing the form

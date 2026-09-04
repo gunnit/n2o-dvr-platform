@@ -1,3 +1,4 @@
+import io
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -39,7 +40,8 @@ from app.schemas.description_revision import (
 from app.services.ai import generate_company_description
 from app.services.azienda_autofill import autofill_from_piva
 from app.services.sector_prepopulator import gather_sector_summary
-from app.services.visura_extractor import extract_visura_text
+from app.services.visura_extractor import extract_visura_raw_text, extract_visura_text
+from app.services.visura_parser import build_visura_autofill
 
 
 class DescriptionResponse(BaseModel):
@@ -281,6 +283,74 @@ async def autofill_azienda(
         return await autofill_from_piva(piva)
 
 
+# Mirrors the SDS upload pattern in sostanze_chimiche.py: 10 MB cap, .pdf
+# only, content-type tolerant for browsers that send octet-stream. Shared by
+# the pre-creation parse below and the post-creation upload (US-2.1 AC1).
+_VISURA_MAX_BYTES = 10 * 1024 * 1024
+
+
+async def _read_visura_upload(file: UploadFile) -> bytes:
+    """Validate a visura upload (PDF, non-empty, <= 10 MB) and return its bytes."""
+    filename = file.filename or "visura.pdf"
+    is_pdf = (
+        file.content_type == "application/pdf"
+        or filename.lower().endswith(".pdf")
+    )
+    if not is_pdf:
+        raise BadRequestError("Solo file PDF ammessi")
+
+    content = await file.read()
+    if len(content) == 0:
+        raise BadRequestError("File vuoto")
+    if len(content) > _VISURA_MAX_BYTES:
+        raise BadRequestError(
+            f"Visura troppo grande (max {_VISURA_MAX_BYTES // (1024 * 1024)} MB)"
+        )
+    return content
+
+
+# Literal `/visura/estrai` is declared BEFORE every `/{azienda_id}/...` route
+# for the same reason as `/dashboard/kpis` above: there is no azienda yet.
+@router.post(
+    "/visura/estrai",
+    response_model=AziendaAutofillResponse,
+    dependencies=[Depends(require_capability(SURVEY_WRITE))],
+)
+async def estrai_visura(file: UploadFile = File(...)) -> AziendaAutofillResponse:
+    """Prefill the new-azienda form from a visura camerale PDF.
+
+    Client call 2026-09-04: "caricare la visura camerale all'inizio del
+    censimento aziendale, insieme alla compilazione tramite partita IVA".
+    Same envelope as ``POST /aziende/autofill`` so the page merges it with
+    the code it already has (empty fields only, provenance badge per field).
+    Nothing is persisted here: the page keeps the file and re-sends it to
+    ``POST /aziende/{id}/visura`` once the azienda exists, which attaches
+    it exactly as the Panoramica tab does today.
+
+    Privacy: the same posture as that upload, and stricter than the P.IVA
+    flow. Text is extracted locally with pypdf straight from memory (the
+    PII-bearing PDF never touches disk), the fields are regex-parsed in
+    ``services.visura_parser`` — no AI helper is called, so nothing is
+    metered — and only company-level values come back; the soci /
+    amministratori names and personal codici fiscali on the visura are
+    discarded with the request.
+    """
+    content = await _read_visura_upload(file)
+    try:
+        raw = extract_visura_raw_text(io.BytesIO(content))
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+
+    response = build_visura_autofill(raw.text)
+    if not response.values:
+        raise BadRequestError(
+            "Nessun dato riconosciuto: il PDF non sembra una visura camerale "
+            "(o il layout non è supportato). Compila i campi a mano oppure "
+            "usa la compilazione tramite Partita IVA."
+        )
+    return response
+
+
 @router.post("", response_model=AziendaResponse, status_code=201)
 async def create_azienda(
     body: AziendaCreate,
@@ -499,10 +569,6 @@ async def genera_descrizione(
 # US-2.1 AC1 — Visura camerale upload
 # ---------------------------------------------------------------------------
 
-# Mirrors the SDS upload pattern in sostanze_chimiche.py: 10 MB cap, .pdf
-# only, content-type tolerant for browsers that send octet-stream.
-_VISURA_MAX_BYTES = 10 * 1024 * 1024
-
 
 @router.post(
     "/{azienda_id}/visura",
@@ -530,21 +596,7 @@ async def upload_visura(
     if not azienda:
         raise NotFoundError("Azienda not found")
 
-    filename = file.filename or "visura.pdf"
-    is_pdf = (
-        file.content_type == "application/pdf"
-        or filename.lower().endswith(".pdf")
-    )
-    if not is_pdf:
-        raise BadRequestError("Solo file PDF ammessi")
-
-    content = await file.read()
-    if len(content) == 0:
-        raise BadRequestError("File vuoto")
-    if len(content) > _VISURA_MAX_BYTES:
-        raise BadRequestError(
-            f"Visura troppo grande (max {_VISURA_MAX_BYTES // (1024 * 1024)} MB)"
-        )
+    content = await _read_visura_upload(file)
 
     visure_dir = Path(settings.FILE_STORAGE_PATH) / "visure" / str(azienda_id)
     visure_dir.mkdir(parents=True, exist_ok=True)

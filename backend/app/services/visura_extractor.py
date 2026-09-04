@@ -24,6 +24,7 @@ import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import IO
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,56 @@ def _redact(text: str) -> str:
     return text
 
 
+@dataclass(frozen=True)
+class VisuraRawText:
+    """Unredacted plaintext of a visura, held in memory for one request only.
+
+    This carries PII (legal-rep names, personal codici fiscali). It must
+    never be persisted, logged or handed to an AI helper — the only two
+    consumers are :func:`extract_visura_text` (which redacts before storing
+    a snippet) and :mod:`app.services.visura_parser` (which pulls out
+    company-level fields deterministically and discards the rest).
+    """
+
+    pages: int
+    text: str
+
+
+def extract_visura_raw_text(source: str | Path | IO[bytes]) -> VisuraRawText:
+    """Read every page of a visura PDF into one string, locally with pypdf.
+
+    Accepts a filesystem path or an open binary stream so the pre-creation
+    flow (``POST /aziende/visura/estrai``) can parse an upload straight from
+    memory without ever writing the PII-bearing PDF to disk.
+
+    Raises ``ValueError`` if the PDF is unreadable or yields no text at
+    all (typical for scanned visure — we don't OCR; the operator can
+    re-upload a digitally-generated copy).
+    """
+    try:
+        from pypdf import PdfReader  # noqa: WPS433 — local import keeps cold path off the hot path
+    except ImportError as exc:  # pragma: no cover — guarded by requirements.txt
+        raise RuntimeError("pypdf non installato — eseguire pip install -r requirements.txt") from exc
+
+    label = Path(source).name if isinstance(source, (str, Path)) else "<upload>"
+    reader = PdfReader(str(source) if isinstance(source, (str, Path)) else source)
+    pages = len(reader.pages)
+    chunks: list[str] = []
+    for page in reader.pages:
+        try:
+            chunks.append(page.extract_text() or "")
+        except Exception as exc:  # pragma: no cover — pypdf swallows most issues
+            logger.warning("Failed to extract page from %s: %s", label, exc)
+
+    raw = "\n\n".join(chunk.strip() for chunk in chunks if chunk and chunk.strip())
+    if len(raw) == 0:
+        raise ValueError(
+            "Visura illeggibile (probabile scansione senza OCR) — "
+            "carica una copia digitale generata dalla CCIAA."
+        )
+    return VisuraRawText(pages=pages, text=raw)
+
+
 def extract_visura_text(pdf_path: str | Path) -> VisuraExtraction:
     """Pull text out of the visura PDF, redact PII, truncate.
 
@@ -71,31 +122,9 @@ def extract_visura_text(pdf_path: str | Path) -> VisuraExtraction:
     all (typical for scanned visure — we don't OCR; the operator can
     re-upload a digitally-generated copy).
     """
-    path = Path(pdf_path)
-    try:
-        from pypdf import PdfReader  # noqa: WPS433 — local import keeps cold path off the hot path
-    except ImportError as exc:  # pragma: no cover — guarded by requirements.txt
-        raise RuntimeError("pypdf non installato — eseguire pip install -r requirements.txt") from exc
-
-    reader = PdfReader(str(path))
-    pages = len(reader.pages)
-    chunks: list[str] = []
-    for page in reader.pages:
-        try:
-            chunks.append(page.extract_text() or "")
-        except Exception as exc:  # pragma: no cover — pypdf swallows most issues
-            logger.warning("Failed to extract page from %s: %s", path.name, exc)
-
-    raw = "\n\n".join(chunk.strip() for chunk in chunks if chunk and chunk.strip())
-    raw_chars = len(raw)
-    if raw_chars == 0:
-        raise ValueError(
-            "Visura illeggibile (probabile scansione senza OCR) — "
-            "carica una copia digitale generata dalla CCIAA."
-        )
-
-    redacted = _redact(raw)
+    raw = extract_visura_raw_text(Path(pdf_path))
+    redacted = _redact(raw.text)
     snippet = redacted[:MAX_SNIPPET_CHARS]
     if len(redacted) > MAX_SNIPPET_CHARS:
         snippet = snippet.rstrip() + "\n[…visura troncata]"
-    return VisuraExtraction(pages=pages, raw_chars=raw_chars, snippet=snippet)
+    return VisuraExtraction(pages=raw.pages, raw_chars=len(raw.text), snippet=snippet)
