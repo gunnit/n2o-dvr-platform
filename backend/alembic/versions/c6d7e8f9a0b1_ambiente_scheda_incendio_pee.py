@@ -1,6 +1,6 @@
 """scheda ambiente for the incendio and PEE allegati
 
-Revision ID: a7b8c9d0e1f2
+Revision ID: c6d7e8f9a0b1
 Revises: d3e4f5a6b8c9
 Create Date: 2026-09-04
 
@@ -15,7 +15,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "a7b8c9d0e1f2"
+revision: str = "c6d7e8f9a0b1"
 down_revision: Union[str, Sequence[str], None] = "d3e4f5a6b8c9"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
