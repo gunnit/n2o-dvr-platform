@@ -83,6 +83,15 @@ PERSON_CF = "RSSMRA80A01H501U"
 # ---------------------------------------------------------------------------
 
 
+def test_typographic_apostrophes_parse_like_ascii_ones():
+    """pypdf hands back U+2019 for the apostrophe of a Standard-encoded font,
+    which is how "Unita' locale" reaches the parser from a real PDF; the
+    unità locali (and with them ``sedi_operative_extra``) must not vanish."""
+    curly = INFOCAMERE.replace("'", "\u2019")
+    assert "\u2019" in curly
+    assert parse_visura(curly).values == parse_visura(INFOCAMERE).values
+
+
 def test_infocamere_layout_maps_every_supported_field():
     parsed = parse_visura(INFOCAMERE)
 
