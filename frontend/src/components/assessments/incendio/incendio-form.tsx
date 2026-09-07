@@ -313,8 +313,12 @@ export function IncendioForm({ form, onResultChange, ambienti = [] }: IncendioFo
 function IncendioOverview({ result }: { result: IncendioResult }) {
   useFormContext<IncendioFormValues>(); // ensure the hook is mounted
 
+  // Pinned only from `lg`, offset below the app header (`h-14` = 3.5rem plus
+  // a 1rem gap): at `top-4` it slid under the header, and below `lg` the
+  // pinned card plus the header took more than half of a phone viewport
+  // (UI/UX audit 2026-09-07, F1). The header's `z-30` stays above it.
   return (
-    <Card className="sticky top-4 z-10 shadow-sm">
+    <Card className="shadow-sm lg:sticky lg:top-[4.5rem] lg:z-10">
       <CardHeader className="border-b">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

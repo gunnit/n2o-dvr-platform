@@ -11,16 +11,22 @@ export interface IncendioVvfBannerProps {
 }
 
 /**
- * Sticky red banner shown when ANY area is classified Alto — per US-3.12 the
- * field operator must be made aware that a deeper VV.F. assessment and SCIA
- * obligations per DPR 151/2011 may apply. Icon via Lucide (no emoji in UI).
+ * Red alert shown at the top of the page when ANY area is classified Alto —
+ * per US-3.12 the field operator must be made aware that a deeper VV.F.
+ * assessment and SCIA obligations per DPR 151/2011 may apply. Icon via
+ * Lucide (no emoji in UI).
+ *
+ * In flow, not sticky: pinned at `top-0` it slid under the app header and
+ * over the summary card, and on a phone the two pinned blocks took more than
+ * half the viewport (UI/UX audit 2026-09-07, F1). While scrolling, the red
+ * "livello massimo: Alto" chip in the summary card carries the signal.
  */
 export function IncendioVvfBanner({ visible }: IncendioVvfBannerProps) {
   if (!visible) return null;
   return (
     <div
       role="alert"
-      className="sticky top-0 z-20 mb-4 flex items-start gap-3 rounded-md border border-[rgba(199,42,58,0.28)] bg-[rgba(199,42,58,0.05)] p-3 text-[#c72a3a] shadow-stripe-ambient"
+      className="flex items-start gap-3 rounded-md border border-[rgba(199,42,58,0.28)] bg-[rgba(199,42,58,0.05)] p-3 text-[#c72a3a] shadow-stripe-ambient"
     >
       <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" aria-hidden="true" />
       <div>

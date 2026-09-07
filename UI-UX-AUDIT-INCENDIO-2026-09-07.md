@@ -4,6 +4,8 @@
 
 Test data: a throwaway consultant tenant, one azienda ("Falegnameria Rossi SRL") with three ambienti (Magazzino vernici, Reparto verniciatura, Uffici amministrativi). The walkthrough logs in through the UI, reaches the page through the Valutazioni hub, links each area to an ambiente, scores them Alto / Medio / Basso, edits the measures checklist, adds, duplicates, validates and removes areas, saves twice, reloads, navigates away with unsaved edits, simulates a 503 on load and a 500 on the measures endpoint, tabs through the form, and repeats the load on mobile and tablet.
 
+> **Update, same day:** the five P1 findings are fixed in the same PR and re-verified with the walkthrough — see §7. The sections below describe the page as tested before the fixes.
+
 ## Health score
 
 | # | Dimension | Score | Key finding |
@@ -173,9 +175,9 @@ Test data: a throwaway consultant tenant, one azienda ("Falegnameria Rossi SRL")
 
 ## 5. Suggested order of work
 
-1. **F1 + F2** (half a day): `top-14` / un-pin on mobile; ascending order in the two queries; archived card in form order.
-2. **F3 + F4** (one day): load-error state with retry; unsaved-changes guard.
-3. **F5** (one day, backend + frontend): single measures source; generator prints the operator's selection.
+1. ~~**F1 + F2** (half a day): `top-14` / un-pin on mobile; ascending order in the two queries; archived card in form order.~~ Done (§7).
+2. ~~**F3 + F4** (one day): load-error state with retry; unsaved-changes guard.~~ Done (§7).
+3. ~~**F5** (one day, backend + frontend): single measures source; generator prints the operator's selection.~~ Done (§7).
 4. **F6–F11** (two days): undefined default scores, actionable save helper, read-only cue, checkbox/radio semantics, navigation links.
 5. **F12–F16** as polish.
 
@@ -191,3 +193,20 @@ node tests/e2e/incendio-uiux-walkthrough.mjs --seed
 ```
 
 Optional env: `E2E_AXE_PATH=/path/to/axe.min.js` runs the accessibility scan; `E2E_CHROMIUM_PATH` points at a local Chromium when Playwright's download is unavailable; `E2E_EMAIL` / `E2E_PASSWORD` / `E2E_AZIENDA_ID` run against an existing (throwaway) tenant instead of seeding. Output: PASS/FAIL/INFO lines, `report.json` and 16 screenshots in `tests/e2e/out/incendio/`. The exit code reflects only whether the walkthrough itself completed; FAIL lines are findings to read, not a CI gate.
+
+## 7. Fix status — 2026-09-07, same PR
+
+All five P1 findings are fixed and re-verified with the committed walkthrough on a fresh tenant: **36 PASS · 10 FAIL** (was 30 · 17). Every remaining FAIL is a P2/P3 item (F6–F10, F15, mobile touch targets).
+
+| Finding | Fix | Re-run evidence |
+|---|---|---|
+| F1 sticky collision | VV.F. banner is in flow (`incendio-vvf-banner.tsx`); the summary card is pinned only from `lg`, offset below the app header (`lg:sticky lg:top-[4.5rem]` in `incendio-form.tsx`) | desktop scrolled: no overlap, card at 72 px below the header; phone: 18% of the viewport occupied while scrolled (was 55%); tablet 16% |
+| F2 order flips | list endpoint (`incendio_valutazioni.py`) and generator loader (`data_loader.load_incendio`) order by `created_at` ascending, `id` as tie-break; the page sorts the rows the same way so it holds against an older API | archived card and reload both keep Magazzino → Reparto → Uffici |
+| F3 silent load failure | the three initial reads go through `fetchWithRetry` (5xx and network errors retried 3×, 400/800 ms back-off); any failure renders an error card with the reason and a "Riprova" button, and neither the form nor "Salva valutazione" is rendered until all three reads succeed | 503 on the saved rows → error card, Riprova, 0 areas rendered, no save button |
+| F4 unsaved edits | `src/hooks/use-unsaved-changes-guard.ts`: `beforeunload` for reload/close plus capture-phase interception of same-origin link clicks while dirty, resolved by an in-app dialog ("Continua a modificare" / "Esci senza salvare") that navigates on confirm | breadcrumb click with a dirty form shows the dialog and stays on the page; confirming leaves |
+| F5 checklist vs allegato | `allegato_incendio.py` prints the operator's saved selection under "Prescrizioni aggiuntive", or the canonical list from `app/data/fire_measures.py` (the same list the UI serves) when the checklist was left at its default (`NULL`); an explicitly empty selection prints "Nessuna prescrizione aggiuntiva registrata"; the generator's private `LIVELLO_SPECIFIC_MEASURES` list and the duplicate "Misure aggiuntive registrate" block are gone | 4 new tests in `backend/tests/test_allegato_incendio_measures.py`; generator, calculator and DVR suites green (114 passed); import contracts kept |
+
+**Extra defect found while fixing F4.** The page read `formState.isDirty` only inside a `watch` callback, and react-hook-form computes `isDirty` only after something subscribes to it, so the first edit never counted: a single changed note showed no "Modifiche non salvate" badge and would have left without a prompt. The flag is now read during render.
+
+**Still open, on purpose.** The browser back button is not guarded (no App Router event; documented in the hook). The measures endpoint failure still shows the literal "Errore 500" (F12). The walkthrough's `api.untouched.measures` line is now informational: `NULL` means "checklist left at its default" and the allegato expands it to the canonical list.
+

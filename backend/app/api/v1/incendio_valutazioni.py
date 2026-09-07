@@ -69,10 +69,14 @@ async def list_incendio(
     db: AsyncSession = Depends(get_db),
 ) -> list[IncendioValutazione]:
     await _get_azienda_or_404(azienda_id, org_id, db)
+    # Creation order, which is the order the operator entered the areas in:
+    # the page saves them one POST per area, in form order, and hydrates the
+    # form from this list. Newest-first reversed the areas on every reload
+    # (UI/UX audit 2026-09-07, F2). `id` only breaks ties.
     result = await db.execute(
         select(IncendioValutazione)
         .where(IncendioValutazione.azienda_id == azienda_id)
-        .order_by(IncendioValutazione.created_at.desc())
+        .order_by(IncendioValutazione.created_at.asc(), IncendioValutazione.id.asc())
     )
     return list(result.scalars().all())
 

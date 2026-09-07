@@ -106,12 +106,16 @@ async function openPage(pg) {
   await pg.waitForTimeout(600);
 }
 async function waitMeasures(pg) { await pg.waitForFunction(() => !document.body.innerText.includes('Caricamento misure'), null, { timeout: 60000 }).catch(() => {}); await pg.waitForTimeout(200); }
+// Measures the VV.F. banner and the summary card against the viewport while
+// scrolled: how much of each is on screen (`visible`, px) and whether the two
+// overlap. `pinnedPct` is the share of the viewport they occupy together.
 const stickyEval = () => {
   const alert = [...document.querySelectorAll('[role="alert"]')].find((e) => e.textContent.includes('VV.F.'));
   const overview = [...document.querySelectorAll('[data-slot="card"]')].find((c) => c.textContent.includes('Livello di rischio incendio'));
-  const r = (el) => { if (!el) return null; const b = el.getBoundingClientRect(); return { top: Math.round(b.top), bottom: Math.round(b.bottom), h: Math.round(b.height) }; };
+  const r = (el) => { if (!el) return null; const b = el.getBoundingClientRect(); const visible = Math.max(0, Math.min(b.bottom, innerHeight) - Math.max(b.top, 0)); return { top: Math.round(b.top), bottom: Math.round(b.bottom), h: Math.round(b.height), visible: Math.round(visible), sticky: getComputedStyle(el).position === 'sticky' }; };
   const a = r(alert), o = r(overview);
-  return { alert: a, overview: o, vh: innerHeight, stickyPct: Math.round((((a?.h || 0) + (o?.h || 0)) / innerHeight) * 100) };
+  const overlap = Boolean(a && o && a.visible > 0 && o.visible > 0 && o.top < a.bottom && a.top < o.bottom);
+  return { alert: a, overview: o, vh: innerHeight, overlap, pinnedPct: Math.round((((a?.visible || 0) + (o?.visible || 0)) / innerHeight) * 100) };
 };
 const HELP = 'text=/Completa INF, SI e PI per ciascuna area per salvare|Correggi i campi non validi|Tutte le aree \\(/';
 
@@ -202,7 +206,7 @@ try {
   await shot(page, '06-alto', true);
   await page.evaluate(() => window.scrollTo(0, 900)); await page.waitForTimeout(400);
   const sd = await page.evaluate(stickyEval);
-  check('sticky.desktop.no.overlap', !(sd.alert && sd.overview && sd.overview.top < sd.alert.bottom), 'sticky banner vs sticky overview while scrolled: ' + JSON.stringify(sd));
+  check('sticky.desktop.no.overlap', !sd.overlap, 'banner vs summary card while scrolled 900px: ' + JSON.stringify(sd));
   await shot(page, '07-desktop-scrolled', false);
   await page.evaluate(() => window.scrollTo(0, 0));
 
@@ -281,7 +285,7 @@ try {
   info('save2.network', `re-save of 3 areas: ${calls2.filter((c) => c.method === 'POST').length} POST, ${calls2.filter((c) => c.method === 'DELETE').length} DELETE, ${calls2.filter((c) => c.method === 'GET').length} GET (${calls2.map((c) => c.status).join(',')})`);
   const rows = await api(`/aziende/${AZID}/incendio-valutazioni`, { token });
   info('api.rows', rows.map((r) => `${r.nome_area || '(null)'}: ${r.livello_rischio} ${r.punteggio_totale}/9 misure=${r.misure_prevenzione === null ? 'NULL' : JSON.stringify(r.misure_prevenzione).slice(0, 50) + '…'} est=${r.estintori_presenti}`).join(' || '));
-  check('api.untouched.measures.null', !rows.some((r) => r.misure_prevenzione === null), 'areas whose checklist was never touched persist misure_prevenzione=NULL although the UI shows every measure selected');
+  info('api.untouched.measures', `${rows.filter((r) => r.misure_prevenzione === null).length} of ${rows.length} rows persist misure_prevenzione=NULL (checklist left at its default); the allegato expands NULL to the canonical list of the band — see backend/tests/test_allegato_incendio_measures.py`);
 
   // ---- 9. reload / hydration
   await openPage(page); await waitMeasures(page);
@@ -302,8 +306,15 @@ try {
   await mag.locator('textarea[id$=".note"]').fill('MODIFICA NON SALVATA');
   const dBefore = report.dialogs.length;
   await page.locator('nav[aria-label="Breadcrumb"] a', { hasText: 'Valutazioni' }).first().click();
-  await page.waitForURL('**/assessments', { timeout: 30000 }).catch(() => {});
-  check('unsaved.guard', report.dialogs.length > dBefore, `leaving with unsaved edits: prompt shown=${report.dialogs.length > dBefore}, now at ${page.url().replace(BASE, '')}`);
+  const guardDialog = page.getByRole('dialog').filter({ hasText: 'Modifiche non salvate' });
+  const inAppPrompt = await guardDialog.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
+  const nativePrompt = report.dialogs.length > dBefore;
+  check('unsaved.guard', inAppPrompt || nativePrompt, `leaving with unsaved edits: in-app prompt=${inAppPrompt}, native prompt=${nativePrompt}, still at ${page.url().replace(BASE, '')}`);
+  if (inAppPrompt) {
+    await guardDialog.getByRole('button', { name: 'Esci senza salvare' }).click();
+    await page.waitForURL('**/assessments', { timeout: 30000 }).catch(() => {});
+    info('unsaved.guard.confirm', 'after "Esci senza salvare": ' + page.url().replace(BASE, ''));
+  }
   await openPage(page);
   info('unsaved.lost', 'unsaved note text present after returning: ' + ((await page.locator('text=MODIFICA NON SALVATA').count()) > 0));
 
@@ -311,7 +322,8 @@ try {
   await page.route('**/incendio-valutazioni', (route) => route.request().method() === 'GET' ? route.fulfill({ status: 503, contentType: 'text/plain', body: 'Service Unavailable' }) : route.continue());
   await openPage(page);
   const b503 = await page.innerText('body');
-  check('loadfail.error.visible', /Errore|non disponibil|Riprova/i.test(b503), `503 on saved-rows GET → error/retry shown: ${/Errore|non disponibil|Riprova/i.test(b503)}; archived card: ${b503.includes('Valutazioni archiviate')}; form areas: ${await areaCount()}`);
+  const retryBtn = page.getByRole('button', { name: 'Riprova' });
+  check('loadfail.error.visible', /Errore|non disponibil|Riprova/i.test(b503), `503 on saved-rows GET → error shown: ${/Errore|non disponibil|Riprova/i.test(b503)}; Riprova button: ${await retryBtn.isVisible().catch(() => false)}; archived card: ${b503.includes('Valutazioni archiviate')}; form areas rendered: ${await areaCount()}; save button rendered: ${await saveBtn.isVisible().catch(() => false)}`);
   await shot(page, '11-load-503', false);
   await page.unroute('**/incendio-valutazioni');
   await page.route('**/calculate/fire-measures*', (route) => route.fulfill({ status: 500, contentType: 'text/plain', body: 'boom' }));
@@ -358,7 +370,7 @@ try {
   await shot(mp, '12-mobile-full', true);
   await mp.evaluate(() => window.scrollTo(0, 1400)); await mp.waitForTimeout(400);
   const ms = await mp.evaluate(stickyEval);
-  check('mobile.sticky.budget', ms.stickyPct <= 25, `sticky banner+overview occupy ${ms.stickyPct}% of an 844px viewport while scrolled: ${JSON.stringify(ms)}`);
+  check('mobile.sticky.budget', ms.pinnedPct <= 25, `banner + summary card occupy ${ms.pinnedPct}% of an 844px viewport while scrolled 1400px: ${JSON.stringify(ms)}`);
   await shot(mp, '13-mobile-scrolled', false);
   const targets = await mp.evaluate(() => { const out = []; let total = 0; for (const b of document.querySelectorAll('main button, main a, main select, main input, main textarea')) { const r = b.getBoundingClientRect(); if (r.width === 0 || r.height === 0) continue; total++; if (r.width < 24 || r.height < 24) out.push(`${b.tagName.toLowerCase()} "${(b.getAttribute('aria-label') || b.textContent || b.id || '').trim().slice(0, 22)}" ${Math.round(r.width)}x${Math.round(r.height)}`); } return { total, small: [...new Set(out)] }; });
   check('mobile.touch.targets', targets.small.length === 0, `${targets.small.length}/${targets.total} interactive elements under 24px: ` + targets.small.slice(0, 6).join(' ; '));

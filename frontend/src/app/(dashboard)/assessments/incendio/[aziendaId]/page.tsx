@@ -12,7 +12,16 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import {
   BAND_CLASS,
   IncendioForm,
@@ -81,6 +90,44 @@ async function authHeaders(): Promise<HeadersInit> {
   return { "Content-Type": "application/json" };
 }
 
+// Saved rows arrive in creation order (the API sorts ascending) and are
+// sorted again here so the form, the "Valutazioni archiviate" card and the
+// allegato agree even against an older API. Newest-first reversed the areas
+// on every reload (UI/UX audit 2026-09-07, F2).
+function sortByCreation(rows: ServerRow[]): ServerRow[] {
+  return [...rows].sort(
+    (a, b) =>
+      a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id),
+  );
+}
+
+// Render cold starts answer the first requests with a 5xx. Retry those and
+// network failures a few times before giving up; a 4xx is returned as-is
+// because retrying cannot change it.
+async function fetchWithRetry(
+  url: string,
+  headers: HeadersInit,
+  attempts = 3,
+): Promise<Response> {
+  let last: Response | undefined;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(url, { headers });
+      if (res.status < 500) return res;
+      last = res;
+    } catch {
+      last = undefined;
+    }
+    if (i < attempts - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 400 * 2 ** i));
+    }
+  }
+  if (last) return last;
+  throw new Error("Connessione al server non riuscita.");
+}
+
+type LoadState = "loading" | "ready" | "error";
+
 // ---------------------------------------------------------------------------
 
 export default function IncendioAssessmentPage() {
@@ -90,7 +137,10 @@ export default function IncendioAssessmentPage() {
 
   const [azienda, setAzienda] = useState<Azienda | null>(null);
   const [ambienti, setAmbienti] = useState<Ambiente[]>([]);
+  const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Bumped by "Riprova" to run the initial load again.
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [existing, setExisting] = useState<ServerRow[]>([]);
   const form = useIncendioForm();
   const [result, setResult] = useState<IncendioResult>({
@@ -100,16 +150,21 @@ export default function IncendioAssessmentPage() {
   });
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [dirty, setDirty] = useState(false);
-  const saveAllowed = incendioSaveAllowed({
-    allScoresComplete: result.allComplete,
-    formIsValid: form.formState.isValid,
-  });
-
-  useEffect(() => {
-    const subscription = form.watch(() => setDirty(form.formState.isDirty));
-    return () => subscription.unsubscribe();
-  }, [form]);
+  // Read during render, not inside a `watch` callback: react-hook-form only
+  // computes `isDirty` once something has subscribed to it, so the callback
+  // version missed the first edit — a single changed note showed no badge and
+  // left the page without a prompt (UI/UX audit 2026-09-07, F4).
+  const dirty = form.formState.isDirty;
+  // Never save against rows the page could not read: with `existing` empty
+  // the save would create every area again next to the invisible ones.
+  const saveAllowed =
+    loadState === "ready" &&
+    incendioSaveAllowed({
+      allScoresComplete: result.allComplete,
+      formIsValid: form.formState.isValid,
+    });
+  const { pendingHref, confirmLeave, cancelLeave } =
+    useUnsavedChangesGuard(dirty);
 
   const refetchExisting = useCallback(async () => {
     const headers = await authHeaders();
@@ -118,60 +173,77 @@ export default function IncendioAssessmentPage() {
       { headers },
     );
     if (!res.ok) throw new Error(`Errore ${res.status}`);
-    const rows = (await res.json()) as ServerRow[];
+    const rows = sortByCreation((await res.json()) as ServerRow[]);
     setExisting(rows);
     return rows;
   }, [apiUrl, aziendaId]);
 
-  // Initial load: azienda + existing valutazioni. Hydrate form from existing
-  // rows so the user sees their last save instead of an empty form.
+  // Initial load: azienda, saved valutazioni and ambienti. All three have to
+  // succeed before the form is shown. A failed read of the saved rows used
+  // to render an empty form with no error, and a save from that state
+  // re-created every area next to the rows it could not see (June audit
+  // F10, UI/UX audit 2026-09-07 F3). The form hydrates from the saved rows
+  // so the operator sees their last save instead of an empty form.
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      setLoadState("loading");
+      setLoadError(null);
       try {
         const headers = await authHeaders();
         const [azRes, rowsRes, ambRes] = await Promise.all([
-          fetch(`${apiUrl}/api/v1/aziende/${aziendaId}`, { headers }),
-          fetch(
+          fetchWithRetry(`${apiUrl}/api/v1/aziende/${aziendaId}`, headers),
+          fetchWithRetry(
             `${apiUrl}/api/v1/aziende/${aziendaId}/incendio-valutazioni`,
-            { headers },
-          ),
-          fetch(`${apiUrl}/api/v1/aziende/${aziendaId}/ambienti`, {
             headers,
-          }),
+          ),
+          fetchWithRetry(
+            `${apiUrl}/api/v1/aziende/${aziendaId}/ambienti`,
+            headers,
+          ),
         ]);
-        if (!azRes.ok) throw new Error(`Errore azienda ${azRes.status}`);
+        if (!azRes.ok) {
+          throw new Error(
+            `Non è stato possibile leggere i dati dell'azienda (errore ${azRes.status}).`,
+          );
+        }
+        if (!rowsRes.ok) {
+          throw new Error(
+            `Non è stato possibile leggere le valutazioni archiviate (errore ${rowsRes.status}).`,
+          );
+        }
+        if (!ambRes.ok) {
+          throw new Error(
+            `Non è stato possibile leggere gli ambienti (errore ${ambRes.status}).`,
+          );
+        }
         const azData = (await azRes.json()) as Azienda;
+        const rows = sortByCreation((await rowsRes.json()) as ServerRow[]);
+        const ambData = (await ambRes.json()) as Ambiente[];
         if (cancelled) return;
         setAzienda(azData);
-        const ambData = ambRes.ok
-          ? ((await ambRes.json()) as Ambiente[])
-          : [];
-        if (!cancelled) setAmbienti(ambData);
-
-        if (rowsRes.ok) {
-          const rows = (await rowsRes.json()) as ServerRow[];
-          if (cancelled) return;
-          setExisting(rows);
-          if (rows.length > 0) {
-            form.reset({
-              areas: rows.map((row) =>
-                incendioAreaFromServer(
-                  row,
-                  ambData.find((ambiente) => ambiente.id === row.ambiente_id)
-                    ?.nome,
-                ),
+        setAmbienti(ambData);
+        setExisting(rows);
+        if (rows.length > 0) {
+          form.reset({
+            areas: rows.map((row) =>
+              incendioAreaFromServer(
+                row,
+                ambData.find((ambiente) => ambiente.id === row.ambiente_id)
+                  ?.nome,
               ),
-            });
-          }
+            ),
+          });
         }
+        setLoadState("ready");
       } catch (err) {
         if (!cancelled) {
           setLoadError(
             err instanceof Error
               ? err.message
-              : "Impossibile caricare l'azienda",
+              : "Non è stato possibile caricare la valutazione.",
           );
+          setLoadState("error");
         }
       }
     }
@@ -181,7 +253,7 @@ export default function IncendioAssessmentPage() {
     };
     // form is stable; we don't want to re-run on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aziendaId, apiUrl]);
+  }, [aziendaId, apiUrl, loadAttempt]);
 
   // Save: POST one row per area FIRST, then delete the previously-saved rows.
   // The old order (delete-then-recreate) lost data if a POST failed mid-save —
@@ -229,7 +301,6 @@ export default function IncendioAssessmentPage() {
           : `Valutazione salvata: ${fresh.length} area/e archiviata/e.`,
       );
       form.reset(form.getValues()); // marks RHF as pristine
-      setDirty(false);
     } catch (err) {
       setSaveMessage(
         err instanceof Error
@@ -242,10 +313,10 @@ export default function IncendioAssessmentPage() {
   }, [saveAllowed, result, existing, apiUrl, aziendaId, form, refetchExisting]);
 
   const pageSubtitle = useMemo(() => {
-    if (loadError) return `Azienda ${aziendaId} (metadati non disponibili)`;
     if (azienda) return azienda.ragione_sociale ?? `Azienda ${aziendaId}`;
+    if (loadState === "error") return `Azienda ${aziendaId}`;
     return "Caricamento…";
-  }, [azienda, aziendaId, loadError]);
+  }, [azienda, aziendaId, loadState]);
 
   const vvfVisible = result.maxLivello === "Alto";
 
@@ -272,117 +343,180 @@ export default function IncendioAssessmentPage() {
         )}
       </div>
 
-      {existing.length > 0 && (
-        <Card className="border-[rgba(16,140,61,0.26)] bg-[rgba(16,140,61,0.05)]">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">
-              Valutazioni archiviate ({existing.length})
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Modifica i valori qui sotto e premi &quot;Salva valutazione&quot;
-              per aggiornare il fascicolo.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
-              {existing.map((r) => {
-                const livello = toUi(r.livello_rischio);
-                return (
-                  <li
-                    key={r.id}
-                    className="flex items-center justify-between rounded-md bg-background px-3 py-2 ring-1 ring-border"
-                  >
-                    <span className="truncate">{r.nome_area || "—"}</span>
-                    {livello ? (
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ring-1",
-                          BAND_CLASS[livello],
-                        )}
-                      >
-                        {livello} · {r.punteggio_totale}/9
-                      </span>
-                    ) : (
-                      <Badge variant="secondary">—</Badge>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+      {loadState === "loading" && (
+        <p className="text-sm text-muted-foreground" aria-live="polite">
+          Lettura della valutazione archiviata…
+        </p>
+      )}
+
+      {loadState === "error" && (
+        <Card
+          role="alert"
+          className="border-[rgba(199,42,58,0.28)] bg-[rgba(199,42,58,0.05)]"
+        >
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+            <div>
+              <p className="text-sm font-medium text-[#c72a3a]">
+                Impossibile caricare la valutazione
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {loadError} Il modulo resta chiuso finché le aree archiviate
+                non sono leggibili, per non creare duplicati.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setLoadAttempt((n) => n + 1)}
+            >
+              Riprova
+            </Button>
           </CardContent>
         </Card>
       )}
 
-      <IncendioForm form={form} onResultChange={setResult} ambienti={ambienti} />
+      {loadState === "ready" && (
+        <>
+          {existing.length > 0 && (
+            <Card className="border-[rgba(16,140,61,0.26)] bg-[rgba(16,140,61,0.05)]">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">
+                  Valutazioni archiviate ({existing.length})
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Modifica i valori qui sotto e premi &quot;Salva valutazione&quot;
+                  per aggiornare il fascicolo.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ul className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                  {existing.map((r) => {
+                    const livello = toUi(r.livello_rischio);
+                    return (
+                      <li
+                        key={r.id}
+                        className="flex items-center justify-between rounded-md bg-background px-3 py-2 ring-1 ring-border"
+                      >
+                        <span className="truncate">{r.nome_area || "—"}</span>
+                        {livello ? (
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ring-1",
+                              BAND_CLASS[livello],
+                            )}
+                          >
+                            {livello} · {r.punteggio_totale}/9
+                          </span>
+                        ) : (
+                          <Badge variant="secondary">—</Badge>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
 
-      {/* Azione consigliata riepilogo (livello massimo) */}
-      <Card>
-        <CardHeader className="border-b">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <CardTitle className="text-sm">
-                Azione consigliata — livello massimo
-              </CardTitle>
-              <CardDescription className="text-xs">
-                {result.maxLivello
-                  ? AZIONE_PER_LIVELLO[result.maxLivello]
-                  : "Completa i tre parametri di almeno un'area per ottenere l'azione consigliata."}
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                livello max
-              </span>
-              {result.maxLivello ? (
-                <span
-                  className={cn(
-                    "inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium ring-1",
-                    BAND_CLASS[result.maxLivello],
+          <IncendioForm form={form} onResultChange={setResult} ambienti={ambienti} />
+
+          {/* Azione consigliata riepilogo (livello massimo) */}
+          <Card>
+            <CardHeader className="border-b">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-sm">
+                    Azione consigliata — livello massimo
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    {result.maxLivello
+                      ? AZIONE_PER_LIVELLO[result.maxLivello]
+                      : "Completa i tre parametri di almeno un'area per ottenere l'azione consigliata."}
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                    livello max
+                  </span>
+                  {result.maxLivello ? (
+                    <span
+                      className={cn(
+                        "inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium ring-1",
+                        BAND_CLASS[result.maxLivello],
+                      )}
+                    >
+                      {result.maxLivello}
+                    </span>
+                  ) : (
+                    <Badge variant="secondary">—</Badge>
                   )}
-                >
-                  {result.maxLivello}
-                </span>
-              ) : (
-                <Badge variant="secondary">—</Badge>
-              )}
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
+                </div>
+              </div>
+            </CardHeader>
+          </Card>
 
-      {/* Save */}
-      <Card className="border-primary/30 bg-primary/5">
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
-          <div>
-            <p className="text-sm font-medium">Salva valutazione</p>
-            <p className="text-xs text-muted-foreground">
-              {saveAllowed
-                ? `Tutte le aree (${result.areas.length}) sono compilate. La valutazione sarà archiviata nel fascicolo cliente.`
-                : result.allComplete
-                  ? "Correggi i campi non validi prima di salvare la valutazione."
-                  : "Completa INF, SI e PI per ciascuna area per salvare la valutazione."}
-            </p>
-            {saveMessage && (
-              <p
-                className={cn(
-                  "mt-1 text-xs",
-                  saveMessage.startsWith("Errore") ||
-                    saveMessage.startsWith("Discrepanza")
-                    ? "text-destructive"
-                    : "text-[#0c6b2f]",
+          {/* Save */}
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+              <div>
+                <p className="text-sm font-medium">Salva valutazione</p>
+                <p className="text-xs text-muted-foreground">
+                  {saveAllowed
+                    ? `Tutte le aree (${result.areas.length}) sono compilate. La valutazione sarà archiviata nel fascicolo cliente.`
+                    : result.allComplete
+                      ? "Correggi i campi non validi prima di salvare la valutazione."
+                      : "Completa INF, SI e PI per ciascuna area per salvare la valutazione."}
+                </p>
+                {saveMessage && (
+                  <p
+                    className={cn(
+                      "mt-1 text-xs",
+                      saveMessage.startsWith("Errore") ||
+                        saveMessage.startsWith("Discrepanza")
+                        ? "text-destructive"
+                        : "text-[#0c6b2f]",
+                    )}
+                  >
+                    {saveMessage}
+                  </p>
                 )}
-              >
-                {saveMessage}
-              </p>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <Button disabled={!saveAllowed || saving} onClick={save}>
-              {saving ? "Salvataggio in corso…" : "Salva valutazione"}
+              </div>
+              <div className="flex gap-2">
+                <Button disabled={!saveAllowed || saving} onClick={save}>
+                  {saving ? "Salvataggio in corso…" : "Salva valutazione"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* Unsaved-changes guard: a same-origin link click while dirty is held
+          by the hook until the operator decides here. */}
+      <Dialog
+        open={pendingHref !== null}
+        onOpenChange={(open) => {
+          if (!open) cancelLeave();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Modifiche non salvate</DialogTitle>
+            <DialogDescription>
+              La valutazione contiene modifiche non ancora archiviate. Se esci
+              ora andranno perse.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={cancelLeave}>
+              Continua a modificare
             </Button>
-          </div>
-        </CardContent>
-      </Card>
+            <Button type="button" variant="destructive" onClick={confirmLeave}>
+              Esci senza salvare
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
