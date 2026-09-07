@@ -16,13 +16,11 @@ import zipfile
 from pathlib import Path
 
 from docx import Document
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Cm, Pt
+from docx.shared import Cm
 from sqlalchemy import func, select
 
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
-from app.services.document_generator.branding import Branding, resolve_logo_source
 from app.services.document_generator.data_loader import load_haccp
 from app.services.document_generator.design import (
     add_cover,
@@ -30,11 +28,8 @@ from app.services.document_generator.design import (
     setup_document,
 )
 from app.services.document_generator.docx_utils import (
-    BRAND_DEEP,
     BRAND_NAVY,
-    BRAND_SLATE,
     TEMPLATES_DIR,
-    TYPE_SCALE,
     add_data_table,
     add_heading,
     add_kv_table,
@@ -58,43 +53,6 @@ _MESI = [
 def _normalize_code(code: str) -> str:
     """Compare codes ignoring case, hyphens and whitespace."""
     return (code or "").upper().replace("-", "").replace(" ", "").strip()
-
-
-def _add_form_letterhead(doc, azienda, branding: Branding | None = None) -> None:
-    """Compact letterhead at the top of a record form: logo, consultancy and
-    client on three tight lines — a form is printed and filled by hand, so it
-    gets no cover page (audit 2026-09-03: the old header was followed by a
-    page break that left page one empty but for the logo).
-    """
-    branding = branding or Branding.default()
-    logo_src = resolve_logo_source(branding)
-    if logo_src is not None:
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.paragraph_format.space_after = Pt(2)
-        try:
-            p.add_run().add_picture(logo_src, width=Cm(3.4))
-        except Exception:
-            # Corrupt or unreadable image — drop the picture and let the
-            # firm-name line below act as the brand mark.
-            logger.exception("HACCP form logo embed failed")
-    firm = (branding.firm_name or "").strip()
-    if firm:
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.paragraph_format.space_after = Pt(0)
-        run = p.add_run(f"{firm.upper()} · Scheda di autocontrollo HACCP")
-        run.font.size = Pt(TYPE_SCALE["small"])
-        run.font.color.rgb = BRAND_SLATE
-    name = (azienda.ragione_sociale or "").strip()
-    if name:
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.paragraph_format.space_after = Pt(10)
-        run = p.add_run(name.upper())
-        run.bold = True
-        run.font.size = Pt(TYPE_SCALE["h3"])
-        run.font.color.rgb = BRAND_DEEP
 
 
 class HaccpFormsGenerator(BaseDocumentGenerator):
@@ -207,10 +165,10 @@ class HaccpFormsGenerator(BaseDocumentGenerator):
             doc = Document()
         setup_document(doc)
 
-        # US-4.4 AC1: consultancy letterhead + client ragione sociale on
-        # every form, regardless of whether the source template provided
-        # its own placeholders.
-        _add_form_letterhead(doc, azienda, self.branding)
+        # US-4.4 AC1 (consultancy letterhead + client ragione sociale on every
+        # form) is met by the running header and footer from finish_document
+        # below: mark, form title | client, and the letterhead line with the
+        # page number. A form is printed and filled by hand, so no cover.
         add_heading(doc, f"{code} — {form.form_title}", level=1)
         # Prefill what the operator would otherwise retype; both cells stay
         # editable ("solo una questione di revisione, non di inserimento").

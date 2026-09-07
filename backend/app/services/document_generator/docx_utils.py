@@ -35,6 +35,11 @@ BRAND_DEEP = RGBColor(0x06, 0x1B, 0x31)      # --color-heading: body ink
 BRAND_SLATE = RGBColor(0x64, 0x74, 0x8D)     # --color-body: captions, secondary lines
 BRAND_SURFACE_HEX = "F6F9FC"                 # --color-surface-low: zebra rows, label cells
 BRAND_RULE_HEX = "C9D3DF"                    # hairlines and table borders (print-firm)
+BRAND_LABEL = RGBColor(0x27, 0x39, 0x51)     # --color-label: label cells on the cover
+BRAND_LIGHT = RGBColor(0xA5, 0xC8, 0xFF)     # --color-primary-light: eyebrow on the navy band
+BRAND_ON_NAVY = RGBColor(0xDB, 0xE7, 0xF5)   # secondary lines on the navy band
+BRAND_WHITE = RGBColor(0xFF, 0xFF, 0xFF)
+TRICOLORE_HEX = ("009246", "FFFFFF", "CE2B37")  # the bar under the N2O wordmark
 FONT_FAMILY = "Calibri"                      # universal in Word; Carlito on LibreOffice
 
 # Type scale in points. Body 10.5 keeps ~13 words per line on A4 text width.

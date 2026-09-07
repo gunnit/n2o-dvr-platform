@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_haccp
-from app.services.document_generator.design import finish_document
+from app.services.document_generator.design import add_cover, finish_document, strip_donor_cover
 from app.services.document_generator.docx_utils import (
     scrub_body,
     TEMPLATES_DIR,
@@ -32,6 +32,22 @@ from app.services.document_generator.docx_utils import (
 
 TEMPLATE = TEMPLATES_DIR / "HACCP.docx"
 TIPO_DOC = "haccp"
+
+
+def _cover(doc, branding, azienda, version, generated_at, *, at_top: bool, page_break: bool) -> None:
+    """The shared cover for this document (see :func:`add_cover`)."""
+    add_cover(
+        doc,
+        title="Manuale di autocontrollo per l'igiene degli alimenti",
+        eyebrow='Sistema di autocontrollo HACCP',
+        legal_basis='ai sensi del Reg. (CE) 852/2004 e del D.Lgs. 193/2007',
+        azienda=azienda,
+        branding=branding,
+        version=version,
+        generated_at=generated_at,
+        at_top=at_top,
+        page_break=page_break,
+    )
 
 # Standard food-safety SOPs that the customization section reminds the
 # operator are documented in the template body. Helps an inspector see at
@@ -71,6 +87,7 @@ class HaccpManualeGenerator(BaseDocumentGenerator):
         azienda = data["azienda"]
         generated_at = data["generated_at"]
         config, forms = await load_haccp(self.db, self.azienda_id)
+        version = await self._next_version()
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
@@ -88,8 +105,13 @@ class HaccpManualeGenerator(BaseDocumentGenerator):
                 'via Increa, 70': _via,
                 'Brugherio': _citta,
             })
+            # The donor cover is a black full-page shape with white type,
+            # up to the Definizioni chapter; the new cover replaces it.
+            strip_donor_cover(doc, stop_text="Definizioni")
+            _cover(doc, self.branding, azienda, version, generated_at, at_top=True, page_break=True)
         else:
             doc = Document()
+            _cover(doc, self.branding, azienda, version, generated_at, at_top=False, page_break=False)
 
         page_break(doc)
         add_heading(doc, f"MANUALE HACCP - {azienda.ragione_sociale}", level=1)
@@ -173,7 +195,6 @@ class HaccpManualeGenerator(BaseDocumentGenerator):
             ["Data emissione", generated_at.strftime("%d/%m/%Y"), ""],
         ])
 
-        version = await self._next_version()
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")

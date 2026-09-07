@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_incendio
-from app.services.document_generator.design import finish_document
+from app.services.document_generator.design import add_cover, finish_document, strip_donor_cover
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
     add_data_table,
@@ -23,6 +23,22 @@ from app.services.document_generator.schede_ambienti import add_schede_ambienti
 
 TEMPLATE = TEMPLATES_DIR / "ALLEGATO RISCHIO INCENDIO.docx"
 TIPO_DOC = "allegato_incendio"
+
+
+def _cover(doc, branding, azienda, version, generated_at, *, at_top: bool, page_break: bool) -> None:
+    """The shared cover for this document (see :func:`add_cover`)."""
+    add_cover(
+        doc,
+        title='Valutazione del rischio incendio',
+        eyebrow='Allegato al Documento di Valutazione dei Rischi',
+        legal_basis="ai sensi dell'art. 46 del D.Lgs. 81/2008 e s.m.i., del D.M. 03/09/2021 e del D.M. 02/09/2021",
+        azienda=azienda,
+        branding=branding,
+        version=version,
+        generated_at=generated_at,
+        at_top=at_top,
+        page_break=page_break,
+    )
 
 # Six prevention areas per REFERENCE_DATA.md §4.5. Each area has tiered
 # measures keyed by the area's livello_rischio so an inspector sees a
@@ -68,6 +84,7 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
         generated_at = data["generated_at"]
         incendi = await load_incendio(self.db, self.azienda_id)
         ambienti_map = {a.id: a for a in data["ambienti"]}
+        version = await self._next_version()
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
@@ -79,8 +96,13 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
                 "e D.M. 02.09.2021": "e D.M. 03/09/2021 e D.M. 02.09.2021",
                 "D.M. 16.02.1982": "D.P.R. 151/2011",
             })
+            # The donor cover ends at a section break; the new cover takes
+            # its place in that first section.
+            strip_donor_cover(doc)
+            _cover(doc, self.branding, azienda, version, generated_at, at_top=True, page_break=False)
         else:
             doc = Document()
+            _cover(doc, self.branding, azienda, version, generated_at, at_top=False, page_break=False)
 
         page_break(doc)
         add_heading(doc, f"VALUTAZIONE SPECIFICA - {azienda.ragione_sociale}", level=1)
@@ -207,7 +229,6 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
             ["Data", generated_at.strftime("%d/%m/%Y"), ""],
         ])
 
-        version = await self._next_version()
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")

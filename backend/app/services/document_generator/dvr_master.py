@@ -32,12 +32,12 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.oxml.xmlchemy import BaseOxmlElement
-from docx.shared import Cm, Inches, Mm, Pt, RGBColor
+from docx.shared import Cm, Mm, Pt, RGBColor
 from docx.table import Table
 
 from app.data.regional_regulations import get_regulations_for_comune
 from app.services.document_generator.base import BaseDocumentGenerator
-from app.services.document_generator.design import finish_document, setup_document
+from app.services.document_generator.design import add_cover, finish_document, setup_document
 from app.services.document_generator.docx_utils import HEADER_BG, LIGHT_GRAY, RISK_COLORS
 from app.services.reference_data import (
     HAZARD_LIBRARY,
@@ -1071,9 +1071,10 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         # field re-resolves with page numbers from the real headings.
         self._finalize_table_of_contents(doc, *toc_anchors)
 
-        # Running header (title | client) and footer (consultancy · revision |
-        # Pagina X di Y) on every page but the cover, plus honest file
-        # properties. The cover itself stays exactly as Luca specified.
+        # Running header (title | client) and footer (letterhead | Pagina X
+        # di Y, revision) on every page but the cover, plus honest file
+        # properties. No consultancy mark in the header: the DVR embeds only
+        # the VERA asset (Luca's requirement, enforced by the fixture audit).
         finish_document(
             doc,
             title="Documento di Valutazione dei Rischi",
@@ -1081,6 +1082,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             branding=self.branding,
             version=version,
             generated_at=data["generated_at"],
+            header_logo=False,
         )
 
         # Save with the filename pattern required by US-2.8 AC2:
@@ -1448,112 +1450,33 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     # Cover page
     # ------------------------------------------------------------------
 
-    def _add_vera_logo(self, doc: Document) -> None:
-        """Add the DVR-specific VERA mark, with a visible failure marker."""
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run()
-        try:
-            run.add_picture(str(_DVR_VERA_LOGO_PATH), width=Inches(4.8))
-        except Exception:
-            run.text = "[LOGO N2O VERA NON DISPONIBILE]"
-            run.font.size = Pt(14)
-            run.font.italic = True
-            run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-
     def _add_cover_page(
         self, doc: Document, azienda, generated_at: datetime, version: int
     ) -> None:
-        """Add a professional cover page.
+        """The DVR cover: the shared layout with the VERA mark as its hero.
 
-        Layout (top → bottom): logo, title block, company identity block
-        (name + address + P.IVA + ATECO), date+version footer.
-        Every field falls back gracefully when missing so generation
-        never crashes on a sparse survey.
+        Client requirement (Luca, 2026-08-03): the DVR embeds only the VERA
+        asset — never the organization's logo or letterhead, and no
+        "Documento elaborato da" block — so the consultancy strip is left
+        off. Title, legal basis, the company's identity table, the revision
+        numbered like the Storico and the stamp/signature boxes come from
+        :func:`add_cover`. A missing asset prints a visible marker instead of
+        failing silently.
         """
-        # Top spacer — kept tight (3 lines) so the title sits above the
-        # vertical center, leaving room for the identity block below.
-        for _ in range(3):
-            doc.add_paragraph("")
-
-        self._add_vera_logo(doc)
-
-        doc.add_paragraph("")
-
-        # Title
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run("DOCUMENTO DI VALUTAZIONE DEI RISCHI")
-        run.bold = True
-        run.font.size = Pt(24)
-        run.font.color.rgb = _HEADER_BG
-
-        # Subtitle
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run("ai sensi degli artt. 17 e 28 del D.Lgs. 81/2008 e s.m.i.")
-        run.font.size = Pt(13)
-        run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-
-        doc.add_paragraph("")
-        doc.add_paragraph("")
-
-        # Company name — guard against None ragione_sociale (sparse surveys
-        # were crashing here previously with AttributeError on .upper()).
-        ragione = (azienda.ragione_sociale or "—").upper()
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(ragione)
-        run.bold = True
-        run.font.size = Pt(18)
-
-        # Address (registered seat) — include CAP + provincia so the cover
-        # carries the full legal address, not just via + comune (audit F-301).
-        cover_address = self._format_address(
-            azienda.sede_legale_via,
-            azienda.sede_legale_citta,
-            getattr(azienda, "cap_legale", None),
-            getattr(azienda, "provincia_legale", None),
+        add_cover(
+            doc,
+            title="DOCUMENTO DI VALUTAZIONE DEI RISCHI",
+            eyebrow="Salute e sicurezza sul lavoro",
+            legal_basis="ai sensi degli artt. 17, comma 1, lett. a) e 28 del D.Lgs. 81/2008 e s.m.i.",
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=generated_at,
+            hero_image=str(_DVR_VERA_LOGO_PATH),
+            hero_width_cm=8.0,
+            hero_fallback_text="[LOGO N2O VERA NON DISPONIBILE]",
+            show_letterhead=False,
         )
-        if cover_address and cover_address != "—":
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run(cover_address)
-            run.font.size = Pt(12)
-            run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-
-        # Identity line: P.IVA + ATECO when available
-        identity_bits: list[str] = []
-        partita_iva = getattr(azienda, "partita_iva", None)
-        if partita_iva:
-            identity_bits.append(f"P.IVA {partita_iva}")
-        codice_ateco = getattr(azienda, "codice_ateco", None)
-        if codice_ateco:
-            identity_bits.append(f"ATECO {codice_ateco}")
-        if identity_bits:
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run(" · ".join(identity_bits))
-            run.font.size = Pt(11)
-            run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-
-        # Spacer before footer
-        for _ in range(3):
-            doc.add_paragraph("")
-
-        # Date and version block — single centered paragraph with both bits.
-        # 2-digit pad (Rev. 00) to mirror the convention Luca uses on the master
-        # template, where the first emission is revision *zero*.
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(
-            f"Revisione {_revision_label(version)} — {generated_at.strftime('%d/%m/%Y')}"
-        )
-        run.font.size = Pt(12)
-        run.bold = True
-
-        # Page break
-        doc.add_page_break()
 
     # ------------------------------------------------------------------
     # Table of contents placeholder

@@ -11,6 +11,10 @@ Output is `.docx` via python-docx: professional formatting, cover page, logo, ta
 
 **Generated text is Italian.** Code and identifiers stay English.
 
+## Page furniture (cover, header, footer)
+
+`design.py` is the single source: `add_cover` (letterhead strip, navy title band, identity and revision tables, stamp/signature boxes), `add_running_header_footer` (mark + title | client; letterhead | Pagina X di Y, revision) and `finish_document`, which every generator calls before `doc.save`. A generator that opens a donor `.docx` calls `strip_donor_cover` first, then `add_cover(..., at_top=True)`; `page_break=False` when the donor's section break already follows. The DVR Master is the one exception to the branding: it passes `show_letterhead=False` and `header_logo=False` because the client requires the VERA mark alone on the DVR (`tests/test_dvr_luca_improvements.py` and the fixture audit enforce it — no `logo.png` bytes anywhere in that file).
+
 ## Specs to read first
 
 - `docs/context/DVR_TEMPLATE_MAPPING.md` — *is* the spec for the DVR Master engine: 111 tables cataloged, 4 document parts with exact boundaries, the environment risk block pattern (7 environments × identical structure), 269 dynamic cells mapped to data fields.

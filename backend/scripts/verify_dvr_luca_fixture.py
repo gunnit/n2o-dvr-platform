@@ -224,16 +224,20 @@ def build_acme_fixture() -> dict:
         ["CARRELLO ELEVATORE", "—", "SI", "SI"],
         ["POSTAZIONE VDT", "—", "SI", "NO"],
     ]
+    # Cover redesign 2026-09-07: the shared cover adds four body tables —
+    # the title band (1×1), the identity table (3×2), the revision table
+    # (2×3) and the stamp/signature boxes (2×3).
     fixture["expected_table_inventory"] = {
-        "total": 71,
+        "total": 75,
         "dimensions": Counter(
             {
+                (1, 1): 1,
                 (2, 1): 5,
                 (2, 2): 6,
-                (2, 3): 13,
+                (2, 3): 15,
                 (2, 5): 12,
                 (2, 7): 1,
-                (3, 2): 7,
+                (3, 2): 8,
                 (3, 6): 1,
                 (5, 2): 6,
                 (5, 3): 2,
