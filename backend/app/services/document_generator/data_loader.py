@@ -41,7 +41,13 @@ async def load_stress(db: AsyncSession, azienda_id: uuid.UUID) -> StressValutazi
 
 
 async def load_incendio(db: AsyncSession, azienda_id: uuid.UUID) -> list[IncendioValutazione]:
-    r = await db.execute(select(IncendioValutazione).where(IncendioValutazione.azienda_id == azienda_id))
+    # Same order as the list endpoint (creation = the order the operator
+    # entered the areas), so the allegato and the form agree.
+    r = await db.execute(
+        select(IncendioValutazione)
+        .where(IncendioValutazione.azienda_id == azienda_id)
+        .order_by(IncendioValutazione.created_at, IncendioValutazione.id)
+    )
     return list(r.scalars().all())
 
 

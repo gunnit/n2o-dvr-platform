@@ -296,6 +296,10 @@ def _sentence_case(value: str) -> str:
 def parse_visura(text: str) -> ParsedVisura:
     """Map visura plaintext onto ``AziendaCreate`` fields. Pure, no I/O."""
     text = _normalise(text)
+    # pypdf >= 6.17 returns the typographic apostrophe (U+2019) for the
+    # quoteright glyph most visura renderers use in "UNITA' LOCALI", and the
+    # label regexes expect the ASCII one. Fold the variants before matching.
+    text = text.replace("\u2019", "'").replace("\u2018", "'").replace("\u00b4", "'")
     out = ParsedVisura()
 
     # Ragione sociale: explicit label first, document heading as fallback.

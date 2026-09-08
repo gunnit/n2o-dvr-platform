@@ -5,6 +5,7 @@ import os
 from docx import Document
 from sqlalchemy import func, select
 
+from app.data.fire_measures import get_measures_for_level
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_incendio
@@ -42,23 +43,25 @@ PREVENTION_CATEGORIES: list[tuple[str, str]] = [
      "Corso antincendio (livello 1/2/3) D.M. 02/09/2021 e aggiornamento almeno quinquennale."),
 ]
 
-# Per-livello specific recommendations to layer on top of the generic
-# categories. Higher risk -> more demanding measures.
-LIVELLO_SPECIFIC_MEASURES: dict[str, list[str]] = {
-    "BASSO": [
-        "Verifica estintori semestrale a cura di tecnico abilitato.",
-        "Addetti antincendio formazione 4 ore (livello 1-FOR).",
-    ],
-    "MEDIO": [
-        "Verifica estintori semestrale; impianto rivelazione + allarme periodicamente testato.",
-        "Addetti antincendio formazione 8 ore (livello 2-FOR) + idoneità tecnica per gli ambienti soggetti a CPI.",
-    ],
-    "ALTO": [
-        "Sistema di rivelazione automatica e spegnimento (sprinkler / aerosol) dove tecnicamente fattibile.",
-        "Addetti antincendio formazione 16 ore (livello 3-FOR) + idoneità tecnica obbligatoria; CPI in corso di validità.",
-        "Coordinamento con il responsabile CPI per aggiornamenti periodici.",
-    ],
-}
+def prescrizioni_per_area(misure_prevenzione: str | None, livello_rischio: str | None) -> list[str]:
+    """The livello-specific prescriptions to print for one area.
+
+    They are the same list the operator reviewed on screen: the checklist in
+    the UI is served by ``/calculate/fire-measures`` from
+    ``app/data/fire_measures.py``. ``None`` means the checklist was left at
+    its default (every measure of the band ticked), so the canonical list is
+    printed; a saved selection — including an explicitly empty one — is
+    printed verbatim. Before this the generator carried a private list, so
+    unticking a measure in the UI never changed the document (UI/UX audit
+    2026-09-07, F5).
+    """
+    if misure_prevenzione is None:
+        band = (livello_rischio or "BASSO").capitalize()
+        try:
+            return get_measures_for_level(band)  # type: ignore[arg-type]
+        except ValueError:
+            return get_measures_for_level("Basso")
+    return [line.strip() for line in misure_prevenzione.splitlines() if line.strip()]
 
 
 class AllegatoIncendioGenerator(BaseDocumentGenerator):
@@ -170,15 +173,17 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
             cat_rows = [[cat, contenuto] for cat, contenuto in PREVENTION_CATEGORIES]
             add_data_table(doc, ["Categoria di prevenzione", "Misure"], cat_rows)
 
-            # Livello-specific addenda
+            # Livello-specific prescriptions — the operator's checklist.
             add_heading(doc, f"Prescrizioni aggiuntive — livello {livello}", level=4)
-            for m in LIVELLO_SPECIFIC_MEASURES.get(livello, LIVELLO_SPECIFIC_MEASURES["BASSO"]):
+            prescrizioni = prescrizioni_per_area(v.misure_prevenzione, v.livello_rischio)
+            for m in prescrizioni:
                 add_paragraph(doc, f"• {m}")
-
-            # Operator-supplied measures, if any
-            if v.misure_prevenzione:
-                add_heading(doc, "Misure aggiuntive registrate", level=4)
-                add_paragraph(doc, v.misure_prevenzione)
+            if not prescrizioni:
+                add_paragraph(
+                    doc,
+                    "Nessuna prescrizione aggiuntiva registrata per quest'area.",
+                    italic=True,
+                )
 
         add_heading(doc, "Gestione dell'emergenza", level=2)
         add_paragraph(
