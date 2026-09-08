@@ -317,10 +317,12 @@ async def test_endpoint_rejects_pdf_that_is_not_a_visura_with_400():
         await estrai_visura(file=_upload(pdf))
 
 
-def test_parser_accepts_typographic_apostrophes_from_pypdf():
-    """pypdf >= 6.17 maps the quoteright glyph to U+2019, so extracted text
-    reads "Unita’ locale"; the label regexes expect the ASCII apostrophe."""
-    parsed = parse_visura(INFOCAMERE.replace("'", "\u2019"))
+@pytest.mark.parametrize("apostrophe", ["\u2018", "\u2019", "\u201b", "\u02bc", "\u00b4", "`"])
+def test_parser_accepts_typographic_apostrophes_from_pypdf(apostrophe):
+    """PDF text extraction hands back a typographic apostrophe where the
+    registry printed the ASCII one, so "Unita' locale" arrives unmatchable.
+    ``_normalise`` folds every variant before the label patterns run."""
+    parsed = parse_visura(INFOCAMERE.replace("'", apostrophe))
 
     assert parsed.values["sedi_operative_extra"][0]["citta"] == "TORINO"
     assert parsed.values["sede_operativa_citta"] == "ROMA"

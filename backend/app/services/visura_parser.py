@@ -192,8 +192,16 @@ class ParsedVisura:
 # --- helpers ------------------------------------------------------------------
 
 
+# Apostrophes as PDF text extraction hands them back. pypdf maps the byte
+# 0x27 of a Standard-encoded font to U+2019 (quoteright), so "Unita' locale"
+# and "attivita' prevalente" arrive with a typographic apostrophe; the label
+# patterns below are written with the ASCII one.
+_APOSTROPHES = str.maketrans({c: "'" for c in "\u2018\u2019\u201b\u02bc\u00b4`"})
+
+
 def _normalise(text: str) -> str:
     text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\xa0", " ")
+    text = text.translate(_APOSTROPHES)
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r" ?\n ?", "\n", text)
     return text
@@ -296,10 +304,6 @@ def _sentence_case(value: str) -> str:
 def parse_visura(text: str) -> ParsedVisura:
     """Map visura plaintext onto ``AziendaCreate`` fields. Pure, no I/O."""
     text = _normalise(text)
-    # pypdf >= 6.17 returns the typographic apostrophe (U+2019) for the
-    # quoteright glyph most visura renderers use in "UNITA' LOCALI", and the
-    # label regexes expect the ASCII one. Fold the variants before matching.
-    text = text.replace("\u2019", "'").replace("\u2018", "'").replace("\u00b4", "'")
     out = ParsedVisura()
 
     # Ragione sociale: explicit label first, document heading as fallback.
