@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_stress
-from app.services.document_generator.design import finish_document, insert_logo_at_top
+from app.services.document_generator.design import add_cover, finish_document, strip_donor_cover
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
     add_data_table,
@@ -36,6 +36,23 @@ TEMPLATE = TEMPLATES_DIR / "ALLEGATO STRESS DA LAVORO CORRELATO.docx"
 TIPO_DOC = "allegato_stress"
 
 
+def _cover(doc, branding, azienda, version, generated_at, *, at_top: bool, page_break: bool) -> None:
+    """The shared cover for this document (see :func:`add_cover`)."""
+    add_cover(
+        doc,
+        title='Valutazione del rischio stress lavoro-correlato',
+        eyebrow='Allegato al Documento di Valutazione dei Rischi',
+        subtitle='Metodo degli indicatori oggettivi (INAIL)',
+        legal_basis="ai sensi dell'art. 28, comma 1-bis, del D.Lgs. 81/2008 e s.m.i.",
+        azienda=azienda,
+        branding=branding,
+        version=version,
+        generated_at=generated_at,
+        at_top=at_top,
+        page_break=page_break,
+    )
+
+
 class AllegatoStressGenerator(BaseDocumentGenerator):
     @staticmethod
     def _cut_donor_tail(doc: Document) -> None:
@@ -58,6 +75,7 @@ class AllegatoStressGenerator(BaseDocumentGenerator):
         azienda = data["azienda"]
         generated_at = data["generated_at"]
         stress = await load_stress(self.db, self.azienda_id)
+        version = await self._next_version()
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
@@ -71,7 +89,6 @@ class AllegatoStressGenerator(BaseDocumentGenerator):
             # structure (audit 2026-09-03). The generator appends the client's
             # own assessment below, so nothing the client needs is lost.
             self._cut_donor_tail(doc)
-            insert_logo_at_top(doc, self.branding)
             scrub_n2o_legacy_donor(
                 doc,
                 azienda,
@@ -82,8 +99,14 @@ class AllegatoStressGenerator(BaseDocumentGenerator):
                     "L'immobile è inserito",
                 ],
             )
+            # The donor cover ends at a section break; the new cover takes
+            # its place in that first section (after the identity scrub, so
+            # the consultancy letterhead on it is not rewritten).
+            strip_donor_cover(doc)
+            _cover(doc, self.branding, azienda, version, generated_at, at_top=True, page_break=False)
         else:
             doc = Document()
+            _cover(doc, self.branding, azienda, version, generated_at, at_top=False, page_break=False)
 
         page_break(doc)
         add_heading(doc, f"VALUTAZIONE SPECIFICA - {azienda.ragione_sociale}", level=1)
@@ -158,7 +181,6 @@ class AllegatoStressGenerator(BaseDocumentGenerator):
             ["Data", generated_at.strftime("%d/%m/%Y"), ""],
         ])
 
-        version = await self._next_version()
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")

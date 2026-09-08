@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_pos
-from app.services.document_generator.design import finish_document
+from app.services.document_generator.design import add_cover, finish_document, strip_donor_cover
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
     add_data_table,
@@ -282,6 +282,22 @@ TEMPLATE = TEMPLATES_DIR / "POS.docx"
 TIPO_DOC = "pos"
 
 
+def _cover(doc, branding, azienda, version, generated_at, *, at_top: bool, page_break: bool) -> None:
+    """The shared cover for this document (see :func:`add_cover`)."""
+    add_cover(
+        doc,
+        title='Piano Operativo di Sicurezza',
+        eyebrow='Sicurezza nei cantieri temporanei o mobili',
+        legal_basis="ai sensi degli artt. 17 e 96 e dell'Allegato XV del D.Lgs. 81/2008 e s.m.i.",
+        azienda=azienda,
+        branding=branding,
+        version=version,
+        generated_at=generated_at,
+        at_top=at_top,
+        page_break=page_break,
+    )
+
+
 class PosGenerator(BaseDocumentGenerator):
     async def generate(self) -> str:
         data = await self.load_data()
@@ -289,12 +305,19 @@ class PosGenerator(BaseDocumentGenerator):
         persone = data.get("persone") or []
         generated_at = data["generated_at"]
         pos_rows = await load_pos(self.db, self.azienda_id)
+        version = await self._next_version()
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
             replace_placeholders(doc, {"RAGIONE SOCIALE": azienda.ragione_sociale or "", "[AZIENDA]": azienda.ragione_sociale or ""})
+            # The donor body is nothing but its cover (title, identity and
+            # revision forms, a blank activity grid); the new cover replaces
+            # it and the page break below starts the generated content.
+            strip_donor_cover(doc, whole_body=True)
+            _cover(doc, self.branding, azienda, version, generated_at, at_top=True, page_break=False)
         else:
             doc = Document()
+            _cover(doc, self.branding, azienda, version, generated_at, at_top=False, page_break=False)
 
         page_break(doc)
         add_heading(doc, f"POS - {azienda.ragione_sociale}", level=1)
@@ -392,7 +415,6 @@ class PosGenerator(BaseDocumentGenerator):
         _render_misure_prevenzione(doc)
         _render_dichiarazione(doc, azienda, persone, generated_at)
 
-        version = await self._next_version()
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")

@@ -10,19 +10,28 @@ same consultancy produced it — and so an organization that uploads its own
 logo gets it on every page of every document.
 
 Palette and type scale live in :mod:`docx_utils` (``BRAND_*``, ``TYPE_SCALE``)
-because the table helpers there need them too. The DVR Master keeps its own
-cover (the VERA mark is a client requirement, see
-docs/superpowers/plans/2026-08-03-dvr-master-luca-improvements.md) but adopts
-the running header/footer and page setup from here.
+because the table helpers there need them too.
+
+Cover redesign 2026-09-07: one layout for all documents — a consultancy
+letterhead strip, a navy title band, the assessed company's identity and
+revision tables and the stamp/signature boxes — with a running header (mark,
+title | client) and a two-line footer (letterhead | Pagina X di Y, revision).
+Documents opened from a donor template drop the donor's own cover first
+(:func:`strip_donor_cover`) and take this one. The DVR Master uses the same
+layout with the VERA mark as its hero and no consultancy identity anywhere
+(a client requirement, see
+docs/superpowers/plans/2026-08-03-dvr-master-luca-improvements.md).
 """
 
 from __future__ import annotations
 
+import copy
 import re
 from datetime import datetime
 
 from docx import Document
 from docx.enum.section import WD_ORIENT
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_ROW_HEIGHT_RULE, WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -31,24 +40,34 @@ from docx.shared import Cm, Pt, RGBColor
 from app.services.document_generator.branding import Branding, resolve_logo_source
 from app.services.document_generator.docx_utils import (
     BRAND_DEEP,
+    BRAND_LABEL,
+    BRAND_LIGHT,
     BRAND_NAVY,
     BRAND_NAVY_HEX,
+    BRAND_ON_NAVY,
     BRAND_RULE_HEX,
     BRAND_SLATE,
+    BRAND_SURFACE_HEX,
+    BRAND_WHITE,
     FONT_FAMILY,
+    TRICOLORE_HEX,
     TYPE_SCALE,
     add_data_table,
     fill_label_table,
     format_sede,
     insert_in_order,
     reset_table_rows,
+    set_table_borders,
+    shade_cell,
 )
 
-# A4 with a binding-side margin; text width is 16.5 cm.
+# A4 with a binding-side margin; text width is 16.5 cm. The top margin holds
+# the running header (mark + title line + hairline) and the bottom one the
+# two-line footer, each 1 cm from the page edge.
 PAGE_W_CM = 21.0
 PAGE_H_CM = 29.7
-MARGIN_TOP_CM = 2.0
-MARGIN_BOTTOM_CM = 2.0
+MARGIN_TOP_CM = 2.3
+MARGIN_BOTTOM_CM = 2.4
 MARGIN_LEFT_CM = 2.5
 MARGIN_RIGHT_CM = 2.0
 TEXT_WIDTH_CM = PAGE_W_CM - MARGIN_LEFT_CM - MARGIN_RIGHT_CM
@@ -191,32 +210,113 @@ def _paragraph_border(paragraph, edge: str, color_hex: str = BRAND_RULE_HEX, siz
 
 def _add_field(run, instruction: str, cached: str = "1") -> None:
     """Emit a Word field (PAGE, NUMPAGES, ...) with a cached result so the
-    unrefreshed view is still sensible."""
+    unrefreshed view is still sensible.
+
+    The field is spread over five runs — begin, instruction, separate, result,
+    end — each carrying ``run``'s formatting. That is the layout Word writes
+    itself, and the one LibreOffice honours when it draws the result: with
+    everything in one run it fell back to the paragraph's font for the number.
+    """
+    rpr = run._r.get_or_add_rPr()
+    last = run._r
+
+    def next_run():
+        nonlocal last
+        r = OxmlElement("w:r")
+        r.append(copy.deepcopy(rpr))
+        last.addnext(r)
+        last = r
+        return r
+
     begin = OxmlElement("w:fldChar")
     begin.set(qn("w:fldCharType"), "begin")
     run._r.append(begin)
     instr = OxmlElement("w:instrText")
     instr.set(qn("xml:space"), "preserve")
     instr.text = f" {instruction} "
-    run._r.append(instr)
+    next_run().append(instr)
     sep = OxmlElement("w:fldChar")
     sep.set(qn("w:fldCharType"), "separate")
-    run._r.append(sep)
+    next_run().append(sep)
     text = OxmlElement("w:t")
     text.text = cached
-    run._r.append(text)
+    next_run().append(text)
     end = OxmlElement("w:fldChar")
     end.set(qn("w:fldCharType"), "end")
-    run._r.append(end)
+    next_run().append(end)
 
 
-def _spacer(doc: Document, lines: int = 1) -> None:
-    for _ in range(lines):
-        doc.add_paragraph("")
+# ---------------------------------------------------------------------------
+# Table primitives — the cover is built from tables, because a shaded cell is
+# the one block-colour device python-docx, Word and LibreOffice all agree on
+# ---------------------------------------------------------------------------
+
+_TBLPR_AFTER_BORDERS = ("shd", "tblLayout", "tblCellMar", "tblLook", "tblCaption", "tblDescription", "tblPrChange")
+_TBLPR_AFTER_CELLMAR = ("tblLook", "tblCaption", "tblDescription", "tblPrChange")
+_TBLPR_AFTER_WIDTH = ("jc", "tblCellSpacing", "tblInd", "tblBorders", "shd", "tblLayout", "tblCellMar", "tblLook", "tblCaption", "tblDescription", "tblPrChange")
+_TCPR_AFTER_BORDERS = ("shd", "noWrap", "tcMar", "textDirection", "tcFitText", "vAlign", "hideMark", "headers", "cellIns", "cellDel", "cellMerge", "tcPrChange")
+_RPR_AFTER_SPACING = ("w", "kern", "position", "sz", "szCs", "highlight", "u", "effect", "bdr", "shd", "fitText", "vertAlign", "rtl", "cs", "em", "lang", "eastAsianLayout", "specVanish", "oMath")
 
 
-def _centered(
-    doc: Document,
+def _twips(cm: float) -> str:
+    return str(int(round(cm * 567)))
+
+
+def _body_blocks(doc: Document) -> list:
+    """Body children in order, minus the trailing section properties."""
+    return [el for el in doc.element.body if el.tag != qn("w:sectPr")]
+
+
+def _text_width_cm(doc: Document) -> float:
+    """Text width of the first section, or the A4 default when a bare
+    document has no geometry yet."""
+    try:
+        section = doc.sections[0]
+        width = section.page_width - section.left_margin - section.right_margin
+        return width / 360000
+    except (IndexError, TypeError):
+        return TEXT_WIDTH_CM
+
+
+def _gap(doc: Document, before_pt: float):
+    """A one-point paragraph carrying vertical space. Tables have no spacing
+    of their own, so the room between the cover's blocks lives here."""
+    p = doc.add_paragraph()
+    fmt = p.paragraph_format
+    fmt.space_before = Pt(before_pt)
+    fmt.space_after = Pt(0)
+    fmt.line_spacing = Pt(1)
+    p.add_run("").font.size = Pt(1)
+    return p
+
+
+def _set_run_font(run) -> None:
+    """Pin the run to the brand face on every script slot. Documents opened
+    from a donor template inherit that template's Normal (Times, mostly), and
+    the cover and running furniture must not."""
+    run.font.name = FONT_FAMILY
+    rpr = run._r.get_or_add_rPr()
+    fonts = rpr.find(qn("w:rFonts"))
+    if fonts is None:
+        fonts = OxmlElement("w:rFonts")
+        rpr.insert(0, fonts)
+    for attr in ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs"):
+        fonts.set(qn(attr), FONT_FAMILY)
+    for attr in ("w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme", "w:cstheme"):
+        if fonts.get(qn(attr)) is not None:
+            del fonts.attrib[qn(attr)]
+
+
+def _run_spacing(run, pt: float) -> None:
+    """Letter-spacing on one run (``w:spacing`` counts twentieths of a point)."""
+    rpr = run._r.get_or_add_rPr()
+    sp = OxmlElement("w:spacing")
+    sp.set(qn("w:val"), str(int(pt * 20)))
+    insert_in_order(rpr, sp, _RPR_AFTER_SPACING)
+
+
+def _text_paragraph(
+    container,
     text: str,
     *,
     size: float,
@@ -225,53 +325,286 @@ def _centered(
     colour: RGBColor | None = None,
     caps: bool = False,
     spacing: float | None = None,
-    space_after: float | None = None,
+    align=None,
+    space_before: float = 0,
+    space_after: float = 0,
+    first: bool = False,
 ):
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    """One run in one paragraph. ``first`` reuses the paragraph a new table
+    cell is born with instead of adding a second one."""
+    p = container.paragraphs[0] if first else container.add_paragraph()
+    if align is not None:
+        p.alignment = align
+    p.paragraph_format.space_before = Pt(space_before)
+    p.paragraph_format.space_after = Pt(space_after)
     run = p.add_run(text.upper() if caps else text)
+    _set_run_font(run)
     run.font.size = Pt(size)
     run.bold = bold
     run.italic = italic
     if colour is not None:
         run.font.color.rgb = colour
     if spacing is not None:
-        rpr = run._r.get_or_add_rPr()
-        sp = OxmlElement("w:spacing")
-        sp.set(qn("w:val"), str(int(spacing * 20)))
-        insert_in_order(rpr, sp, ("w", "kern", "position", "sz", "szCs", "highlight", "u", "effect", "bdr", "shd", "fitText", "vertAlign", "rtl", "cs", "em", "lang", "eastAsianLayout", "specVanish", "oMath"))
-    if space_after is not None:
-        p.paragraph_format.space_after = Pt(space_after)
+        _run_spacing(run, spacing)
     return p
 
 
-def insert_logo_at_top(doc: Document, branding: Branding, *, width_cm: float = 4.5) -> bool:
-    """Put the consultancy mark as the very first body element.
+def _table_no_borders(table) -> None:
+    tbl_pr = table._tbl.tblPr
+    for existing in tbl_pr.findall(qn("w:tblBorders")):
+        tbl_pr.remove(existing)
+    borders = OxmlElement("w:tblBorders")
+    for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        el = OxmlElement(f"w:{edge}")
+        el.set(qn("w:val"), "nil")
+        borders.append(el)
+    insert_in_order(tbl_pr, borders, _TBLPR_AFTER_BORDERS)
 
-    For donor templates whose cover is a text box we cannot restyle: the
-    donor's own logo is stripped with the other body pictures and the
-    organization's mark takes its place above the title.
-    """
-    logo_src = resolve_logo_source(branding)
-    if logo_src is None:
-        return False
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p.paragraph_format.space_after = Pt(6)
-    try:
-        p.add_run().add_picture(logo_src, width=Cm(width_cm))
-    except Exception:
-        p._p.getparent().remove(p._p)
-        return False
+
+def _table_width(table, cm: float) -> None:
+    tbl_pr = table._tbl.tblPr
+    width = tbl_pr.find(qn("w:tblW"))
+    if width is None:
+        width = OxmlElement("w:tblW")
+        insert_in_order(tbl_pr, width, _TBLPR_AFTER_WIDTH)
+    width.set(qn("w:w"), _twips(cm))
+    width.set(qn("w:type"), "dxa")
+
+
+def _table_cell_margins(table, *, top_cm: float = 0.0, bottom_cm: float = 0.0, left_cm: float = 0.0, right_cm: float = 0.0) -> None:
+    tbl_pr = table._tbl.tblPr
+    for existing in tbl_pr.findall(qn("w:tblCellMar")):
+        tbl_pr.remove(existing)
+    margins = OxmlElement("w:tblCellMar")
+    for edge, cm in (("top", top_cm), ("left", left_cm), ("bottom", bottom_cm), ("right", right_cm)):
+        el = OxmlElement(f"w:{edge}")
+        el.set(qn("w:w"), _twips(cm))
+        el.set(qn("w:type"), "dxa")
+        margins.append(el)
+    insert_in_order(tbl_pr, margins, _TBLPR_AFTER_CELLMAR)
+
+
+def _cell_borders(cell, edges: dict[str, tuple[str, int]]) -> None:
+    """Borders on one cell: ``edges`` maps top/left/bottom/right to
+    ``(colour_hex, size)`` with the size in eighths of a point; the edges not
+    named are switched off."""
+    tc_pr = cell._tc.get_or_add_tcPr()
+    for existing in tc_pr.findall(qn("w:tcBorders")):
+        tc_pr.remove(existing)
+    borders = OxmlElement("w:tcBorders")
+    for edge in ("top", "left", "bottom", "right"):
+        el = OxmlElement(f"w:{edge}")
+        spec = edges.get(edge)
+        if spec is None:
+            el.set(qn("w:val"), "nil")
+        else:
+            colour, size = spec
+            el.set(qn("w:val"), "single")
+            el.set(qn("w:sz"), str(size))
+            el.set(qn("w:space"), "0")
+            el.set(qn("w:color"), colour)
+        borders.append(el)
+    insert_in_order(tc_pr, borders, _TCPR_AFTER_BORDERS)
+
+
+def _row_height(row, cm: float, *, exact: bool) -> None:
+    row.height = Cm(cm)
+    row.height_rule = WD_ROW_HEIGHT_RULE.EXACTLY if exact else WD_ROW_HEIGHT_RULE.AT_LEAST
+
+
+def _fixed_table(container, widths_cm: list[float], *, rows: int = 1):
+    """A borderless fixed-layout table, centred, with no cell padding.
+    ``container`` is the document or a cell (for the nested tricolore bar)."""
+    table = container.add_table(rows=rows, cols=len(widths_cm))
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.autofit = False
+    for column, width_cm in zip(table.columns, widths_cm):
+        column.width = Cm(width_cm)
+        for cell in column.cells:
+            cell.width = Cm(width_cm)
+    _table_width(table, sum(widths_cm))
+    _table_no_borders(table)
+    _table_cell_margins(table)
+    return table
+
+
+def _move_to_top(doc: Document, count: int) -> None:
+    """Move the last ``count`` body blocks to the front, order preserved."""
     body = doc.element.body
-    body.remove(p._p)
-    body.insert(0, p._p)
-    return True
+    blocks = _body_blocks(doc)
+    for index, el in enumerate(blocks[len(blocks) - count:]):
+        body.remove(el)
+        body.insert(index, el)
+
+
+def strip_donor_cover(
+    doc: Document,
+    *,
+    stop_text: str | None = None,
+    stop_before_table: bool = False,
+    whole_body: bool = False,
+    max_scan: int = 60,
+) -> int:
+    """Remove a donor template's own cover page.
+
+    Deletes every leading body block up to — not including — the first one
+    that ends the cover: a paragraph carrying a section break, a paragraph
+    whose text is ``stop_text``, or (with ``stop_before_table``) the first
+    table. ``whole_body`` says the donor body is nothing but its cover (the
+    POS template) and clears it entirely. Otherwise nothing is removed when
+    no boundary appears within ``max_scan`` blocks, so an unexpected
+    template keeps its cover rather than losing its body. The donor's page
+    frame around the cover section goes with it. Returns the number of
+    blocks removed.
+    """
+    blocks = _body_blocks(doc)
+    boundary = len(blocks) if whole_body else None
+    for index, el in enumerate(blocks[:max_scan] if boundary is None else []):
+        if el.tag == qn("w:tbl"):
+            if stop_before_table:
+                boundary = index
+                break
+            continue
+        if el.find(f"{qn('w:pPr')}/{qn('w:sectPr')}") is not None:
+            boundary = index
+            break
+        if stop_text is not None:
+            text = "".join(t.text or "" for t in el.iter(qn("w:t")))
+            if " ".join(text.split()).lower() == " ".join(stop_text.split()).lower():
+                boundary = index
+                break
+    if boundary is None:
+        return 0
+    body = doc.element.body
+    for el in blocks[:boundary]:
+        body.remove(el)
+    try:
+        sect_pr = doc.sections[0]._sectPr
+    except IndexError:
+        sect_pr = None
+    if sect_pr is not None:
+        for frame in sect_pr.findall(qn("w:pgBorders")):
+            sect_pr.remove(frame)
+    return boundary
 
 
 # ---------------------------------------------------------------------------
 # Cover page
 # ---------------------------------------------------------------------------
+
+def _letterhead_strip(doc: Document, branding: Branding, *, logo_width_cm: float, width_cm: float) -> None:
+    """Consultancy mark on the left, firm name and letterhead lines ranged
+    right, on a shared hairline."""
+    table = _fixed_table(doc, [7.5, width_cm - 7.5])
+    _table_cell_margins(table, bottom_cm=0.22)
+    left, right = table.rows[0].cells
+    for cell in (left, right):
+        cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.BOTTOM
+        _cell_borders(cell, {"bottom": (BRAND_RULE_HEX, 6)})
+    logo_src = resolve_logo_source(branding)
+    logo_p = left.paragraphs[0]
+    logo_p.paragraph_format.space_after = Pt(0)
+    if logo_src is not None:
+        try:
+            logo_p.add_run().add_picture(logo_src, width=Cm(logo_width_cm))
+        except Exception:
+            # An unreadable upload must not break generation; the firm name
+            # on the right still identifies the consultancy.
+            pass
+    _text_paragraph(
+        right,
+        (branding.firm_name or "").strip().upper(),
+        size=9,
+        bold=True,
+        colour=BRAND_NAVY,
+        align=WD_ALIGN_PARAGRAPH.RIGHT,
+        first=True,
+    )
+    for line in _letterhead_lines(branding):
+        _text_paragraph(right, line, size=TYPE_SCALE["small"], colour=BRAND_SLATE, align=WD_ALIGN_PARAGRAPH.RIGHT)
+
+
+def _tiny(paragraph) -> None:
+    """Collapse a paragraph Word insists on (after a nested table) to a point."""
+    fmt = paragraph.paragraph_format
+    fmt.space_before = Pt(0)
+    fmt.space_after = Pt(0)
+    fmt.line_spacing = Pt(1)
+    paragraph.add_run("").font.size = Pt(1)
+
+
+def _title_band(doc: Document, *, eyebrow: str | None, title: str, subtitle: str | None, legal_basis: str | None, width_cm: float) -> None:
+    """Navy band: eyebrow, title, subtitle, legal basis and the tricolore bar
+    that sits under the N2O wordmark."""
+    table = _fixed_table(doc, [width_cm])
+    _table_cell_margins(table, top_cm=0.6, bottom_cm=0.5, left_cm=0.85, right_cm=0.85)
+    cell = table.rows[0].cells[0]
+    shade_cell(cell, BRAND_NAVY_HEX)
+    first = True
+    if eyebrow:
+        _text_paragraph(cell, eyebrow, size=TYPE_SCALE["small"], colour=BRAND_LIGHT, caps=True, spacing=1.2, space_after=6, first=True)
+        first = False
+    last = _text_paragraph(cell, title, size=TYPE_SCALE["cover_title"], bold=True, colour=BRAND_WHITE, space_after=4, first=first)
+    if subtitle:
+        last = _text_paragraph(cell, subtitle, size=TYPE_SCALE["cover_subtitle"], colour=BRAND_ON_NAVY, space_after=2)
+    if legal_basis:
+        last = _text_paragraph(cell, legal_basis, size=TYPE_SCALE["h3"], italic=True, colour=BRAND_ON_NAVY)
+    last.paragraph_format.space_after = Pt(9)
+    bar = _fixed_table(cell, [0.85, 0.85, 0.85])
+    bar.alignment = WD_TABLE_ALIGNMENT.LEFT
+    _row_height(bar.rows[0], 0.12, exact=True)
+    for segment, colour in zip(bar.rows[0].cells, TRICOLORE_HEX):
+        shade_cell(segment, colour)
+        _tiny(segment.paragraphs[0])
+    _tiny(cell.paragraphs[-1])
+
+
+def _identity_rows(azienda) -> list[tuple[str, str]]:
+    rows: list[tuple[str, str]] = []
+    legale = format_sede(azienda, "legale")
+    if legale != "—":
+        rows.append(("Sede legale", legale))
+    operativa = format_sede(azienda, "operativa")
+    if operativa not in ("—", legale):
+        rows.append(("Sede operativa", operativa))
+    piva = str(getattr(azienda, "partita_iva", None) or "").strip()
+    if piva:
+        rows.append(("Partita IVA", piva))
+    ateco = str(getattr(azienda, "codice_ateco", None) or "").strip()
+    if ateco:
+        rows.append(("Codice ATECO", ateco))
+    return rows
+
+
+def _label_table(doc: Document, rows: list[tuple[str, str]], *, width_cm: float):
+    label_cm = 4.2
+    table = _fixed_table(doc, [label_cm, width_cm - label_cm], rows=len(rows))
+    _table_cell_margins(table, top_cm=0.09, bottom_cm=0.09, left_cm=0.2, right_cm=0.2)
+    set_table_borders(table)
+    for row, (label, value) in zip(table.rows, rows):
+        _row_height(row, 0.62, exact=False)
+        label_cell, value_cell = row.cells
+        _text_paragraph(label_cell, label, size=TYPE_SCALE["table"], bold=True, colour=BRAND_LABEL, first=True)
+        _text_paragraph(value_cell, value, size=TYPE_SCALE["table"], colour=BRAND_DEEP, first=True)
+        shade_cell(label_cell, BRAND_SURFACE_HEX)
+    return table
+
+
+def _signature_boxes(doc: Document, *, width_cm: float):
+    """Two labelled boxes: the employer's stamp and signature, the RSPP's
+    signature — the cover is where the paper copy gets signed."""
+    box_cm = (width_cm - 0.7) / 2
+    table = _fixed_table(doc, [box_cm, 0.7, box_cm], rows=2)
+    _table_cell_margins(table, top_cm=0.05, bottom_cm=0.12)
+    labels = ("Timbro e firma del Datore di Lavoro", "Firma dell'RSPP")
+    for cell, label in zip((table.rows[0].cells[0], table.rows[0].cells[2]), labels):
+        _text_paragraph(cell, label, size=TYPE_SCALE["small"], colour=BRAND_SLATE, caps=True, spacing=1.2, first=True)
+    _row_height(table.rows[1], 1.9, exact=True)
+    edges = {edge: (BRAND_RULE_HEX, 6) for edge in ("top", "left", "bottom", "right")}
+    for cell in (table.rows[1].cells[0], table.rows[1].cells[2]):
+        _cell_borders(cell, edges)
+    return table
+
 
 def add_cover(
     doc: Document,
@@ -284,101 +617,98 @@ def add_cover(
     subtitle: str | None = None,
     legal_basis: str | None = None,
     eyebrow: str | None = "Allegato al Documento di Valutazione dei Rischi",
-    logo_width_cm: float = 5.0,
-    show_consultancy: bool = True,
-) -> None:
-    """The cover every attachment shares.
+    logo_width_cm: float = 4.0,
+    show_letterhead: bool = True,
+    hero_image=None,
+    hero_width_cm: float = 8.0,
+    hero_fallback_text: str | None = None,
+    show_signatures: bool = True,
+    at_top: bool = False,
+    page_break: bool = True,
+) -> int:
+    """The cover every document shares.
 
-    Top to bottom: consultancy mark (the organization's uploaded logo, else the
-    bundled navy N2O mark), eyebrow, title, subtitle, legal basis, a hairline,
-    the assessed company's identity block, then revision + date and — when
-    ``show_consultancy`` — the "elaborato da" letterhead. Ends with a page
-    break. Every field degrades to nothing when the data is missing; the cover
-    never prints a placeholder.
+    Top to bottom: the consultancy letterhead strip (the organization's
+    uploaded logo, else the bundled N2O mark, with the firm's letterhead
+    lines ranged right); an optional hero image (the DVR's VERA mark); the
+    navy title band with eyebrow, title, subtitle and legal basis; the
+    assessed company's name and identity table (seats, P.IVA, ATECO); the
+    revision table numbered like the Storico; and the stamp/signature boxes.
+
+    Every field degrades to nothing when the data is missing; the cover never
+    prints a placeholder. ``show_letterhead=False`` leaves the consultancy off
+    the page entirely (the DVR Master, by client requirement). With
+    ``at_top`` the cover is moved in front of everything already in the body
+    — how a document opened from a donor template gets it — and
+    ``page_break`` says whether to end it with a page break (not when a
+    section break already follows). Returns the number of body blocks added.
     """
-    _spacer(doc, 2)
+    width_cm = _text_width_cm(doc)
+    before = len(_body_blocks(doc))
 
-    logo_src = resolve_logo_source(branding)
-    if logo_src is not None:
+    if show_letterhead:
+        _letterhead_strip(doc, branding, logo_width_cm=logo_width_cm, width_cm=width_cm)
+
+    if hero_image is not None:
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.space_before = Pt(22 if show_letterhead else 6)
+        p.paragraph_format.space_after = Pt(18)
+        run = p.add_run()
         try:
-            p.add_run().add_picture(logo_src, width=Cm(logo_width_cm))
+            run.add_picture(hero_image, width=Cm(hero_width_cm))
         except Exception:
-            # An unreadable upload must not break generation; the firm name
-            # in the letterhead below still identifies the consultancy.
-            p.add_run("")
-    _spacer(doc, 1)
+            if hero_fallback_text:
+                run.text = hero_fallback_text
+                run.font.size = Pt(14)
+                run.font.italic = True
+                run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+    else:
+        _gap(doc, 78 if show_letterhead else 24)
 
-    if eyebrow:
-        _centered(doc, eyebrow, size=TYPE_SCALE["small"], colour=BRAND_SLATE, caps=True, spacing=1.2, space_after=8)
-    _centered(doc, title, size=TYPE_SCALE["cover_title"], bold=True, colour=BRAND_NAVY, space_after=4)
-    if subtitle:
-        _centered(doc, subtitle, size=TYPE_SCALE["cover_subtitle"], colour=BRAND_SLATE, space_after=2)
-    if legal_basis:
-        _centered(doc, legal_basis, size=TYPE_SCALE["body"], italic=True, colour=BRAND_SLATE, space_after=10)
-
-    rule = doc.add_paragraph()
-    rule.paragraph_format.left_indent = Cm(5.0)
-    rule.paragraph_format.right_indent = Cm(5.0)
-    rule.paragraph_format.space_after = Pt(0)
-    _paragraph_border(rule, "bottom", BRAND_NAVY_HEX, size=8, space=1)
-    _spacer(doc, 2)
+    _title_band(doc, eyebrow=eyebrow, title=title, subtitle=subtitle, legal_basis=legal_basis, width_cm=width_cm)
 
     ragione = (getattr(azienda, "ragione_sociale", None) or "").strip()
-    _centered(
+    _text_paragraph(doc, "Azienda", size=TYPE_SCALE["small"], colour=BRAND_SLATE, caps=True, spacing=1.2, space_before=24, space_after=3)
+    _text_paragraph(doc, ragione.upper() if ragione else "—", size=TYPE_SCALE["cover_client"], bold=True, colour=BRAND_DEEP, space_after=6)
+    rows = _identity_rows(azienda)
+    if rows:
+        _label_table(doc, rows, width_cm=width_cm)
+
+    _gap(doc, 18)
+    revisions = add_data_table(
         doc,
-        ragione.upper() if ragione else "—",
-        size=TYPE_SCALE["cover_client"],
-        bold=True,
-        colour=BRAND_DEEP,
-        space_after=4,
+        ["Rev.", "Motivazione", "Data"],
+        [[revision_label(version), revision_motivation(version), generated_at.strftime("%d/%m/%Y")]],
+        column_widths_cm=[2.0, width_cm - 6.0, 4.0],
     )
-    sede = format_sede(azienda, "legale")
-    if sede and sede != "—":
-        _centered(doc, sede, size=TYPE_SCALE["body"], colour=BRAND_SLATE, space_after=2)
-    bits = []
-    piva = getattr(azienda, "partita_iva", None)
-    ateco = getattr(azienda, "codice_ateco", None)
-    if piva:
-        bits.append(f"P.IVA {piva}")
-    if ateco:
-        bits.append(f"ATECO {ateco}")
-    if bits:
-        _centered(doc, " · ".join(bits), size=TYPE_SCALE["body"], colour=BRAND_SLATE)
+    for row in revisions.rows:
+        for cell in row.cells:
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs:
+                    _set_run_font(run)
 
-    _spacer(doc, 4)
-    _centered(
-        doc,
-        f"Revisione {revision_label(version)} · {generated_at.strftime('%d/%m/%Y')}",
-        size=TYPE_SCALE["body"],
-        bold=True,
-        colour=BRAND_DEEP,
-        space_after=14,
-    )
+    if show_signatures:
+        _gap(doc, 34)
+        _signature_boxes(doc, width_cm=width_cm)
 
-    if show_consultancy:
-        _centered(
-            doc,
-            "Documento elaborato da",
-            size=TYPE_SCALE["small"],
-            colour=BRAND_SLATE,
-            caps=True,
-            spacing=1.0,
-            space_after=2,
-        )
-        _centered(
-            doc,
-            (branding.firm_name or "").upper(),
-            size=TYPE_SCALE["body"],
-            bold=True,
-            colour=BRAND_NAVY,
-            space_after=1,
-        )
-        for line in _letterhead_lines(branding):
-            _centered(doc, line, size=TYPE_SCALE["small"], colour=BRAND_SLATE, space_after=0)
+    if page_break:
+        doc.add_page_break()
 
-    doc.add_page_break()
+    added = len(_body_blocks(doc)) - before
+    if at_top:
+        _move_to_top(doc, added)
+    return added
+
+
+def _tax_line(branding: Branding) -> str | None:
+    """``P.IVA … · C.F. …`` from the parts present, or None."""
+    tax = []
+    if branding.partita_iva:
+        tax.append(f"P.IVA {branding.partita_iva}")
+    if branding.codice_fiscale and branding.codice_fiscale != branding.partita_iva:
+        tax.append(f"C.F. {branding.codice_fiscale}")
+    return " · ".join(tax) or None
 
 
 def _letterhead_lines(branding: Branding) -> list[str]:
@@ -386,13 +716,9 @@ def _letterhead_lines(branding: Branding) -> list[str]:
     addr = branding.address_line()
     if addr:
         lines.append(addr)
-    tax = []
-    if branding.partita_iva:
-        tax.append(f"P.IVA {branding.partita_iva}")
-    if branding.codice_fiscale and branding.codice_fiscale != branding.partita_iva:
-        tax.append(f"C.F. {branding.codice_fiscale}")
+    tax = _tax_line(branding)
     if tax:
-        lines.append(" · ".join(tax))
+        lines.append(tax)
     contact = branding.contact_line()
     if contact:
         lines.append(contact)
@@ -413,16 +739,31 @@ def _clear(container) -> None:
         t._tbl.getparent().remove(t._tbl)
 
 
-def _two_sided(container, left: list[tuple[str, dict]], right: list[tuple[str, dict]], *, width_cm: float):
-    """One paragraph with left text and a right-aligned tab: the classic
-    running-head layout without a table."""
-    p = container.paragraphs[0] if container.paragraphs else container.add_paragraph()
+def _two_sided(container, left: list[tuple[str, dict]], right: list[tuple[str, dict]], *, width_cm: float, new_paragraph: bool = False):
+    """One paragraph with left content and a right-aligned tab: the classic
+    running-head layout without a table. A part is ``(text, fmt)``; ``fmt``
+    may carry ``field`` (PAGE, NUMPAGES) or ``picture`` (a path or stream
+    embedded at ``height_cm``) instead of text."""
+    if new_paragraph or not container.paragraphs:
+        p = container.add_paragraph()
+    else:
+        p = container.paragraphs[0]
     p.paragraph_format.tab_stops.add_tab_stop(Cm(width_cm), WD_TAB_ALIGNMENT.RIGHT)
+    p.paragraph_format.space_before = Pt(0)
     p.paragraph_format.space_after = Pt(0)
 
     def emit(parts):
         for text, fmt in parts:
             run = p.add_run()
+            picture = fmt.get("picture")
+            if picture is not None:
+                try:
+                    run.add_picture(picture, height=Cm(fmt.get("height_cm", 0.55)))
+                except Exception:
+                    # An unreadable logo upload leaves the header text-only.
+                    pass
+                continue
+            _set_run_font(run)
             run.font.size = Pt(fmt.get("size", TYPE_SCALE["small"]))
             run.bold = fmt.get("bold", False)
             run.font.color.rgb = fmt.get("colour", BRAND_SLATE)
@@ -439,26 +780,33 @@ def _two_sided(container, left: list[tuple[str, dict]], right: list[tuple[str, d
     return p
 
 
-def _write_running(header, footer, *, title: str, ragione: str, firm: str, rev: str, width_cm: float) -> None:
-    hp = _two_sided(
-        header,
-        [(title, {"bold": True, "colour": BRAND_NAVY})],
-        [(ragione, {"colour": BRAND_SLATE})],
-        width_cm=width_cm,
-    )
-    _paragraph_border(hp, "bottom", BRAND_RULE_HEX, size=6, space=3)
+def _write_running(header, footer, *, title: str, ragione: str, branding: Branding, rev: str, width_cm: float, header_logo: bool) -> None:
+    """Header: mark + title | client. Footer: firm · address · P.IVA | Pagina
+    X di Y, then contacts | Rev. NN del date."""
+    left: list[tuple[str, dict]] = []
+    logo_src = resolve_logo_source(branding) if header_logo else None
+    if logo_src is not None:
+        left.append(("", {"picture": logo_src, "height_cm": 0.55}))
+        left.append(("   ", {"size": 9}))
+    left.append((title, {"bold": True, "colour": BRAND_NAVY, "size": 9}))
+    hp = _two_sided(header, left, [(ragione, {"colour": BRAND_SLATE, "size": 9})], width_cm=width_cm)
+    _paragraph_border(hp, "bottom", BRAND_RULE_HEX, size=6, space=4)
 
-    left = [(firm, {"bold": True, "colour": BRAND_NAVY})]
-    if firm:
-        left.append((" · ", {}))
-    left.append((rev, {}))
-    fp = _two_sided(
-        footer,
-        left,
-        [("Pagina ", {}), ("", {"field": "PAGE"}), (" di ", {}), ("", {"field": "NUMPAGES"})],
-        width_cm=width_cm,
-    )
-    _paragraph_border(fp, "top", BRAND_RULE_HEX, size=6, space=3)
+    first_left: list[tuple[str, dict]] = [((branding.firm_name or "").strip().upper(), {"bold": True, "colour": BRAND_NAVY})]
+    for bit in (branding.address_line(), _tax_line(branding)):
+        if bit:
+            first_left += [(" · ", {}), (bit, {})]
+    page = {"bold": True, "colour": BRAND_DEEP}
+    first_right = [
+        ("Pagina ", page),
+        ("", {"field": "PAGE", **page}),
+        (" di ", page),
+        ("", {"field": "NUMPAGES", **page}),
+    ]
+    fp = _two_sided(footer, first_left, first_right, width_cm=width_cm)
+    _paragraph_border(fp, "top", BRAND_RULE_HEX, size=6, space=4)
+    contact = branding.contact_line()
+    _two_sided(footer, [(contact, {})] if contact else [], [(rev, {})], width_cm=width_cm, new_paragraph=True)
 
 
 def add_running_header_footer(
@@ -470,17 +818,19 @@ def add_running_header_footer(
     version: int | None,
     generated_at: datetime,
     cover_is_clean: bool = True,
+    header_logo: bool = True,
 ) -> None:
-    """Header: document title | client. Footer: consultancy · revision | Pagina X di Y.
+    """Header: consultancy mark, document title | client. Footer: letterhead
+    line | Pagina X di Y, then contacts | Rev. NN del date.
 
     Applied to every section; with ``cover_is_clean`` the first page of the
     first section (the cover) gets no header/footer. Content is written fresh
     into the default, first-page and even-page header/footer parts, replacing
     whatever a donor template carried there — this is how the legacy N2O
-    letterhead leaves the template family.
+    letterhead leaves the template family. ``header_logo=False`` keeps the
+    mark out of the header (the DVR Master embeds only the VERA asset).
     """
     ragione = (getattr(azienda, "ragione_sociale", None) or "").strip()
-    firm = (branding.firm_name or "").strip()
     rev = f"Rev. {revision_label(version)} del {generated_at.strftime('%d/%m/%Y')}"
     for index, section in enumerate(doc.sections):
         width_cm = (section.page_width - section.left_margin - section.right_margin) / 360000
@@ -492,6 +842,12 @@ def add_running_header_footer(
             current = getattr(section, attr, None)
             if current is None or current < Cm(0.8):
                 setattr(section, attr, Cm(1.0))
+        # Room for the mark in the header and the two footer lines: donor
+        # sections arrive with margins as tight as 0.75 cm.
+        for attr, minimum in (("top_margin", MARGIN_TOP_CM), ("bottom_margin", MARGIN_BOTTOM_CM)):
+            current = getattr(section, attr, None)
+            if current is None or current < Cm(minimum):
+                setattr(section, attr, Cm(minimum))
         parts = (
             section.header, section.footer,
             section.first_page_header, section.first_page_footer,
@@ -501,10 +857,11 @@ def add_running_header_footer(
             container.is_linked_to_previous = False
             _clear(container)
 
-        _write_running(section.header, section.footer, title=title, ragione=ragione, firm=firm, rev=rev, width_cm=width_cm)
+        running = dict(title=title, ragione=ragione, branding=branding, rev=rev, width_cm=width_cm, header_logo=header_logo)
+        _write_running(section.header, section.footer, **running)
         # Even pages only matter when the document asks for odd/even headers;
         # writing them keeps a donor's evenAndOddHeaders setting harmless.
-        _write_running(section.even_page_header, section.even_page_footer, title=title, ragione=ragione, firm=firm, rev=rev, width_cm=width_cm)
+        _write_running(section.even_page_header, section.even_page_footer, **running)
 
         if section.different_first_page_header_footer:
             # Leave the cover clean: an empty paragraph is required so Word does
@@ -512,7 +869,7 @@ def add_running_header_footer(
             section.first_page_header.add_paragraph("")
             section.first_page_footer.add_paragraph("")
         else:
-            _write_running(section.first_page_header, section.first_page_footer, title=title, ragione=ragione, firm=firm, rev=rev, width_cm=width_cm)
+            _write_running(section.first_page_header, section.first_page_footer, **running)
 
 
 # ---------------------------------------------------------------------------
@@ -844,11 +1201,13 @@ def finish_document(
     cover_is_clean: bool = True,
     fill_cover: bool = False,
     cover_values: dict[str, str] | None = None,
+    header_logo: bool = True,
 ) -> None:
     """Everything a generator must do before ``doc.save``: running header and
     footer on every section, honest file properties, no orphaned donor parts
     and — for documents opened from a donor template — the cover forms
-    filled in."""
+    filled in. ``header_logo=False`` keeps the consultancy mark out of the
+    running header (the DVR Master carries only the VERA asset)."""
     if fill_cover:
         fill_cover_tables(doc, azienda=azienda, version=version, generated_at=generated_at, extra=cover_values)
     add_running_header_footer(
@@ -859,6 +1218,7 @@ def finish_document(
         version=version,
         generated_at=generated_at,
         cover_is_clean=cover_is_clean,
+        header_logo=header_logo,
     )
     set_core_properties(
         doc,

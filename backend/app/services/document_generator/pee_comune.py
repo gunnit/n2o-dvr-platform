@@ -18,7 +18,7 @@ from app.models.ambiente_foto import AmbienteFoto
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_pee
-from app.services.document_generator.design import finish_document, insert_logo_at_top
+from app.services.document_generator.design import add_cover, finish_document, strip_donor_cover
 from app.services.document_generator.docx_utils import (
     scrub_body,
     strip_body_images,
@@ -62,12 +62,29 @@ TEMPLATE = TEMPLATES_DIR / "PIANO GESTIONE EMERGENZE - COMUNE.docx"
 TIPO_DOC = "pee_comune"
 
 
+def _cover(doc, branding, azienda, version, generated_at, *, at_top: bool, page_break: bool) -> None:
+    """The shared cover for this document (see :func:`add_cover`)."""
+    add_cover(
+        doc,
+        title='Piano di gestione delle emergenze',
+        eyebrow='Gestione delle emergenze',
+        legal_basis="ai sensi dell'art. 46 del D.Lgs. 81/2008 e s.m.i. e del D.M. 02/09/2021",
+        azienda=azienda,
+        branding=branding,
+        version=version,
+        generated_at=generated_at,
+        at_top=at_top,
+        page_break=page_break,
+    )
+
+
 class PeeComuneGenerator(BaseDocumentGenerator):
     async def generate(self) -> str:
         data = await self.load_data()
         azienda = data["azienda"]
         generated_at = data["generated_at"]
         pee = await load_pee(self.db, self.azienda_id, tipo="comune") or await load_pee(self.db, self.azienda_id, tipo="azienda")
+        version = await self._next_version()
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
@@ -90,9 +107,13 @@ class PeeComuneGenerator(BaseDocumentGenerator):
                 'madonnina-parrocchia': 'azienda',
             })
             strip_body_images(doc)
-            insert_logo_at_top(doc, self.branding)
+            # The donor cover runs up to its table of contents; the new cover
+            # replaces it and breaks to the Indice.
+            strip_donor_cover(doc, stop_text="Indice")
+            _cover(doc, self.branding, azienda, version, generated_at, at_top=True, page_break=True)
         else:
             doc = Document()
+            _cover(doc, self.branding, azienda, version, generated_at, at_top=False, page_break=False)
 
         page_break(doc)
         add_heading(doc, f"PIANO DI EMERGENZA EDIFICIO - {azienda.ragione_sociale}", level=1)
@@ -166,7 +187,6 @@ class PeeComuneGenerator(BaseDocumentGenerator):
         add_heading(doc, "Manutenzione dei presidi comuni", level=2)
         add_paragraph(doc, "Gli impianti antincendio comuni (rivelazione, idranti, porte REI) sono manutenuti dall'amministratore condominiale con cadenza almeno semestrale e documentazione conservata a disposizione.")
 
-        version = await self._next_version()
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")

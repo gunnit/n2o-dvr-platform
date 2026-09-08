@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_duvri
-from app.services.document_generator.design import finish_document
+from app.services.document_generator.design import add_cover, finish_document, strip_donor_cover
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
     add_data_table,
@@ -25,6 +25,22 @@ from app.services.document_generator.docx_utils import (
 
 TEMPLATE = TEMPLATES_DIR / "DUVRI.docx"
 TIPO_DOC = "duvri"
+
+
+def _cover(doc, branding, azienda, version, generated_at, *, at_top: bool, page_break: bool) -> None:
+    """The shared cover for this document (see :func:`add_cover`)."""
+    add_cover(
+        doc,
+        title='Documento Unico di Valutazione dei Rischi da Interferenze',
+        eyebrow='Salute e sicurezza sul lavoro',
+        legal_basis="ai sensi dell'art. 26, comma 3, del D.Lgs. 81/2008 e s.m.i.",
+        azienda=azienda,
+        branding=branding,
+        version=version,
+        generated_at=generated_at,
+        at_top=at_top,
+        page_break=page_break,
+    )
 UNKNOWN_ENVIRONMENT = "Ambiente non disponibile"
 
 
@@ -210,6 +226,7 @@ class DuvriGenerator(BaseDocumentGenerator):
         azienda = data["azienda"]
         generated_at = data["generated_at"]
         duvri_rows = await load_duvri(self.db, self.azienda_id)
+        version = await self._next_version()
         company_equipment_rows = _company_equipment_rows(data)
         company_equipment_inserted = False
 
@@ -224,8 +241,13 @@ class DuvriGenerator(BaseDocumentGenerator):
                 company_equipment_rows,
             )
             _remove_legacy_donor_equipment(doc)
+            # The donor's text-box title goes; the appalto form it sat above
+            # follows the new cover as the first content page.
+            strip_donor_cover(doc, stop_before_table=True)
+            _cover(doc, self.branding, azienda, version, generated_at, at_top=True, page_break=True)
         else:
             doc = Document()
+            _cover(doc, self.branding, azienda, version, generated_at, at_top=False, page_break=False)
 
         page_break(doc)
         add_heading(doc, f"DUVRI - {azienda.ragione_sociale}", level=1)
@@ -286,7 +308,6 @@ class DuvriGenerator(BaseDocumentGenerator):
                 ["Data", generated_at.strftime("%d/%m/%Y")],
             ])
 
-        version = await self._next_version()
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")

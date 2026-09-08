@@ -192,8 +192,16 @@ class ParsedVisura:
 # --- helpers ------------------------------------------------------------------
 
 
+# Apostrophes as PDF text extraction hands them back. pypdf maps the byte
+# 0x27 of a Standard-encoded font to U+2019 (quoteright), so "Unita' locale"
+# and "attivita' prevalente" arrive with a typographic apostrophe; the label
+# patterns below are written with the ASCII one.
+_APOSTROPHES = str.maketrans({c: "'" for c in "\u2018\u2019\u201b\u02bc\u00b4`"})
+
+
 def _normalise(text: str) -> str:
     text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\xa0", " ")
+    text = text.translate(_APOSTROPHES)
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r" ?\n ?", "\n", text)
     return text

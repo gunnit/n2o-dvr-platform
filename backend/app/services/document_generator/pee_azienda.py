@@ -19,7 +19,7 @@ from app.models.ambiente_foto import AmbienteFoto
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_pee
-from app.services.document_generator.design import finish_document
+from app.services.document_generator.design import add_cover, finish_document, strip_donor_cover
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
     add_data_table,
@@ -38,6 +38,22 @@ logger = logging.getLogger(__name__)
 
 TEMPLATE = TEMPLATES_DIR / "PIANO GESTIONE EMERGENZE - AZIENDA.docx"
 TIPO_DOC = "pee_azienda"
+
+
+def _cover(doc, branding, azienda, version, generated_at, *, at_top: bool, page_break: bool) -> None:
+    """The shared cover for this document (see :func:`add_cover`)."""
+    add_cover(
+        doc,
+        title='Piano di gestione delle emergenze',
+        eyebrow='Gestione delle emergenze',
+        legal_basis="ai sensi dell'art. 46 del D.Lgs. 81/2008 e s.m.i. e del D.M. 02/09/2021",
+        azienda=azienda,
+        branding=branding,
+        version=version,
+        generated_at=generated_at,
+        at_top=at_top,
+        page_break=page_break,
+    )
 
 
 def _remove_donor_collection_point_images(doc: Document) -> None:
@@ -130,6 +146,7 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
         azienda = data["azienda"]
         generated_at = data["generated_at"]
         pee = await load_pee(self.db, self.azienda_id, tipo="azienda")
+        version = await self._next_version()
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
@@ -144,8 +161,13 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
                 ),
                 " (come illustrato sopra)": "",
             })
+            # The donor cover ends at a section break; the new cover takes
+            # its place in that first section.
+            strip_donor_cover(doc)
+            _cover(doc, self.branding, azienda, version, generated_at, at_top=True, page_break=False)
         else:
             doc = Document()
+            _cover(doc, self.branding, azienda, version, generated_at, at_top=False, page_break=False)
 
         drill_frequency = (pee.frequenza_prove if pee else None) or "non configurata"
         # Alarm type configured on the plan; the default keeps the document
@@ -269,7 +291,6 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
             "Ogni prova viene registrata con il relativo esito.",
         )
 
-        version = await self._next_version()
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")

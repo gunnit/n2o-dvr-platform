@@ -12,7 +12,7 @@ from app.services.document_generator.data_loader import (
     load_gestanti,
     load_gestanti_mansioni,
 )
-from app.services.document_generator.design import finish_document, insert_logo_at_top
+from app.services.document_generator.design import add_cover, finish_document, strip_donor_cover
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
     add_data_table,
@@ -38,6 +38,22 @@ def _role_nominativo(persone: list, attr: str) -> str | None:
 
 TEMPLATE = TEMPLATES_DIR / "ALLEGATO GESTANTI.docx"
 TIPO_DOC = "allegato_gestanti"
+
+
+def _cover(doc, branding, azienda, version, generated_at, *, at_top: bool, page_break: bool) -> None:
+    """The shared cover for this document (see :func:`add_cover`)."""
+    add_cover(
+        doc,
+        title='Valutazione dei rischi per la tutela delle lavoratrici madri',
+        eyebrow='Allegato al Documento di Valutazione dei Rischi',
+        legal_basis="ai sensi dell'art. 11 del D.Lgs. 151/2001 e dell'art. 28 del D.Lgs. 81/2008 e s.m.i.",
+        azienda=azienda,
+        branding=branding,
+        version=version,
+        generated_at=generated_at,
+        at_top=at_top,
+        page_break=page_break,
+    )
 
 ESITO_LABELS = {
     "compatibile": "Compatibile",
@@ -135,6 +151,7 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
         nome_ddl = _role_nominativo(persone, "ruolo_datore_lavoro") or (azienda.ragione_sociale or "")
         nome_rspp = _role_nominativo(persone, "ruolo_rspp") or "Da nominare"
         nome_mc = _role_nominativo(persone, "ruolo_medico_competente") or "Da nominare"
+        version = await self._next_version()
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
@@ -149,10 +166,15 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
             # organization's mark above the title, and leave the roster
             # as ten blank rows for the client's own workers to sign.
             strip_body_images(doc)
-            insert_logo_at_top(doc, self.branding)
             reset_table_rows(doc, "Nome e cognome | Mansione", [["", "", "", ""] for _ in range(10)])
+            # The donor cover ends at a section break; the new cover takes
+            # its place in that first section (after the identity scrub, so
+            # the consultancy letterhead on it is not rewritten).
+            strip_donor_cover(doc)
+            _cover(doc, self.branding, azienda, version, generated_at, at_top=True, page_break=False)
         else:
             doc = Document()
+            _cover(doc, self.branding, azienda, version, generated_at, at_top=False, page_break=False)
 
         page_break(doc)
         add_heading(doc, f"VALUTAZIONE SPECIFICA - {azienda.ragione_sociale}", level=1)
@@ -241,7 +263,6 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
                 ["Data", generated_at.strftime("%d/%m/%Y"), ""],
             ])
 
-        version = await self._next_version()
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")
