@@ -572,6 +572,19 @@ def add_toc(doc: Document, *, title: str = "Indice"):
     end.set(qn("w:fldCharType"), "end")
     end_p.add_run()._r.append(end)
 
+    refresh_fields_on_open(doc)
+    doc.add_page_break()
+    return field_start_p, end_p
+
+
+def refresh_fields_on_open(doc: Document) -> None:
+    """Ask Word to update every field when the document is opened.
+
+    Page numbers, NUMPAGES and — on the donor templates — the index. Their
+    TOC is a real field whose cached lines were written by the consultant who
+    last saved the template, so without this the reader sees that outline
+    instead of the one this generation produced.
+    """
     try:
         settings_root = doc.settings.element
         if settings_root.find(qn("w:updateFields")) is None:
@@ -580,9 +593,6 @@ def add_toc(doc: Document, *, title: str = "Indice"):
             settings_root.append(uf)
     except Exception:
         pass
-
-    doc.add_page_break()
-    return field_start_p, end_p
 
 
 def finalize_toc(doc: Document, field_start_p, end_p) -> None:
@@ -868,6 +878,7 @@ def finish_document(
         generated_at=generated_at,
         version=version,
     )
+    refresh_fields_on_open(doc)
     try:
         prune_orphan_parts(doc)
     except Exception:

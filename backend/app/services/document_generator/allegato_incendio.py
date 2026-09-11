@@ -16,14 +16,33 @@ from app.services.document_generator.docx_utils import (
     add_heading,
     add_kv_table,
     add_paragraph,
+    fill_paragraph_blanks,
+    format_comune,
     page_break,
+    prune_toc_entries,
+    remove_between,
+    remove_blank_label_forms,
+    replace_paragraph_text,
     scrub_body,
     slugify,
 )
+from app.services.document_generator.donor_front_matter import fill_front_matter
 from app.services.document_generator.schede_ambienti import add_schede_ambienti
 
 TEMPLATE = TEMPLATES_DIR / "ALLEGATO RISCHIO INCENDIO.docx"
 TIPO_DOC = "allegato_incendio"
+
+# The donor chapters between these two headings are the assessment itself:
+# six blank per-ambiente sheets, the aree-omogenee matrix pre-filled with the
+# form's default answers, and six blank measure sheets. All three are emitted
+# below from the live valutazione, so the blank originals are dropped rather
+# than printed alongside (audit 2026-09-11).
+SUPERSEDED_CHAPTERS = (
+    "Caratteristiche degli ambienti di lavoro",
+    "Valutazione del Rischio Incendio per Aree Omogenee",
+    "Misure Preventive, Protettive e Precauzionali di esercizio",
+)
+DONOR_ASSESSMENT_END = "Dichiarazione"
 
 # Six prevention areas per REFERENCE_DATA.md §4.5. Each area has tiered
 # measures keyed by the area's livello_rischio so an inspector sees a
@@ -82,6 +101,28 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
                 "e D.M. 02.09.2021": "e D.M. 03/09/2021 e D.M. 02.09.2021",
                 "D.M. 16.02.1982": "D.P.R. 151/2011",
             })
+            # The template is N2O's blank master form. Write the survey into
+            # its front matter, drop the chapters this generator re-emits,
+            # and sign the declaration — otherwise the client opens 28 pages
+            # of empty boxes before reaching the assessment.
+            fill_front_matter(
+                doc,
+                azienda=azienda,
+                persone=data["persone"],
+                ambienti=data["ambienti"],
+            )
+            removed = remove_between(doc, SUPERSEDED_CHAPTERS[0], DONOR_ASSESSMENT_END)
+            if removed:
+                prune_toc_entries(doc, SUPERSEDED_CHAPTERS)
+                # The Criteri chapter points the reader at a table that lived
+                # in the chapters just removed.
+                replace_paragraph_text(
+                    doc,
+                    "individuazione aree omogenee",
+                    "Le aree omogenee così individuate sono riportate nella "
+                    "valutazione specifica in coda al presente documento.",
+                )
+            self._sign_declaration(doc, azienda, data["persone"], generated_at)
         else:
             doc = Document()
 
@@ -228,8 +269,45 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
             generated_at=generated_at,
             fill_cover=True,
         )
+        # After the cover is filled, so a cover awaiting its values is never
+        # mistaken for an abandoned form: what is still blank here is a donor
+        # sheet the platform has no data for.
+        remove_blank_label_forms(doc)
         doc.save(filepath)
         return filepath
+
+    @staticmethod
+    def _sign_declaration(doc, azienda, persone, generated_at) -> None:
+        """Fill the donor declaration's ruled blanks from the survey.
+
+        "Il sottoscritto, ____ in qualità di Datore di Lavoro della ____ con
+        sede legale in ____" and the place-and-date line under it. The
+        signature boxes below stay ruled: those are for a pen.
+        """
+        ddl = next((p for p in persone or [] if getattr(p, "ruolo_datore_lavoro", False)), None)
+        sede = ", ".join(
+            x for x in (
+                (azienda.sede_legale_via or "").strip(),
+                format_comune(
+                    getattr(azienda, "cap_legale", None),
+                    azienda.sede_legale_citta,
+                    getattr(azienda, "provincia_legale", None),
+                ),
+            ) if x and x != "—"
+        )
+        fill_paragraph_blanks(doc, "Il sottoscritto", [
+            (ddl.nominativo if ddl else "") or "",
+            azienda.ragione_sociale or "",
+            sede,
+        ])
+        comune = format_comune(
+            None, azienda.sede_legale_citta, getattr(azienda, "provincia_legale", None)
+        )
+        replace_paragraph_text(
+            doc,
+            "), lì",
+            f"{comune if comune != '—' else ''}, lì {generated_at.strftime('%d/%m/%Y')}".lstrip(", "),
+        )
 
     async def _next_version(self) -> int:
         return await self.resolve_version([TIPO_DOC, "ALLEGATO_INCENDIO"])

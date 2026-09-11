@@ -711,7 +711,7 @@ def _set_cell_text_keep_format(cell, text: str) -> None:
         extra._p.getparent().remove(extra._p)
 
 
-def fill_label_table(doc: Document, values: dict) -> int:
+def fill_label_table(doc: Document, values: dict, *, tables=None) -> int:
     """Fill empty value cells next to (or under) matching labels in body tables.
 
     A label matches when the cell text, stripped of a trailing colon, equals a
@@ -727,8 +727,10 @@ def fill_label_table(doc: Document, values: dict) -> int:
     Each label is filled in the first table where it appears and skipped in
     later ones: a DUVRI carries the same "Ragione Sociale / Sede Legale" form
     for the committente and again for the appaltatore, and only the first is
-    the client. Values may be strings or lists of strings. Returns the number
-    of cells filled.
+    the client. Pass ``tables`` to restrict the search to specific tables —
+    the anagrafica form repeats labels the cover already consumed, so it asks
+    for itself by name (:func:`find_label_table`) instead. Values may be
+    strings or lists of strings. Returns the number of cells filled.
     """
     wanted: dict[str, list[str]] = {}
     for k, v in values.items():
@@ -759,7 +761,7 @@ def fill_label_table(doc: Document, values: dict) -> int:
             self.entries.append((el, 1))
             return 0
 
-    for table in doc.tables:
+    for table in (doc.tables if tables is None else tables):
         rows = list(table.rows)
         used = _Seen()
         touched: set[str] = set()
@@ -798,6 +800,163 @@ def fill_label_table(doc: Document, values: dict) -> int:
                 break
         done |= touched
     return filled
+
+
+def find_label_table(doc: Document, requires: Iterable[str]):
+    """The first body table whose first column carries every one of ``requires``.
+
+    Donor forms repeat labels — "Azienda" heads both the cover and the
+    anagrafica — so a table is identified by a combination only it has,
+    rather than by its position, which shifts whenever a template is edited.
+    """
+    from docx.table import Table
+
+    wanted = [_norm_text(r).rstrip(":").strip() for r in requires]
+    for el in _body_children(doc):
+        if el.tag != qn("w:tbl"):
+            continue
+        table = Table(el, doc)
+        labels = {
+            _norm_text(row.cells[0].text).rstrip(":").strip()
+            for row in table.rows
+            if row.cells
+        }
+        if all(w in labels for w in wanted):
+            return table
+    return None
+
+
+def remove_between(doc: Document, start_text: str, end_text: str) -> int:
+    """Delete the body from the paragraph ``start_text`` up to ``end_text``.
+
+    Both are matched on the whole paragraph text (case, whitespace and
+    apostrophes ignored); the start paragraph goes with the block it heads
+    and the end paragraph stays. Returns the number of body elements
+    removed, or 0 when either anchor is missing — a template edit then shows
+    up as a failing test instead of silently deleting the wrong half of a
+    document.
+    """
+    from docx.text.paragraph import Paragraph
+
+    body = doc.element.body
+    children = _body_children(doc)
+    start = end = None
+    for i, el in enumerate(children):
+        if el.tag != qn("w:p"):
+            continue
+        para = Paragraph(el, doc)
+        style = (para.style.name if para.style else "") or ""
+        if style.lower().startswith("toc"):
+            # An index line is not the chapter it points at: matching one
+            # would delete the whole body between the index and the anchor.
+            continue
+        text = _norm_text(para.text)
+        if start is None and text == _norm_text(start_text):
+            start = i
+        elif start is not None and text == _norm_text(end_text):
+            end = i
+            break
+    if start is None or end is None or end <= start:
+        return 0
+    for el in children[start:end]:
+        body.remove(el)
+    return end - start
+
+
+def prune_toc_entries(doc: Document, texts: Iterable[str]) -> int:
+    """Drop cached TOC lines for chapters no longer in the document.
+
+    The donor index is a real TOC field, so Word rebuilds it on open (see
+    ``design.refresh_fields_on_open``). Until it does, the reader sees the
+    cached text — which would still list the chapters the generator replaced,
+    with their old page numbers.
+    """
+    wanted = [_norm_text(t) for t in texts if t]
+    removed = 0
+    for para in list(doc.paragraphs):
+        style = (para.style.name if para.style else "") or ""
+        if not style.lower().startswith("toc"):
+            continue
+        line = _norm_text(para.text)
+        if any(line.startswith(w) for w in wanted):
+            para._p.getparent().remove(para._p)
+            removed += 1
+    return removed
+
+
+def remove_blank_label_forms(doc: Document, *, min_rows: int = 3) -> int:
+    """Remove two-column donor forms whose value column is entirely empty.
+
+    Run it last, after every fill: what is still blank is a form the platform
+    holds no data for. The donor templates ship six copies of the same
+    per-ambiente sheet because a consultant used to fill them by hand, and
+    printing them asks the operator to type what the document already states
+    elsewhere. Returns the number of tables removed.
+    """
+    from docx.table import Table
+
+    body = doc.element.body
+    removed = 0
+    for el in _body_children(doc):
+        if el.tag != qn("w:tbl"):
+            continue
+        table = Table(el, doc)
+        rows = list(table.rows)
+        if len(rows) < min_rows or len(table.columns) != 2:
+            continue
+        values = []
+        for row in rows:
+            cells = row.cells
+            if len(cells) > 1 and cells[1]._tc is not cells[0]._tc:
+                values.append((cells[1].text or "").strip())
+        if values and not any(values):
+            body.remove(el)
+            removed += 1
+    return removed
+
+
+def _set_paragraph_text_keep_format(paragraph, text: str) -> None:
+    """Rewrite a paragraph, reusing the first run's formatting."""
+    if paragraph.runs:
+        paragraph.runs[0].text = text
+        for run in paragraph.runs[1:]:
+            run.text = ""
+    else:
+        paragraph.add_run(text)
+
+
+_BLANK_RUN_RE = re.compile(r"_{3,}")
+
+
+def fill_paragraph_blanks(doc: Document, starts_with: str, values: Iterable[str]) -> bool:
+    """Write ``values`` into the underscore blanks of a donor paragraph.
+
+    Donor declarations leave ruled blanks for a pen ("Il sottoscritto, ____
+    in qualità di Datore di Lavoro della ____"). Each run of underscores
+    takes the next value; surplus blanks are left ruled for signing.
+    """
+    remaining = list(values)
+    for para in doc.paragraphs:
+        if not _norm_text(para.text).startswith(_norm_text(starts_with)):
+            continue
+        _set_paragraph_text_keep_format(
+            para,
+            _BLANK_RUN_RE.sub(
+                lambda m: remaining.pop(0) if remaining else m.group(0), para.text
+            ),
+        )
+        return True
+    return False
+
+
+def replace_paragraph_text(doc: Document, contains: str, text: str) -> bool:
+    """Rewrite the first paragraph containing ``contains``, keeping its style."""
+    needle = _norm_text(contains)
+    for para in doc.paragraphs:
+        if needle and needle in _norm_text(para.text):
+            _set_paragraph_text_keep_format(para, text)
+            return True
+    return False
 
 
 def recolor_white_text(doc: Document, to: RGBColor = BRAND_NAVY) -> int:

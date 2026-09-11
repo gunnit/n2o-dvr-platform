@@ -28,10 +28,12 @@ from app.services.document_generator.docx_utils import (
     add_paragraph,
     format_sede,
     page_break,
+    remove_blank_label_forms,
     replace_placeholders,
     scrub_body,
     slugify,
 )
+from app.services.document_generator.donor_front_matter import fill_front_matter
 from app.services.document_generator.schede_ambienti import add_schede_ambienti
 
 logger = logging.getLogger(__name__)
@@ -144,6 +146,16 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
                 ),
                 " (come illustrato sopra)": "",
             })
+            # Same blank master form as the incendio allegato: anagrafica,
+            # roster and safety roles come from the survey, and the two
+            # per-ambiente sheets it leaves ruled are the ones the scheda
+            # ambiente below replaces (audit 2026-09-11).
+            fill_front_matter(
+                doc,
+                azienda=azienda,
+                persone=data["persone"],
+                ambienti=data["ambienti"],
+            )
         else:
             doc = Document()
 
@@ -285,6 +297,9 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
             generated_at=generated_at,
             fill_cover=True,
         )
+        # After the cover is filled: what is still a blank two-column form is
+        # a donor sheet with no data behind it.
+        remove_blank_label_forms(doc)
         doc.save(filepath)
         return filepath
 
