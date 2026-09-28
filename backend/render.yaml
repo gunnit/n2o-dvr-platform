@@ -34,6 +34,13 @@ services:
     preDeployCommand: PYTHONPATH=. alembic upgrade head && PYTHONPATH=. python -m scripts.paypal_setup --bind-only
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
+      # The interpreter both services ran when requirements.txt was locked
+      # (read from the live image on 2026-09-28). The lock was verified on this
+      # exact version (numpy 2.2.6 has no 3.14 wheel and builds from source on
+      # it), so a silent interpreter bump could undo it. Change this and the
+      # lock together.
+      - key: PYTHON_VERSION
+        value: "3.14.3"
       - key: DATABASE_URL
         fromDatabase:
           name: n2o-dvr-db
@@ -137,6 +144,8 @@ services:
     buildCommand: cp -r ../templates ./templates && pip install -r requirements.txt
     startCommand: celery -A app.celery_app worker --loglevel=info --concurrency=1
     envVars:
+      - key: PYTHON_VERSION  # same pin as n2o-dvr-api, same reason
+        value: "3.14.3"
       - key: DATABASE_URL
         fromDatabase:
           name: n2o-dvr-db

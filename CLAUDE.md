@@ -36,6 +36,7 @@ DVR (master risk assessment) · MMC (manual handling, NIOSH) · VDT (display scr
 - **Money and roles are two separate gates on the same endpoints.** `app/billing/*` answers what the organization bought and fails with `402`; `app/core/permissions.py` answers what this person may do inside it and fails with `403`. Neither substitutes for the other.
 - **Read and download paths are gated by neither** — D.Lgs. 81/2008 retention means a lapsed tenant, and every role, keeps access to existing documents.
 - Any new write path that creates work needs an entitlement gate. `backend/tests/test_billing_enforcement.py` and `test_permissions.py` fail the build when one is missed.
+- **Backend dependencies are locked.** Add or bump a package in `backend/requirements.in`, then regenerate `backend/requirements.txt` with the `uv pip compile` command in its header — never edit the lock by hand. Render and CI install exactly what it pins, and on 2026-09-28 it matched production package for package (Python 3.14.3, pinned by `PYTHON_VERSION` in `render.yaml`).
 
 Depth on billing, permissions, the OpenAI SDK contract and document generation lives in `.claude/rules/` and loads automatically when you open the matching files.
 
