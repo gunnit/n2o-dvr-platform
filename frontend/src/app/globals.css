@@ -305,6 +305,66 @@ body {
   outline-color: #a5c8ff;
 }
 
+/* The landing's annotation face (formulas, norm references, document codes).
+   `inline` because `--font-plex-mono` is set by next/font on the landing's
+   root element, not on :root — a plain @theme token would resolve the var()
+   on :root, find nothing, and fall back for every element. */
+@theme inline {
+  --font-plex: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Feather the render into the navy so its rectangle never shows. Three masks
+   because the framing changes: portrait on phones, the wide render cropped to
+   the model (object-right) up to xl, then the full render. */
+.hero-model-img {
+  -webkit-mask-image: radial-gradient(ellipse 82% 62% at 50% 64%, #000 62%, transparent 100%);
+  mask-image: radial-gradient(ellipse 82% 62% at 50% 64%, #000 62%, transparent 100%);
+}
+@media (min-width: 48rem) {
+  .hero-model-img {
+    -webkit-mask-image: radial-gradient(ellipse 72% 80% at 53% 52%, #000 60%, transparent 100%);
+    mask-image: radial-gradient(ellipse 72% 80% at 53% 52%, #000 60%, transparent 100%);
+  }
+}
+@media (min-width: 80rem) {
+  .hero-model-img {
+    -webkit-mask-image: radial-gradient(ellipse 75% 80% at 62% 52%, #000 55%, transparent 100%);
+    mask-image: radial-gradient(ellipse 75% 80% at 62% 52%, #000 55%, transparent 100%);
+  }
+}
+
+/* Hero scale model, desktop placement.
+   The render is 1200×679 (design units) and the workshop occupies its
+   horizontal band 33.3%–98.3%. The box is sized so that band runs from the
+   left edge of the hero's right-hand column (`.hero-stage`, a size container)
+   to 40px past the viewport edge — `(100vw - 1104px) / 2` is the gutter
+   outside the 1104px content column — and shifted left by a third of its own
+   width so the model, not the empty navy around it, starts at the column.
+   Two caps: 1240px, so wide monitors get margin rather than a bigger model;
+   and the column's height, so on a short laptop screen the model plus the
+   example card under it (card bottom = 0.4791 × width + 132px from the box
+   top) still clears the facts strip — at 1280×800 the width cap alone would
+   push the card over it.
+   The pair is then centred vertically in the column.
+   Every callout inside the box is positioned in percentages of it, which is
+   what keeps the pins and their labels aligned at every width. */
+@media (min-width: 80rem) {
+  .hero-stage {
+    container-type: size;
+  }
+  .hero-model {
+    --hero-w: min(
+      1240px,
+      calc((100cqw + max(28px, (100vw - 1104px) / 2) + 40px) / 0.65),
+      calc((100cqh - 164px) / 0.4791)
+    );
+    position: absolute;
+    left: calc(var(--hero-w) * -0.3333);
+    top: max(16px, calc((100cqh - var(--hero-w) * 0.4791 - 132px) / 2));
+    width: var(--hero-w);
+  }
+}
+
 /* -----------------------------------------------------------------------
    Login / auth split screen
    The cinematic panel leans on slow ambient motion; every class below is

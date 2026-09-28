@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { Check } from "lucide-react";
+import { ArrowDown, ArrowRight, Check, FileText, Lock, UserCheck } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { FascicoloStack } from "@/components/landing/fascicolo-stack";
-import { ParallaxImage } from "@/components/landing/parallax-image";
+import { plexMono } from "@/components/landing/fonts";
+import { HeroModel } from "@/components/landing/hero-model";
 import { Reveal } from "@/components/landing/reveal";
 import { SiteFooter } from "@/components/landing/site-footer";
 import { SiteNav } from "@/components/landing/site-nav";
@@ -16,11 +16,19 @@ export const metadata: Metadata = {
     "La piattaforma N2O compone DVR, allegati di valutazione e piani operativi a partire dai dati del sopralluogo. Conforme al D.Lgs. 81/2008.",
 };
 
-const STATS: { value: string; label: string; tabular?: boolean }[] = [
-  { value: "17", label: "tipi di documento", tabular: true },
-  { value: "7", label: "metodi di calcolo documentati", tabular: true },
-  { value: "60–70%", label: "obiettivo di riduzione dei tempi", tabular: true },
-  { value: "D.Lgs. 81/2008", label: "e normativa collegata" },
+/**
+ * Four facts a buyer can hold us to — no targets dressed up as results. Each
+ * one answers a doubt: how much, how reliable, what happens to my data, what
+ * happens to my documents if I stop paying.
+ */
+const FACTS = [
+  { title: "17 documenti", body: "DVR, allegati e piani da un'unica base dati" },
+  { title: "7 metodi di calcolo", body: "Dichiarati e verificabili in ogni tabella" },
+  {
+    title: "Tutela dei dati",
+    body: "Codice fiscale, documenti d'identità e dati sanitari mai inviati all'AI",
+  },
+  { title: "Documenti sempre tuoi", body: "Consultabili e scaricabili anche dopo la disdetta" },
 ];
 
 const RISK_LEVELS = [
@@ -30,16 +38,101 @@ const RISK_LEVELS = [
   { label: "Gravissimo", range: "9–12", color: "var(--color-risk-red)" },
 ];
 
+type Step = {
+  n: string;
+  title: string;
+  body: string;
+  image: { src: string; alt: string };
+  bullets?: string[];
+};
+
+const STEPS: Step[] = [
+  {
+    n: "01",
+    title: "Sopralluogo digitale",
+    body: "In azienda rilevi organico, ambienti, attrezzature e sostanze con un questionario che guida la visita. Niente appunti da trascrivere al rientro.",
+    image: {
+      src: "/landing/modello-sopralluogo.webp",
+      alt: "Tablet con il questionario di sopralluogo, casco e lista di controllo",
+    },
+    bullets: [
+      "Anagrafica compilata dalla sola P.IVA",
+      "Scheda di sicurezza PDF → sostanza strutturata",
+      "Foto del reparto → inventario attrezzature",
+    ],
+  },
+  {
+    n: "02",
+    title: "Valutazioni e calcoli",
+    body: "Indice di rischio, NIOSH, videoterminali, stress INAIL, incendio e microclima: ogni metodo si applica ai dati rilevati, con il calcolo sempre visibile.",
+    image: {
+      src: "/landing/modello-valutazione.webp",
+      alt: "Matrice di rischio in blocchi, dal verde al rosso al crescere dell'indice",
+    },
+  },
+  {
+    n: "03",
+    title: "Revisione e approvazione",
+    body: "I documenti Word escono con la struttura, le tabelle e le intestazioni del modello. Li rivedi in anteprima, correggi dove serve e approvi.",
+    image: {
+      src: "/landing/modello-revisione.webp",
+      alt: "Documento rilegato in blu con un timbro",
+    },
+    bullets: [
+      "Anteprima e correzioni nel browser",
+      "File .docx sempre modificabili",
+      "Cambia un dato, il fascicolo resta coerente",
+    ],
+  },
+];
+
+type Doc = { code: string; title: string; norm: string };
+
+/** The 17 documents, in the order the fascicolo is assembled. */
+const DOCUMENT_GROUPS: { label: string; docs: Doc[] }[] = [
+  {
+    label: "Documento principale",
+    docs: [
+      { code: "DVR", title: "Documento di valutazione dei rischi", norm: "D.Lgs. 81/2008 · artt. 17 e 28" },
+    ],
+  },
+  {
+    label: "Allegati di valutazione · 10",
+    docs: [
+      { code: "MMC", title: "Movimentazione manuale dei carichi", norm: "UNI ISO 11228-1 · NIOSH" },
+      { code: "VDT", title: "Videoterminali", norm: "D.Lgs. 81/2008 · Titolo VII" },
+      { code: "STRESS", title: "Stress lavoro-correlato", norm: "Metodologia INAIL" },
+      { code: "GESTANTI", title: "Tutela delle lavoratrici madri", norm: "D.Lgs. 151/2001" },
+      { code: "INCENDIO", title: "Rischio incendio", norm: "D.M. 3 settembre 2021" },
+      { code: "MICROCLIMA", title: "Comfort termico", norm: "UNI EN ISO 7730" },
+      { code: "CALDO", title: "Ambienti severi caldi", norm: "UNI EN ISO 7933" },
+      { code: "BIOLOGICO", title: "Rischio biologico · alimentare", norm: "D.Lgs. 81/2008 · Titolo X" },
+      { code: "BIOLOGICO", title: "Rischio biologico · asilo nido", norm: "D.Lgs. 81/2008 · Titolo X" },
+      { code: "BIOLOGICO", title: "Rischio biologico · odontoiatria", norm: "D.Lgs. 81/2008 · Titolo X" },
+    ],
+  },
+  {
+    label: "Documenti complementari · 6",
+    docs: [
+      { code: "PEE", title: "Piano di emergenza ed evacuazione", norm: "Aziende private" },
+      { code: "PEE", title: "Piano di emergenza, struttura pubblica", norm: "Comuni, enti ed eventi" },
+      { code: "DUVRI", title: "Rischi da interferenze", norm: "D.Lgs. 81/2008 · art. 26" },
+      { code: "POS", title: "Piano operativo di sicurezza", norm: "D.Lgs. 81/2008 · Titolo IV" },
+      { code: "HACCP", title: "Manuale di autocontrollo", norm: "Reg. CE 852/2004" },
+      { code: "HACCP", title: "16 schede operative", norm: "Registrazioni di autocontrollo" },
+    ],
+  },
+];
+
 const METHODS: { name: string; description: string; formula: string }[] = [
   {
     name: "Indice di rischio",
-    description: "Probabilità e danno su scala 3–12, quattro livelli di priorità",
+    description: "Probabilità e danno su scala 3–12, con quattro livelli di priorità",
     formula: "I = 2·D + P",
   },
   {
-    name: "NIOSH (MMC)",
-    description:
-      "Peso limite raccomandato e indice di sollevamento per ogni compito di movimentazione",
+    name: "NIOSH · movimentazione carichi",
+    description: "Peso limite raccomandato e indice di sollevamento per ogni compito",
     formula: "PLR = CP·A·B·C·D·E·F",
   },
   {
@@ -49,8 +142,7 @@ const METHODS: { name: string; description: string; formula: string }[] = [
   },
   {
     name: "Stress lavoro-correlato",
-    description:
-      "Checklist INAIL: eventi sentinella, contenuto e contesto del lavoro",
+    description: "Checklist INAIL: eventi sentinella, contenuto e contesto del lavoro",
     formula: "76 indicatori",
   },
   {
@@ -59,42 +151,110 @@ const METHODS: { name: string; description: string; formula: string }[] = [
     formula: "INF + SI + PI",
   },
   {
-    name: "Microclima: comfort termico",
-    description: "Indici PMV e PPD per gli ambienti termici moderati",
+    name: "Microclima · comfort termico",
+    description: "Indici PMV e PPD negli ambienti termici moderati",
     formula: "PMV · PPD",
   },
   {
-    name: "Microclima: caldo severo",
+    name: "Microclima · caldo severo",
     description: "Sollecitazione termica prevedibile negli ambienti severi caldi",
     formula: "PHS",
   },
 ];
 
-const SETTORI: { src: string; alt: string; name: string; note: string; position?: string }[] = [
+/**
+ * Worded to the letter of the privacy rule (CLAUDE.md): codice fiscale,
+ * identity documents and health data never reach a model. Company data does —
+ * that is how descriptions get proposed — so never widen this to "dati
+ * anagrafici" or "dati personali".
+ */
+const AI_POINTS = [
   {
-    src: "/landing/settore-cucina.webp",
-    alt: "Cucina professionale in acciaio inox",
+    icon: FileText,
+    title: "Legge le schede di sicurezza",
+    body: "Dal PDF della scheda di sicurezza ricava la sostanza chimica già strutturata, pronta per la valutazione.",
+  },
+  {
+    icon: UserCheck,
+    title: "Propone, non decide",
+    body: "Descrizioni aziendali e misure di miglioramento arrivano come proposte da accettare, correggere o scartare.",
+  },
+  {
+    icon: Lock,
+    title: "Dati personali protetti",
+    body: "Codice fiscale, documenti d'identità e dati sanitari non vengono mai inviati ai modelli.",
+  },
+];
+
+const PERCORSI = [
+  {
+    id: "consulenti",
+    label: "Per consulenti, RSPP e studi",
+    title: "Produci per tutto il tuo portafoglio clienti.",
+    body: "Un ambiente multi-azienda con la tua carta intestata: logo, P.IVA e nominativo RSPP su ogni documento. Per il cliente finale, il lavoro resta firmato da te.",
+    bullets: [
+      "Tutti i 17 documenti, su ogni piano",
+      "Da 15 aziende clienti attive fino a illimitate",
+      "Migrazione dei tuoi template e API, dal piano Studio",
+      "Portali self-service per i clienti, dal piano Network",
+    ],
+    price: "€1.490",
+    cta: { href: "/prezzi#consulenti", label: "Piani per consulenti" },
+    image: {
+      src: "/landing/modello-portafoglio.webp",
+      alt: "Dodici modelli in scala di aziende diverse, ciascuno sulla propria base",
+      width: 1400,
+      height: 1045,
+      className: "h-[210px] w-auto sm:h-[270px]",
+    },
+  },
+  {
+    id: "aziende",
+    label: "Per aziende e datori di lavoro",
+    title: "Tieni aggiornato il tuo fascicolo, invece di rifarlo.",
+    body: "Non è un DVR fai-da-te: la piattaforma scrive struttura, calcoli e testi, un RSPP certificato rivede e controfirma su richiesta. La responsabilità della valutazione resta del datore di lavoro.",
+    bullets: [
+      "Revisioni e rigenerazioni illimitate",
+      "Promemoria di aggiornamento, art. 29 c.3",
+      "Data certa con marca temporale e PEC, inclusa da Plus",
+      "Revisione RSPP con controfirma, inclusa da Plus",
+    ],
+    price: "€490",
+    cta: { href: "/prezzi#aziende", label: "Piani per aziende" },
+    image: {
+      src: "/landing/modello-azienda.webp",
+      alt: "Modello in scala di un capannone con palazzina uffici",
+      width: 1200,
+      height: 896,
+      className: "h-[200px] w-auto sm:h-[250px]",
+    },
+  },
+];
+
+const SETTORI = [
+  {
+    src: "/landing/modello-ristorazione.webp",
+    alt: "Modello in scala di una cucina professionale",
     name: "Ristorazione",
     note: "HACCP · biologico alimentare",
   },
   {
-    src: "/landing/settore-cantiere.webp",
-    alt: "Cantiere edile con ponteggi",
+    src: "/landing/modello-edilizia.webp",
+    alt: "Modello in scala di un cantiere con ponteggi e gru",
     name: "Edilizia",
     note: "POS · DUVRI · Titolo IV",
   },
   {
-    src: "/landing/settore-magazzino.webp",
-    alt: "Magazzino con scaffalature e carrello elevatore",
+    src: "/landing/modello-logistica.webp",
+    alt: "Modello in scala di un magazzino con scaffalature e carrello elevatore",
     name: "Logistica",
     note: "MMC · attrezzature · PEE",
   },
   {
-    src: "/landing/ruolo-ufficio.webp",
-    alt: "Consulente di sicurezza in un ufficio",
+    src: "/landing/modello-terziario.webp",
+    alt: "Modello in scala di un ufficio open space",
     name: "Terziario",
     note: "VDT · stress · microclima",
-    position: "50% 24%",
   },
 ];
 
@@ -102,53 +262,66 @@ const FATTURAZIONE: { label: string; title: string; body: string }[] = [
   {
     label: "Ciclo",
     title: "Annuale, IVA esclusa",
-    body: "Prezzi di listino al netto dell'IVA 22%. Prepagato tre anni con sconto su richiesta.",
+    body: "Prezzi di listino al netto dell'IVA 22%. Prepagato triennale con sconto, su richiesta.",
   },
   {
     label: "Pagamento",
     title: "PayPal",
-    body: "L'attivazione è confermata solo dopo la conferma di PayPal. Nessun addebito se annulli l'approvazione.",
+    body: "L'attivazione parte solo dopo la conferma di PayPal. Nessun addebito se annulli l'approvazione.",
   },
   {
-    label: "Insoluti",
+    label: "Pagamenti non riusciti",
     title: "Accesso completo durante i tentativi",
-    body: "Se un pagamento non va a buon fine PayPal riprova nei giorni successivi: nel frattempo continui a lavorare.",
+    body: "PayPal riprova nei giorni successivi e nel frattempo continui a lavorare.",
   },
   {
     label: "Disdetta",
     title: "I documenti restano tuoi",
-    body: "Mantieni l'accesso fino a fine periodo pagato. Dopo puoi sempre consultare e scaricare quanto già generato: la conservazione richiesta dal D.Lgs. 81/2008 è garantita.",
+    body: "Accesso fino a fine periodo pagato. Dopo, consulti e scarichi sempre quanto generato, come richiede la conservazione prevista dal D.Lgs. 81/2008.",
   },
 ];
 
-const EYEBROW = "text-[12px] font-medium tracking-[0.16em] uppercase";
+const CONTAINER = "mx-auto w-full max-w-[1160px] px-6 sm:px-7";
 const SECTION_H2 =
-  "font-heading text-[clamp(1.9rem,3.2vw,2.6rem)] leading-[1.1] font-light tracking-[-0.028em] text-balance";
-/** Card and sub-section heads. Weight 300 like every other heading here. */
-const CARD_H3 =
-  "font-heading text-[23px] font-light leading-[1.28] tracking-[-0.018em] text-[#061b31]";
+  "font-heading text-[clamp(2rem,3.4vw,2.75rem)] leading-[1.1] font-light tracking-[-0.03em] text-balance";
+const LEAD = "text-[16px] leading-[1.6] text-pretty sm:text-[17px]";
+/** Small technical label — a norm, a code, a column head. Not an eyebrow. */
+const TECH = "font-plex text-[12px]";
 
-/**
- * "What you get" lists. A check, not an em dash — /prezzi's comparison table
- * spends "—" on *not* included, and the two pages have to agree on the glyph.
- */
-function FeatureList({ items, className }: { items: string[]; className?: string }) {
+function FeatureList({ items }: { items: string[] }) {
   return (
-    <ul className={`grid gap-[11px] ${className ?? "mt-6"}`}>
+    <ul className="mt-5 grid gap-2.5">
       {items.map((item) => (
-        <li
-          key={item}
-          className="flex gap-[11px] text-[14.5px] leading-[1.5] text-[#273951]"
-        >
+        <li key={item} className="flex gap-2.5 text-[14.5px] leading-[1.5] text-[#273951]">
           <Check
             aria-hidden
             strokeWidth={2.5}
-            className="mt-[4px] size-[13px] shrink-0 text-[#003d74]"
+            className="mt-[4px] size-[14px] shrink-0 text-[#003d74]"
           />
           {item}
         </li>
       ))}
     </ul>
+  );
+}
+
+function RiskScale() {
+  return (
+    <div className="mt-5">
+      <div className="flex items-baseline justify-between">
+        <span className="text-[13px] font-medium text-[#273951]">Indice di rischio</span>
+        <span className={`${TECH} text-[13px] text-[#003d74]`}>I = 2·D + P</span>
+      </div>
+      <ul className="mt-2.5 grid grid-cols-4 gap-1">
+        {RISK_LEVELS.map((level) => (
+          <li key={level.label} className="flex flex-col gap-1.5">
+            <span aria-hidden className="h-1.5 rounded-[2px]" style={{ background: level.color }} />
+            <span className={`${TECH} text-[#273951]`}>{level.range}</span>
+            <span className="text-[12.5px] text-[#64748d]">{level.label}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -159,530 +332,431 @@ export default async function Home() {
   }
 
   return (
-    <div className="bg-white">
+    <div className={`${plexMono.variable} bg-white`}>
       <SiteNav variant="overlay" />
 
       <main>
         {/* ================= Hero ================= */}
         <section
           id="top"
-          className="dark-section relative flex min-h-[96svh] flex-col overflow-hidden bg-[#061b31]"
+          className="dark-section relative flex min-h-[max(760px,100svh)] flex-col overflow-hidden bg-[#061930]"
         >
-          <div aria-hidden className="absolute inset-x-0 -inset-y-[8%] overflow-hidden">
-            <ParallaxImage
-              src="/landing/hero-officina.webp"
-              alt=""
-              width={1376}
-              height={768}
-              speed={0.14}
-              priority
-              sizes="100vw"
-              wrapperClassName="h-full w-full"
-              className="h-full w-full object-cover"
-            />
-          </div>
           <div
             aria-hidden
-            className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,27,49,.72)_0%,rgba(6,27,49,.44)_38%,rgba(6,27,49,.9)_100%)]"
+            className="absolute inset-0 bg-[radial-gradient(ellipse_48%_52%_at_68%_46%,rgba(27,85,148,0.24),rgba(6,25,48,0)_70%)]"
           />
+
           <div
-            aria-hidden
-            className="absolute inset-0 bg-[radial-gradient(ellipse_62%_54%_at_28%_56%,rgba(6,27,49,.62)_0%,rgba(6,27,49,0)_72%)]"
-          />
-
-          <div className="relative z-2 mx-auto flex w-full max-w-[1160px] flex-1 flex-col justify-center px-6 pt-[116px] pb-12 sm:px-7 sm:pt-[150px] sm:pb-16">
-            <p className={`landing-rise mb-[26px] ${EYEBROW} text-[#a5c8ff]`}>
-              Piattaforma per la sicurezza sul lavoro
-            </p>
-            <h1
-              className="landing-rise max-w-[17ch] font-heading text-[clamp(2.6rem,5.4vw,4.1rem)] leading-[1.03] font-light tracking-[-0.035em] text-balance text-white"
-              style={{ animationDelay: "60ms" }}
-            >
-              Dal sopralluogo al DVR, senza ricopiare un dato.
-            </h1>
-            <p
-              className="landing-rise mt-[26px] max-w-[600px] text-[17px] leading-[1.6] font-light text-white/82"
-              style={{ animationDelay: "160ms" }}
-            >
-              I dati si raccolgono una volta sola, in azienda. La piattaforma
-              compone l&apos;intero fascicolo — DVR, allegati di valutazione,
-              piani operativi — conforme al D.Lgs.&nbsp;81/2008 e pronto per la
-              revisione del professionista.
-            </p>
-
-            <div
-              className="landing-rise mt-9 flex flex-wrap gap-3.5"
-              style={{ animationDelay: "260ms" }}
-            >
-              <a
-                href="#consulenti"
-                className="inline-flex min-w-[236px] flex-col gap-[3px] rounded-md bg-white px-[22px] py-[15px] shadow-stripe-deep transition-transform duration-250 ease-[cubic-bezier(.16,1,.3,1)] hover:-translate-y-0.5"
+            className={`${CONTAINER} relative z-2 grid flex-1 gap-8 pt-[104px] pb-10 sm:pt-[128px] lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)] lg:items-center lg:gap-12 lg:pb-14 xl:grid-cols-[minmax(0,500px)_minmax(0,1fr)] xl:pt-[72px] xl:pb-6`}
+          >
+            <div className="relative z-3 flex flex-col">
+              <p
+                className={`landing-rise ${TECH} text-[12.5px] tracking-[0.02em] text-[#a5c8ff]`}
               >
-                <span className="text-[15px] font-semibold text-[#061b31]">
-                  Sono un consulente
-                </span>
-                <span className="text-[13px] text-[#64748d]">
-                  Studi e RSPP · più aziende clienti
-                </span>
-              </a>
-              <a
-                href="#aziende"
-                className="inline-flex min-w-[236px] flex-col gap-[3px] rounded-md border border-white/28 bg-white/6 px-[22px] py-[15px] transition-[transform,background-color,border-color] duration-250 ease-[cubic-bezier(.16,1,.3,1)] hover:-translate-y-0.5 hover:border-white/50 hover:bg-white/13"
+                Sicurezza sul lavoro · D.Lgs. 81/2008
+              </p>
+              <h1
+                className="landing-rise mt-5 font-heading text-[clamp(2.4rem,4.1vw,3.625rem)] leading-[1.04] font-light tracking-[-0.035em] text-white"
+                style={{ animationDelay: "60ms" }}
               >
-                <span className="text-[15px] font-semibold text-white">
-                  Sono un&apos;azienda
-                </span>
-                <span className="text-[13px] text-white/66">
-                  Datore di lavoro · una sola impresa
-                </span>
-              </a>
+                Dal sopralluogo
+                <br />
+                al DVR, senza
+                <br />
+                ricopiare un dato.
+              </h1>
+              <p
+                className="landing-rise mt-6 max-w-[480px] text-[16px] leading-[1.6] text-white/80 sm:text-[18px]"
+                style={{ animationDelay: "140ms" }}
+              >
+                Raccogli i dati una volta sola, in azienda. La piattaforma compone
+                DVR, allegati e piani operativi conformi al D.Lgs.&nbsp;81/2008: a te
+                resta solo la revisione.
+              </p>
+
+              <div
+                className="landing-rise mt-8 flex flex-col gap-2.5 sm:flex-row sm:gap-3"
+                style={{ animationDelay: "220ms" }}
+              >
+                <Link
+                  href="/prezzi"
+                  className="inline-flex h-[50px] items-center justify-center gap-2.5 rounded-md bg-white px-[22px] text-[15px] font-semibold text-[#061b31] shadow-stripe-deep transition-colors hover:bg-[#e5edf5]"
+                >
+                  Scegli il piano
+                  <ArrowRight aria-hidden className="size-4" strokeWidth={1.8} />
+                </Link>
+                <a
+                  href="#come-funziona"
+                  className="inline-flex h-[50px] items-center justify-center gap-2.5 rounded-md border border-white/28 bg-white/5 px-5 text-[15px] font-medium text-white transition-colors hover:border-white/50 hover:bg-white/12"
+                >
+                  Come funziona
+                  <ArrowDown aria-hidden className="size-4" strokeWidth={1.8} />
+                </a>
+              </div>
+              <p
+                className="landing-rise mt-5 text-center text-[13px] leading-[1.5] text-white/68 sm:text-left sm:text-[13.5px]"
+                style={{ animationDelay: "260ms" }}
+              >
+                Consulenti e RSPP da{" "}
+                <strong className="tnum font-semibold text-white">€1.490</strong> · aziende
+                da <strong className="tnum font-semibold text-white">€490</strong> ·
+                all&apos;anno, IVA esclusa
+              </p>
+            </div>
+
+            <div className="hero-stage relative xl:self-stretch">
+              <HeroModel />
             </div>
           </div>
 
-          <div className="relative z-2 border-t border-white/13">
-            {/* Two columns on phones rather than four stacked rows: the four
-                figures are one comparable set, and stacking them spent ~290px
-                turning a data block into a list. The hairlines make the
-                quadrant read as a table at every width. */}
-            <div className="mx-auto grid w-full max-w-[1160px] grid-cols-2 px-6 sm:px-7 lg:grid-cols-4">
-              {STATS.map((stat, i) => (
-                <div
-                  key={stat.label}
+          <div className="relative z-2 border-t border-white/12">
+            <ul className={`${CONTAINER} grid grid-cols-2 lg:grid-cols-4`}>
+              {FACTS.map((fact, i) => (
+                <li
+                  key={fact.title}
                   className={[
-                    "py-[18px] sm:py-[22px]",
-                    // Column rule inside each row, row rule under the first row.
-                    i % 2 === 1 ? "border-l border-white/13 pl-5" : "pr-5",
-                    i >= 2 ? "border-t border-white/13" : "",
-                    // At lg all four sit on one row: drop the row rule and let
-                    // every cell but the first carry the column rule.
-                    "lg:border-t-0",
-                    i === 0 ? "lg:border-l-0" : "lg:border-l lg:border-white/13",
-                    // Each edge stated exactly once per breakpoint. Two
-                    // competing utilities for one property (`lg:px-6` plus a
-                    // `lg:pl-0` override) are resolved by Tailwind's own
-                    // output order, not by the order they appear here — which
-                    // is how the first cell ended up indented 24px from the
-                    // headline directly above it.
+                    "flex flex-col gap-1 py-[18px] sm:py-5",
+                    i % 2 === 1 ? "border-l border-white/12 pl-4 sm:pl-6" : "pr-4 sm:pr-6",
+                    i >= 2 ? "border-t border-white/12 lg:border-t-0" : "",
+                    // One row at lg: every cell but the first carries the rule.
                     i === 0
-                      ? "lg:pl-0 lg:pr-6"
-                      : i === STATS.length - 1
-                        ? "lg:pl-6 lg:pr-0"
-                        : "lg:px-6",
+                      ? "lg:pr-6 lg:pl-0"
+                      : i === FACTS.length - 1
+                        ? "lg:border-l lg:pr-0 lg:pl-6"
+                        : "lg:border-l lg:px-6",
                   ].join(" ")}
                 >
-                  <p
-                    className={`font-heading text-[21px] font-light tracking-[-0.02em] text-white sm:text-[26px] ${stat.tabular ? "tnum" : ""}`}
-                  >
-                    {stat.value}
+                  <p className="font-heading text-[16px] text-white sm:text-[18px]">
+                    {fact.title}
                   </p>
-                  <p className="mt-1 text-[12.5px] text-white/60">{stat.label}</p>
-                </div>
+                  <p className="text-[12.5px] leading-[1.45] text-white/64 sm:text-[13px]">
+                    {fact.body}
+                  </p>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         </section>
-
-        {/* ================= Il fascicolo (scroll stack) ================= */}
-        <FascicoloStack />
 
         {/* ================= Come funziona ================= */}
-        <section id="come-funziona" className="section-y-loose bg-white">
-          <div className="mx-auto w-full max-w-[1160px] px-6 sm:px-7">
-            <Reveal>
-              <p className={`mb-[18px] ${EYEBROW} text-[#003d74]`}>Come funziona</p>
-              <h2 className={`max-w-[20ch] ${SECTION_H2} text-[#061b31]`}>
-                Un solo flusso, dal campo al documento.
-              </h2>
-              <p className="mt-[18px] max-w-[56ch] text-[16px] leading-[1.6] text-[#64748d]">
-                Ogni dato viene rilevato una volta e riusato ovunque serva: nelle
-                valutazioni, nelle tabelle e in ogni allegato del fascicolo.
-              </p>
+        <section id="come-funziona" className="section-y-loose scroll-mt-[68px] bg-white">
+          <div className={CONTAINER}>
+            <Reveal className="grid gap-10 lg:grid-cols-2 lg:items-end lg:gap-20">
+              <div>
+                <h2 className={`max-w-[520px] ${SECTION_H2} text-[#061b31]`}>
+                  Un solo flusso, dal campo al documento.
+                </h2>
+                <p className={`mt-5 max-w-[500px] ${LEAD} text-[#64748d]`}>
+                  Ogni dato si rileva una volta e si riusa ovunque serva: nelle
+                  valutazioni, nelle tabelle, in ogni allegato del fascicolo.
+                </p>
+              </div>
+              <figure className="border-t border-[#e5edf5] pt-[22px]">
+                <p className={`${TECH} text-[#003d74]`}>Il principio di progetto</p>
+                <blockquote className="mt-3.5 font-heading text-[20px] leading-[1.45] font-light tracking-[-0.012em] text-pretty text-[#061b31] sm:text-[24px] sm:leading-[1.4]">
+                  «Il nostro deve essere solo una questione di revisione, non di
+                  inserimento del dato.»
+                </blockquote>
+                <figcaption className="mt-3.5 text-[13.5px] text-[#64748d]">
+                  I consulenti di N2O SRL, da cui la piattaforma è nata
+                </figcaption>
+              </figure>
             </Reveal>
 
-            {/* Step gap stays clearly under the section's own padding so the
-                three steps read as one group rather than three sections. */}
-            <div className="mt-14 grid gap-16 sm:mt-[84px] sm:gap-24">
-              {/* Step 1 */}
-              <Reveal className="grid items-center gap-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1.08fr)] md:gap-[60px]">
-                <div>
-                  <div className="flex items-baseline gap-4">
-                    <span
-                      aria-hidden
-                      className="tnum font-heading text-[40px] leading-none font-light text-[#003d74]"
-                    >
-                      1
-                    </span>
-                    <h3 className={CARD_H3}>
-                      Sopralluogo digitale
+            <ol className="mt-12 grid gap-14 sm:mt-20 lg:grid-cols-3 lg:gap-6">
+              {STEPS.map((step, i) => (
+                <Reveal as="li" key={step.n} delay={i * 80} className="flex flex-col">
+                    <div className="flex h-[240px] items-center justify-center overflow-hidden rounded-[14px] border border-[#eef2f7] bg-[#f6f9fc] sm:h-[320px]">
+                      <Image
+                        src={step.image.src}
+                        alt={step.image.alt}
+                        width={960}
+                        height={960}
+                        sizes="290px"
+                        className="size-[220px] object-contain sm:size-[290px]"
+                      />
+                    </div>
+                    <div className="mt-6 flex items-center gap-3 sm:mt-7">
+                      <span className={`${TECH} text-[13px] text-[#003d74]`}>{step.n}</span>
+                      <span aria-hidden className="h-px flex-1 bg-[#e5edf5]" />
+                    </div>
+                    <h3 className="mt-4 font-heading text-[21px] leading-[1.25] font-normal tracking-[-0.018em] text-[#061b31] sm:text-[23px]">
+                      {step.title}
                     </h3>
-                  </div>
-                  <p className="mt-[18px] max-w-[48ch] text-[15.5px] leading-[1.65] text-[#64748d]">
-                    L&apos;operatore rileva in azienda organico, ambienti,
-                    attrezzature e sostanze con un questionario strutturato che
-                    guida la visita. Niente appunti da trascrivere al rientro: i
-                    dati nascono già ordinati e collegati all&apos;azienda.
-                  </p>
-                  <FeatureList
-                    items={[
-                      "Autofill dell'anagrafica dalla sola P.IVA",
-                      "Scheda di sicurezza PDF → sostanza chimica strutturata",
-                      "Foto del reparto → inventario attrezzature",
-                    ]}
-                  />
-                </div>
-                <ParallaxImage
-                  src="/landing/sopralluogo.webp"
-                  alt="Consulente con tablet durante il sopralluogo in un'officina meccanica"
-                  width={1600}
-                  height={1200}
-                  speed={0.06}
-                  sizes="(min-width: 768px) 50vw, 100vw"
-                  wrapperClassName="overflow-hidden rounded-[10px] shadow-stripe-elevated"
-                  className="block h-auto w-full"
-                />
-              </Reveal>
-
-              {/* Step 2 — text first in the DOM, card pulled left on desktop */}
-              <Reveal className="grid items-center gap-10 md:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)] md:gap-[60px]">
-                <div className="md:order-2">
-                  <div className="flex items-baseline gap-4">
-                    <span
-                      aria-hidden
-                      className="tnum font-heading text-[40px] leading-none font-light text-[#003d74]"
-                    >
-                      2
-                    </span>
-                    <h3 className={CARD_H3}>
-                      Valutazioni e calcoli
-                    </h3>
-                  </div>
-                  <p className="mt-[18px] max-w-[48ch] text-[15.5px] leading-[1.65] text-[#64748d]">
-                    Indice di rischio, protocollo NIOSH, soglie videoterminali,
-                    checklist INAIL, rischio incendio e comfort termico: ogni
-                    metodo viene applicato automaticamente ai dati rilevati, con
-                    risultati tracciabili in ogni tabella.
-                  </p>
-                </div>
-                <div className="rounded-[10px] border border-[#e5edf5] bg-white p-[30px] shadow-stripe-elevated md:order-1">
-                  <div className="flex items-baseline justify-between gap-4">
-                    <p className="text-[15px] font-medium text-[#273951]">
-                      Indice di rischio
+                    <p className="mt-2.5 text-[15px] leading-[1.62] text-pretty text-[#64748d] sm:text-[15.5px]">
+                      {step.body}
                     </p>
-                    <span className="font-mono text-[13px] text-[#003d74]">
-                      I = 2·D + P
-                    </span>
-                  </div>
-                  <ul className="mt-[18px]">
-                    {RISK_LEVELS.map((level) => (
-                      <li
-                        key={level.label}
-                        className="flex items-center justify-between border-b border-[#eef2f7] py-[11px] last:border-b-0"
-                      >
-                        <span className="flex items-center gap-3">
-                          <span
-                            aria-hidden
-                            className="h-2.5 w-2.5 rounded-full"
-                            style={{ backgroundColor: level.color }}
-                          />
-                          <span className="text-[14px] text-[#061b31]">
-                            {level.label}
-                          </span>
-                        </span>
-                        <span className="tnum text-[13px] text-[#64748d]">
-                          {level.range}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-4 text-[12.5px] leading-[1.5] text-[#64748d]">
-                    La scala applicata a ogni pericolo individuato nel
-                    sopralluogo.
-                  </p>
-                </div>
-              </Reveal>
-
-              {/* Step 3 */}
-              <Reveal className="grid items-center gap-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1.08fr)] md:gap-[60px]">
-                <div>
-                  <div className="flex items-baseline gap-4">
-                    <span
-                      aria-hidden
-                      className="tnum font-heading text-[40px] leading-none font-light text-[#003d74]"
-                    >
-                      3
-                    </span>
-                    <h3 className={CARD_H3}>
-                      Generazione e revisione
-                    </h3>
-                  </div>
-                  <p className="mt-[18px] max-w-[48ch] text-[15.5px] leading-[1.65] text-[#64748d]">
-                    La piattaforma compone i documenti Word con la struttura, le
-                    tabelle e le intestazioni del modello, li mostra in anteprima
-                    nel browser e consente correzioni inline. Il consulente
-                    rivede, corregge dove serve e approva.
-                  </p>
-                  <p className="mt-6 border-l-2 border-[#003d74] bg-[#f6f9fc] px-[18px] py-4 text-[14.5px] leading-[1.6] text-[#273951]">
-                    «Il nostro deve essere solo una questione di revisione, non
-                    di inserimento del dato.»
-                  </p>
-                </div>
-                <ParallaxImage
-                  src="/landing/fascicolo.webp"
-                  alt="Il DVR rilegato con gli allegati e il timbro"
-                  width={1200}
-                  height={896}
-                  speed={0.06}
-                  sizes="(min-width: 768px) 50vw, 100vw"
-                  wrapperClassName="overflow-hidden rounded-[10px] shadow-stripe-elevated"
-                  className="block h-auto w-full"
-                />
-              </Reveal>
-            </div>
+                    {step.bullets ? <FeatureList items={step.bullets} /> : <RiskScale />}
+                </Reveal>
+              ))}
+            </ol>
           </div>
         </section>
 
-        {/* ================= Due percorsi ================= */}
+        {/* ================= Il fascicolo ================= */}
         <section
-          id="consulenti"
-          className="section-y scroll-mt-[90px] border-t border-[#e5edf5] bg-[#f6f9fc]"
+          id="fascicolo"
+          className="dark-section section-y-loose scroll-mt-[68px] overflow-hidden bg-[#061b31]"
         >
-          <div className="mx-auto w-full max-w-[1160px] px-6 sm:px-7">
-            <Reveal>
-              <p className={`mb-[18px] ${EYEBROW} text-[#003d74]`}>Due percorsi</p>
-              <h2 className={`max-w-[24ch] ${SECTION_H2} text-[#061b31]`}>
-                La stessa piattaforma, due modi di usarla.
-              </h2>
-            </Reveal>
-
-            <div className="mt-13 grid gap-7 md:grid-cols-2">
-              <Reveal
-                as="article"
-                className="flex flex-col overflow-hidden rounded-[10px] border border-[#e5edf5] bg-white shadow-stripe-standard"
-              >
-                <div className="h-[250px] overflow-hidden bg-[#061b31]">
-                  <Image
-                    src="/landing/ruolo-campo.webp"
-                    alt="Tecnico della sicurezza con tablet in officina"
-                    width={896}
-                    height={1200}
-                    sizes="(min-width: 768px) 50vw, 100vw"
-                    className="h-full w-full object-cover"
-                    style={{ objectPosition: "50% 26%" }}
-                  />
-                </div>
-                <div className="flex flex-1 flex-col p-8">
-                  <p className="text-[11.5px] font-semibold tracking-[0.12em] text-[#003d74] uppercase">
-                    Per consulenti e studi
-                  </p>
-                  {/* min-h of two line boxes: these two cards sit side by side
-                      and one title wraps to two lines, which used to push its
-                      whole column — body, bullets — 36px out of step. */}
-                  <h3 className={`${CARD_H3} mt-3 md:min-h-[2lh]`}>
-                    Produci per tutto il tuo portafoglio clienti
-                  </h3>
-                  <p className="mt-3.5 text-[15px] leading-[1.62] text-[#64748d]">
-                    Un ambiente multi-azienda con la tua carta intestata: logo,
-                    P.IVA e nominativo RSPP stampati su ogni documento. La
-                    piattaforma resta invisibile al cliente finale.
-                  </p>
-                  <FeatureList
-                    items={[
-                      "Tutti e 17 i tipi di documento su ogni piano",
-                      "Da 15 a 200+ aziende clienti attive",
-                      "Migrazione dei tuoi template, white-label, API",
-                      "Portali self-service per i clienti (da Network)",
-                    ]}
-                  />
-                  <div className="mt-auto flex items-baseline gap-3.5 pt-7">
-                    <Link
-                      href="/prezzi#consulenti"
-                      className="inline-flex h-[42px] items-center rounded-[4px] bg-[#003d74] px-5 text-[14.5px] font-medium text-white transition-colors hover:bg-[#1b5594]"
-                    >
-                      Vedi i piani
-                    </Link>
-                    <span className="text-[13.5px] text-[#64748d]">
-                      da{" "}
-                      <strong className="tnum font-medium text-[#061b31]">
-                        €1.490
-                      </strong>
-                      /anno
-                    </span>
-                  </div>
-                </div>
+          <div className={CONTAINER}>
+            <div className="grid items-center gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,600px)] lg:gap-10">
+              <Reveal>
+                <h2 className={`max-w-[500px] ${SECTION_H2} text-white`}>
+                  Diciassette documenti, un&apos;unica base dati.
+                </h2>
+                <p className={`mt-5 max-w-[470px] ${LEAD} text-white/72`}>
+                  Ogni allegato riusa gli ambienti, le persone e le attrezzature del
+                  sopralluogo. Correggi un dato una volta: resta coerente in tutto il
+                  fascicolo.
+                </p>
+                <p className={`mt-6 flex flex-wrap gap-x-6 gap-y-2 ${TECH} text-[13px] text-[#a5c8ff]`}>
+                  <span>
+                    <strong className="font-medium text-white">1</strong> principale
+                  </span>
+                  <span>
+                    <strong className="font-medium text-white">10</strong> allegati
+                  </span>
+                  <span>
+                    <strong className="font-medium text-white">6</strong> complementari
+                  </span>
+                </p>
               </Reveal>
-
-              {/* The anchor belongs on the card, not on its photo: the id had
-                  landed on the inner image box, so "Sono un'azienda" in the
-                  hero scrolled 312px past the section heading to the top of a
-                  picture. The article already carried the scroll-mt for it. */}
-              <Reveal
-                as="article"
-                id="aziende"
-                className="flex scroll-mt-[90px] flex-col overflow-hidden rounded-[10px] border border-[#e5edf5] bg-white shadow-stripe-standard"
-              >
-                <div className="h-[250px] overflow-hidden bg-[#061b31]">
-                  <Image
-                    src="/landing/ruolo-datore.webp"
-                    alt="Datore di lavoro davanti alla propria officina"
-                    width={896}
-                    height={1200}
-                    sizes="(min-width: 768px) 50vw, 100vw"
-                    className="h-full w-full object-cover"
-                    style={{ objectPosition: "50% 22%" }}
-                  />
-                </div>
-                <div className="flex flex-1 flex-col p-8">
-                  <p className="text-[11.5px] font-semibold tracking-[0.12em] text-[#003d74] uppercase">
-                    Per aziende
-                  </p>
-                  {/* min-h of two line boxes: these two cards sit side by side
-                      and one title wraps to two lines, which used to push its
-                      whole column — body, bullets — 36px out of step. */}
-                  <h3 className={`${CARD_H3} mt-3 md:min-h-[2lh]`}>
-                    Tieni aggiornato il tuo fascicolo, non rifarlo ogni volta
-                  </h3>
-                  <p className="mt-3.5 text-[15px] leading-[1.62] text-[#64748d]">
-                    Non è un DVR fai-da-te. La piattaforma scrive struttura,
-                    calcoli e testi; un RSPP certificato rivede e controfirma su
-                    richiesta. Il datore di lavoro resta il responsabile e lo sa.
-                  </p>
-                  <FeatureList
-                    items={[
-                      "Revisioni e rigenerazioni illimitate",
-                      "Promemoria di aggiornamento art. 29 c.3",
-                      "Data certa: marca temporale e deposito PEC",
-                      "Revisione RSPP assistita inclusa da Plus",
-                    ]}
-                  />
-                  <div className="mt-auto flex items-baseline gap-3.5 pt-7">
-                    <Link
-                      href="/prezzi#aziende"
-                      className="inline-flex h-[42px] items-center rounded-[4px] border border-[#003d74] bg-white px-5 text-[14.5px] font-medium text-[#003d74] transition-colors hover:bg-[#f6f9fc]"
-                    >
-                      Vedi i piani
-                    </Link>
-                    <span className="text-[13.5px] text-[#64748d]">
-                      da{" "}
-                      <strong className="tnum font-medium text-[#061b31]">
-                        €490
-                      </strong>
-                      /anno
-                    </span>
-                  </div>
-                </div>
-              </Reveal>
+              <Image
+                src="/landing/modello-fascicolo.webp"
+                alt="Raccoglitore blu aperto con fogli e divisori, accanto a un timbro"
+                width={1600}
+                height={1195}
+                sizes="(min-width: 1024px) 600px, 100vw"
+                className="-mx-6 w-[calc(100%+3rem)] max-w-none [mask-image:radial-gradient(ellipse_62%_64%_at_52%_50%,#000_58%,transparent_100%)] sm:-mx-7 sm:w-[calc(100%+3.5rem)] lg:mx-0 lg:w-full lg:max-w-full"
+              />
             </div>
 
-            <Reveal>
-              <p className="mt-[26px] max-w-[80ch] text-[13.5px] leading-[1.6] text-[#64748d]">
-                I piani diretti sono pensati per le imprese che documentano la
-                propria sicurezza, entro i limiti di sedi e addetti di ciascun
-                piano. Il POS del cantiere temporaneo o mobile e il manuale
-                HACCP non sono inclusi in nessun piano diretto: se la tua
-                attività li richiede ti mettiamo in contatto con uno studio
-                partner.
-              </p>
-            </Reveal>
+            {/* CSS columns balance the 17 rows across 1–3 columns on their own;
+                each group label travels with its first row so it is never
+                stranded at the foot of a column. */}
+            <div className="mt-12 gap-12 md:columns-2 lg:mt-16 lg:columns-3">
+              {DOCUMENT_GROUPS.map((group) =>
+                group.docs.map((doc, i) => {
+                  const row = (
+                    <div className="flex gap-4 border-t border-white/12 py-3.5">
+                      <span
+                        className={`w-[92px] shrink-0 ${TECH} text-[11.5px] leading-5 text-[#a5c8ff]`}
+                      >
+                        {doc.code}
+                      </span>
+                      <span className="flex flex-col gap-[3px]">
+                        <span className="text-[14.5px] leading-5 text-white">{doc.title}</span>
+                        <span className={`${TECH} text-[11.5px] text-white/58`}>{doc.norm}</span>
+                      </span>
+                    </div>
+                  );
+                  return i === 0 ? (
+                    <div
+                      key={`${group.label}-${doc.title}`}
+                      className="break-inside-avoid pt-7 first:pt-0"
+                    >
+                      <p className={`mb-3 ${TECH} text-white/60`}>{group.label}</p>
+                      {row}
+                    </div>
+                  ) : (
+                    <div key={`${group.label}-${doc.title}`} className="break-inside-avoid">
+                      {row}
+                    </div>
+                  );
+                }),
+              )}
+            </div>
+            <p className="mt-10 max-w-[760px] text-[14px] leading-[1.6] text-white/66">
+              Nei piani per consulenti sono inclusi tutti e 17. Nei piani per
+              aziende, POS e manuale HACCP passano da uno studio partner.
+            </p>
           </div>
         </section>
 
-        {/* ================= Metodo e normativa ================= */}
-        <section id="metodo" className="dark-section section-y scroll-mt-[70px] bg-[#18244e]">
-          <div className="mx-auto w-full max-w-[1160px] px-6 sm:px-7">
-            <Reveal>
-              <p className={`mb-[18px] ${EYEBROW} text-[#a5c8ff]`}>
-                Metodo e normativa
-              </p>
-              <h2 className={`max-w-[24ch] ${SECTION_H2} text-white`}>
+        {/* ================= Metodo ================= */}
+        <section id="metodo" className="section-y-loose scroll-mt-[68px] bg-white">
+          <div className={CONTAINER}>
+            <Reveal className="grid gap-5 lg:grid-cols-2 lg:items-end lg:gap-20">
+              <h2 className={`max-w-[520px] ${SECTION_H2} text-[#061b31]`}>
                 Calcoli verificabili, riferimenti puntuali.
               </h2>
-              <p className="mt-[18px] max-w-[58ch] text-[16px] leading-[1.62] font-light text-white/70">
-                Ogni valore che entra in tabella ha un metodo dichiarato e una
-                fonte normativa: chi revisiona può sempre risalire al calcolo.
+              <p className={`max-w-[500px] ${LEAD} text-[#64748d]`}>
+                Ogni valore che entra in tabella ha un metodo dichiarato e una fonte
+                normativa: chi rivede può sempre risalire al calcolo.
               </p>
             </Reveal>
 
-            <Reveal>
-              <dl className="mt-13">
+            <Reveal className="mt-10 sm:mt-14">
+              <div
+                aria-hidden
+                className={`hidden gap-8 pb-3 ${TECH} text-[#64748d] md:grid md:grid-cols-[240px_minmax(0,1fr)_220px] lg:grid-cols-[280px_minmax(0,1fr)_240px]`}
+              >
+                <span>Metodo</span>
+                <span>Cosa calcola</span>
+                <span className="text-right">Formula o soglia</span>
+              </div>
+              <dl className="border-b border-[#e5edf5]">
                 {METHODS.map((method) => (
                   <div
                     key={method.name}
-                    className="grid gap-x-8 gap-y-1 border-b border-white/11 py-[17px] last:border-b-0 md:grid-cols-[230px_minmax(0,1fr)_auto] md:items-baseline"
+                    className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 border-t border-[#e5edf5] py-4 md:grid-cols-[240px_minmax(0,1fr)_220px] md:items-baseline md:gap-8 md:py-[18px] lg:grid-cols-[280px_minmax(0,1fr)_240px]"
                   >
-                    <dt className="text-[15px] font-medium text-white">
+                    <dt className="text-[15px] font-medium text-[#061b31] md:text-[15.5px]">
                       {method.name}
                     </dt>
-                    <dd className="text-[14px] leading-[1.55] font-light text-white/65">
-                      {method.description}
-                    </dd>
-                    <dd className="font-mono text-[13px] whitespace-nowrap text-[#a5c8ff]">
+                    <dd
+                      className={`${TECH} text-right text-[12.5px] whitespace-nowrap text-[#003d74] md:order-3 md:text-[13.5px]`}
+                    >
                       {method.formula}
+                    </dd>
+                    <dd className="col-span-2 text-[14px] leading-[1.55] text-[#64748d] md:order-2 md:col-span-1 md:text-[15px]">
+                      {method.description}
                     </dd>
                   </div>
                 ))}
               </dl>
-              <p className="mt-6 text-[13px] leading-[1.6] text-white/55">
-                Riferimenti: D.Lgs. 81/2008, D.Lgs. 151/2001, D.M. 3 settembre
-                2021, Reg. CE 852/2004, UNI EN ISO 7730, 7933 e 11228.
+              <p className="mt-4 text-[13px] leading-[1.6] text-[#64748d] sm:mt-5 sm:text-[13.5px]">
+                Riferimenti: D.Lgs. 81/2008, D.Lgs. 151/2001, D.M. 3 settembre 2021,
+                Reg. CE 852/2004, UNI EN ISO 7730, UNI EN ISO 7933, UNI ISO 11228-1.
               </p>
             </Reveal>
 
-            <Reveal className="mt-16 grid gap-14 border-t border-white/11 pt-12 md:grid-cols-[minmax(0,330px)_minmax(0,1fr)]">
-              <h3 className="font-heading text-[23px] leading-[1.2] font-light tracking-[-0.02em] text-white">
-                L&apos;AI assiste, il consulente decide.
-              </h3>
-              <p className="max-w-[64ch] text-[15px] leading-[1.68] font-light text-white/70">
-                I modelli leggono le schede di sicurezza delle sostanze chimiche,
-                propongono descrizioni aziendali e misure di miglioramento. Ogni
-                testo generato passa dalla revisione di un professionista prima
-                di entrare nel documento, e i dati anagrafici e sanitari non
-                vengono mai inviati ai modelli.
-              </p>
+            <Reveal className="mt-14 grid gap-8 border-t border-[#e5edf5] pt-8 sm:mt-24 sm:pt-12 lg:grid-cols-[340px_minmax(0,1fr)] lg:gap-16">
+              <div>
+                <h3 className="font-heading text-[26px] leading-[1.15] font-light tracking-[-0.025em] text-[#061b31] sm:text-[30px]">
+                  L&apos;AI assiste, il consulente decide.
+                </h3>
+                <p className="mt-3.5 text-[15px] leading-[1.6] text-[#64748d]">
+                  Ogni testo generato passa dalla revisione di un professionista prima
+                  di entrare nel documento.
+                </p>
+              </div>
+              <ul className="grid gap-6 md:grid-cols-3 md:gap-8">
+                {AI_POINTS.map(({ icon: Icon, title, body }) => (
+                  <li key={title} className="flex gap-3.5 md:flex-col md:gap-3">
+                    <Icon
+                      aria-hidden
+                      strokeWidth={1.6}
+                      className="size-6 shrink-0 text-[#003d74]"
+                    />
+                    <div>
+                      <p className="text-[15px] font-medium text-[#061b31] md:text-[15.5px]">
+                        {title}
+                      </p>
+                      <p className="mt-1 text-[14px] leading-[1.6] text-[#64748d] md:mt-2 md:text-[14.5px]">
+                        {body}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </Reveal>
           </div>
         </section>
 
-        {/* ================= Settori ================= */}
-        {/* Tighter than its neighbours on purpose: a band of four photographs
-            carries itself and does not need prose breathing room. */}
-        <section className="section-y-tight bg-white">
-          <div className="mx-auto w-full max-w-[1160px] px-6 sm:px-7">
-            <div className="flex flex-wrap items-end justify-between gap-10">
-              <Reveal>
-                <p className={`mb-[18px] ${EYEBROW} text-[#003d74]`}>Settori</p>
-                <h2 className={`max-w-[22ch] ${SECTION_H2} text-[#061b31]`}>
-                  Le varianti che il settore richiede.
-                </h2>
-              </Reveal>
-              <Reveal>
-                <p className="max-w-[44ch] text-[15px] leading-[1.6] text-[#64748d]">
-                  Il rischio biologico di un asilo non è quello di un laboratorio
-                  odontoiatrico. Gli allegati esistono nelle varianti che la
-                  normativa distingue.
-                </p>
-              </Reveal>
+        {/* ================= Per chi è ================= */}
+        <section
+          id="per-chi"
+          className="section-y-loose scroll-mt-[68px] border-t border-[#e5edf5] bg-[#f6f9fc]"
+        >
+          <div className={CONTAINER}>
+            <Reveal>
+              <h2 className={`max-w-[560px] ${SECTION_H2} text-[#061b31]`}>
+                La stessa piattaforma, due modi di usarla.
+              </h2>
+            </Reveal>
+
+            <div className="mt-8 grid gap-4 sm:mt-14 md:grid-cols-2 md:gap-6">
+              {PERCORSI.map((percorso, i) => (
+                <Reveal
+                  as="article"
+                  key={percorso.id}
+                  id={percorso.id}
+                  delay={i * 80}
+                  className="flex scroll-mt-[90px] flex-col overflow-hidden rounded-[14px] border border-[#e5edf5] bg-white shadow-stripe-standard"
+                >
+                  <div className="flex h-[220px] items-center justify-center bg-[#eef2f7] sm:h-[300px]">
+                    <Image
+                      src={percorso.image.src}
+                      alt={percorso.image.alt}
+                      width={percorso.image.width}
+                      height={percorso.image.height}
+                      sizes="(min-width: 768px) 400px, 300px"
+                      className={`${percorso.image.className} object-contain`}
+                    />
+                  </div>
+                  <div className="flex flex-1 flex-col p-6 sm:p-9">
+                    <p className={`${TECH} text-[#003d74]`}>{percorso.label}</p>
+                    {/* Reserved line boxes once the cards sit side by side
+                        (three at md, two from lg): the titles wrap to
+                        different lengths, which would otherwise push one
+                        card's body out of step with the other's. */}
+                    <h3 className="mt-3 font-heading text-[22px] leading-[1.25] font-light tracking-[-0.02em] text-[#061b31] sm:text-[25px] md:min-h-[3lh] lg:min-h-[2lh]">
+                      {percorso.title}
+                    </h3>
+                    <p className="mt-3.5 text-[15px] leading-[1.62] text-[#64748d]">
+                      {percorso.body}
+                    </p>
+                    <FeatureList items={percorso.bullets} />
+                    <div className="mt-auto flex flex-col gap-3.5 pt-7 sm:pt-8 lg:flex-row lg:items-center lg:justify-between">
+                      <p className="text-[14px] text-[#64748d]">
+                        da{" "}
+                        <strong className="tnum font-heading text-[22px] font-normal text-[#061b31]">
+                          {percorso.price}
+                        </strong>{" "}
+                        /anno · IVA esclusa
+                      </p>
+                      <Link
+                        href={percorso.cta.href}
+                        className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-[#003d74] px-5 text-[15px] font-semibold text-white transition-colors hover:bg-[#1b5594] sm:h-[46px] sm:text-[14.5px]"
+                      >
+                        {percorso.cta.label}
+                        <ArrowRight aria-hidden className="size-[15px]" strokeWidth={1.8} />
+                      </Link>
+                    </div>
+                  </div>
+                </Reveal>
+              ))}
             </div>
 
-            <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {SETTORI.map((settore) => (
-                <Reveal
-                  key={settore.name}
-                  as="figure"
-                  className="relative aspect-[1/1.12] overflow-hidden rounded-[10px] bg-[#061b31]"
-                >
+            <p className="mt-6 max-w-[820px] text-[13.5px] leading-[1.6] text-[#64748d] sm:mt-7">
+              I piani per aziende sono pensati per le imprese che documentano la
+              propria sicurezza, entro i limiti di sedi e addetti di ciascun piano. POS
+              e manuale HACCP non sono inclusi: se la tua attività li richiede, ti
+              mettiamo in contatto con uno studio partner.
+            </p>
+          </div>
+        </section>
+
+        {/* ================= Settori ================= */}
+        <section className="section-y bg-white">
+          <div className={CONTAINER}>
+            <Reveal className="flex flex-wrap items-end justify-between gap-x-12 gap-y-4">
+              <h2 className={`max-w-[520px] ${SECTION_H2} text-[#061b31]`}>
+                Le varianti che il settore richiede.
+              </h2>
+              <p className="max-w-[430px] text-[15.5px] leading-[1.6] text-pretty text-[#64748d] sm:text-[16px]">
+                Il rischio biologico di un asilo nido non è quello di uno studio
+                odontoiatrico. Gli allegati esistono nelle varianti che la normativa
+                distingue.
+              </p>
+            </Reveal>
+            <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-6 sm:mt-12 sm:gap-6 lg:grid-cols-4">
+              {SETTORI.map((settore, i) => (
+                <Reveal as="figure" key={settore.name} delay={i * 60} className="flex flex-col gap-2.5 sm:gap-3.5">
                   <Image
                     src={settore.src}
                     alt={settore.alt}
-                    fill
-                    sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-                    className="object-cover"
-                    style={{ objectPosition: settore.position ?? "50% 50%" }}
+                    width={900}
+                    height={900}
+                    sizes="(min-width: 1024px) 272px, 50vw"
+                    className="aspect-square w-full rounded-[10px] bg-[#e3e9f1] object-cover sm:rounded-xl"
                   />
-                  <figcaption className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,rgba(6,27,49,0),rgba(6,27,49,.88))] px-5 pt-13 pb-[18px] text-white">
-                    <span className="block text-[15px] font-medium">
+                  <figcaption className="flex flex-col gap-1">
+                    <span className="text-[15px] font-medium text-[#061b31] sm:text-[16px]">
                       {settore.name}
                     </span>
-                    <span className="mt-[3px] block text-[12.5px] text-white/66">
+                    <span className={`${TECH} text-[11.5px] leading-[1.4] text-[#64748d] sm:text-[12px]`}>
                       {settore.note}
                     </span>
                   </figcaption>
@@ -694,68 +768,33 @@ export default async function Home() {
 
         {/* ================= Fatturazione ================= */}
         <section className="section-y border-t border-[#e5edf5] bg-[#f6f9fc]">
-          <div className="mx-auto w-full max-w-[1160px] px-6 sm:px-7">
-            <div className="grid items-start gap-16 md:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
-              <Reveal>
-                <p className={`mb-[18px] ${EYEBROW} text-[#003d74]`}>
-                  Fatturazione
-                </p>
-                <h2 className="font-heading text-[clamp(1.7rem,2.8vw,2.25rem)] leading-[1.12] font-light tracking-[-0.026em] text-balance text-[#061b31]">
-                  Nessuna sorpresa a fine anno.
-                </h2>
-                <p className="mt-[18px] text-[15.5px] leading-[1.64] text-[#64748d]">
-                  Abbonamento annuale, pagamento con PayPal, consumi sempre
-                  visibili nella schermata Abbonamento. Nessun blocco improvviso:
-                  gli avvisi arrivano prima del limite, non quando lo hai già
-                  superato.
-                </p>
-                <Link
-                  href="/prezzi#fatturazione"
-                  className="mt-[26px] inline-flex h-[42px] items-center rounded-[4px] bg-[#003d74] px-5 text-[14.5px] font-medium text-white transition-colors hover:bg-[#1b5594]"
-                >
-                  Domande sulla fatturazione
-                </Link>
-              </Reveal>
+          <div className={`${CONTAINER} grid items-start gap-8 lg:grid-cols-[360px_minmax(0,1fr)] lg:gap-[72px]`}>
+            <Reveal>
+              <h2 className="font-heading text-[clamp(1.75rem,2.8vw,2.25rem)] leading-[1.12] font-light tracking-[-0.026em] text-balance text-[#061b31]">
+                Nessuna sorpresa a fine anno.
+              </h2>
+              <p className="mt-4 text-[15.5px] leading-[1.64] text-[#64748d]">
+                Abbonamento annuale, pagamento con PayPal, consumi sempre visibili
+                nella pagina Abbonamento. Gli avvisi arrivano al 75% e al 90% del
+                limite, non quando l&apos;hai già superato.
+              </p>
+              <Link
+                href="/prezzi#fatturazione"
+                className="mt-2 inline-flex min-h-11 items-center gap-2 text-[14.5px] font-semibold text-[#003d74] underline-offset-4 hover:underline"
+              >
+                Domande sulla fatturazione
+                <ArrowRight aria-hidden className="size-[15px]" strokeWidth={1.8} />
+              </Link>
+            </Reveal>
 
-              <Reveal className="grid gap-px overflow-hidden rounded-[10px] border border-[#e5edf5] bg-[#e5edf5] sm:grid-cols-2">
-                {FATTURAZIONE.map((item) => (
-                  <div key={item.label} className="bg-white p-7">
-                    <p className="text-[11.5px] font-semibold tracking-[0.1em] text-[#003d74] uppercase">
-                      {item.label}
-                    </p>
-                    <p className="mt-3 font-heading text-[19px] font-normal tracking-[-0.015em] text-[#061b31]">
-                      {item.title}
-                    </p>
-                    <p className="mt-[9px] text-[14px] leading-[1.6] text-[#64748d]">
-                      {item.body}
-                    </p>
-                  </div>
-                ))}
-              </Reveal>
-            </div>
-
-            <Reveal className="mt-9 grid gap-9 rounded-[10px] bg-[#061b31] px-[30px] py-[26px] md:grid-cols-3">
-              {[
-                {
-                  label: "Consumi visibili",
-                  body: "Crediti AI e aziende attive, con barra di avanzamento e avviso al 75% e al 90%.",
-                },
-                {
-                  label: "Un solo metro",
-                  body: "Si conta l'azienda con almeno un documento generato o revisionato nell'anno. Le archiviate restano leggibili e non contano.",
-                },
-                {
-                  label: "Amministrazione",
-                  body: "Solo un amministratore dell'organizzazione può cambiare piano o disdire.",
-                },
-              ].map((item) => (
-                <div key={item.label}>
-                  <p className="text-[11.5px] font-semibold tracking-[0.1em] text-[#a5c8ff] uppercase">
-                    {item.label}
+            <Reveal className="grid gap-px overflow-hidden rounded-xl border border-[#e5edf5] bg-[#e5edf5] sm:grid-cols-2">
+              {FATTURAZIONE.map((item) => (
+                <div key={item.label} className="flex flex-col gap-1.5 bg-white p-5 sm:gap-2 sm:p-7">
+                  <p className={`${TECH} text-[#003d74]`}>{item.label}</p>
+                  <p className="font-heading text-[17px] font-normal tracking-[-0.015em] text-[#061b31] sm:text-[19px]">
+                    {item.title}
                   </p>
-                  <p className="mt-2.5 text-[14px] leading-[1.6] text-white/72">
-                    {item.body}
-                  </p>
+                  <p className="text-[14px] leading-[1.6] text-[#64748d]">{item.body}</p>
                 </div>
               ))}
             </Reveal>
@@ -763,33 +802,41 @@ export default async function Home() {
         </section>
 
         {/* ================= Chiusura ================= */}
-        <section id="accedi" className="section-y-loose scroll-mt-[70px] bg-white">
-          <div className="mx-auto w-full max-w-[820px] px-6 text-center sm:px-7">
-            <Reveal>
-              <h2 className="font-heading text-[clamp(1.8rem,3.4vw,2.6rem)] leading-[1.16] font-light tracking-[-0.028em] text-balance text-[#061b31]">
-                Attiva la piattaforma e comincia dal primo sopralluogo.
-              </h2>
-              <p className="mx-auto mt-5 max-w-[56ch] text-[16px] leading-[1.62] text-[#64748d]">
-                Scegli il piano adatto allo studio o all&apos;impresa, attiva
-                l&apos;abbonamento con PayPal e carica subito la prima azienda.
-                Il piano Solo non ha costi di attivazione.
-              </p>
-              <div className="mt-9 flex flex-wrap justify-center gap-3.5">
-                <Link
-                  href="/prezzi"
-                  className="inline-flex h-[46px] items-center rounded-[4px] bg-[#003d74] px-[26px] text-[15px] font-medium text-white shadow-stripe-ambient transition-colors hover:bg-[#1b5594]"
-                >
-                  Vedi i piani
-                </Link>
-                <a
-                  href="mailto:support@dvr-sicurezza.it"
-                  className="inline-flex h-[46px] items-center rounded-[4px] border border-[#e5edf5] bg-white px-[26px] text-[15px] font-medium text-[#003d74] transition-colors hover:border-[#003d74] hover:bg-[#f6f9fc]"
-                >
-                  Parla con noi
-                </a>
-              </div>
-            </Reveal>
-          </div>
+        <section id="accedi" className="dark-section section-y-loose scroll-mt-[68px] bg-[#061930]">
+          <Reveal className={`${CONTAINER} flex flex-col items-center text-center`}>
+            <div aria-hidden className="flex gap-2.5">
+              {RISK_LEVELS.map((level) => (
+                <span
+                  key={level.label}
+                  className="size-2.5 rounded-full"
+                  style={{ background: level.color }}
+                />
+              ))}
+            </div>
+            <h2 className="mt-6 max-w-[760px] font-heading text-[clamp(2.1rem,3.6vw,3rem)] leading-[1.1] font-light tracking-[-0.032em] text-balance text-white sm:mt-7">
+              Il fascicolo parte dal prossimo sopralluogo.
+            </h2>
+            <p className="mt-5 max-w-[580px] text-[16px] leading-[1.6] text-pretty text-white/74 sm:text-[17px]">
+              Scegli il piano per il tuo studio o la tua impresa, attiva
+              l&apos;abbonamento con PayPal e carica subito la prima azienda. Il piano
+              Solo non ha costi di attivazione.
+            </p>
+            <div className="mt-8 flex w-full flex-col gap-2.5 sm:mt-10 sm:w-auto sm:flex-row sm:gap-3">
+              <Link
+                href="/prezzi"
+                className="inline-flex h-[50px] items-center justify-center gap-2.5 rounded-md bg-white px-6 text-[15px] font-semibold text-[#061b31] transition-colors hover:bg-[#e5edf5]"
+              >
+                Scegli il piano
+                <ArrowRight aria-hidden className="size-4" strokeWidth={1.8} />
+              </Link>
+              <a
+                href="mailto:support@dvr-sicurezza.it"
+                className="inline-flex h-[50px] items-center justify-center rounded-md border border-white/28 px-[22px] text-[15px] font-medium text-white transition-colors hover:border-white/50 hover:bg-white/12"
+              >
+                Parla con noi
+              </a>
+            </div>
+          </Reveal>
         </section>
       </main>
 

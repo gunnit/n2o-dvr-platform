@@ -20,7 +20,7 @@ export function Reveal({
   className?: string;
   /** Stagger, in ms, applied once the element reveals. */
   delay?: number;
-  as?: "div" | "section" | "article" | "figure";
+  as?: "div" | "section" | "article" | "figure" | "li";
   /** Set when the revealed element is itself a scroll anchor. */
   id?: string;
 }) {
