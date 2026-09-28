@@ -38,7 +38,18 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
+          # `--comment` asks for the findings on the PR; Claude Code's own
+          # /code-review only prints them unless it is given that flag.
+          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }} --comment'
+          # A `prompt` runs the action in agent mode, where the inline-comment tool
+          # is installed only when it is listed here, and `gh` commands run only
+          # when listed too. With nothing listed the review ran and posted
+          # nothing: #86 and #87 got no review comment, and #87's run logged two
+          # permission denials. This is the list the action's docs give for PR
+          # reviews (docs/solutions.md). The action skips a PR that edits this
+          # file, so a change here first shows on the next PR.
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
 
