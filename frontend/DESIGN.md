@@ -13,7 +13,7 @@ This project uses Stripe's structural design language -- typography, spacing, sh
 | Label text | `#273951` | **keep** `#273951` |
 | Border default | `#e5edf5` | **keep** `#e5edf5` |
 | Typeface (display/body) | `sohne-var` | `Plus Jakarta Sans` (headings) + `Inter` (body) |
-| Typeface (monospace) | `SourceCodePro` | system monospace |
+| Typeface (monospace) | `SourceCodePro` | system monospace in the app; `IBM Plex Mono` (`font-plex`) on the public landing only, for formulas, norm references and document codes |
 | `"ss01"` OpenType | required on every glyph | **N/A** -- Plus Jakarta Sans has no ss01; rely on tight tracking + weight 300 instead |
 | `"tnum"` tabular nums | financial data | **keep** -- apply to KPI numerals, table dates, counts |
 | Dark brand section bg | `#1c1e54` (indigo) | `#18244e` (N2O sidebar navy) |
