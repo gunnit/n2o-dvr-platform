@@ -1,0 +1,43 @@
+# Direct runtime dependencies of the API and the Celery worker, with the
+# minimum versions the code declares. Edit this file, not requirements.txt.
+#
+# requirements.txt is compiled from here and pins every package, transitive
+# ones included, to an exact version. Render (both services) and CI install
+# from requirements.txt only, so a deploy installs what was tested instead of
+# whatever is newest on PyPI that day. Regenerate it from backend/ after any
+# change here:
+#
+#   uv pip compile requirements.in --universal --python-version 3.12 -o requirements.txt
+#
+# Existing pins are kept unless you ask for a newer one with
+# --upgrade-package NAME. The lock must install on 3.12 (CI, local venvs) and on
+# 3.14.3, the version Render runs (PYTHON_VERSION in render.yaml).
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+sqlalchemy[asyncio]>=2.0.30
+asyncpg>=0.29.0
+alembic>=1.13.0
+pydantic>=2.7.0
+pydantic-settings>=2.3.0
+python-docx>=1.1.0
+openai>=2.11.0
+google-api-python-client>=2.130.0
+google-auth>=2.30.0
+celery[redis]>=5.4.0
+pythermalcomfort==4.4.2
+python-multipart>=0.0.9
+pillow>=10.3.0
+pillow-heif==1.5.0
+pypdf>=4.0.0
+openpyxl>=3.1.0
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+httpx>=0.27.0
+email-validator>=2.1.0
+# Billing (monetization Phase 0+). Only the payment lifecycle lives in PayPal;
+# entitlements and usage are read from Postgres (INV-2). PayPal ships no
+# maintained Python SDK for Subscriptions, so app/billing/paypal_client.py
+# talks to the REST API over httpx (already a dependency above) — no extra
+# package.
+# Test/lint tooling (pytest, pytest-asyncio, import-linter) lives in
+# requirements-dev.txt so it stays out of the deployed image.
