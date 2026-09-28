@@ -313,14 +313,26 @@ body {
   --font-plex: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-/* Feather the render into the navy so its rectangle never shows. Three masks
-   because the framing changes: portrait on phones, the wide render cropped to
-   the model (object-right) up to xl, then the full render. */
+/* Feather the render into the navy so its rectangle never shows. The mask
+   follows the framing:
+   - below lg the box runs edge to edge (hero-model.tsx), so only its top and
+     bottom meet the section and only those fade. A radial mask here stayed
+     opaque at the box's sides and left visible vertical seams on phones.
+     Portrait render below md (model at 34–94% of its height), the wide render
+     cropped to the model from md (7–91%);
+   - from lg the box sits in its column, so all four sides fade;
+   - from xl it is the full, uncropped render. */
 .hero-model-img {
-  -webkit-mask-image: radial-gradient(ellipse 82% 62% at 50% 64%, #000 62%, transparent 100%);
-  mask-image: radial-gradient(ellipse 82% 62% at 50% 64%, #000 62%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 30%, #000 90%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 30%, #000 90%, transparent 100%);
 }
 @media (min-width: 48rem) {
+  .hero-model-img {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 7%, #000 90%, transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, #000 7%, #000 90%, transparent 100%);
+  }
+}
+@media (min-width: 64rem) {
   .hero-model-img {
     -webkit-mask-image: radial-gradient(ellipse 72% 80% at 53% 52%, #000 60%, transparent 100%);
     mask-image: radial-gradient(ellipse 72% 80% at 53% 52%, #000 60%, transparent 100%);
