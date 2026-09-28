@@ -113,7 +113,10 @@ export function HeroModel() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="hero-model relative aspect-[4/5] w-full md:aspect-[870/679] xl:aspect-[1200/679]">
+      {/* Edge to edge below lg: the render's navy is not the section's navy,
+          and a box inset in the gutter showed its sides as faint vertical
+          seams. At the viewport edges there is nothing to seam against. */}
+      <div className="hero-model relative -mx-6 aspect-[4/5] w-[calc(100%+3rem)] sm:-mx-7 sm:w-[calc(100%+3.5rem)] md:aspect-[870/679] lg:mx-0 lg:w-full xl:aspect-[1200/679]">
         <picture>
           <source media="(min-width: 768px)" srcSet={wide} sizes={common.sizes} />
           <img
