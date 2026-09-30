@@ -126,7 +126,12 @@ export default function AdminFeedbackPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<StatusFilter>("all");
-  const [savingId, setSavingId] = useState<string | null>(null);
+  // A set, not a single id: triaging is a run down the queue, and one slow
+  // PATCH (the server closes the mirrored GitHub issue inline) used to clear
+  // the flag for a row that was still in flight.
+  const [savingIds, setSavingIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -174,24 +179,40 @@ export default function AdminFeedbackPage() {
     return c;
   }, [rows]);
 
+  function setSaving(id: string, saving: boolean) {
+    setSavingIds((ids) => {
+      const next = new Set(ids);
+      if (saving) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
   async function changeStatus(row: FeedbackRow, status: FeedbackStatus) {
     if (row.status === status) return;
-    setSavingId(row.id);
-    // Optimistic update
-    const prev = rows;
-    setRows(rows.map((r) => (r.id === row.id ? { ...r, status } : r)));
+    const previous = row.status;
+    setSaving(row.id, true);
+    // Optimistic update. Both the write and the rollback touch this row
+    // only: restoring a whole snapshot used to undo a *different* row the
+    // admin had changed meanwhile — silently, and after that change had
+    // already been saved.
+    setRows((current) =>
+      current.map((r) => (r.id === row.id ? { ...r, status } : r)),
+    );
     try {
       await apiFetch(`/api/v1/feedback/${row.id}`, {
         method: "PATCH",
         body: JSON.stringify({ status }),
       });
     } catch (err) {
-      setRows(prev);
+      setRows((current) =>
+        current.map((r) => (r.id === row.id ? { ...r, status: previous } : r)),
+      );
       toast.error(
         err instanceof Error ? err.message : "Aggiornamento non riuscito.",
       );
     } finally {
-      setSavingId(null);
+      setSaving(row.id, false);
     }
   }
 
@@ -357,7 +378,7 @@ export default function AdminFeedbackPage() {
                         <div className="flex items-center gap-1.5">
                           <Select
                             value={row.status}
-                            disabled={savingId === row.id}
+                            disabled={savingIds.has(row.id)}
                             onChange={(e) =>
                               changeStatus(
                                 row,
@@ -372,7 +393,7 @@ export default function AdminFeedbackPage() {
                               </option>
                             ))}
                           </Select>
-                          {savingId === row.id && (
+                          {savingIds.has(row.id) && (
                             <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
                           )}
                         </div>

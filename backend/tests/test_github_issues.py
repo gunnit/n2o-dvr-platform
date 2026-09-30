@@ -162,6 +162,50 @@ async def test_close_issue_sends_state_reason(monkeypatch, configure_github):
 
 
 @pytest.mark.asyncio
+async def test_reopen_issue_clears_the_closed_state(monkeypatch, configure_github):
+    """Un-triaging an item has to put the mirrored issue back on the board."""
+    seen: dict[str, Any] = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["url"] = str(req.url)
+        seen["method"] = req.method
+        seen["body"] = json.loads(req.read().decode())
+        return httpx.Response(200, json={})
+
+    _install_transport(monkeypatch, handler)
+    await github_issues.reopen_issue(42)
+    assert seen["method"] == "PATCH"
+    assert seen["url"] == "https://api.github.com/repos/acme/test-repo/issues/42"
+    assert seen["body"] == {"state": "open"}
+
+
+@pytest.mark.asyncio
+async def test_reopen_issue_no_token_is_noop(monkeypatch):
+    monkeypatch.setattr(settings, "GITHUB_TOKEN", "", raising=False)
+    called = False
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        nonlocal called
+        called = True
+        return httpx.Response(200, json={})
+
+    _install_transport(monkeypatch, handler)
+    await github_issues.reopen_issue(42)
+    assert called is False, "no token = no HTTP call"
+
+
+@pytest.mark.asyncio
+async def test_reopen_issue_network_error_is_swallowed(monkeypatch, configure_github):
+    """Best-effort both ways: a failed reopen must not surface to the admin."""
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("boom")
+
+    _install_transport(monkeypatch, handler)
+    await github_issues.reopen_issue(42)  # must not raise
+
+
+@pytest.mark.asyncio
 async def test_build_title_is_generic_and_type_derived():
     fb = _make_fb(
         type="idea",

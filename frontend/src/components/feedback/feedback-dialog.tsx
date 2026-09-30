@@ -19,6 +19,8 @@ import { Label } from "@/components/ui/label";
 import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
 
+import { currentFeedbackContext } from "./feedback-context";
+
 type FeedbackType = "bug" | "idea" | "observation";
 
 const TYPE_OPTIONS: {
@@ -78,11 +80,7 @@ export function FeedbackDialog({
         body: JSON.stringify({
           type,
           description: description.trim(),
-          page_url:
-            typeof window !== "undefined" ? window.location.href : null,
-          route: pathname ?? null,
-          user_agent:
-            typeof navigator !== "undefined" ? navigator.userAgent : null,
+          ...currentFeedbackContext(pathname ?? null),
         }),
       });
       toast.success("Grazie, abbiamo ricevuto la tua segnalazione.");
@@ -111,7 +109,11 @@ export function FeedbackDialog({
         <form onSubmit={submit} className="space-y-5">
           <div className="space-y-2">
             <Label>Tipo</Label>
-            <div className="grid grid-cols-3 gap-2">
+            <div
+              role="group"
+              aria-label="Tipo di segnalazione"
+              className="grid grid-cols-3 gap-2"
+            >
               {TYPE_OPTIONS.map((opt) => {
                 const Icon = opt.icon;
                 const active = type === opt.value;
@@ -119,6 +121,9 @@ export function FeedbackDialog({
                   <button
                     key={opt.value}
                     type="button"
+                    // Which of the three is chosen is carried by colour
+                    // alone otherwise — nothing a screen reader can read.
+                    aria-pressed={active}
                     onClick={() => setType(opt.value)}
                     className={cn(
                       "flex flex-col items-center gap-1.5 rounded-md border px-2 py-3 text-xs transition-colors",
