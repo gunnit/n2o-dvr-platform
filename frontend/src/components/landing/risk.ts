@@ -2,9 +2,11 @@
  * The DVR risk index as the landing page shows it: `I = 2·D + P`.
  *
  * Mirrors `calculate_risk_index` in backend/app/services/risk_calculator.py —
- * the same scales, labels, bands and action timeframes — so a number a visitor
- * plays with on the public page is the number the product would compute. Not
- * the textbook `P × D`: damage weighs double (see CLAUDE.md).
+ * the same scales and bands — and the DVR Master's level table
+ * (`_RISK_LEVEL_TABLE_ROWS` in document_generator/dvr_master.py) word for
+ * word, so a number a visitor plays with on the public page is the number,
+ * the action and the deadline the product would print. Not the textbook
+ * `P × D`: damage weighs double (see CLAUDE.md).
  */
 
 export const SCALE = [1, 2, 3, 4] as const;
@@ -33,7 +35,8 @@ export type RiskBand = {
   max: number;
   /** A theme token from globals.css, so the landing and the app agree. */
   color: string;
-  /** The backend's `tempistica`, phrased as the deadline it is. */
+  /** "Azione" and "Tempistica", as the DVR's level table prints them. */
+  action: string;
   timeframe: string;
 };
 
@@ -44,7 +47,8 @@ export const RISK_BANDS: readonly RiskBand[] = [
     min: 3,
     max: 4,
     color: "var(--color-risk-green)",
-    timeframe: "Monitoraggio continuo",
+    action: "Monitoraggio",
+    timeframe: "Continuo",
   },
   {
     key: "modesto",
@@ -52,7 +56,8 @@ export const RISK_BANDS: readonly RiskBand[] = [
     min: 5,
     max: 6,
     color: "var(--color-risk-yellow)",
-    timeframe: "Entro 1 anno",
+    action: "Strumenti di minimizzazione",
+    timeframe: "1 anno",
   },
   {
     key: "grave",
@@ -60,7 +65,8 @@ export const RISK_BANDS: readonly RiskBand[] = [
     min: 7,
     max: 8,
     color: "var(--color-risk-orange)",
-    timeframe: "Entro 6 mesi",
+    action: "Sensibilizzazione + controllo",
+    timeframe: "6 mesi",
   },
   {
     key: "gravissimo",
@@ -68,6 +74,7 @@ export const RISK_BANDS: readonly RiskBand[] = [
     min: 9,
     max: 12,
     color: "var(--color-risk-red)",
+    action: "Ricerca urgente misure",
     timeframe: "Immediatamente",
   },
 ];
@@ -76,8 +83,12 @@ export function isScaleValue(value: number): value is ScaleValue {
   return Number.isInteger(value) && value >= 1 && value <= 4;
 }
 
-/** `I = 2·D + P`. Throws outside the 1–4 scales, as the backend does. */
-export function riskIndex(danno: number, probabilita: number): number {
+/**
+ * `I = 2·D + P`. Named arguments on purpose: the backend's
+ * `calculate_risk_index(p, d)` takes them the other way round.
+ * Throws outside the 1–4 scales, as the backend does.
+ */
+export function riskIndex({ danno, probabilita }: { danno: number; probabilita: number }): number {
   if (!isScaleValue(danno)) throw new RangeError(`Danno (D) must be 1-4, got ${danno}`);
   if (!isScaleValue(probabilita)) {
     throw new RangeError(`Probabilità (P) must be 1-4, got ${probabilita}`);

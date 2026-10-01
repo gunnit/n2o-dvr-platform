@@ -66,8 +66,12 @@ void main() {
 #endif
     // A soft sheet of light rather than a crisp line: a sharp edge over the
     // model's steps read as a crackle, which is the wrong note here.
-    float line = exp(-(k * k) / (2.0 * (1.4 * px) * (1.4 * px)));
-    float glow = exp(-(k * k) / (2.0 * (18.0 * px) * (18.0 * px)));
+    // Gaussians written as exp(-w²/2) with w in line widths: dividing by a
+    // squared pixel size (~1e-6) underflows to 0/0 on mediump-only GPUs.
+    float wl = k / (1.4 * px);
+    float wg = k / (18.0 * px);
+    float line = exp(-0.5 * wl * wl);
+    float glow = exp(-0.5 * wg * wg);
     float trail = (1.0 - smoothstep(-0.0005, 0.0005, k)) * exp(k * 9.0);
     vec3 ice = vec3(0.647, 0.784, 1.0);
     float amount = uScanAmount * onModel;
@@ -103,7 +107,9 @@ type Options = {
   allowSoftware?: boolean;
 };
 
-const MAX_DPR = 2;
+/** Matches the <img> on 3× phones; the pixel cap keeps big screens cheap. */
+const MAX_DPR = 3;
+const MAX_PIXELS = 2_600_000;
 
 export function createDepthRenderer(
   canvas: HTMLCanvasElement,
@@ -122,7 +128,8 @@ export function createDepthRenderer(
     // A software rasteriser would run the scan on the CPU: not worth it.
     failIfMajorPerformanceCaveat: !allowSoftware,
   });
-  if (!gl) return null;
+  // A canvas whose context was disposed hands the same, lost, context back.
+  if (!gl || gl.isContextLost()) return null;
 
   const derivatives = gl.getExtension("OES_standard_derivatives") !== null;
   const program = link(gl, VERTEX, fragment(derivatives));
@@ -181,9 +188,11 @@ export function createDepthRenderer(
 
   const renderer: DepthRenderer = {
     resize() {
-      const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
-      const width = Math.max(1, Math.round(canvas.clientWidth * dpr));
-      const height = Math.max(1, Math.round(canvas.clientHeight * dpr));
+      const cssW = Math.max(1, canvas.clientWidth);
+      const cssH = Math.max(1, canvas.clientHeight);
+      const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR, Math.sqrt(MAX_PIXELS / (cssW * cssH)));
+      const width = Math.max(1, Math.round(cssW * dpr));
+      const height = Math.max(1, Math.round(cssH * dpr));
       if (canvas.width === width && canvas.height === height) return false;
       canvas.width = width;
       canvas.height = height;

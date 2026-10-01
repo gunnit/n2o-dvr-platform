@@ -25,7 +25,7 @@ type Vars = CSSProperties & { [name: `--${string}`]: string | number };
 
 const CELLS = SCALE.flatMap((danno) =>
   SCALE.map((probabilita) => {
-    const index = riskIndex(danno, probabilita);
+    const index = riskIndex({ danno, probabilita });
     return { danno, probabilita, index, band: riskBand(index) };
   }),
 );
@@ -39,7 +39,7 @@ export function RiskMatrix() {
   const skipMotion = useSkipMotion();
   const risen = skipMotion || entered;
 
-  const index = riskIndex(danno, probabilita);
+  const index = riskIndex({ danno, probabilita });
   const band = riskBand(index);
 
   // Blocks rise the first time the model scrolls into view; globals.css keeps
@@ -48,8 +48,8 @@ export function RiskMatrix() {
     const el = modelRef.current;
     if (skipMotion || !el) return;
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return;
+      (entries) => {
+        if (!entries[entries.length - 1].isIntersecting) return;
         setEntered(true);
         observer.disconnect();
       },
@@ -67,8 +67,8 @@ export function RiskMatrix() {
           Prova il calcolo che firmerai.
         </h3>
         <p className="mt-3.5 text-[15px] leading-[1.6] text-pretty text-[#64748d]">
-          Il danno pesa il doppio della probabilità. Scegli i due valori: l&apos;indice,
-          il livello e la tempistica sono quelli che la piattaforma scrive nel DVR.
+          Il danno pesa il doppio della probabilità. Scegli i due valori: indice,
+          livello, azione e tempistica sono quelli che la piattaforma scrive nel DVR.
         </p>
 
         <Scale
@@ -97,7 +97,9 @@ export function RiskMatrix() {
             <span aria-hidden className="size-2.5 rounded-full" style={{ background: band.color }} />
             {band.label}
           </span>
-          <span className="text-[13.5px] text-[#64748d]">{band.timeframe}</span>
+          <span className="w-full text-[13.5px] text-[#64748d]">
+            {band.action} · <span className="text-[#273951]">{band.timeframe}</span>
+          </span>
         </output>
       </div>
 

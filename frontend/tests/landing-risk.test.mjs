@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -16,6 +17,7 @@ import {
   SCAN_FROM,
   SCAN_MS,
   SCAN_TO,
+  STAGE,
   msToReach,
   scanAt,
   scanEase,
@@ -28,13 +30,14 @@ import {
 test("riskIndex is 2·D + P on every combination of the two 1–4 scales", () => {
   for (const d of SCALE) {
     for (const p of SCALE) {
-      assert.equal(riskIndex(d, p), 2 * d + p, `D ${d} · P ${p}`);
+      assert.equal(riskIndex({ danno: d, probabilita: p }), 2 * d + p, `D ${d} · P ${p}`);
     }
   }
-  assert.equal(riskIndex(1, 1), 3);
-  assert.equal(riskIndex(4, 4), 12);
+  assert.equal(riskIndex({ danno: 1, probabilita: 1 }), 3);
+  assert.equal(riskIndex({ danno: 4, probabilita: 4 }), 12);
   // Not the textbook P × D, and not symmetric: damage weighs double.
-  assert.notEqual(riskIndex(1, 4), riskIndex(4, 1));
+  assert.equal(riskIndex({ danno: 4, probabilita: 1 }), 9);
+  assert.equal(riskIndex({ danno: 1, probabilita: 4 }), 6);
 });
 
 test("riskIndex rejects values outside the scales, as the backend does", () => {
@@ -46,7 +49,7 @@ test("riskIndex rejects values outside the scales, as the backend does", () => {
     [1.5, 2],
     [2, Number.NaN],
   ]) {
-    assert.throws(() => riskIndex(d, p), RangeError, `D ${d} · P ${p}`);
+    assert.throws(() => riskIndex({ danno: d, probabilita: p }), RangeError, `D ${d} · P ${p}`);
   }
 });
 
@@ -69,15 +72,16 @@ test("riskBand follows the four DVR levels and their deadlines", () => {
   assert.throws(() => riskBand(2), RangeError);
   assert.throws(() => riskBand(13), RangeError);
 
-  // Same order, ranges and timeframes as the DVR Master's level table
-  // (dvr_master.py _RISK_LEVEL_TABLE_ROWS: Continuo / 1 anno / 6 mesi / Immediatamente).
+  // Word for word the DVR Master's level table
+  // (backend/app/services/document_generator/dvr_master.py, _RISK_LEVEL_TABLE_ROWS):
+  // the matrix promises the visitor these are what the DVR prints.
   assert.deepEqual(
-    RISK_BANDS.map((b) => [b.label, b.min, b.max, b.timeframe]),
+    RISK_BANDS.map((b) => [`${b.min}-${b.max}`, b.label.toUpperCase(), b.action, b.timeframe]),
     [
-      ["Accettabile", 3, 4, "Monitoraggio continuo"],
-      ["Modesto", 5, 6, "Entro 1 anno"],
-      ["Grave", 7, 8, "Entro 6 mesi"],
-      ["Gravissimo", 9, 12, "Immediatamente"],
+      ["3-4", "ACCETTABILE", "Monitoraggio", "Continuo"],
+      ["5-6", "MODESTO", "Strumenti di minimizzazione", "1 anno"],
+      ["7-8", "GRAVE", "Sensibilizzazione + controllo", "6 mesi"],
+      ["9-12", "GRAVISSIMO", "Ricerca urgente misure", "Immediatamente"],
     ],
   );
   // Bands tile 3..12 with no gap and no overlap.
@@ -96,7 +100,7 @@ test("scale labels are complete and in order", () => {
 });
 
 test("hero pins are a valid worked example, one per level", () => {
-  const bands = HERO_PINS.map((pin) => riskBand(riskIndex(pin.danno, pin.probabilita)).key);
+  const bands = HERO_PINS.map((pin) => riskBand(riskIndex(pin)).key);
   assert.deepEqual([...bands].sort(), ["accettabile", "grave", "gravissimo", "modesto"]);
 
   const cards = HERO_PINS.filter((pin) => pin.placement.kind === "card");
@@ -104,7 +108,7 @@ test("hero pins are a valid worked example, one per level", () => {
   const [card] = cards;
   // The card prints "I = 2·4 + 2 = 10": keep the arithmetic and the band honest.
   assert.equal(card.id, "saldatura");
-  assert.equal(riskIndex(card.danno, card.probabilita), 10);
+  assert.equal(riskIndex(card), 10);
   assert.equal(riskBand(10).key, "gravissimo");
   assert.ok(card.hazard, "the card shows a hazard line");
 });
@@ -124,7 +128,9 @@ test("hero pin geometry is inside the stage and leaders meet their labels", () =
     if (kind === "left") assert.ok(x < pin.head.x, `${pin.id}: a left chip ends left of its leader`);
     if (kind === "right") assert.ok(x > pin.head.x, `${pin.id}: a right chip starts right of its leader`);
     if (kind === "above") {
-      assert.ok(x < pin.head.x, `${pin.id}: the leader must land inside the chip`);
+      // Right-aligned on x, so the leader lands inside it at any width as
+      // long as the chip is at least (x - head.x) wide: ~5% of the stage.
+      assert.ok(x > pin.head.x && x - pin.head.x < 0.1, `${pin.id}: the leader must land inside the chip`);
       assert.ok(y < pin.head.y, `${pin.id}: an "above" chip sits above the head`);
     }
     if (kind === "card") assert.ok(y > pin.base.y, `${pin.id}: the card hangs below the pin`);
@@ -158,6 +164,29 @@ test("the scan reaches every pin, in order, inside the sweep", () => {
   const last = Math.max(...scans.map(msToReach));
   assert.ok(last + CARD_DELAY_MS < 4000);
 });
+
+test("STAGE is the shipped image's real size (the stage's aspect comes from it)", () => {
+  const size = webpSize(new URL("../src/components/landing/assets/officina-modello.webp", import.meta.url));
+  assert.deepEqual(size, { width: STAGE.width, height: STAGE.height });
+  const depth = webpSize(new URL("../src/components/landing/assets/officina-profondita.webp", import.meta.url));
+  // Powers of two: WebGL1 can only mipmap those, and the scan needs the mips.
+  for (const side of [depth.width, depth.height]) assert.equal(side & (side - 1), 0, `${side} is not a power of two`);
+});
+
+/** Width and height from a WebP's RIFF header (lossy, lossless or extended). */
+function webpSize(url) {
+  const b = readFileSync(url);
+  assert.equal(b.toString("ascii", 0, 4), "RIFF");
+  assert.equal(b.toString("ascii", 8, 12), "WEBP");
+  const chunk = b.toString("ascii", 12, 16);
+  if (chunk === "VP8 ") return { width: b.readUInt16LE(26) & 0x3fff, height: b.readUInt16LE(28) & 0x3fff };
+  if (chunk === "VP8L") {
+    const bits = b.readUInt32LE(21);
+    return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+  }
+  if (chunk === "VP8X") return { width: b.readUIntLE(24, 3) + 1, height: b.readUIntLE(27, 3) + 1 };
+  throw new Error(`unknown WebP chunk ${chunk}`);
+}
 
 test("depth constants describe a usable scan plane and ground", () => {
   const [lo, hi] = DEPTH.scanRange;

@@ -17,7 +17,10 @@
 export const STAGE = { width: 1800, height: 1260 } as const;
 
 type Placement =
-  /** Chip above the pin's head; `x` is the chip's left edge. */
+  /**
+   * Leader straight up to a chip centred on `y`, whose right edge is `x`.
+   * Right-aligned so the leader stays inside the chip at every stage width.
+   */
   | { kind: "above"; x: number; y: number }
   /** Leader up to `y`, then sideways to a chip ending (`left`) or starting (`right`) at `x`. */
   | { kind: "left" | "right"; x: number; y: number }
@@ -44,14 +47,16 @@ export type HeroPin = {
 
 export const HERO_PINS: readonly HeroPin[] = [
   {
-    id: "tornio",
-    name: "Tornio",
+    // Slips on the marked walkway: a credible D 1. (A lathe at D 1 is not —
+    // its entanglement hazard is a D 3–4 for any RSPP.)
+    id: "pavimento",
+    name: "Pavimento",
     danno: 1,
     probabilita: 2,
-    head: { x: 0.2027, y: 0.3048 },
-    base: { x: 0.2044, y: 0.3579 },
-    scan: 0.293,
-    placement: { kind: "above", x: 0.035, y: 0.13 },
+    head: { x: 0.3178, y: 0.3587 },
+    base: { x: 0.3178, y: 0.4032 },
+    scan: 0.464,
+    placement: { kind: "above", x: 0.385, y: 0.13 },
   },
   {
     id: "fresatrice",
@@ -60,7 +65,7 @@ export const HERO_PINS: readonly HeroPin[] = [
     probabilita: 2,
     head: { x: 0.4026, y: 0.1694 },
     base: { x: 0.4033, y: 0.2159 },
-    scan: 0.578,
+    scan: 0.579,
     placement: { kind: "left", x: 0.39, y: 0 },
   },
   {
@@ -70,7 +75,7 @@ export const HERO_PINS: readonly HeroPin[] = [
     probabilita: 3,
     head: { x: 0.4922, y: 0.1992 },
     base: { x: 0.4922, y: 0.2333 },
-    scan: 0.691,
+    scan: 0.692,
     placement: { kind: "right", x: 0.505, y: 0 },
   },
   {
@@ -99,13 +104,13 @@ export const DEPTH = {
    */
   scanAxis: [2.403, -0.68, -1.0] as const,
   /** `s` over the model, so the sweep runs 0 → 1 from the lathes to the racks. */
-  scanRange: [-0.8007, 1.2223] as const,
+  scanRange: [-0.8014, 1.223] as const,
   /**
    * The navy floor the model stands on, fitted as
    * `depth ≈ c0·u + c1·v + c2·u·v + c3·v² + c4`. Anything well above it is the
    * model, which keeps the scan off the backdrop without a separate mask.
    */
-  ground: [0.0012, 0.5838, 0.0349, 0.3977, -0.0005] as const,
+  ground: [0.0013, 0.5858, 0.0344, 0.3975, -0.0011] as const,
   /** The depth that stays put while the rest parallaxes: mid-floor. */
   focus: 0.5,
 } as const;

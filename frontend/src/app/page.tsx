@@ -8,6 +8,7 @@ import { plexMono } from "@/components/landing/fonts";
 import { HeroStage } from "@/components/landing/hero-stage";
 import { Reveal } from "@/components/landing/reveal";
 import { RiskMatrix } from "@/components/landing/risk-matrix";
+import { RISK_BANDS } from "@/components/landing/risk";
 import { SiteFooter } from "@/components/landing/site-footer";
 import { SiteNav } from "@/components/landing/site-nav";
 
@@ -30,13 +31,6 @@ const FACTS = [
     body: "Codice fiscale, documenti d'identità e dati sanitari mai inviati all'AI",
   },
   { title: "Documenti sempre tuoi", body: "Consultabili e scaricabili anche dopo la disdetta" },
-];
-
-const RISK_LEVELS = [
-  { label: "Accettabile", range: "3–4", color: "var(--color-risk-green)" },
-  { label: "Modesto", range: "5–6", color: "var(--color-risk-yellow)" },
-  { label: "Grave", range: "7–8", color: "var(--color-risk-orange)" },
-  { label: "Gravissimo", range: "9–12", color: "var(--color-risk-red)" },
 ];
 
 type Step = {
@@ -314,10 +308,12 @@ function RiskScale() {
         <span className={`${TECH} text-[13px] text-[#003d74]`}>I = 2·D + P</span>
       </div>
       <ul className="mt-2.5 grid grid-cols-4 gap-1">
-        {RISK_LEVELS.map((level) => (
+        {RISK_BANDS.map((level) => (
           <li key={level.label} className="flex flex-col gap-1.5">
             <span aria-hidden className="h-1.5 rounded-[2px]" style={{ background: level.color }} />
-            <span className={`${TECH} text-[#273951]`}>{level.range}</span>
+            <span className={`${TECH} text-[#273951]`}>
+              {level.min}–{level.max}
+            </span>
             <span className="text-[12.5px] text-[#64748d]">{level.label}</span>
           </li>
         ))}
@@ -809,7 +805,7 @@ export default async function Home() {
         <section id="accedi" className="dark-section section-y-loose scroll-mt-[68px] bg-[#061930]">
           <Reveal className={`${CONTAINER} flex flex-col items-center text-center`}>
             <div aria-hidden className="flex gap-2.5">
-              {RISK_LEVELS.map((level) => (
+              {RISK_BANDS.map((level) => (
                 <span
                   key={level.label}
                   className="size-2.5 rounded-full"

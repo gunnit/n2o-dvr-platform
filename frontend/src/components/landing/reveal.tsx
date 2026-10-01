@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { markHydrated } from "@/components/landing/hydration";
 import { useSkipMotion } from "@/components/landing/use-skip-motion";
 
 /**
@@ -36,9 +37,7 @@ export function Reveal({
   const shown = skipMotion || entered;
 
   useEffect(() => {
-    // Tells globals.css a script is running, which stands down its
-    // "the bundle never arrived" fallback.
-    document.documentElement.dataset.hydrated = "";
+    markHydrated();
   }, []);
 
   useEffect(() => {

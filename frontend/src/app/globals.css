@@ -432,14 +432,32 @@ body {
    laptop the facts strip must still show under it. */
 @media (min-width: 64rem) {
   .hero-model {
-    width: min(100%, 820px, max(420px, calc((100svh - 236px) * 10 / 7)));
+    width: min(100%, 820px, max(420px, calc((100svh - 236px) * var(--stage-ar, 1.4286))));
   }
 }
 
 .hero-stage {
   position: relative;
-  aspect-ratio: 10 / 7;
+  aspect-ratio: var(--stage-ar, 1.4286);
   transform: translate3d(var(--hero-shift-x, 0px), var(--hero-shift-y, 0px), 0);
+}
+/* The stage trails the page as it scrolls away: depth, on the compositor. */
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .hero-stage {
+      animation: hero-drift linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 100vh;
+    }
+  }
+}
+@keyframes hero-drift {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: 0 36px;
+  }
 }
 
 /* The render's navy is a touch lighter than the section's mid-edge, so the
@@ -722,6 +740,13 @@ body {
     display: none;
   }
 }
+@media (max-width: 63.99rem) {
+  @container hero-model (min-width: 540px) {
+    .hero-stage {
+      margin-bottom: max(0px, calc(124px - 14cqw));
+    }
+  }
+}
 @container hero-model (min-width: 540px) and (max-width: 719px) {
   .hero-chip {
     gap: 6px;
@@ -762,6 +787,14 @@ body {
   html:not([data-hydrated]) .hero-card:not([data-on]) {
     animation: landing-unhide 0.6s ease 4s forwards;
   }
+  html:not([data-hydrated]) .hero-card:not([data-on]) .hero-card-scale > span:not([data-hit]) {
+    animation: hero-cell-unhide 0.6s ease 4s forwards;
+  }
+}
+@keyframes hero-cell-unhide {
+  to {
+    opacity: 0.35;
+  }
 }
 @keyframes hero-ping {
   from {
@@ -782,21 +815,19 @@ body {
    the viewer are the top, the south (+y) and the west (-x) ones.
    ----------------------------------------------------------------------- */
 .risk-model {
-  --cell: 46px;
-  --gap: 8px;
-  --unit: 6.5px;
   position: relative;
   display: grid;
   place-items: center;
-  height: 300px;
+  aspect-ratio: 5 / 4;
+  max-height: 380px;
+  container-type: inline-size;
 }
-@media (min-width: 40rem) {
-  .risk-model {
-    --cell: 56px;
-    --gap: 10px;
-    --unit: 8px;
-    height: 380px;
-  }
+/* The plate's diagonal is about 7.2 cells wide; 13cqw keeps it inside the
+   box down to a 280px screen, 56px caps it on wide ones. */
+.risk-model > * {
+  --cell: min(56px, 13cqw);
+  --gap: calc(var(--cell) * 0.18);
+  --unit: calc(var(--cell) * 0.143);
 }
 .risk-plane {
   position: relative;
@@ -868,7 +899,7 @@ body {
 /* Axis labels sit just outside the plate's two front edges. --hw and --hh
    are the plate's half-diagonal on screen: rotateZ(45deg) turns its side s
    into a diagonal s·√2, and rotateX(57deg) foreshortens the height by cos57. */
-.risk-model {
+.risk-model > * {
   --s: calc(var(--cell) * 4 + var(--gap) * 3);
   --hw: calc(var(--s) * 0.7071);
   --hh: calc(var(--hw) * 0.5446);
@@ -968,6 +999,16 @@ body {
   .risk-face,
   .risk-block {
     transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .risk-model,
+  .hero-overlay {
+    forced-color-adjust: none;
+  }
+  .risk-option:has(input:checked) {
+    outline: 3px solid Highlight;
+    outline-offset: 1px;
   }
 }
 @keyframes risk-stand-top {

@@ -4,15 +4,17 @@ import Image from "next/image";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import modello from "@/components/landing/assets/officina-modello.webp";
 import profondita from "@/components/landing/assets/officina-profondita.webp";
-import type { DepthRenderer } from "@/components/landing/hero-depth-gl";
+import type { DepthFrame, DepthRenderer } from "@/components/landing/hero-depth-gl";
 import {
   CARD_DELAY_MS,
   HERO_PINS,
   SCAN_MS,
+  STAGE,
   msToReach,
   scanAt,
   type HeroPin,
 } from "@/components/landing/hero-scene";
+import { markHydrated } from "@/components/landing/hydration";
 import { riskBand, riskIndex, type RiskBand } from "@/components/landing/risk";
 import { useSkipMotion } from "@/components/landing/use-skip-motion";
 
@@ -24,7 +26,8 @@ import { useSkipMotion } from "@/components/landing/use-skip-motion";
  * for reduced motion. With JavaScript, the pins start hidden (globals.css,
  * `scripting: enabled`), a WebGL layer is loaded once the image has painted,
  * and a survey scan sweeps the model, raising each pin as it passes. After
- * that the model answers the pointer and the scroll with real parallax.
+ * that the model answers the pointer with real parallax and tilts as the page
+ * scrolls; the stage's own scroll drift is a CSS scroll timeline.
  *
  * The image is always the LCP element and always underneath: if WebGL is
  * missing, slow or lost, the pins still rise on the same timetable and the
@@ -36,22 +39,31 @@ const ORDER = [...HERO_PINS].sort((a, b) => a.scan - b.scan);
 const LAST = ORDER[ORDER.length - 1];
 const CARD_PIN = HERO_PINS.find((pin) => pin.placement.kind === "card") ?? LAST;
 
+/** The overlay's SVG units: 1000 across, the stage's own aspect down. */
+const VB_W = 1000;
+const VB_H = Math.round((VB_W * STAGE.height) / STAGE.width);
+
 /** Parallax reach, in UV per unit of depth (see hero-depth-gl.ts). */
 const POINTER_X = 0.016;
 const POINTER_Y = 0.011;
 const SCROLL_TILT = 0.016;
-/** The whole stage drifts this far, in px, for the same inputs. */
+/** The whole stage shifts this far, in px, under the pointer. */
 const SHIFT_X = 7;
 const SHIFT_Y = 5;
-const SCROLL_DRIFT = 56;
 
-/** How long the pins wait for WebGL before rising without the scan. */
-const GL_GRACE_MS = 900;
+/**
+ * How long the pins wait, after the image, for the WebGL layer to be ready
+ * to scan. Covers fetching ~12 KB on a slow mobile connection; a device that
+ * cannot run it says so at once and the pins rise without the scan.
+ */
+const GL_WAIT_MS = 2500;
 /** Whatever happens, everything is shown by then. */
-const FAILSAFE_MS = 6500;
+const FAILSAFE_MS = 9000;
+/** A resize settles before the colour texture is redrawn at the new size. */
+const REUPLOAD_MS = 160;
 
 function pinRisk(pin: HeroPin): { index: number; band: RiskBand } {
-  const index = riskIndex(pin.danno, pin.probabilita);
+  const index = riskIndex(pin);
   return { index, band: riskBand(index) };
 }
 
@@ -72,8 +84,8 @@ export function HeroStage() {
   const stageRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Number of pins raised so far, in sweep order. Starts at zero; the CSS
-  // keeps everything visible when there is no script to raise them.
+  // Pins raised so far, in sweep order. Starts at zero; the CSS keeps
+  // everything visible when there is no script to raise them.
   const [raisedSoFar, setRaised] = useState(0);
   const [cardShown, setCardOn] = useState(false);
   const [live, setLive] = useState(false);
@@ -83,20 +95,11 @@ export function HeroStage() {
   const cardOn = skipMotion || cardShown;
 
   useEffect(() => {
-    // Lets globals.css stop holding content back for a script that runs.
-    document.documentElement.dataset.hydrated = "";
-
+    markHydrated();
     const stage = stageRef.current;
     const image = imageRef.current;
     const canvas = canvasRef.current;
-    if (!stage || !image || !canvas) return;
-
-    if (skipMotion) return;
-
-    const showAll = () => {
-      setRaised(ORDER.length);
-      setCardOn(true);
-    };
+    if (!stage || !image || !canvas || skipMotion) return;
 
     let disposed = false;
     let renderer: DepthRenderer | null = null;
@@ -107,12 +110,19 @@ export function HeroStage() {
     let inView = true;
     let scroll = 0;
     let heroHeight = 1;
+    let frame: DepthFrame = { offsetX: 0, offsetY: 0, scan: 0, scanAmount: 0 };
     const timers: number[] = [];
     const target = { x: 0, y: 0 };
     const current = { x: 0, y: 0 };
 
     const later = (fn: () => void, ms: number) => {
-      timers.push(window.setTimeout(fn, ms));
+      const id = window.setTimeout(fn, ms);
+      timers.push(id);
+      return id;
+    };
+    const showAll = () => {
+      setRaised(ORDER.length);
+      setCardOn(true);
     };
     later(showAll, FAILSAFE_MS);
 
@@ -158,22 +168,19 @@ export function HeroStage() {
         else scanStart = -1;
       }
 
-      // The stage drifts as one piece; the depth offset moves its layers
+      // The stage shifts as one piece; the depth offset moves its layers
       // against each other. Pointer right = camera right = near things left.
       stage.style.setProperty("--hero-shift-x", `${(-current.x * SHIFT_X).toFixed(2)}px`);
-      stage.style.setProperty(
-        "--hero-shift-y",
-        `${(-current.y * SHIFT_Y + scroll * SCROLL_DRIFT).toFixed(2)}px`,
-      );
-      if (renderer && inView) {
-        renderer.render({
-          offsetX: -current.x * POINTER_X,
-          offsetY: -current.y * POINTER_Y + scroll * SCROLL_TILT,
-          scan,
-          scanAmount,
-        });
-      }
+      stage.style.setProperty("--hero-shift-y", `${(-current.y * SHIFT_Y).toFixed(2)}px`);
+      frame = {
+        offsetX: -current.x * POINTER_X,
+        offsetY: -current.y * POINTER_Y + scroll * SCROLL_TILT,
+        scan,
+        scanAmount,
+      };
+      if (renderer && inView) renderer.render(frame);
       if (again) request();
+      else last = 0; // the next gesture starts from a fresh frame time
     };
 
     // --- Inputs ------------------------------------------------------------
@@ -190,15 +197,15 @@ export function HeroStage() {
       target.y = 0;
       request();
     };
+    // Feeds the WebGL tilt only; the stage's drift is a CSS scroll timeline.
     const onScroll = () => {
       const next = Math.max(0, Math.min(1, window.scrollY / heroHeight));
       if (next === scroll) return;
       scroll = next;
-      request();
+      if (renderer) request();
     };
     const measure = () => {
-      const hero = stage.closest("section");
-      heroHeight = Math.max(1, hero?.offsetHeight ?? window.innerHeight);
+      heroHeight = Math.max(1, stage.closest("section")?.offsetHeight ?? window.innerHeight);
       onScroll();
     };
 
@@ -210,94 +217,111 @@ export function HeroStage() {
     window.addEventListener("resize", measure, { passive: true });
     measure();
 
-    const visibility = new IntersectionObserver(([entry]) => {
-      inView = entry.isIntersecting;
+    const visibility = new IntersectionObserver((entries) => {
+      inView = entries[entries.length - 1].isIntersecting;
       if (inView) request();
     });
     visibility.observe(stage);
 
-    let resizeQueued = false;
-    const resizer = new ResizeObserver(() => {
-      if (resizeQueued) return;
-      resizeQueued = true;
-      requestAnimationFrame(() => {
-        resizeQueued = false;
-        if (renderer?.resize()) {
-          renderer.setImage(image);
-          request();
-        }
-      });
-    });
+    // A resize clears the drawing buffer, so the frame is redrawn at once
+    // (ResizeObserver runs before paint) from the texture already uploaded;
+    // the costlier re-upload at the new size waits until the resize settles.
+    let reupload = 0;
+    const refresh = () => {
+      if (!renderer?.resize()) return;
+      renderer.render(frame);
+      window.clearTimeout(reupload);
+      reupload = later(() => {
+        renderer?.setImage(image);
+        renderer?.render(frame);
+      }, REUPLOAD_MS);
+    };
+    const resizer = new ResizeObserver(refresh);
+    // A device-pixel-ratio change (window moved to another screen) resizes the
+    // buffer without resizing the box, so ResizeObserver never hears of it.
+    let dprQuery: MediaQueryList | null = null;
+    const onDpr = () => {
+      refresh();
+      watchDpr();
+    };
+    const watchDpr = () => {
+      dprQuery?.removeEventListener("change", onDpr);
+      dprQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+      dprQuery.addEventListener("change", onDpr);
+    };
     // A wider stage can make the browser pick a sharper srcset candidate.
     const onImageLoad = () => {
       renderer?.setImage(image);
       request();
     };
 
-    // --- Boot: image first, then WebGL in idle time --------------------------
-    const boot = async () => {
-      later(() => startTimeline(false), GL_GRACE_MS);
-      try {
-        const [{ createDepthRenderer }, depth] = await Promise.all([
-          import("@/components/landing/hero-depth-gl"),
-          loadImage(profondita.src),
-          image.decode(),
-        ]);
-        if (disposed) return;
-        renderer = createDepthRenderer(canvas, image, depth, {
-          onLost: () => {
-            renderer = null;
-            setLive(false);
-          },
-          allowSoftware: "__n2oHeroSoftwareGL" in window,
+    // --- Boot: once the image is in, fetch the WebGL layer -------------------
+    const boot = () => {
+      later(() => startTimeline(false), GL_WAIT_MS);
+      Promise.all([
+        import("@/components/landing/hero-depth-gl"),
+        loadImage(profondita.src),
+        image.decode(),
+      ])
+        .then(([{ createDepthRenderer }, depth]) => {
+          if (disposed) return;
+          renderer = createDepthRenderer(canvas, image, depth, {
+            onLost: () => {
+              renderer = null;
+              setLive(false);
+            },
+            allowSoftware: "__n2oHeroSoftwareGL" in window,
+          });
+          if (!renderer) {
+            startTimeline(false);
+            return;
+          }
+          resizer.observe(canvas);
+          watchDpr();
+          image.addEventListener("load", onImageLoad);
+          frame = { ...frame, offsetY: scroll * SCROLL_TILT };
+          renderer.render(frame);
+          setLive(true);
+          startTimeline(true);
+          request();
+        })
+        .catch(() => {
+          // No module, no depth map or no decode: the image stays as it is.
+          startTimeline(false);
         });
-        if (!renderer) return;
-        resizer.observe(canvas);
-        image.addEventListener("load", onImageLoad);
-        renderer.render({ offsetX: 0, offsetY: scroll * SCROLL_TILT, scan: 0, scanAmount: 0 });
-        setLive(true);
-        startTimeline(true);
-        request();
-      } catch {
-        // No module, no depth map, or no decode: the image stays as it is and
-        // the pins rise on the grace timer.
-      }
     };
+    const onImageError = () => startTimeline(false);
 
-    // Safari has no requestIdleCallback; a short timeout is close enough.
-    let cancelIdle = () => {};
-    const whenIdle = () => {
-      if (typeof window.requestIdleCallback === "function") {
-        const handle = window.requestIdleCallback(() => void boot(), { timeout: 600 });
-        cancelIdle = () => window.cancelIdleCallback(handle);
-      } else {
-        const handle = window.setTimeout(() => void boot(), 120);
-        cancelIdle = () => window.clearTimeout(handle);
-      }
-    };
-    if (image.complete && image.naturalWidth) whenIdle();
-    else image.addEventListener("load", whenIdle, { once: true });
+    if (image.complete && image.naturalWidth) boot();
+    else {
+      image.addEventListener("load", boot, { once: true });
+      image.addEventListener("error", onImageError, { once: true });
+    }
 
     return () => {
       disposed = true;
       if (raf) cancelAnimationFrame(raf);
       timers.forEach((t) => window.clearTimeout(t));
-      cancelIdle();
       window.removeEventListener("pointermove", onPointer);
       document.removeEventListener("pointerout", onPointerOut);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", measure);
-      image.removeEventListener("load", whenIdle);
+      image.removeEventListener("load", boot);
+      image.removeEventListener("error", onImageError);
       image.removeEventListener("load", onImageLoad);
+      dprQuery?.removeEventListener("change", onDpr);
       visibility.disconnect();
       resizer.disconnect();
       renderer?.dispose();
       renderer = null;
+      stage.style.removeProperty("--hero-shift-x");
+      stage.style.removeProperty("--hero-shift-y");
+      setLive(false);
     };
   }, [skipMotion]);
 
   return (
-    <figure className="hero-model">
+    <figure className="hero-model" style={{ "--stage-ar": STAGE.width / STAGE.height } as Vars}>
       <div ref={stageRef} className="hero-stage">
         <div className="hero-stage-media">
           <Image
@@ -310,19 +334,25 @@ export function HeroStage() {
             // 820px (globals.css, .hero-model).
             sizes="(min-width: 1024px) min(820px, calc(100vw - 440px)), 100vw"
           />
-          <canvas ref={canvasRef} aria-hidden data-live={live || undefined} />
+          {/* A fresh canvas whenever the effect boots anew: a disposed one
+              keeps its lost WebGL context. */}
+          <canvas
+            key={skipMotion ? "still" : "live"}
+            ref={canvasRef}
+            aria-hidden
+            data-live={live || undefined}
+          />
         </div>
 
         {/* Decorative restatement of the alt text and the legend below. */}
         <div aria-hidden className="hero-overlay">
-          <svg viewBox="0 0 1000 700" preserveAspectRatio="none" className="hero-leaders">
+          <svg viewBox={`0 0 ${VB_W} ${VB_H}`} preserveAspectRatio="none" className="hero-leaders">
             {HERO_PINS.map((pin) => (
               <path
                 key={pin.id}
                 d={leaderPath(pin)}
                 pathLength={1}
                 data-on={isRaised(pin, raised) || undefined}
-                className={pin.placement.kind === "card" ? "hero-leader-card" : undefined}
               />
             ))}
           </svg>
@@ -372,20 +402,20 @@ function loadImage(src: string) {
   });
 }
 
-/** Leader in the overlay's 1000×700 units: from the pin to its label. */
+/** Leader in the overlay's SVG units: from the pin to its label. */
 function leaderPath(pin: HeroPin) {
-  const hx = pin.head.x * 1000;
-  const hy = pin.head.y * 700;
+  const hx = pin.head.x * VB_W;
+  const hy = pin.head.y * VB_H;
   const { placement } = pin;
-  const py = placement.y * 700;
+  const py = placement.y * VB_H;
   switch (placement.kind) {
     case "above":
       return `M${hx} ${hy} V${py}`;
     case "left":
     case "right":
-      return `M${hx} ${hy} V${py} H${placement.x * 1000}`;
+      return `M${hx} ${hy} V${py} H${placement.x * VB_W}`;
     case "card":
-      return `M${pin.base.x * 1000} ${pin.base.y * 700} V${py}`;
+      return `M${pin.base.x * VB_W} ${pin.base.y * VB_H} V${py}`;
   }
 }
 
@@ -399,7 +429,7 @@ function Pin({ pin, on }: { pin: HeroPin; on: boolean }) {
   };
   return (
     <span className="hero-pin" style={style} data-on={on || undefined}>
-      {/* Clipped at the base, so the pin rises out of the machine. */}
+      {/* Clipped at the base, so the pin rises out of the floor or machine. */}
       <span className="hero-pin-clip">
         <span className="hero-pin-rise">
           <span className="hero-pin-stem" />
@@ -414,10 +444,12 @@ function Pin({ pin, on }: { pin: HeroPin; on: boolean }) {
 function Chip({ pin, on }: { pin: HeroPin; on: boolean }) {
   const { index, band } = pinRisk(pin);
   const { placement } = pin;
+  // "left" and "above" chips hang from their right edge, "right" ones from
+  // their left: either way the leader lands inside the chip at any width.
   const style: Vars =
-    placement.kind === "left"
-      ? { "--y": pct(placement.y), "--right": pct(1 - placement.x) }
-      : { "--y": pct(placement.y), "--left": pct(placement.x) };
+    placement.kind === "right"
+      ? { "--y": pct(placement.y), "--left": pct(placement.x) }
+      : { "--y": pct(placement.y), "--right": pct(1 - placement.x) };
   return (
     <span className="hero-chip" data-side={placement.kind} style={style} data-on={on || undefined}>
       <span className="hero-dot" style={{ background: band.color }} />
