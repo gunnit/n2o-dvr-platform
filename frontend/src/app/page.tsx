@@ -5,8 +5,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { plexMono } from "@/components/landing/fonts";
-import { HeroModel } from "@/components/landing/hero-model";
+import { HeroStage } from "@/components/landing/hero-stage";
 import { Reveal } from "@/components/landing/reveal";
+import { RiskMatrix } from "@/components/landing/risk-matrix";
 import { SiteFooter } from "@/components/landing/site-footer";
 import { SiteNav } from "@/components/landing/site-nav";
 
@@ -215,7 +216,7 @@ const PERCORSI = [
     body: "Non è un DVR fai-da-te: la piattaforma scrive struttura, calcoli e testi, un RSPP certificato rivede e controfirma su richiesta. La responsabilità della valutazione resta del datore di lavoro.",
     bullets: [
       "Revisioni e rigenerazioni illimitate",
-      "Promemoria di aggiornamento, art. 29 c.3",
+      "Promemoria di aggiornamento, art.\u00a029\u00a0c.3",
       "Data certa con marca temporale e PEC, inclusa da Plus",
       "Revisione RSPP con controfirma, inclusa da Plus",
     ],
@@ -335,78 +336,74 @@ export default async function Home() {
     <div className={`${plexMono.variable} bg-white`}>
       <SiteNav variant="overlay" />
 
-      <main>
+      <main id="contenuto" tabIndex={-1} className="outline-none">
         {/* ================= Hero ================= */}
-        <section
-          id="top"
-          className="dark-section relative flex min-h-[max(760px,100svh)] flex-col overflow-hidden bg-[#061930]"
-        >
+        <section id="top" className="dark-section relative overflow-hidden bg-[#061930]">
           <div
             aria-hidden
-            className="absolute inset-0 bg-[radial-gradient(ellipse_48%_52%_at_68%_46%,rgba(27,85,148,0.24),rgba(6,25,48,0)_70%)]"
+            className="absolute inset-0 bg-[radial-gradient(ellipse_60%_46%_at_50%_42%,rgba(27,85,148,0.26),rgba(6,25,48,0)_72%)] lg:bg-[radial-gradient(ellipse_44%_58%_at_70%_48%,rgba(27,85,148,0.26),rgba(6,25,48,0)_72%)]"
           />
 
           <div
-            className={`${CONTAINER} relative z-2 grid flex-1 gap-8 pt-[104px] pb-10 sm:pt-[128px] lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)] lg:items-center lg:gap-12 lg:pb-14 xl:grid-cols-[minmax(0,500px)_minmax(0,1fr)] xl:pt-[72px] xl:pb-6`}
+            className={`${CONTAINER} hero-grid relative z-2 pt-[92px] pb-9 sm:pt-[112px] sm:pb-12 lg:min-h-[min(880px,calc(100svh-132px))] lg:pt-[84px] lg:pb-10`}
           >
-            <div className="relative z-3 flex flex-col">
-              <p
-                className={`landing-rise ${TECH} text-[12.5px] tracking-[0.02em] text-[#a5c8ff]`}
-              >
-                Sicurezza sul lavoro · D.Lgs. 81/2008
-              </p>
-              <h1
-                className="landing-rise mt-5 font-heading text-[clamp(2.4rem,4.1vw,3.625rem)] leading-[1.04] font-light tracking-[-0.035em] text-white"
-                style={{ animationDelay: "60ms" }}
-              >
-                Dal sopralluogo
-                <br />
-                al DVR, senza
-                <br />
-                ricopiare un dato.
-              </h1>
-              <p
-                className="landing-rise mt-6 max-w-[480px] text-[16px] leading-[1.6] text-white/80 sm:text-[18px]"
-                style={{ animationDelay: "140ms" }}
-              >
-                Raccogli i dati una volta sola, in azienda. La piattaforma compone
-                DVR, allegati e piani operativi conformi al D.Lgs.&nbsp;81/2008: a te
-                resta solo la revisione.
-              </p>
+            <p
+              className={`hero-kicker landing-rise ${TECH} text-[12.5px] tracking-[0.02em] text-[#a5c8ff]`}
+            >
+              Sicurezza sul lavoro · D.Lgs. 81/2008
+            </p>
+            <h1
+              className="hero-title landing-rise mt-4 font-heading text-[clamp(2.4rem,4.1vw,3.625rem)] leading-[1.04] font-light tracking-[-0.035em] text-balance text-white sm:mt-5 md:text-[3.1rem] lg:text-[clamp(2.6rem,4.1vw,3.625rem)]"
+              style={{ animationDelay: "60ms" }}
+            >
+              {/* The three-line break is the desktop composition; narrower
+                  columns balance the lines themselves. */}
+              Dal sopralluogo <br className="hidden lg:inline" />
+              al DVR, senza <br className="hidden lg:inline" />
+              ricopiare un dato.
+            </h1>
 
-              <div
-                className="landing-rise mt-8 flex flex-col gap-2.5 sm:flex-row sm:gap-3"
-                style={{ animationDelay: "220ms" }}
-              >
-                <Link
-                  href="/prezzi"
-                  className="inline-flex h-[50px] items-center justify-center gap-2.5 rounded-md bg-white px-[22px] text-[15px] font-semibold text-[#061b31] shadow-stripe-deep transition-colors hover:bg-[#e5edf5]"
-                >
-                  Scegli il piano
-                  <ArrowRight aria-hidden className="size-4" strokeWidth={1.8} />
-                </Link>
-                <a
-                  href="#come-funziona"
-                  className="inline-flex h-[50px] items-center justify-center gap-2.5 rounded-md border border-white/28 bg-white/5 px-5 text-[15px] font-medium text-white transition-colors hover:border-white/50 hover:bg-white/12"
-                >
-                  Come funziona
-                  <ArrowDown aria-hidden className="size-4" strokeWidth={1.8} />
-                </a>
-              </div>
-              <p
-                className="landing-rise mt-5 text-center text-[13px] leading-[1.5] text-white/68 sm:text-left sm:text-[13.5px]"
-                style={{ animationDelay: "260ms" }}
-              >
-                Consulenti e RSPP da{" "}
-                <strong className="tnum font-semibold text-white">€1.490</strong> · aziende
-                da <strong className="tnum font-semibold text-white">€490</strong> ·
-                all&apos;anno, IVA esclusa
-              </p>
+            <div className="hero-model-slot mt-6 sm:mt-8 lg:mt-0">
+              <HeroStage />
             </div>
 
-            <div className="hero-stage relative xl:self-stretch">
-              <HeroModel />
+            <p
+              className="hero-lead landing-rise mt-6 max-w-[480px] text-[16px] leading-[1.6] text-pretty text-white/80 sm:mt-7 sm:text-[18px] lg:mt-6"
+              style={{ animationDelay: "140ms" }}
+            >
+              Raccogli i dati una volta sola, in azienda. La piattaforma compone
+              DVR, allegati e piani operativi conformi al D.Lgs.&nbsp;81/2008: a te
+              resta solo la revisione.
+            </p>
+
+            <div
+              className="hero-actions landing-rise mt-7 flex flex-wrap gap-2.5 sm:gap-3 lg:mt-8"
+              style={{ animationDelay: "220ms" }}
+            >
+              <Link
+                href="/prezzi"
+                className="inline-flex h-[50px] grow basis-[150px] items-center justify-center gap-2 rounded-md bg-white px-3.5 text-[15px] font-semibold whitespace-nowrap text-[#061b31] shadow-stripe-deep transition-colors hover:bg-[#e5edf5] sm:grow-0 sm:basis-auto sm:gap-2.5 sm:px-[22px]"
+              >
+                Scegli il piano
+                <ArrowRight aria-hidden className="size-4" strokeWidth={1.8} />
+              </Link>
+              <a
+                href="#come-funziona"
+                className="inline-flex h-[50px] grow basis-[150px] items-center justify-center gap-2 rounded-md border border-white/28 bg-white/5 px-3.5 text-[15px] font-medium whitespace-nowrap text-white transition-colors hover:border-white/50 hover:bg-white/12 sm:grow-0 sm:basis-auto sm:gap-2.5 sm:px-5"
+              >
+                Come funziona
+                <ArrowDown aria-hidden className="size-4" strokeWidth={1.8} />
+              </a>
             </div>
+            <p
+              className="hero-price landing-rise mt-5 text-[13px] leading-[1.5] text-pretty text-white/68 sm:text-[13.5px]"
+              style={{ animationDelay: "260ms" }}
+            >
+              Consulenti e RSPP da{" "}
+              <strong className="tnum font-semibold text-white">€1.490</strong> · aziende
+              da <strong className="tnum font-semibold text-white">€490</strong> ·
+              all&apos;anno, IVA&nbsp;esclusa
+            </p>
           </div>
 
           <div className="relative z-2 border-t border-white/12">
@@ -465,18 +462,23 @@ export default async function Home() {
 
             <ol className="mt-12 grid gap-14 sm:mt-20 lg:grid-cols-3 lg:gap-6">
               {STEPS.map((step, i) => (
-                <Reveal as="li" key={step.n} delay={i * 80} className="flex flex-col">
-                    <div className="flex h-[240px] items-center justify-center overflow-hidden rounded-[14px] border border-[#eef2f7] bg-[#f6f9fc] sm:h-[320px]">
+                <Reveal
+                  as="li"
+                  key={step.n}
+                  delay={i * 80}
+                  className="flex flex-col md:grid md:grid-cols-[280px_minmax(0,1fr)] md:grid-rows-[auto_auto_auto_1fr] md:gap-x-10 lg:flex lg:flex-col"
+                >
+                    <div className="flex h-[240px] items-center justify-center overflow-hidden rounded-[14px] border border-[#eef2f7] bg-[#f6f9fc] sm:h-[320px] md:row-span-4 md:h-[280px] lg:h-[320px]">
                       <Image
                         src={step.image.src}
                         alt={step.image.alt}
                         width={960}
                         height={960}
                         sizes="290px"
-                        className="size-[220px] object-contain sm:size-[290px]"
+                        className="parallax-sm size-[220px] object-contain sm:size-[290px] md:size-[240px] lg:size-[290px]"
                       />
                     </div>
-                    <div className="mt-6 flex items-center gap-3 sm:mt-7">
+                    <div className="mt-6 flex items-center gap-3 sm:mt-7 md:mt-1 lg:mt-7">
                       <span className={`${TECH} text-[13px] text-[#003d74]`}>{step.n}</span>
                       <span aria-hidden className="h-px flex-1 bg-[#e5edf5]" />
                     </div>
@@ -527,44 +529,40 @@ export default async function Home() {
                 width={1600}
                 height={1195}
                 sizes="(min-width: 1024px) 600px, 100vw"
-                className="-mx-6 w-[calc(100%+3rem)] max-w-none [mask-image:radial-gradient(ellipse_62%_64%_at_52%_50%,#000_58%,transparent_100%)] sm:-mx-7 sm:w-[calc(100%+3.5rem)] lg:mx-0 lg:w-full lg:max-w-full"
+                className="parallax-lg -mx-6 w-[calc(100%+3rem)] max-w-none [mask-image:radial-gradient(ellipse_62%_64%_at_52%_50%,#000_58%,transparent_100%)] sm:-mx-7 sm:w-[calc(100%+3.5rem)] lg:mx-0 lg:w-full lg:max-w-full"
               />
             </div>
 
-            {/* CSS columns balance the 17 rows across 1–3 columns on their own;
-                each group label travels with its first row so it is never
-                stranded at the foot of a column. */}
-            <div className="mt-12 gap-12 md:columns-2 lg:mt-16 lg:columns-3">
-              {DOCUMENT_GROUPS.map((group) =>
-                group.docs.map((doc, i) => {
-                  const row = (
-                    <div className="flex gap-4 border-t border-white/12 py-3.5">
-                      <span
-                        className={`w-[92px] shrink-0 ${TECH} text-[11.5px] leading-5 text-[#a5c8ff]`}
-                      >
-                        {doc.code}
-                      </span>
-                      <span className="flex flex-col gap-[3px]">
-                        <span className="text-[14.5px] leading-5 text-white">{doc.title}</span>
-                        <span className={`${TECH} text-[11.5px] text-white/58`}>{doc.norm}</span>
-                      </span>
-                    </div>
-                  );
-                  return i === 0 ? (
-                    <div
-                      key={`${group.label}-${doc.title}`}
-                      className="break-inside-avoid pt-7 first:pt-0"
-                    >
-                      <p className={`mb-3 ${TECH} text-white/60`}>{group.label}</p>
-                      {row}
-                    </div>
-                  ) : (
-                    <div key={`${group.label}-${doc.title}`} className="break-inside-avoid">
-                      {row}
-                    </div>
-                  );
-                }),
-              )}
+            {/* Two columns from md, both starting on a group label so their
+                first rules line up: the ten allegati on the right, the main
+                document and the six complementari on the left. Phones keep
+                the order the fascicolo is assembled in. */}
+            <div className="mt-12 grid gap-y-9 md:grid-cols-2 md:grid-rows-[auto_1fr] md:gap-x-12 md:[grid-template-areas:'principale_allegati'_'complementari_allegati'] lg:mt-16 lg:gap-x-16">
+              {DOCUMENT_GROUPS.map((group, g) => (
+                <div
+                  key={group.label}
+                  className={
+                    ["md:[grid-area:principale]", "md:[grid-area:allegati]", "md:[grid-area:complementari]"][g]
+                  }
+                >
+                  <p className={`mb-3 ${TECH} text-white/60`}>{group.label}</p>
+                  <ul>
+                    {group.docs.map((doc) => (
+                      <li key={doc.title} className="flex gap-4 border-t border-white/12 py-3.5">
+                        <span
+                          className={`w-[92px] shrink-0 ${TECH} text-[11.5px] leading-5 text-[#a5c8ff]`}
+                        >
+                          {doc.code}
+                        </span>
+                        <span className="flex flex-col gap-[3px]">
+                          <span className="text-[14.5px] leading-5 text-white">{doc.title}</span>
+                          <span className={`${TECH} text-[11.5px] text-white/58`}>{doc.norm}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
             <p className="mt-10 max-w-[760px] text-[14px] leading-[1.6] text-white/66">
               Nei piani per consulenti sono inclusi tutti e 17. Nei piani per
@@ -586,7 +584,11 @@ export default async function Home() {
               </p>
             </Reveal>
 
-            <Reveal className="mt-10 sm:mt-14">
+            <Reveal className="mt-10 rounded-[14px] border border-[#e5edf5] bg-white p-6 shadow-stripe-standard sm:mt-14 sm:p-10">
+              <RiskMatrix />
+            </Reveal>
+
+            <Reveal className="mt-14 sm:mt-20">
               <div
                 aria-hidden
                 className={`hidden gap-8 pb-3 ${TECH} text-[#64748d] md:grid md:grid-cols-[240px_minmax(0,1fr)_220px] lg:grid-cols-[280px_minmax(0,1fr)_240px]`}
@@ -682,7 +684,7 @@ export default async function Home() {
                       width={percorso.image.width}
                       height={percorso.image.height}
                       sizes="(min-width: 768px) 400px, 300px"
-                      className={`${percorso.image.className} object-contain`}
+                      className={`${percorso.image.className} parallax-sm object-contain`}
                     />
                   </div>
                   <div className="flex flex-1 flex-col p-6 sm:p-9">
@@ -698,7 +700,7 @@ export default async function Home() {
                       {percorso.body}
                     </p>
                     <FeatureList items={percorso.bullets} />
-                    <div className="mt-auto flex flex-col gap-3.5 pt-7 sm:pt-8 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="mt-auto flex flex-col gap-3.5 pt-7 sm:pt-8 xl:flex-row xl:items-center xl:justify-between">
                       <p className="text-[14px] text-[#64748d]">
                         da{" "}
                         <strong className="tnum font-heading text-[22px] font-normal text-[#061b31]">
@@ -708,7 +710,7 @@ export default async function Home() {
                       </p>
                       <Link
                         href={percorso.cta.href}
-                        className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-[#003d74] px-5 text-[15px] font-semibold text-white transition-colors hover:bg-[#1b5594] sm:h-[46px] sm:text-[14.5px]"
+                        className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-[#003d74] px-5 text-[15px] font-semibold whitespace-nowrap text-white transition-colors hover:bg-[#1b5594] sm:h-[46px] sm:text-[14.5px]"
                       >
                         {percorso.cta.label}
                         <ArrowRight aria-hidden className="size-[15px]" strokeWidth={1.8} />
@@ -719,7 +721,7 @@ export default async function Home() {
               ))}
             </div>
 
-            <p className="mt-6 max-w-[820px] text-[13.5px] leading-[1.6] text-[#64748d] sm:mt-7">
+            <p className="mt-6 max-w-[820px] text-[13.5px] leading-[1.6] text-[#5c6b84] sm:mt-7">
               I piani per aziende sono pensati per le imprese che documentano la
               propria sicurezza, entro i limiti di sedi e addetti di ciascun piano. POS
               e manuale HACCP non sono inclusi: se la tua attività li richiede, ti
@@ -744,14 +746,16 @@ export default async function Home() {
             <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-6 sm:mt-12 sm:gap-6 lg:grid-cols-4">
               {SETTORI.map((settore, i) => (
                 <Reveal as="figure" key={settore.name} delay={i * 60} className="flex flex-col gap-2.5 sm:gap-3.5">
-                  <Image
-                    src={settore.src}
-                    alt={settore.alt}
-                    width={900}
-                    height={900}
-                    sizes="(min-width: 1024px) 272px, 50vw"
-                    className="aspect-square w-full rounded-[10px] bg-[#e3e9f1] object-cover sm:rounded-xl"
-                  />
+                  <div className="overflow-hidden rounded-[10px] bg-[#e3e9f1] sm:rounded-xl">
+                    <Image
+                      src={settore.src}
+                      alt={settore.alt}
+                      width={900}
+                      height={900}
+                      sizes="(min-width: 1024px) 272px, 50vw"
+                      className="parallax-tile aspect-square w-full object-cover"
+                    />
+                  </div>
                   <figcaption className="flex flex-col gap-1">
                     <span className="text-[15px] font-medium text-[#061b31] sm:text-[16px]">
                       {settore.name}
@@ -773,7 +777,7 @@ export default async function Home() {
               <h2 className="font-heading text-[clamp(1.75rem,2.8vw,2.25rem)] leading-[1.12] font-light tracking-[-0.026em] text-balance text-[#061b31]">
                 Nessuna sorpresa a fine anno.
               </h2>
-              <p className="mt-4 text-[15.5px] leading-[1.64] text-[#64748d]">
+              <p className="mt-4 text-[15.5px] leading-[1.64] text-[#5c6b84]">
                 Abbonamento annuale, pagamento con PayPal, consumi sempre visibili
                 nella pagina Abbonamento. Gli avvisi arrivano al 75% e al 90% del
                 limite, non quando l&apos;hai già superato.

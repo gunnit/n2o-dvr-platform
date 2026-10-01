@@ -13,7 +13,7 @@ export default function NotFound() {
     <div className="flex min-h-svh flex-col bg-white">
       <SiteNav variant="solid" />
 
-      <main className="flex flex-1 items-center bg-[#f6f9fc]">
+      <main id="contenuto" tabIndex={-1} className="flex flex-1 items-center bg-[#f6f9fc] outline-none">
         {/* pt/pb stated separately rather than `py-* pt-*`: two utilities for
             one property are resolved by Tailwind's output order, not by the
             order written here. The 68px is the fixed nav this sits under. */}

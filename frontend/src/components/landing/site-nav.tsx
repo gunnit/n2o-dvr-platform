@@ -127,9 +127,18 @@ export function SiteNav({ variant = "overlay" }: { variant?: Variant }) {
 
   return (
     <>
+      <a
+        href="#contenuto"
+        className="fixed top-3 left-3 z-80 -translate-y-24 rounded-md bg-white px-4 py-3 text-[14px] font-semibold text-[#061b31] shadow-stripe-deep transition-transform focus-visible:translate-y-0"
+      >
+        Salta al contenuto
+      </a>
       <header
         className={[
           "fixed inset-x-0 top-0 z-60 border-b transition-[background-color,border-color,backdrop-filter] duration-300",
+          // On navy (over the hero, or the solid variant) the navy focus ring
+          // measured 1.61:1; `.dark-section` lifts it to ice blue.
+          frosted ? "" : "dark-section",
           frosted
             ? "border-[#e5edf5] bg-white/[0.86] backdrop-blur-[14px]"
             : dark
