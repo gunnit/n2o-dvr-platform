@@ -1,13 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { markHydrated } from "@/components/landing/hydration";
 import { useSkipMotion } from "@/components/landing/use-skip-motion";
 
 /**
  * Fades and lifts its children in once they enter the viewport, then stops
- * observing. Renders visible immediately when the viewer prefers reduced motion
- * or the browser has no IntersectionObserver — the content must never depend on
- * the animation to be readable.
+ * observing.
+ *
+ * The hidden state lives in globals.css (`.reveal`), behind
+ * `scripting: enabled` and `prefers-reduced-motion: no-preference`. The
+ * server-rendered HTML is therefore readable as it stands: a visitor without
+ * JavaScript, a crawler, or a page whose bundle never hydrated sees every
+ * section. It used to ship `opacity: 0` inline, which left all seven section
+ * headings invisible in those cases — the content must never depend on the
+ * animation to be readable.
  */
 export function Reveal({
   children,
@@ -28,6 +35,10 @@ export function Reveal({
   const skipMotion = useSkipMotion();
   const [entered, setEntered] = useState(false);
   const shown = skipMotion || entered;
+
+  useEffect(() => {
+    markHydrated();
+  }, []);
 
   useEffect(() => {
     if (skipMotion) return;
@@ -53,20 +64,15 @@ export function Reveal({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ref={ref as any}
       id={id}
-      className={className}
-      style={
-        skipMotion
-          ? undefined
-          : {
-              opacity: shown ? 1 : 0,
-              transform: shown ? "none" : "translateY(22px)",
-              transition:
-                "opacity .8s cubic-bezier(.16,1,.3,1), transform .8s cubic-bezier(.16,1,.3,1)",
-              transitionDelay: shown && delay ? `${delay}ms` : undefined,
-            }
-      }
+      className={className ? `reveal ${className}` : "reveal"}
+      data-revealed={shown || undefined}
+      style={delay ? stagger(delay) : undefined}
     >
       {children}
     </Tag>
   );
+}
+
+function stagger(ms: number): CSSProperties {
+  return { "--reveal-delay": `${ms}ms` } as CSSProperties & Record<"--reveal-delay", string>;
 }

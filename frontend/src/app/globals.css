@@ -300,6 +300,31 @@ body {
   }
 }
 
+/* Reveal (components/landing/reveal.tsx). Visible by default; hidden only
+   when a script will run to reveal it, and unhidden after 4s if that script
+   never hydrates (html[data-hydrated] is set on mount). */
+.reveal {
+  transition:
+    opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1) var(--reveal-delay, 0ms),
+    transform 0.8s cubic-bezier(0.16, 1, 0.3, 1) var(--reveal-delay, 0ms);
+}
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  .reveal:not([data-revealed]) {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  html:not([data-hydrated]) .reveal:not([data-revealed]) {
+    animation: landing-unhide 0.6s ease 4s forwards;
+  }
+}
+@keyframes landing-unhide {
+  to {
+    opacity: 1;
+    transform: none;
+    stroke-dashoffset: 0;
+  }
+}
+
 /* Navy primary outline is invisible on navy surfaces; lift it to ice blue */
 .dark-section :where(a, button):focus-visible {
   outline-color: #a5c8ff;
@@ -313,67 +338,692 @@ body {
   --font-plex: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-/* Feather the render into the navy so its rectangle never shows. The mask
-   follows the framing:
-   - below lg the box runs edge to edge (hero-model.tsx), so only its top and
-     bottom meet the section and only those fade. A radial mask here stayed
-     opaque at the box's sides and left visible vertical seams on phones.
-     Portrait render below md (model at 34–94% of its height), the wide render
-     cropped to the model from md (7–91%);
-   - from lg the box sits in its column, so all four sides fade;
-   - from xl it is the full, uncropped render. */
-.hero-model-img {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 30%, #000 90%, transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0%, #000 30%, #000 90%, transparent 100%);
-}
-@media (min-width: 48rem) {
-  .hero-model-img {
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 7%, #000 90%, transparent 100%);
-    mask-image: linear-gradient(to bottom, transparent 0%, #000 7%, #000 90%, transparent 100%);
+/* Scroll-linked depth for the section renders: each image trails its frame
+   by a few pixels as it crosses the screen, so it reads as sitting behind
+   it. Compositor-driven (scroll timelines), no script. Browsers without
+   scroll-driven animations, and anyone who asked for reduced motion, get
+   the still layout. `parallax-tile` is for a cover image clipped by its
+   frame: the extra scale keeps its edges out of view while it drifts. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .parallax-sm,
+    .parallax-lg,
+    .parallax-tile {
+      animation: parallax-drift linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 100%;
+    }
+    .parallax-sm {
+      --drift: 14px;
+    }
+    .parallax-lg {
+      --drift: 26px;
+    }
+    .parallax-tile {
+      --drift: 10px;
+      scale: 1.08;
+    }
   }
 }
-@media (min-width: 64rem) {
-  .hero-model-img {
-    -webkit-mask-image: radial-gradient(ellipse 72% 80% at 53% 52%, #000 60%, transparent 100%);
-    mask-image: radial-gradient(ellipse 72% 80% at 53% 52%, #000 60%, transparent 100%);
+@keyframes parallax-drift {
+  from {
+    transform: translateY(calc(var(--drift) * -1));
   }
-}
-@media (min-width: 80rem) {
-  .hero-model-img {
-    -webkit-mask-image: radial-gradient(ellipse 75% 80% at 62% 52%, #000 55%, transparent 100%);
-    mask-image: radial-gradient(ellipse 75% 80% at 62% 52%, #000 55%, transparent 100%);
+  to {
+    transform: translateY(var(--drift));
   }
 }
 
-/* Hero scale model, desktop placement.
-   The render is 1200×679 (design units) and the workshop occupies its
-   horizontal band 33.3%–98.3%. The box is sized so that band runs from the
-   left edge of the hero's right-hand column (`.hero-stage`, a size container)
-   to 40px past the viewport edge — `(100vw - 1104px) / 2` is the gutter
-   outside the 1104px content column — and shifted left by a third of its own
-   width so the model, not the empty navy around it, starts at the column.
-   Two caps: 1240px, so wide monitors get margin rather than a bigger model;
-   and the column's height, so on a short laptop screen the model plus the
-   example card under it (card bottom = 0.4791 × width + 132px from the box
-   top) still clears the facts strip — at 1280×800 the width cap alone would
-   push the card over it.
-   The pair is then centred vertically in the column.
-   Every callout inside the box is positioned in percentages of it, which is
-   what keeps the pins and their labels aligned at every width. */
-@media (min-width: 80rem) {
-  .hero-stage {
-    container-type: size;
+/* -----------------------------------------------------------------------
+   Hero: the live scale model (components/landing/hero-stage.tsx)
+   ----------------------------------------------------------------------- */
+
+/* One grid, two orders. On phones and tablets the model sits between the
+   headline and the copy, so it is on the first screen instead of under the
+   buttons; from lg it takes the right column and the copy is centred beside
+   it. Grid areas, not two copies of the markup. */
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "kicker" "title" "model" "lead" "actions" "price";
+}
+.hero-kicker { grid-area: kicker; }
+.hero-title { grid-area: title; }
+.hero-model-slot { grid-area: model; }
+.hero-lead { grid-area: lead; }
+.hero-actions { grid-area: actions; }
+.hero-price { grid-area: price; }
+
+/* Below lg the model runs edge to edge: at the viewport's edges there is
+   nothing for the render's own navy to show a seam against. */
+.hero-model-slot {
+  margin-inline: -1.5rem;
+}
+@media (min-width: 40rem) {
+  .hero-model-slot {
+    margin-inline: -1.75rem;
   }
+}
+@media (min-width: 64rem) {
+  .hero-grid {
+    grid-template-columns: minmax(0, 400px) minmax(0, 1fr);
+    grid-template-rows: 1fr auto auto auto auto auto 1fr;
+    grid-template-areas: ". model" "kicker model" "title model" "lead model" "actions model" "price model" ". model";
+    column-gap: 32px;
+  }
+  /* Into the right gutter: the plinth's far corner is at 92% of the box, so
+     the bleed eats empty navy, never the model. */
+  .hero-model-slot {
+    align-self: center;
+    margin-inline: 0 calc(-1 * max(16px, (100vw - 1160px) / 2 + 16px));
+  }
+}
+@media (min-width: 80rem) {
+  .hero-grid {
+    grid-template-columns: minmax(0, 480px) minmax(0, 1fr);
+    column-gap: 48px;
+  }
+}
+
+.hero-model {
+  container: hero-model / inline-size;
+}
+/* Width-led, but never taller than the screen leaves room for: on a 720px
+   laptop the facts strip must still show under it. */
+@media (min-width: 64rem) {
   .hero-model {
-    --hero-w: min(
-      1240px,
-      calc((100cqw + max(28px, (100vw - 1104px) / 2) + 40px) / 0.65),
-      calc((100cqh - 164px) / 0.4791)
-    );
-    position: absolute;
-    left: calc(var(--hero-w) * -0.3333);
-    top: max(16px, calc((100cqh - var(--hero-w) * 0.4791 - 132px) / 2));
-    width: var(--hero-w);
+    width: min(100%, 820px, max(420px, calc((100svh - 236px) * var(--stage-ar, 1.4286))));
+  }
+}
+
+.hero-stage {
+  position: relative;
+  aspect-ratio: var(--stage-ar, 1.4286);
+  transform: translate3d(var(--hero-shift-x, 0px), var(--hero-shift-y, 0px), 0);
+}
+/* The stage trails the page as it scrolls away: depth, on the compositor. */
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .hero-stage {
+      animation: hero-drift linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 100vh;
+    }
+  }
+}
+@keyframes hero-drift {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: 0 36px;
+  }
+}
+
+/* The render's navy is a touch lighter than the section's mid-edge, so the
+   picture is feathered into it: top and bottom only below lg (the sides are
+   the viewport's), all four sides once it sits in its column. */
+.hero-stage-media {
+  position: absolute;
+  inset: 0;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 6%, #000 90%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 6%, #000 90%, transparent 100%);
+}
+@media (min-width: 64rem) {
+  .hero-stage-media {
+    -webkit-mask-image:
+      linear-gradient(to right, transparent 0%, #000 6%, #000 93%, transparent 100%),
+      linear-gradient(to bottom, transparent 0%, #000 6%, #000 90%, transparent 100%);
+    -webkit-mask-composite: source-in;
+    mask-image:
+      linear-gradient(to right, transparent 0%, #000 6%, #000 93%, transparent 100%),
+      linear-gradient(to bottom, transparent 0%, #000 6%, #000 90%, transparent 100%);
+    mask-composite: intersect;
+  }
+}
+.hero-stage-media > img,
+.hero-stage-media > canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+/* The canvas's first frame is the image itself; the fade only hides the
+   swap if a GPU rounds colours differently. */
+.hero-stage-media > canvas {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.hero-stage-media > canvas[data-live] {
+  opacity: 1;
+}
+
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* --- Pins ------------------------------------------------------------------
+   Positioned by their head and base (fractions of the stage); the head's
+   radius follows the stage's width with a floor for phones. */
+.hero-pin {
+  --r: max(4.5px, 0.95cqw);
+  position: absolute;
+  left: var(--x);
+  top: calc(var(--top) - var(--r) - 6px);
+  height: calc(var(--bottom) - var(--top) + var(--r) + 6px);
+  width: calc(var(--r) * 2 + 8px);
+  margin-left: calc(-1 * var(--r) - 4px);
+}
+.hero-pin-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.hero-pin-rise {
+  position: absolute;
+  inset: 0;
+  transition: transform 0.75s cubic-bezier(0.22, 1.25, 0.36, 1);
+}
+.hero-pin-stem {
+  position: absolute;
+  top: calc(6px + var(--r));
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: linear-gradient(90deg, #7a8698, #eef2f6 50%, #8e99aa);
+}
+.hero-pin-head {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: calc(var(--r) * 2);
+  height: calc(var(--r) * 2);
+  margin-left: calc(-1 * var(--r));
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 30%, rgb(255 255 255 / 0.92) 0, rgb(255 255 255 / 0.38) 17%, rgb(255 255 255 / 0) 36%),
+    radial-gradient(circle at 50% 50%, var(--c) 0 52%, color-mix(in srgb, var(--c), #000 38%) 100%);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.45);
+}
+.hero-pin-ring {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: calc(var(--r) * 2);
+  height: calc(var(--r) * 2);
+  margin-left: calc(-1 * var(--r));
+  border: 1.5px solid var(--c);
+  border-radius: 50%;
+  opacity: 0;
+}
+
+/* --- Leaders, chips and the worked example -------------------------------- */
+.hero-leaders {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  display: none;
+}
+.hero-leaders path {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.55);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.25s;
+}
+
+.hero-chip {
+  position: absolute;
+  top: var(--y);
+  left: var(--left, auto);
+  right: var(--right, auto);
+  display: none;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  margin-top: -14px;
+  padding: 0 10px;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  border-radius: 6px;
+  background: rgb(6 25 48 / 0.9);
+  font-family: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: #fff;
+  white-space: nowrap;
+  transition:
+    opacity 0.45s ease 0.45s,
+    transform 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.45s;
+}
+.hero-chip-value {
+  color: #a5c8ff;
+}
+.hero-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.hero-card {
+  --w: min(268px, 46cqw);
+  position: absolute;
+  /* Its leader drops from the welding pin, so it starts there — unless that
+     would push it out of the stage on a narrow column. */
+  left: min(var(--left), calc(97.5% - var(--w)));
+  top: var(--top);
+  width: var(--w);
+  display: none;
+  flex-direction: column;
+  padding: 12px 14px 14px;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  border-radius: 10px;
+  background: rgb(6 25 48 / 0.94);
+  box-shadow: 0 24px 40px -20px rgb(0 0 0 / 0.6);
+  transition:
+    opacity 0.5s ease,
+    transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hero-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.hero-card-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: #fff;
+}
+.hero-card-band {
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, var(--c) 50%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--c) 18%, transparent);
+  font-family: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--c) 22%, #fff);
+}
+.hero-card-hazard {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: rgb(255 255 255 / 0.66);
+  white-space: nowrap;
+}
+.hero-card-formula {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 12px;
+  font-family: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  color: #a5c8ff;
+}
+.hero-card-dp {
+  font-size: 11px;
+  color: rgb(255 255 255 / 0.6);
+}
+.hero-card-scale {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 2px;
+  margin-top: 10px;
+}
+.hero-card-scale > span {
+  height: 8px;
+  border-radius: 1px;
+  opacity: 0.35;
+  transition: opacity 0.3s ease calc(0.35s + var(--i) * 45ms);
+}
+.hero-card-scale > span[data-band="accettabile"] { background: var(--color-risk-green); }
+.hero-card-scale > span[data-band="modesto"] { background: var(--color-risk-yellow); }
+.hero-card-scale > span[data-band="grave"] { background: var(--color-risk-orange); }
+.hero-card-scale > span[data-band="gravissimo"] { background: var(--color-risk-red); }
+.hero-card-scale > span[data-hit] {
+  opacity: 1;
+  box-shadow: 0 0 0 1.5px #fff;
+}
+
+/* --- Narrow stages: pins plus a legend instead of callouts ---------------- */
+.hero-legend {
+  margin-top: 10px;
+  padding-inline: 1.5rem;
+  font-family: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: rgb(255 255 255 / 0.84);
+}
+@media (min-width: 40rem) {
+  .hero-legend {
+    padding-inline: 1.75rem;
+  }
+}
+.hero-legend-title {
+  display: block;
+  font-size: 11.5px;
+  color: rgb(255 255 255 / 0.64);
+}
+.hero-legend ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 16px;
+  margin-top: 8px;
+}
+.hero-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.hero-legend-value {
+  color: #a5c8ff;
+}
+
+@container hero-model (min-width: 540px) {
+  .hero-leaders {
+    display: block;
+  }
+  .hero-chip,
+  .hero-card {
+    display: flex;
+  }
+  .hero-legend {
+    display: none;
+  }
+}
+@media (max-width: 63.99rem) {
+  @container hero-model (min-width: 540px) {
+    .hero-stage {
+      margin-bottom: max(0px, calc(124px - 14cqw));
+    }
+  }
+}
+@container hero-model (min-width: 540px) and (max-width: 719px) {
+  .hero-chip {
+    gap: 6px;
+    height: 26px;
+    margin-top: -13px;
+    padding: 0 8px;
+    font-size: 11px;
+  }
+}
+
+/* --- Motion ------------------------------------------------------------------
+   Everything above is the finished state, which is what visitors without
+   JavaScript and anyone who asked for reduced motion see. Only when a script
+   will run do pins, leaders and labels start hidden for the scan to raise
+   them (data-on, set by hero-stage.tsx). If the bundle never hydrates, they
+   come up on their own after 4s. */
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  .hero-pin:not([data-on]) .hero-pin-rise {
+    transform: translateY(105%);
+  }
+  .hero-leaders path:not([data-on]) {
+    stroke-dashoffset: 1;
+  }
+  .hero-chip:not([data-on]),
+  .hero-card:not([data-on]) {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  .hero-card:not([data-on]) .hero-card-scale > span:not([data-hit]) {
+    opacity: 0;
+  }
+  .hero-pin[data-on] .hero-pin-ring {
+    animation: hero-ping 1.1s ease-out 0.4s both;
+  }
+  html:not([data-hydrated]) .hero-pin:not([data-on]) .hero-pin-rise,
+  html:not([data-hydrated]) .hero-leaders path:not([data-on]),
+  html:not([data-hydrated]) .hero-chip:not([data-on]),
+  html:not([data-hydrated]) .hero-card:not([data-on]) {
+    animation: landing-unhide 0.6s ease 4s forwards;
+  }
+  html:not([data-hydrated]) .hero-card:not([data-on]) .hero-card-scale > span:not([data-hit]) {
+    animation: hero-cell-unhide 0.6s ease 4s forwards;
+  }
+}
+@keyframes hero-cell-unhide {
+  to {
+    opacity: 0.35;
+  }
+}
+@keyframes hero-ping {
+  from {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(3.2);
+  }
+}
+
+/* -----------------------------------------------------------------------
+   Risk matrix model (components/landing/risk-matrix.tsx)
+   A 4×4 plate of blocks, each as tall as its index, in plain CSS 3D. No
+   perspective on purpose: the orthographic view matches the scale-model
+   renders. With rotateX(57deg) rotateZ(-45deg) the faces turned towards
+   the viewer are the top, the south (+y) and the west (-x) ones.
+   ----------------------------------------------------------------------- */
+.risk-model {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 5 / 4;
+  max-height: 380px;
+  container-type: inline-size;
+}
+/* The plate's diagonal is about 7.2 cells wide; 13cqw keeps it inside the
+   box down to a 280px screen, 56px caps it on wide ones. */
+.risk-model > * {
+  --cell: min(56px, 13cqw);
+  --gap: calc(var(--cell) * 0.18);
+  --unit: calc(var(--cell) * 0.143);
+}
+.risk-plane {
+  position: relative;
+  width: calc(var(--cell) * 4 + var(--gap) * 3);
+  aspect-ratio: 1;
+  margin-top: calc(var(--unit) * 6);
+  transform: rotateX(57deg) rotateZ(-45deg);
+  transform-style: preserve-3d;
+}
+.risk-base {
+  position: absolute;
+  inset: calc(var(--gap) * -1.6);
+  border-radius: 4px;
+  background: #0f2a52;
+  box-shadow: 0 30px 50px -10px rgb(6 25 48 / 0.35);
+  transform: translateZ(-1px);
+}
+.risk-block {
+  position: absolute;
+  left: calc((var(--p) - 1) * (var(--cell) + var(--gap)));
+  top: calc((4 - var(--d)) * (var(--cell) + var(--gap)));
+  width: var(--cell);
+  height: var(--cell);
+  transform-style: preserve-3d;
+  cursor: pointer;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.risk-face {
+  position: absolute;
+  transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1) calc((var(--d) + var(--p)) * 45ms);
+}
+.risk-face-top {
+  inset: 0;
+  border-radius: 3px;
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0) 55%),
+    var(--top);
+  transform: translateZ(calc(var(--h) * var(--unit)));
+}
+.risk-face-south {
+  top: 100%;
+  left: 0;
+  width: 100%;
+  height: calc(var(--h) * var(--unit));
+  background: linear-gradient(to bottom, #c9d2de, #dbe2eb);
+  transform-origin: top;
+  transform: rotateX(90deg);
+}
+.risk-face-west {
+  top: 0;
+  right: 100%;
+  width: calc(var(--h) * var(--unit));
+  height: 100%;
+  background: linear-gradient(to left, #e9eef4, #f7f9fb);
+  transform-origin: right;
+  transform: rotateY(90deg);
+}
+.risk-block[data-selected] {
+  transform: translateZ(calc(var(--unit) * 1.2));
+}
+.risk-block[data-selected] .risk-face-top {
+  box-shadow:
+    inset 0 0 0 2px #fff,
+    0 0 0 2px #061b31;
+}
+.risk-block:not([data-selected]):hover .risk-face-top {
+  filter: brightness(1.08);
+}
+/* Axis labels sit just outside the plate's two front edges. --hw and --hh
+   are the plate's half-diagonal on screen: rotateZ(45deg) turns its side s
+   into a diagonal s·√2, and rotateX(57deg) foreshortens the height by cos57. */
+.risk-model > * {
+  --s: calc(var(--cell) * 4 + var(--gap) * 3);
+  --hw: calc(var(--s) * 0.7071);
+  --hh: calc(var(--hw) * 0.5446);
+}
+.risk-axis {
+  position: absolute;
+  padding: 1px 6px;
+  border-radius: 4px;
+  /* Its own ground: near the plate's edge the label may overlap the navy. */
+  background: #fff;
+  font-family: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: #64748d;
+  white-space: nowrap;
+}
+/* Phones: the plate is nearly as wide as the card, so the labels take the
+   box's bottom corners instead of hanging off the plate's edges. */
+.risk-axis-d {
+  bottom: 0;
+  left: 0;
+}
+.risk-axis-p {
+  right: 0;
+  bottom: 0;
+}
+@media (min-width: 40rem) {
+  .risk-axis {
+    top: calc(50% + var(--unit) * 3 + var(--hh) * 0.62);
+  }
+  .risk-axis-d {
+    right: calc(50% + var(--hw) * 0.62);
+    bottom: auto;
+    left: auto;
+  }
+  .risk-axis-p {
+    right: auto;
+    bottom: auto;
+    left: calc(50% + var(--hw) * 0.62);
+  }
+}
+
+/* The D and P pickers: four boxed options per scale, a number over its name. */
+.risk-option {
+  position: relative;
+  display: flex;
+  min-height: 56px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 8px 7px;
+  border: 1px solid #e5edf5;
+  border-radius: 6px;
+  background: #fff;
+  color: #273951;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+.risk-option:hover {
+  border-color: #b9c6d6;
+}
+.risk-option:has(input:checked) {
+  border-color: #003d74;
+  background: #003d74;
+  color: #fff;
+}
+.risk-option:has(input:focus-visible) {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.risk-option > span:last-child {
+  hyphens: auto;
+}
+
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  .risk-model:not([data-risen]) .risk-face-top {
+    transform: translateZ(0);
+  }
+  .risk-model:not([data-risen]) .risk-face-south {
+    transform: rotateX(90deg) scaleY(0);
+  }
+  .risk-model:not([data-risen]) .risk-face-west {
+    transform: rotateY(90deg) scaleX(0);
+  }
+  html:not([data-hydrated]) .risk-model:not([data-risen]) .risk-face-top {
+    animation: risk-stand-top 0.6s ease 4s forwards;
+  }
+  html:not([data-hydrated]) .risk-model:not([data-risen]) .risk-face-south {
+    animation: risk-stand-south 0.6s ease 4s forwards;
+  }
+  html:not([data-hydrated]) .risk-model:not([data-risen]) .risk-face-west {
+    animation: risk-stand-west 0.6s ease 4s forwards;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .risk-face,
+  .risk-block {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .risk-model,
+  .hero-overlay {
+    forced-color-adjust: none;
+  }
+  .risk-option:has(input:checked) {
+    outline: 3px solid Highlight;
+    outline-offset: 1px;
+  }
+}
+@keyframes risk-stand-top {
+  to {
+    transform: translateZ(calc(var(--h) * var(--unit)));
+  }
+}
+@keyframes risk-stand-south {
+  to {
+    transform: rotateX(90deg);
+  }
+}
+@keyframes risk-stand-west {
+  to {
+    transform: rotateY(90deg);
   }
 }
 

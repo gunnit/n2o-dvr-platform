@@ -56,7 +56,7 @@ export default async function PrezziPage() {
     <div className="bg-white">
       <SiteNav variant="solid" />
 
-      <main>
+      <main id="contenuto" tabIndex={-1} className="outline-none">
         <PricingTabs signedIn={Boolean(session)} />
 
         {/* ================= Fatturazione ================= */}

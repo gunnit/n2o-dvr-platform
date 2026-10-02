@@ -8,16 +8,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 /**
  * Public site header.
  *
- * `overlay` sits transparent over the dark hero and turns into a frosted white
- * bar once the hero has scrolled past — the landing page only. `solid` is the
- * permanently-navy variant every other public page uses, where there is no hero
- * behind it to read against.
+ * `overlay` is transparent at the top of the landing, navy frosted while it
+ * crosses the hero and white frosted once the hero has scrolled past — the
+ * landing page only. `solid` is the permanently-navy variant every other
+ * public page uses, where there is no hero behind it to read against.
  *
  * Below `lg` the section links move into a full-screen menu. They used to be
  * hidden in two waves with nothing in their place, so a phone visitor could
  * reach a section only by scrolling to it.
  */
 type Variant = "overlay" | "solid";
+type Tone = "clear" | "dark" | "light";
 
 /** `/#id` on sub-pages, bare `#id` on the landing so we never re-navigate. */
 function sectionHref(id: string, onLanding: boolean) {
@@ -39,8 +40,11 @@ export function SiteNav({ variant = "overlay" }: { variant?: Variant }) {
   const onLanding = variant === "overlay";
   const pathname = usePathname();
   const onPrezzi = pathname === "/prezzi";
-  // Overlay starts transparent; solid is never anything else.
-  const [solid, setSolid] = useState(variant === "solid");
+  // Overlay: transparent at the very top, navy frosted while it crosses the
+  // hero — whose scale model sits right behind the bar on phones, under white
+  // text (1.7:1 measured) — and white frosted once the hero has gone by.
+  // Solid is never anything but navy.
+  const [tone, setTone] = useState<Tone>(variant === "solid" ? "dark" : "clear");
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -50,22 +54,34 @@ export function SiteNav({ variant = "overlay" }: { variant?: Variant }) {
     if (variant === "solid") return;
 
     let queued = false;
+    let lightAt = 0;
+    const measure = () => {
+      // `top` is the landing's hero section (app/page.tsx).
+      const hero = document.getElementById("top");
+      lightAt = (hero ? hero.offsetHeight : window.innerHeight * 0.72) - 68;
+    };
     const apply = () => {
       queued = false;
-      setSolid(window.scrollY > window.innerHeight * 0.72);
+      const y = window.scrollY;
+      setTone(y > lightAt ? "light" : y > 16 ? "dark" : "clear");
     };
     const onScroll = () => {
       if (queued) return;
       queued = true;
       requestAnimationFrame(apply);
     };
+    const onResize = () => {
+      measure();
+      onScroll();
+    };
 
+    measure();
     apply();
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll, { passive: true });
+    window.addEventListener("resize", onResize, { passive: true });
     return () => {
       window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
+      window.removeEventListener("resize", onResize);
     };
   }, [variant]);
 
@@ -118,8 +134,8 @@ export function SiteNav({ variant = "overlay" }: { variant?: Variant }) {
     }
   };
 
-  const dark = variant === "solid";
-  const frosted = solid && !dark;
+  const dark = tone === "dark";
+  const frosted = tone === "light";
 
   const linkTone = frosted
     ? "text-[#64748d] hover:text-[#061b31]"
@@ -127,9 +143,18 @@ export function SiteNav({ variant = "overlay" }: { variant?: Variant }) {
 
   return (
     <>
+      <a
+        href="#contenuto"
+        className="fixed top-3 left-3 z-80 -translate-y-24 rounded-md bg-white px-4 py-3 text-[14px] font-semibold text-[#061b31] shadow-stripe-deep transition-transform focus-visible:translate-y-0"
+      >
+        Salta al contenuto
+      </a>
       <header
         className={[
           "fixed inset-x-0 top-0 z-60 border-b transition-[background-color,border-color,backdrop-filter] duration-300",
+          // On navy (over the hero, or the solid variant) the navy focus ring
+          // measured 1.61:1; `.dark-section` lifts it to ice blue.
+          frosted ? "" : "dark-section",
           frosted
             ? "border-[#e5edf5] bg-white/[0.86] backdrop-blur-[14px]"
             : dark
