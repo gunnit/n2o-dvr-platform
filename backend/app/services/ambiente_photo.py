@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 from dataclasses import dataclass
 from io import BytesIO
@@ -173,3 +174,34 @@ async def backfill_document_images_for_dvr(
         stored += 1
     await db.commit()
     return PhotoBackfillResult(len(photos), stored, unavailable, failed)
+
+
+# Formats OpenAI's input_image accepts; HEIC is skipped, as for the
+# attrezzature extraction, rather than failing the whole call.
+VISION_MIME_TYPES = frozenset({"image/jpeg", "image/png", "image/webp", "image/gif"})
+
+
+async def usable_vision_photos(db: AsyncSession, ambiente_id: UUID) -> list[Path]:
+    """Paths of the ambiente's photos in a vision format that exist on disk.
+
+    Shared by every photo-based AI helper (scheda ambiente, risk suggestion).
+    """
+    rows = (
+        await db.execute(
+            select(AmbienteFoto).where(AmbienteFoto.ambiente_id == ambiente_id)
+        )
+    ).scalars().all()
+    paths: list[Path] = []
+    for foto in rows:
+        if foto.content_type not in VISION_MIME_TYPES or not foto.file_path:
+            continue
+        path = Path(foto.file_path)
+        if path.is_file():
+            paths.append(path)
+    return paths
+
+
+def photos_digest(paths: list[Path]) -> str:
+    """Short stable key for a photo set: the same photos bill once, a new
+    photo is new work (MB-2.4 idempotency keys)."""
+    return hashlib.sha1(",".join(sorted(str(p) for p in paths)).encode()).hexdigest()[:12]

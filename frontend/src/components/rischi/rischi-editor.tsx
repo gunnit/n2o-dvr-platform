@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/table";
 import {
   AlertTriangle,
+  Camera,
   Check,
   CloudOff,
   Loader2,
@@ -894,15 +895,18 @@ export function RischiEditor({
   // operator presses "Applica" in the proposal panel (meeting 2026-09-04:
   // the categories the AI excludes must be visible and restorable, not
   // silently unticked).
-  const fetchAIRischi = useCallback(async () => {
+  // `fromPhotos` grounds the proposal in the ambiente's sopralluogo photos
+  // (segnalazione 2026-10-02); both land in the same review panel.
+  const fetchAIRischi = useCallback(async (fromPhotos = false) => {
     if (!selectedAmbiente) return;
     const ambienteId = selectedAmbiente.id;
     setAiLoadingByAmbiente((prev) => ({ ...prev, [ambienteId]: true }));
     try {
-      const response = await apiFetch<AiRischiProposal>(
-        `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/rischi/suggerisci`,
-        { method: "POST" },
-      );
+      // Literal paths, so the feature map can see both call sites.
+      const url = fromPhotos
+        ? `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/rischi/suggerisci-da-foto`
+        : `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/rischi/suggerisci`;
+      const response = await apiFetch<AiRischiProposal>(url, { method: "POST" });
       setAiProposalByAmbiente((prev) => ({ ...prev, [ambienteId]: response }));
       // Every proposed change starts selected; the operator unticks what
       // they disagree with. Unticking an exclusion keeps the category as it
@@ -914,10 +918,11 @@ export function RischiEditor({
         ),
       }));
       const esclusi = response.items.filter((i) => !i.applicabile).length;
+      const fonte = fromPhotos ? "Proposta AI dalle foto" : "Proposta AI";
       toast.info(
         esclusi > 0
-          ? `Proposta AI pronta: ${response.items.length - esclusi} categorie applicabili, ${esclusi} escluse. Controlla e applica.`
-          : `Proposta AI pronta: ${response.items.length} categorie. Controlla e applica.`,
+          ? `${fonte} pronta: ${response.items.length - esclusi} categorie applicabili, ${esclusi} escluse. Controlla e applica.`
+          : `${fonte} pronta: ${response.items.length} categorie. Controlla e applica.`,
       );
     } catch (err) {
       toast.error(
@@ -1140,7 +1145,7 @@ export function RischiEditor({
               type="button"
               variant="outline"
               size="sm"
-              onClick={fetchAIRischi}
+              onClick={() => fetchAIRischi(false)}
               disabled={
                 !selectedAmbiente ||
                 aiLoadingByAmbiente[selectedAmbiente.id] === true
@@ -1159,6 +1164,21 @@ export function RischiEditor({
                   Suggerisci con AI
                 </>
               )}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fetchAIRischi(true)}
+              disabled={
+                !selectedAmbiente ||
+                aiLoadingByAmbiente[selectedAmbiente.id] === true
+              }
+              title="Proposta basata sulle foto dell'ambiente caricate nel sopralluogo"
+              className="border-[rgba(124,58,237,0.34)] text-[#5b21b6] hover:bg-[rgba(124,58,237,0.08)]"
+            >
+              <Camera className="mr-1.5 h-3.5 w-3.5" />
+              Suggerisci dalle foto
             </Button>
             <Button
               type="button"
