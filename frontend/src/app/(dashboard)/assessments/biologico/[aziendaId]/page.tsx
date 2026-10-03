@@ -11,7 +11,9 @@ import { cn } from "@/lib/utils";
 import {
   BiologicoForm,
   type BiologicoResult,
+  type BiologicoSaved,
   type BiologicoState,
+  type Settore,
 } from "@/components/assessments/biologico/biologico-form";
 import type { Azienda } from "@/types";
 
@@ -38,6 +40,11 @@ export default function BiologicoAssessmentPage({
   const [savedSummary, setSavedSummary] = useState<
     { settore: string; livello: string | null; updated_at: string }[]
   >([]);
+  // Saved agenti/DPI per settore, so the form reopens with what was saved.
+  const [savedExtras, setSavedExtras] = useState<
+    Partial<Record<Settore, BiologicoSaved>>
+  >({});
+  const [savedLoaded, setSavedLoaded] = useState(false);
 
   // --------------------------------------------------------------- Azienda
   useEffect(() => {
@@ -75,8 +82,23 @@ export default function BiologicoAssessmentPage({
             settore: string;
             livello_rischio: string | null;
             created_at: string;
+            agenti_identificati?: BiologicoSaved["agenti"];
+            dpi_richiesti?: { descrizione?: string }[];
           }>;
           if (!cancelled) {
+            setSavedExtras(
+              Object.fromEntries(
+                rows.map((r) => [
+                  r.settore,
+                  {
+                    agenti: r.agenti_identificati ?? [],
+                    dpi: (r.dpi_richiesti ?? [])
+                      .map((d) => d.descrizione ?? "")
+                      .filter(Boolean),
+                  },
+                ]),
+              ) as Partial<Record<Settore, BiologicoSaved>>,
+            );
             setSavedSummary(
               rows.map((r) => ({
                 settore: r.settore,
@@ -94,6 +116,8 @@ export default function BiologicoAssessmentPage({
               : "Impossibile caricare l'azienda",
           );
         }
+      } finally {
+        if (!cancelled) setSavedLoaded(true);
       }
     }
     if (aziendaId) load();
@@ -140,6 +164,9 @@ export default function BiologicoAssessmentPage({
         risposte_checklist: risposteList,
         protocollo_sanitario: state.protocolloSanitario || null,
         livello_rischio: result.livello,
+        // The upsert overwrites every field: send the edited lists each time.
+        agenti_identificati: state.agenti,
+        dpi_richiesti: state.dpi.map((descrizione) => ({ descrizione })),
       };
 
       const res = await fetch(
@@ -243,6 +270,8 @@ export default function BiologicoAssessmentPage({
 
       <BiologicoForm
         aziendaId={aziendaId}
+        saved={savedExtras}
+        savedLoaded={savedLoaded}
         onStateChange={setState}
         onResultChange={setResult}
         onDirtyChange={setDirty}

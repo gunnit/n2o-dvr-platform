@@ -17,6 +17,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import {
+  DpiUtilizzatiCard,
+  MalattieContraibiliCard,
+  type AgenteBiologico,
+} from "./biologico-malattie-dpi";
 
 // ---------------------------------------------------------------------------
 // Types & constants — mirror backend/app/services/document_generator/
@@ -45,6 +50,19 @@ export interface BiologicoState {
   settore: Settore;
   risposte: Record<string, Risposta>;
   protocolloSanitario: string;
+  agenti: AgenteBiologico[];
+  dpi: string[];
+}
+
+/** Agenti and DPI already saved on the server for a settore. */
+export interface BiologicoSaved {
+  agenti?: Partial<AgenteBiologico>[];
+  dpi?: string[];
+}
+
+interface SectorDefaults {
+  agenti: AgenteBiologico[];
+  dpi: string[];
 }
 
 export interface BiologicoResult {
@@ -138,7 +156,9 @@ export function computeBiologico(
 // API fetch — checklist catalog
 // ---------------------------------------------------------------------------
 
-async function fetchChecklist(settore: Settore): Promise<ChecklistItem[]> {
+async function fetchChecklist(
+  settore: Settore,
+): Promise<{ items: ChecklistItem[]; defaults: SectorDefaults }> {
   const apiUrl =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   let token: string | null = null;
@@ -161,8 +181,32 @@ async function fetchChecklist(settore: Settore): Promise<ChecklistItem[]> {
   const body = (await res.json()) as {
     settore: Settore;
     items: ChecklistItem[];
+    agenti?: AgenteBiologico[];
+    dpi?: string[];
   };
-  return body.items;
+  return {
+    items: body.items,
+    defaults: { agenti: body.agenti ?? [], dpi: body.dpi ?? [] },
+  };
+}
+
+/** Fill sintomi/cura missing on agenti saved before they existed. */
+function completeAgenti(
+  saved: Partial<AgenteBiologico>[],
+  defaults: AgenteBiologico[],
+): AgenteBiologico[] {
+  const byNome = new Map(defaults.map((a) => [a.nome, a]));
+  return saved.map((a) => {
+    const ref = byNome.get(a.nome ?? "");
+    return {
+      nome: a.nome ?? "",
+      gruppo: a.gruppo ?? ref?.gruppo ?? "",
+      via: a.via ?? ref?.via ?? "",
+      patologia: a.patologia || ref?.patologia || "",
+      sintomi: a.sintomi || ref?.sintomi || "",
+      cura: a.cura || ref?.cura || "",
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -242,6 +286,9 @@ export interface BiologicoFormProps {
   initialSettore?: Settore;
   initialRisposte?: Record<string, Risposta>;
   initialProtocollo?: string;
+  /** Saved agenti/DPI per settore; seeding waits for `savedLoaded`. */
+  saved?: Partial<Record<Settore, BiologicoSaved>>;
+  savedLoaded?: boolean;
   onStateChange?: (state: BiologicoState) => void;
   onResultChange?: (result: BiologicoResult) => void;
   onDirtyChange?: (dirty: boolean) => void;
@@ -252,6 +299,8 @@ export function BiologicoForm({
   initialSettore = "alimentare",
   initialRisposte,
   initialProtocollo = "",
+  saved,
+  savedLoaded = true,
   onStateChange,
   onResultChange,
   onDirtyChange,
@@ -271,6 +320,19 @@ export function BiologicoForm({
   });
   const [protocollo, setProtocollo] = useState<string>(initialProtocollo);
   const [hydrated, setHydrated] = useState(false);
+  // Agenti (with sintomi/cura) and DPI per settore, segnalazione 2026-10-02.
+  // A settore with no entry yet gets seeded from the saved valutazione or,
+  // failing that, from the sector defaults the checklist endpoint returns.
+  const [defaultsBySettore, setDefaultsBySettore] = useState<
+    Partial<Record<Settore, SectorDefaults>>
+  >({});
+  const [agentiBySettore, setAgentiBySettore] = useState<
+    Partial<Record<Settore, AgenteBiologico[]>>
+  >({});
+  const [dpiBySettore, setDpiBySettore] = useState<
+    Partial<Record<Settore, string[]>>
+  >({});
+  const [touchedExtras, setTouchedExtras] = useState(false);
 
   // ------------------------------------------------------------------ Draft
   // Hydrate draft from localStorage on mount.
@@ -285,7 +347,11 @@ export function BiologicoForm({
           settore?: Settore;
           risposteBySettore?: Record<Settore, Record<string, Risposta>>;
           protocollo?: string;
+          agentiBySettore?: Partial<Record<Settore, AgenteBiologico[]>>;
+          dpiBySettore?: Partial<Record<Settore, string[]>>;
         };
+        if (parsed.agentiBySettore) setAgentiBySettore(parsed.agentiBySettore);
+        if (parsed.dpiBySettore) setDpiBySettore(parsed.dpiBySettore);
         if (parsed.settore) setSettore(parsed.settore);
         if (parsed.risposteBySettore) {
           setRisposteBySettore((prev) => ({
@@ -313,12 +379,26 @@ export function BiologicoForm({
     try {
       window.localStorage.setItem(
         storageKey,
-        JSON.stringify({ settore, risposteBySettore, protocollo }),
+        JSON.stringify({
+          settore,
+          risposteBySettore,
+          protocollo,
+          agentiBySettore,
+          dpiBySettore,
+        }),
       );
     } catch {
       /* ignore quota */
     }
-  }, [hydrated, settore, risposteBySettore, protocollo, storageKey]);
+  }, [
+    hydrated,
+    settore,
+    risposteBySettore,
+    protocollo,
+    agentiBySettore,
+    dpiBySettore,
+    storageKey,
+  ]);
 
   // ------------------------------------------------------------------ Load
   useEffect(() => {
@@ -326,8 +406,10 @@ export function BiologicoForm({
     setLoading(true);
     setLoadError(null);
     fetchChecklist(settore)
-      .then((items) => {
-        if (!cancelled) setItems(items);
+      .then(({ items, defaults }) => {
+        if (cancelled) return;
+        setItems(items);
+        setDefaultsBySettore((prev) => ({ ...prev, [settore]: defaults }));
       })
       .catch((err) => {
         if (!cancelled) {
@@ -344,6 +426,57 @@ export function BiologicoForm({
       cancelled = true;
     };
   }, [settore]);
+
+  // Seed agenti/DPI for the settore once its defaults and the saved
+  // valutazioni are known; a draft entry, once present, is never replaced.
+  useEffect(() => {
+    if (!hydrated || !savedLoaded) return;
+    const defaults = defaultsBySettore[settore];
+    if (!defaults) return;
+    const fromServer = saved?.[settore];
+    const t = setTimeout(() => {
+      setAgentiBySettore((prev) =>
+        prev[settore]
+          ? prev
+          : {
+              ...prev,
+              [settore]: fromServer?.agenti?.length
+                ? completeAgenti(fromServer.agenti, defaults.agenti)
+                : defaults.agenti,
+            },
+      );
+      setDpiBySettore((prev) =>
+        prev[settore]
+          ? prev
+          : {
+              ...prev,
+              [settore]: fromServer?.dpi?.length ? fromServer.dpi : defaults.dpi,
+            },
+      );
+    }, 0);
+    return () => clearTimeout(t);
+  }, [hydrated, savedLoaded, saved, settore, defaultsBySettore]);
+
+  const agenti = useMemo(
+    () => agentiBySettore[settore] ?? [],
+    [agentiBySettore, settore],
+  );
+  const dpi = useMemo(() => dpiBySettore[settore] ?? [], [dpiBySettore, settore]);
+
+  const setAgenti = useCallback(
+    (next: AgenteBiologico[]) => {
+      setTouchedExtras(true);
+      setAgentiBySettore((prev) => ({ ...prev, [settore]: next }));
+    },
+    [settore],
+  );
+  const setDpi = useCallback(
+    (next: string[]) => {
+      setTouchedExtras(true);
+      setDpiBySettore((prev) => ({ ...prev, [settore]: next }));
+    },
+    [settore],
+  );
 
   // ------------------------------------------------------------------ Scoring
   const risposte = useMemo(
@@ -364,16 +497,18 @@ export function BiologicoForm({
       settore,
       risposte,
       protocolloSanitario: protocollo,
+      agenti,
+      dpi,
     });
-  }, [settore, risposte, protocollo, onStateChange]);
+  }, [settore, risposte, protocollo, agenti, dpi, onStateChange]);
 
   // Dirty tracking — anything entered for this sector counts as dirty.
   useEffect(() => {
     if (!hydrated) return;
     const hasAnswers = Object.keys(risposte).length > 0;
     const hasProtocollo = protocollo.trim().length > 0;
-    onDirtyChange?.(hasAnswers || hasProtocollo);
-  }, [hydrated, risposte, protocollo, onDirtyChange]);
+    onDirtyChange?.(hasAnswers || hasProtocollo || touchedExtras);
+  }, [hydrated, risposte, protocollo, touchedExtras, onDirtyChange]);
 
   // ------------------------------------------------------------------ Callbacks
   const setAnswer = useCallback(
@@ -601,6 +736,18 @@ export function BiologicoForm({
           )}
         </CardContent>
       </Card>
+
+      <MalattieContraibiliCard
+        agenti={agenti}
+        onChange={setAgenti}
+        onRestore={() => setAgenti(defaultsBySettore[settore]?.agenti ?? [])}
+      />
+
+      <DpiUtilizzatiCard
+        dpi={dpi}
+        onChange={setDpi}
+        onRestore={() => setDpi(defaultsBySettore[settore]?.dpi ?? [])}
+      />
 
       {/* Protocollo sanitario */}
       <Card>

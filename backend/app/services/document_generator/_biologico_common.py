@@ -95,12 +95,46 @@ async def build_biologico_document(
         column_widths_cm=[5.0, 1.8, 4.2, 5.5],
     )
 
+    # Segnalazione 2026-10-02: "malattie contraibili con sintomi e cura".
+    # Agenti saved before the change carry no sintomi/cura: take them from
+    # the sector defaults by agent name, so older valutazioni still print.
+    default_by_nome = {a.get("nome"): a for a in agenti_default}
+    malattie_rows = []
+    for a in agenti:
+        ref = default_by_nome.get(a.get("nome"), {})
+        sintomi = a.get("sintomi") or ref.get("sintomi") or ""
+        cura = a.get("cura") or ref.get("cura") or ""
+        if not (sintomi or cura):
+            continue
+        malattie_rows.append([
+            a.get("patologia") or ref.get("patologia") or "",
+            a.get("nome", ""),
+            sintomi,
+            cura,
+        ])
+    if malattie_rows:
+        add_heading(doc, "Malattie contraibili: sintomi e cura", level=1)
+        add_paragraph(
+            doc,
+            "Informazioni generali per i lavoratori sulle malattie trasmissibili dagli agenti "
+            "identificati. Non sostituiscono la valutazione del Medico Competente: in presenza "
+            "di sintomi il lavoratore si rivolge al proprio medico e lo segnala al datore di lavoro.",
+            italic=True,
+            size=9,
+        )
+        add_data_table(
+            doc,
+            ["Malattia", "Agente", "Sintomi principali", "Cura e profilassi"],
+            malattie_rows,
+            column_widths_cm=[3.4, 3.4, 5.0, 5.0],
+        )
+
     add_heading(doc, "Misure di prevenzione e protezione collettive", level=1)
     misure = (row.misure_protettive if row and row.misure_protettive else None) or [{"descrizione": m} for m in misure_default]
     for m in misure:
         add_paragraph(doc, f"• {m.get('descrizione', '')}")
 
-    add_heading(doc, "Dispositivi di protezione individuale (DPI)", level=1)
+    add_heading(doc, "Dispositivi di protezione individuale (DPI) utilizzati", level=1)
     dpi = (row.dpi_richiesti if row and row.dpi_richiesti else None) or [{"descrizione": d} for d in dpi_default]
     for d in dpi:
         add_paragraph(doc, f"• {d.get('descrizione', '')}")

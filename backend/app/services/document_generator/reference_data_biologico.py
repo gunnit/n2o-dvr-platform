@@ -1,19 +1,22 @@
 """Sector-specific knowledge bases for Rischio Biologico generators.
 
-Each entry: list of {nome, gruppo, via, patologia}.
+Each entry: list of {nome, gruppo, via, patologia, sintomi, cura}. ``sintomi``
+and ``cura`` (segnalazione 2026-10-02: "malattie contraibili con sintomi e
+cura") are short, general information for the workers; the operator reviews
+them and the Medico Competente has the final word.
 Groups per D.Lgs. 81/2008 Allegato XLVI (agenti biologici gruppi 1..4).
 """
 
 ALIMENTARE_AGENTI = [
-    {"nome": "Salmonella spp.", "gruppo": "2", "via": "Ingestione", "patologia": "Salmonellosi, tossinfezione alimentare"},
-    {"nome": "Listeria monocytogenes", "gruppo": "2", "via": "Ingestione", "patologia": "Listeriosi, gastroenterite"},
-    {"nome": "Escherichia coli (STEC/EHEC)", "gruppo": "2", "via": "Ingestione", "patologia": "Gastroenterite emorragica, SEU"},
-    {"nome": "Staphylococcus aureus", "gruppo": "2", "via": "Ingestione/contatto", "patologia": "Tossinfezione alimentare"},
-    {"nome": "Clostridium botulinum", "gruppo": "2", "via": "Ingestione", "patologia": "Botulismo"},
-    {"nome": "Clostridium perfringens", "gruppo": "2", "via": "Ingestione", "patologia": "Tossinfezione gastroenterica"},
-    {"nome": "Norovirus", "gruppo": "2", "via": "Oro-fecale", "patologia": "Gastroenterite acuta virale"},
-    {"nome": "Epatite A", "gruppo": "2", "via": "Oro-fecale", "patologia": "Epatite acuta"},
-    {"nome": "Campylobacter jejuni", "gruppo": "2", "via": "Ingestione", "patologia": "Enterite"},
+    {"nome": "Salmonella spp.", "gruppo": "2", "via": "Ingestione", "patologia": "Salmonellosi, tossinfezione alimentare", "sintomi": "Diarrea, febbre, crampi addominali, nausea e vomito, 12-72 ore dopo l'ingestione", "cura": "Reidratazione orale; antibiotico solo su prescrizione medica nei casi gravi. Allontanamento dalla manipolazione degli alimenti fino a guarigione"},
+    {"nome": "Listeria monocytogenes", "gruppo": "2", "via": "Ingestione", "patologia": "Listeriosi, gastroenterite", "sintomi": "Febbre, dolori muscolari, nausea e diarrea; nelle forme invasive meningite o setticemia. In gravidanza rischio di aborto e infezione del feto", "cura": "Terapia antibiotica su prescrizione medica; visita urgente in gravidanza in caso di febbre"},
+    {"nome": "Escherichia coli (STEC/EHEC)", "gruppo": "2", "via": "Ingestione", "patologia": "Gastroenterite emorragica, SEU", "sintomi": "Crampi addominali intensi e diarrea anche con sangue; possibile sindrome emolitico-uremica (SEU)", "cura": "Reidratazione e controllo medico; gli antibiotici sono di norma sconsigliati. Ricovero in caso di SEU"},
+    {"nome": "Staphylococcus aureus", "gruppo": "2", "via": "Ingestione/contatto", "patologia": "Tossinfezione alimentare", "sintomi": "Nausea, vomito improvviso e crampi addominali da 30 minuti a 8 ore dopo il pasto; lesioni cutanee infette se per contatto", "cura": "Reidratazione; risoluzione spontanea in 1-2 giorni. Coprire ferite e lesioni delle mani prima di manipolare alimenti"},
+    {"nome": "Clostridium botulinum", "gruppo": "2", "via": "Ingestione", "patologia": "Botulismo", "sintomi": "Visione doppia, palpebre cadenti, difficoltà a deglutire e a parlare, debolezza muscolare discendente fino all'insufficienza respiratoria", "cura": "Emergenza medica: chiamare il 112. Antitossina botulinica e supporto respiratorio in ospedale"},
+    {"nome": "Clostridium perfringens", "gruppo": "2", "via": "Ingestione", "patologia": "Tossinfezione gastroenterica", "sintomi": "Diarrea e crampi addominali 8-16 ore dopo il pasto, raramente febbre o vomito", "cura": "Reidratazione; risoluzione spontanea in circa 24 ore"},
+    {"nome": "Norovirus", "gruppo": "2", "via": "Oro-fecale", "patologia": "Gastroenterite acuta virale", "sintomi": "Vomito e diarrea improvvisi, nausea, crampi, talvolta febbre lieve; molto contagioso", "cura": "Reidratazione; non esiste terapia specifica. Astensione dal lavoro con alimenti fino a 48 ore dopo la fine dei sintomi"},
+    {"nome": "Epatite A", "gruppo": "2", "via": "Oro-fecale", "patologia": "Epatite acuta", "sintomi": "Stanchezza, febbre, nausea, dolore addominale, urine scure e ittero (pelle e occhi gialli)", "cura": "Nessuna terapia specifica: riposo e controllo medico. Prevenzione con vaccino anti-epatite A"},
+    {"nome": "Campylobacter jejuni", "gruppo": "2", "via": "Ingestione", "patologia": "Enterite", "sintomi": "Diarrea anche con sangue, febbre, dolori addominali 2-5 giorni dopo l'ingestione", "cura": "Reidratazione; antibiotico su prescrizione medica nei casi gravi"},
 ]
 ALIMENTARE_MISURE = [
     "Catena del freddo: prodotti freschi a 0-4 C, surgelati a -18 C",
@@ -39,16 +42,16 @@ ALIMENTARE_PROTOCOLLO = (
 )
 
 ASILO_AGENTI = [
-    {"nome": "Virus sinciziale respiratorio (VRS)", "gruppo": "2", "via": "Aerogena/contatto", "patologia": "Bronchiolite, polmonite"},
-    {"nome": "Rotavirus", "gruppo": "2", "via": "Oro-fecale", "patologia": "Gastroenterite infantile"},
-    {"nome": "Virus varicella-zoster", "gruppo": "2", "via": "Aerogena/contatto", "patologia": "Varicella"},
-    {"nome": "Virus parotite", "gruppo": "2", "via": "Aerogena/contatto", "patologia": "Parotite epidemica"},
-    {"nome": "Virus morbillo", "gruppo": "2", "via": "Aerogena", "patologia": "Morbillo"},
-    {"nome": "Virus rosolia", "gruppo": "2", "via": "Aerogena", "patologia": "Rosolia (rischio per gestanti)"},
-    {"nome": "Streptococcus pyogenes", "gruppo": "2", "via": "Aerogena/contatto", "patologia": "Faringite, scarlattina"},
-    {"nome": "Pediculus humanus capitis", "gruppo": "1", "via": "Contatto diretto", "patologia": "Pediculosi"},
-    {"nome": "Sarcoptes scabiei", "gruppo": "2", "via": "Contatto diretto", "patologia": "Scabbia"},
-    {"nome": "Parvovirus B19", "gruppo": "2", "via": "Aerogena", "patologia": "Megaloeritema (rischio per gestanti)"},
+    {"nome": "Virus sinciziale respiratorio (VRS)", "gruppo": "2", "via": "Aerogena/contatto", "patologia": "Bronchiolite, polmonite", "sintomi": "Raffreddore, tosse e febbre nell'adulto; nei bambini piccoli difficoltà respiratoria e bronchiolite", "cura": "Terapia dei sintomi; consultare il medico se compare difficoltà respiratoria"},
+    {"nome": "Rotavirus", "gruppo": "2", "via": "Oro-fecale", "patologia": "Gastroenterite infantile", "sintomi": "Vomito, diarrea acquosa e febbre, soprattutto nei bambini", "cura": "Reidratazione; igiene accurata delle mani e delle superfici del cambio"},
+    {"nome": "Virus varicella-zoster", "gruppo": "2", "via": "Aerogena/contatto", "patologia": "Varicella", "sintomi": "Febbre e vescicole pruriginose diffuse; più grave nell'adulto non immune e in gravidanza", "cura": "Antivirale su prescrizione medica; prevenzione con vaccino nei lavoratori non immuni"},
+    {"nome": "Virus parotite", "gruppo": "2", "via": "Aerogena/contatto", "patologia": "Parotite epidemica", "sintomi": "Febbre e gonfiore doloroso delle ghiandole salivari sotto le orecchie; nell'adulto possibile orchite", "cura": "Terapia dei sintomi; prevenzione con vaccino MPR"},
+    {"nome": "Virus morbillo", "gruppo": "2", "via": "Aerogena", "patologia": "Morbillo", "sintomi": "Febbre alta, tosse, congiuntivite, poi esantema diffuso; possibili complicanze polmonari e neurologiche", "cura": "Terapia dei sintomi e controllo medico; prevenzione con vaccino MPR"},
+    {"nome": "Virus rosolia", "gruppo": "2", "via": "Aerogena", "patologia": "Rosolia (rischio per gestanti)", "sintomi": "Febbre lieve, linfonodi ingrossati, esantema; in gravidanza grave rischio di malformazioni fetali", "cura": "Terapia dei sintomi; prevenzione con vaccino MPR prima della gravidanza"},
+    {"nome": "Streptococcus pyogenes", "gruppo": "2", "via": "Aerogena/contatto", "patologia": "Faringite, scarlattina", "sintomi": "Mal di gola intenso, febbre, linfonodi del collo ingrossati; nella scarlattina esantema puntiforme", "cura": "Terapia antibiotica su prescrizione medica; rientro dopo almeno 24-48 ore di antibiotico"},
+    {"nome": "Pediculus humanus capitis", "gruppo": "1", "via": "Contatto diretto", "patologia": "Pediculosi", "sintomi": "Prurito al cuoio capelluto, presenza di pidocchi e lendini", "cura": "Trattamento antiparassitario locale e rimozione delle lendini; lavaggio a caldo di indumenti e biancheria"},
+    {"nome": "Sarcoptes scabiei", "gruppo": "2", "via": "Contatto diretto", "patologia": "Scabbia", "sintomi": "Prurito intenso, soprattutto notturno, con piccole lesioni tra le dita, ai polsi e alle pieghe cutanee", "cura": "Trattamento scabicida su prescrizione medica esteso ai conviventi; lavaggio a caldo di biancheria e indumenti"},
+    {"nome": "Parvovirus B19", "gruppo": "2", "via": "Aerogena", "patologia": "Megaloeritema (rischio per gestanti)", "sintomi": "Sintomi simil-influenzali, eritema alle guance, dolori articolari; in gravidanza rischio di anemia fetale", "cura": "Terapia dei sintomi; in gravidanza controllo specialistico in caso di contatto"},
 ]
 ASILO_MISURE = [
     "Aerazione frequente degli ambienti (almeno 4 volte/giorno)",
@@ -73,14 +76,14 @@ ASILO_PROTOCOLLO = (
 )
 
 DENTISTI_AGENTI = [
-    {"nome": "Virus dell'epatite B (HBV)", "gruppo": "3**", "via": "Parenterale/mucose", "patologia": "Epatite cronica B"},
-    {"nome": "Virus dell'epatite C (HCV)", "gruppo": "3**", "via": "Parenterale", "patologia": "Epatite cronica C"},
-    {"nome": "HIV", "gruppo": "3**", "via": "Parenterale/mucose", "patologia": "AIDS"},
-    {"nome": "Mycobacterium tuberculosis", "gruppo": "3", "via": "Aerogena", "patologia": "Tubercolosi"},
-    {"nome": "Streptococcus mutans / Treponema denticola", "gruppo": "2", "via": "Contatto/aerosol", "patologia": "Carie, parodontite"},
-    {"nome": "Herpes simplex virus (HSV-1)", "gruppo": "2", "via": "Contatto/aerosol", "patologia": "Herpes labiale e erpete digitale"},
-    {"nome": "Virus dell'influenza", "gruppo": "2", "via": "Aerogena", "patologia": "Influenza stagionale"},
-    {"nome": "SARS-CoV-2", "gruppo": "3", "via": "Aerogena", "patologia": "COVID-19"},
+    {"nome": "Virus dell'epatite B (HBV)", "gruppo": "3**", "via": "Parenterale/mucose", "patologia": "Epatite cronica B", "sintomi": "Spesso senza sintomi; stanchezza, nausea, ittero; può evolvere in epatite cronica e cirrosi", "cura": "Profilassi post-esposizione (immunoglobuline e vaccino) entro poche ore; antivirali per la forma cronica. Prevenzione con vaccino anti-epatite B"},
+    {"nome": "Virus dell'epatite C (HCV)", "gruppo": "3**", "via": "Parenterale", "patologia": "Epatite cronica C", "sintomi": "Spesso senza sintomi per anni; stanchezza, ittero; possibile evoluzione in cirrosi", "cura": "Terapia antivirale specialistica, oggi molto efficace; controllo sierologico dopo esposizione accidentale"},
+    {"nome": "HIV", "gruppo": "3**", "via": "Parenterale/mucose", "patologia": "AIDS", "sintomi": "Fase iniziale simil-influenzale, poi lunga fase senza sintomi; in assenza di terapia immunodeficienza (AIDS)", "cura": "Profilassi post-esposizione con antiretrovirali da iniziare entro poche ore (al massimo 72) dall'incidente; terapia antiretrovirale a vita"},
+    {"nome": "Mycobacterium tuberculosis", "gruppo": "3", "via": "Aerogena", "patologia": "Tubercolosi", "sintomi": "Tosse persistente oltre 3 settimane, febbricola serale, sudorazione notturna, perdita di peso", "cura": "Terapia antibiotica combinata per almeno 6 mesi su prescrizione specialistica; test per l'infezione latente nei contatti"},
+    {"nome": "Streptococcus mutans / Treponema denticola", "gruppo": "2", "via": "Contatto/aerosol", "patologia": "Carie, parodontite", "sintomi": "Carie, infiammazione e sanguinamento delle gengive, parodontite", "cura": "Igiene orale e cure odontoiatriche; rischio professionale contenuto con le precauzioni standard"},
+    {"nome": "Herpes simplex virus (HSV-1)", "gruppo": "2", "via": "Contatto/aerosol", "patologia": "Herpes labiale e erpete digitale", "sintomi": "Vescicole dolorose sulle labbra o, se per contatto professionale, sulle dita (patereccio erpetico)", "cura": "Antivirale su prescrizione medica; guanti sempre integri durante le prestazioni"},
+    {"nome": "Virus dell'influenza", "gruppo": "2", "via": "Aerogena", "patologia": "Influenza stagionale", "sintomi": "Febbre alta improvvisa, dolori muscolari, mal di testa, tosse", "cura": "Riposo e terapia dei sintomi; antivirale su prescrizione nei soggetti a rischio. Prevenzione con vaccino annuale"},
+    {"nome": "SARS-CoV-2", "gruppo": "3", "via": "Aerogena", "patologia": "COVID-19", "sintomi": "Febbre, tosse, stanchezza, perdita di gusto o olfatto; possibili forme respiratorie gravi", "cura": "Terapia dei sintomi e indicazioni del medico; antivirali nei soggetti a rischio. Prevenzione con vaccino e FFP2 nelle manovre che generano aerosol"},
 ]
 DENTISTI_MISURE = [
     "Sterilizzazione strumenti riutilizzabili in autoclave classe B a 134 C per 3-4 minuti",
@@ -250,3 +253,18 @@ def classify_biologico(settore: str, risposte: list[dict]) -> dict:
         "livello": livello,
         "unanswered": unanswered,
     }
+
+
+def get_sector_defaults(settore: str) -> dict:
+    """Default agenti (with sintomi and cura) and DPI for a settore, used to
+    prefill the form. Raises ValueError for an unknown settore."""
+    key = (settore or "").strip().lower()
+    table = {
+        "alimentare": (ALIMENTARE_AGENTI, ALIMENTARE_DPI),
+        "asilo": (ASILO_AGENTI, ASILO_DPI),
+        "dentisti": (DENTISTI_AGENTI, DENTISTI_DPI),
+    }
+    if key not in table:
+        raise ValueError(f"Settore non riconosciuto: {settore!r}")
+    agenti, dpi = table[key]
+    return {"agenti": [dict(a) for a in agenti], "dpi": list(dpi)}
