@@ -19,6 +19,15 @@ from app.schemas.protocollo_sanitario import normalize_mansione
 from app.services.reference_data import DPI_CATALOG, RISCHI_SPECIFICI_CATALOG
 
 
+# Segnalazione 2026-10-02: N2O hid the protocollo sanitario module "per ora
+# non necessario". While False the UI does not offer it and DVR §4.3 ignores
+# saved protocols (an operator could no longer see or correct them), falling
+# back to the persona-based table. The API, the data and the tests stay, so
+# re-enabling is this flag plus PROTOCOLLO_SANITARIO_ENABLED in
+# frontend/src/lib/features.ts.
+PROTOCOLLO_SANITARIO_ATTIVO = False
+
+
 @dataclass
 class MansioneAggregate:
     mansione: str

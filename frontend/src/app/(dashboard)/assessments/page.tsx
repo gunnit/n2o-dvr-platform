@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label";
 import type { Azienda } from "@/types";
 import { apiCall } from "@/lib/api-client";
 import { Monogram, type AccentKey } from "@/components/cards/Monogram";
+import { PROTOCOLLO_SANITARIO_ENABLED } from "@/lib/features";
 import { cn } from "@/lib/utils";
 import { useEntitlementsContext } from "@/components/billing/entitlements-provider";
 import { isDocTypeGated } from "@/hooks/use-entitlements";
@@ -52,7 +53,7 @@ type AssessmentType = {
   accent: AccentKey;
 };
 
-const assessmentTypes: AssessmentType[] = [
+const allAssessmentTypes: AssessmentType[] = [
   {
     slug: "risk",
     docTypes: ["dvr_master"],
@@ -174,6 +175,11 @@ const assessmentTypes: AssessmentType[] = [
     accent: "emerald",
   },
 ];
+
+// Modules switched off on purpose stay out of the hub (lib/features.ts).
+const assessmentTypes = allAssessmentTypes.filter(
+  (t) => t.slug !== "protocollo-sanitario" || PROTOCOLLO_SANITARIO_ENABLED,
+);
 
 export default function AssessmentsIndexPage() {
   // What the *organization* bought. The other visibility axis — what this
