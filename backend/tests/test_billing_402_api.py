@@ -496,3 +496,27 @@ def test_lapsed_tenant_cannot_burn_unlimited_ai(monkeypatch):
     )
     assert resp.status_code == 402, resp.text
     assert called["n"] == 0, "the AI service was called for a tenant with no plan"
+
+
+def test_second_sede_may_share_the_partita_iva():
+    """Segnalazione 2026-10-02: each azienda row is a sede operativa, so a
+    second sede of the same company (same P.IVA) is created, not refused."""
+
+    async def body(client, t):
+        first = await client.post(
+            "/api/v1/aziende",
+            json={"ragione_sociale": "Rossi Srl - Milano", "partita_iva": "01234567890"},
+            headers=t.headers,
+        )
+        assert first.status_code == 201, first.text
+        return await client.post(
+            "/api/v1/aziende",
+            json={"ragione_sociale": "Rossi Srl - Torino", "partita_iva": "01234567890"},
+            headers=t.headers,
+        )
+
+    resp = _with_tenant(
+        "PYTEST_B_SAMEPIVA", True, body,
+        account_type="direct", max_sites=3, ai_credits_year=100,
+    )
+    assert resp.status_code == 201, resp.text

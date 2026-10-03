@@ -33,6 +33,7 @@ from app.core.permissions import ASSESSMENTS_WRITE
 from app.db.session import get_db
 from app.dependencies import get_current_org, require_capability
 from app.models.azienda import Azienda
+from app.models.ambiente import Ambiente
 from app.models.persona import Persona
 from app.models.vdt_valutazione import VdtValutazione
 from app.schemas.vdt import (
@@ -79,6 +80,22 @@ async def _validate_persona(
     )
     if result.scalar_one_or_none() is None:
         raise BadRequestError("persona_id non appartiene a questa azienda")
+
+
+async def _validate_ambiente(
+    azienda_id: uuid.UUID, ambiente_id: uuid.UUID | None, db: AsyncSession
+) -> None:
+    """The postazione's ambiente must belong to the same azienda (the form
+    now picks it from a dropdown, segnalazione 2026-10-02)."""
+    if ambiente_id is None:
+        return
+    result = await db.execute(
+        select(Ambiente.id).where(
+            Ambiente.id == ambiente_id, Ambiente.azienda_id == azienda_id
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise BadRequestError("ambiente_id non appartiene a questa azienda")
 
 
 def _apply_surveillance(out: dict[str, Any], esposto: bool) -> None:
@@ -202,6 +219,7 @@ async def create_vdt(
     await _get_azienda_or_404(azienda_id, org_id, db)
     payload = body.model_dump()
     await _validate_persona(azienda_id, payload.get("persona_id"), db)
+    await _validate_ambiente(azienda_id, payload.get("ambiente_id"), db)
 
     enriched = _apply_derived(payload)
     row = VdtValutazione(azienda_id=azienda_id, **enriched)
@@ -259,6 +277,8 @@ async def update_vdt(
     updates = body.model_dump(exclude_unset=True)
     if "persona_id" in updates:
         await _validate_persona(azienda_id, updates.get("persona_id"), db)
+    if "ambiente_id" in updates:
+        await _validate_ambiente(azienda_id, updates.get("ambiente_id"), db)
 
     previous_persona_id = row.persona_id
 

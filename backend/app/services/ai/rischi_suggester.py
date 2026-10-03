@@ -27,7 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.models.ambiente import Ambiente
 from app.models.attrezzatura import Attrezzatura
 from app.models.azienda import Azienda
-from app.services.ai.client import generate_structured
+from app.services.ai.client import extract_from_images, generate_structured
 from app.services.reference_data import (
     CATEGORIA_LONG_TO_SHORT,
     HAZARD_LIBRARY,
@@ -238,7 +238,59 @@ async def suggest_rischi(
         system=SYSTEM_PROMPT,
         reasoning_effort="medium",
     )
+    return _normalize_response(response)
 
+
+PHOTO_INSTRUCTIONS = """Le immagini allegate sono foto dell'ambiente di lavoro scattate durante
+il sopralluogo. Basa la valutazione su cio' che si vede nelle foto (macchine,
+impianti, scaffalature, sostanze, pavimenti, uscite, cavi, postazioni,
+illuminazione) e sul contesto testuale. Nel campo `pericolo` descrivi
+l'elemento osservato nelle foto quando c'e'. Non segnare come applicabile una
+categoria solo per supposizione: se le foto non mostrano nulla di pertinente
+usa il contesto testuale. Ignora eventuali persone ritratte e non descriverle."""
+
+
+async def suggest_rischi_from_photos(
+    ambiente: Ambiente,
+    azienda: Azienda,
+    attrezzature: list[Attrezzatura],
+    image_paths: list,
+) -> RischiSuggeriti:
+    """Same proposal as ``suggest_rischi``, grounded in the ambiente photos.
+
+    Segnalazione 2026-10-02: "creare una valutazione del rischio prendendo
+    spunto dall'immagine caricata dell'ambiente". Vision model, same 11
+    categories and the same server-side filter; nothing is persisted, the
+    operator reviews the proposal in the editor's review panel.
+    """
+    context = _build_context(ambiente, azienda, attrezzature)
+    catalog = _format_categories_for_prompt()
+    instructions = (
+        f"{PHOTO_INSTRUCTIONS}\n\n"
+        f"Contesto ambiente:\n{context}\n\n"
+        f"Catalogo delle 11 categorie di rischio (con esempi di pericolo):\n"
+        f"{catalog}\n\n"
+        f"Valuta tutte le 11 categorie per questo ambiente."
+    )
+    logger.info(
+        "Suggesting rischi from %d photos for ambiente %s of azienda %s",
+        len(image_paths),
+        ambiente.id,
+        azienda.id,
+    )
+    response = await extract_from_images(
+        image_paths,
+        schema=RischiSuggeriti,
+        instructions=instructions,
+        system=SYSTEM_PROMPT,
+        reasoning_effort="medium",
+    )
+    return _normalize_response(response)
+
+
+def _normalize_response(response: RischiSuggeriti) -> RischiSuggeriti:
+    """Keep the 11 canonical categories once each, filling any the model
+    omitted with a conservative non-applicable row."""
     # Server-side filter: accept only the 11 canonical short names.
     # Be lenient: if the model returned a long name, map back to short.
     short_set = set(RISK_CATEGORY_SHORT_NAMES)

@@ -121,11 +121,21 @@ class DecisionResponse(BaseModel):
 # -----------------------------------------------------------------------------
 
 
+
+def _check_periodo_maternita(inizio: date | None, fine: date | None) -> None:
+    if inizio and fine and fine < inizio:
+        raise ValueError(
+            "La data di fine maternità non può precedere la data di inizio"
+        )
+
+
 class GestantiCreate(BaseModel):
     persona_id: uuid.UUID
     stato: Stato = "gestante"
     data_notifica: date | None = None
     data_presunto_parto: date | None = None
+    data_inizio_maternita: date | None = None
+    data_fine_maternita: date | None = None
     misure_adeguamento: str | None = None
     mansione_alternativa: str | None = None
     richiesta_astensione_anticipata: bool = False
@@ -135,11 +145,18 @@ class GestantiCreate(BaseModel):
     firma_medico_competente: str | None = None
     note: str | None = None
 
+    @model_validator(mode="after")
+    def _periodo_maternita_ordinato(self):
+        _check_periodo_maternita(self.data_inizio_maternita, self.data_fine_maternita)
+        return self
+
 
 class GestantiUpdate(BaseModel):
     stato: Stato | None = None
     data_notifica: date | None = None
     data_presunto_parto: date | None = None
+    data_inizio_maternita: date | None = None
+    data_fine_maternita: date | None = None
     misure_adeguamento: str | None = None
     mansione_alternativa: str | None = None
     richiesta_astensione_anticipata: bool | None = None
@@ -148,6 +165,11 @@ class GestantiUpdate(BaseModel):
     firma_rspp: str | None = None
     firma_medico_competente: str | None = None
     note: str | None = None
+
+    @model_validator(mode="after")
+    def _periodo_maternita_ordinato(self):
+        _check_periodo_maternita(self.data_inizio_maternita, self.data_fine_maternita)
+        return self
 
 
 class GestantiResponse(BaseModel):
@@ -159,6 +181,8 @@ class GestantiResponse(BaseModel):
     stato: str
     data_notifica: date | None
     data_presunto_parto: date | None
+    data_inizio_maternita: date | None = None
+    data_fine_maternita: date | None = None
     rischi_vietati: list[Any]
     misure_adeguamento: str | None
     mansione_alternativa: str | None

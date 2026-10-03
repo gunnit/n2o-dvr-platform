@@ -238,6 +238,21 @@ _NIOSH_DERIVED_FIELDS = (
 )
 
 
+def _stored_cp_override(row: MmcValutazione) -> float | None:
+    """The stored CP, but only when it is a real operator override.
+
+    Every row stores a resolved CP, including the plain table value, so a raw
+    `row.cp` cannot be read as an override: doing so froze the CP at creation
+    and ignored later changes of sesso or fascia d'età. A CP equal to the table
+    value for the row's own sesso and fascia is the default, not an override.
+    """
+    if row.cp is None:
+        return None
+    stored = float(row.cp)
+    default = _resolve_cp(row.sesso or "M", row.fascia_eta or ">18", None)
+    return None if abs(stored - default) < 1e-9 else stored
+
+
 def _build_patch_assignments(
     row: MmcValutazione, updates: dict[str, Any]
 ) -> dict[str, Any]:
@@ -256,7 +271,7 @@ def _build_patch_assignments(
     assignments: dict[str, Any] = dict(updates)
 
     niosh_inputs_changed = any(k in updates for k in _NIOSH_INPUT_FIELDS)
-    if not niosh_inputs_changed:
+    if not niosh_inputs_changed and "cp" not in updates:
         return assignments
 
     # Recompute multipliers from merged (current row + updates) state.
@@ -273,9 +288,13 @@ def _build_patch_assignments(
             float(row.frequenza_atti_min) if row.frequenza_atti_min is not None else None
         ),
         "durata_min": row.durata_min,
-        "cp": float(row.cp) if row.cp is not None else None,
+        "cp": _stored_cp_override(row),
     }
     current.update({k: updates[k] for k in _NIOSH_INPUT_FIELDS if k in updates})
+    if "cp" in updates:
+        # Explicit choice from the client: a number overrides, null means
+        # "back to the standard table".
+        current["cp"] = updates["cp"]
     enriched = _apply_niosh(current)
     for k in _NIOSH_DERIVED_FIELDS:
         assignments[k] = enriched[k]

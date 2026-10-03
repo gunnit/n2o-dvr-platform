@@ -71,6 +71,9 @@ class MmcValutazioneUpdate(BaseModel):
     giudizio_presa: GiudizioPresa | None = None
     frequenza_atti_min: float | None = Field(None, ge=0, le=30)
     durata_min: int | None = Field(None, ge=0, le=480)
+    # Operator CP override; null resets to the standard table. Previously
+    # missing here, so a CP changed on an existing evaluation was dropped.
+    cp: float | None = Field(None, gt=0, le=40)
     note: str | None = None
     misure_proposte: str | None = None
 

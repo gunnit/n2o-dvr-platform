@@ -156,15 +156,49 @@ def test_overview_merges_saved_valutazione():
 
 
 def test_overview_keeps_saved_rows_after_staff_turnover():
-    """A mansione assessed in the past stays listed even when nobody holds
-    it any more — the preventive valutazione outlives the organigramma."""
+    """A mansione assessed in the past (or added by hand) stays listed even
+    when nobody holds it any more."""
     saved = _saved_row("Magazziniera", esito="non_compatibile", misure="x" * 12)
     items = build_mansioni_overview([_persona("Impiegata")], [saved])
-    mansioni = {it.mansione for it in items}
-    assert "Magazziniera" in mansioni
     orphan = next(it for it in items if it.mansione == "Magazziniera")
     assert orphan.num_persone == 0
     assert orphan.valutazione is not None
+
+
+def test_overview_hides_saved_row_when_only_men_hold_the_mansione():
+    saved = _saved_row("Magazziniere", esito="compatibile")
+    items = build_mansioni_overview([_persona("magazziniere", sesso="M")], [saved])
+    assert items == []
+
+
+def test_overview_skips_mansioni_held_only_by_men():
+    persone = [
+        _persona("Carpentiere", sesso="M"),
+        _persona("Carpentiere", sesso="M"),
+        _persona("Impiegata", sesso="F"),
+    ]
+    items = build_mansioni_overview(persone, saved=[])
+    assert [it.mansione for it in items] == ["Impiegata"]
+
+
+def test_overview_reads_sex_from_codice_fiscale_when_sesso_is_empty():
+    """Day digits 41-71 in the CF mark a woman; sesso left blank is common."""
+    donna = SimpleNamespace(mansione="Cuoca", sesso=None, codice_fiscale="RSSMRA85T50H501Z")
+    uomo = SimpleNamespace(mansione="Autista", sesso="", codice_fiscale="RSSMRA85T10H501Z")
+    items = build_mansioni_overview([donna, uomo], saved=[])
+    assert [(it.mansione, it.num_lavoratrici) for it in items] == [("Cuoca", 1)]
+
+
+def test_overview_keeps_mansioni_whose_holders_have_no_recorded_sex():
+    """Sesso blank and no usable CF: unknown, not male, so not hidden."""
+    ignoto = SimpleNamespace(mansione="Commessa", sesso=None, codice_fiscale=None)
+    items = build_mansioni_overview([ignoto], saved=[])
+    assert [it.mansione for it in items] == ["Commessa"]
+
+
+def test_overview_sesso_is_case_and_whitespace_tolerant():
+    items = build_mansioni_overview([_persona("Barista", sesso=" f ")], saved=[])
+    assert items[0].num_lavoratrici == 1
 
 
 def test_overview_skips_blank_mansioni():
@@ -294,3 +328,29 @@ def test_mansioni_endpoints_exist_with_expected_methods():
         "DELETE",
         "/aziende/{azienda_id}/gestanti/mansioni/{mansione_valutazione_id}",
     ) in pairs
+
+
+# ---------------------------------------------------------------------------
+# Periodo di maternità replaces the expected delivery date (2026-10-02)
+# ---------------------------------------------------------------------------
+
+
+def test_periodo_maternita_end_cannot_precede_start():
+    import datetime as dt
+
+    import pytest
+    from pydantic import ValidationError
+
+    from app.schemas.gestanti import GestantiCreate, GestantiUpdate
+
+    ok = GestantiUpdate(
+        data_inizio_maternita=dt.date(2026, 11, 1),
+        data_fine_maternita=dt.date(2027, 4, 1),
+    )
+    assert ok.data_fine_maternita == dt.date(2027, 4, 1)
+    with pytest.raises(ValidationError):
+        GestantiCreate(
+            persona_id=uuid4(),
+            data_inizio_maternita=dt.date(2026, 11, 1),
+            data_fine_maternita=dt.date(2026, 10, 1),
+        )

@@ -22,6 +22,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { EmptyStateCard } from "@/components/ui/empty-state";
 import { useApi } from "@/hooks/use-api";
+import { PROTOCOLLO_SANITARIO_ENABLED } from "@/lib/features";
 import type { Azienda } from "@/types";
 
 import { MansioneCard } from "@/components/assessments/protocollo-sanitario/mansione-card";
@@ -33,6 +34,32 @@ import type {
 } from "@/components/assessments/protocollo-sanitario/types";
 
 export default function ProtocolloSanitarioPage() {
+  // Hidden on request (segnalazione 2026-10-02); see lib/features.ts.
+  if (!PROTOCOLLO_SANITARIO_ENABLED) return <ProtocolloSanitarioNonAttivo />;
+  return <ProtocolloSanitarioContent />;
+}
+
+function ProtocolloSanitarioNonAttivo() {
+  return (
+    <div className="mx-auto max-w-2xl py-8">
+      <EmptyStateCard
+        icon={Stethoscope}
+        title="Protocollo sanitario non attivo"
+        body="Questa valutazione è stata disattivata per ora. La sorveglianza sanitaria nel DVR resta compilata dai rischi e dai DPI delle persone censite."
+        action={
+          <Link
+            href="/assessments"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Torna alle valutazioni
+          </Link>
+        }
+      />
+    </div>
+  );
+}
+
+function ProtocolloSanitarioContent() {
   const params = useParams<{ aziendaId: string }>();
   const aziendaId = params.aziendaId;
   const { apiFetch } = useApi();

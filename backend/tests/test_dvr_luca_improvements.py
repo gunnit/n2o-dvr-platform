@@ -663,7 +663,7 @@ def _generator_patch_surface():
     loader_modules = [
         (allegato_mmc, "load_mmc"),
         (allegato_vdt, "load_vdt"),
-        (allegato_stress, "load_stress"),
+        (allegato_stress, "load_stress_all"),
         (allegato_incendio, "load_incendio"),
         (allegato_microclima, "load_microclima"),
         (allegato_microclima_severo, "load_microclima"),
@@ -679,6 +679,7 @@ def _generator_patch_surface():
         "load_mmc",
         "load_vdt",
         "load_stress",
+        "load_stress_all",
         "load_incendio",
         "load_microclima",
         "load_gestanti",

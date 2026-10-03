@@ -31,6 +31,8 @@ export interface FemaleWorker {
   id: string;
   nominativo: string;
   mansione: string | null;
+  /** Sesso not recorded and not derivable from the codice fiscale. */
+  sessoNonIndicato?: boolean;
 }
 
 // ---------------------------------------------------------------------------

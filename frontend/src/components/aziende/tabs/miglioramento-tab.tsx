@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Check,
+  HandHelping,
+  HelpCircle,
   ListPlus,
   Pencil,
   Plus,
@@ -39,6 +41,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { NoticeDialog, useOnceNotice } from "@/components/ui/notice-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useApi } from "@/hooks/use-api";
 import type { LivelloRischio } from "@/types";
@@ -229,6 +232,9 @@ function PriorityCell({ priorita }: { priorita: string | null }) {
 
 export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
   const { apiFetch } = useApi();
+  // Segnalazione 2026-10-02: the long list of proposed measures scares
+  // operators. Explain once per azienda; the "?" button reopens it.
+  const aiutoNotice = useOnceNotice(`n2o:miglioramento-aiuto:${aziendaId}`);
 
   const [rows, setRows] = useState<MisuraMiglioramento[]>([]);
   const [loading, setLoading] = useState(true);
@@ -526,6 +532,18 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
 
   return (
     <Panel accent="navy">
+      <NoticeDialog
+        open={aiutoNotice.open}
+        onAcknowledge={aiutoNotice.acknowledge}
+        title="Ti aiuto io!"
+        icon={HandHelping}
+      >
+        <p>
+          Non spaventarti se vedi tutti questi piani di miglioramento: devi
+          semplicemente scegliere quelli che credi siano inerenti alla tua
+          attività.
+        </p>
+      </NoticeDialog>
       <PanelHeader
         icon={Target}
         title="Piano di Miglioramento"
@@ -536,6 +554,16 @@ export default function MiglioramentoTab({ aziendaId }: MiglioramentoTabProps) {
           // panel. They wrap among themselves once the header has already
           // dropped them onto their own row.
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={aiutoNotice.show}
+              title="Come scegliere le misure di miglioramento"
+              aria-label="Come scegliere le misure di miglioramento"
+            >
+              <HelpCircle className="h-3.5 w-3.5" strokeWidth={2} />
+            </Button>
             <Button
               type="button"
               size="sm"

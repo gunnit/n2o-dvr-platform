@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/table";
 import {
   AlertTriangle,
+  Camera,
   Check,
   CloudOff,
   Loader2,
@@ -56,6 +57,7 @@ import {
 } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Callout } from "@/components/ui/callout";
+import { NoticeDialog, useOnceNotice } from "@/components/ui/notice-dialog";
 
 // Shape of POST .../rischi/suggerisci — held for review before it is
 // applied (see aiProposalByAmbiente).
@@ -893,15 +895,18 @@ export function RischiEditor({
   // operator presses "Applica" in the proposal panel (meeting 2026-09-04:
   // the categories the AI excludes must be visible and restorable, not
   // silently unticked).
-  const fetchAIRischi = useCallback(async () => {
+  // `fromPhotos` grounds the proposal in the ambiente's sopralluogo photos
+  // (segnalazione 2026-10-02); both land in the same review panel.
+  const fetchAIRischi = useCallback(async (fromPhotos = false) => {
     if (!selectedAmbiente) return;
     const ambienteId = selectedAmbiente.id;
     setAiLoadingByAmbiente((prev) => ({ ...prev, [ambienteId]: true }));
     try {
-      const response = await apiFetch<AiRischiProposal>(
-        `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/rischi/suggerisci`,
-        { method: "POST" },
-      );
+      // Literal paths, so the feature map can see both call sites.
+      const url = fromPhotos
+        ? `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/rischi/suggerisci-da-foto`
+        : `/api/v1/aziende/${aziendaId}/ambienti/${ambienteId}/rischi/suggerisci`;
+      const response = await apiFetch<AiRischiProposal>(url, { method: "POST" });
       setAiProposalByAmbiente((prev) => ({ ...prev, [ambienteId]: response }));
       // Every proposed change starts selected; the operator unticks what
       // they disagree with. Unticking an exclusion keeps the category as it
@@ -913,10 +918,11 @@ export function RischiEditor({
         ),
       }));
       const esclusi = response.items.filter((i) => !i.applicabile).length;
+      const fonte = fromPhotos ? "Proposta AI dalle foto" : "Proposta AI";
       toast.info(
         esclusi > 0
-          ? `Proposta AI pronta: ${response.items.length - esclusi} categorie applicabili, ${esclusi} escluse. Controlla e applica.`
-          : `Proposta AI pronta: ${response.items.length} categorie. Controlla e applica.`,
+          ? `${fonte} pronta: ${response.items.length - esclusi} categorie applicabili, ${esclusi} escluse. Controlla e applica.`
+          : `${fonte} pronta: ${response.items.length} categorie. Controlla e applica.`,
       );
     } catch (err) {
       toast.error(
@@ -1028,6 +1034,16 @@ export function RischiEditor({
     updateLocalValutazioni,
   ]);
 
+  // Segnalazione 2026-10-02: at the start of each ambiente's evaluation the
+  // operator acknowledges that every risk needs their own manual judgement.
+  // Once per ambiente per browser session, so it returns on the next visit.
+  const disclaimer = useOnceNotice(
+    !loadingInitial && selectedAmbiente
+      ? `n2o:rischi-disclaimer:${selectedAmbiente.id}`
+      : null,
+    "session",
+  );
+
   if (ambienti.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-input bg-muted/30 py-12">
@@ -1053,6 +1069,25 @@ export function RischiEditor({
 
   return (
     <div className="space-y-6">
+      <NoticeDialog
+        open={disclaimer.open}
+        onAcknowledge={disclaimer.acknowledge}
+        title={`Valutazione dei rischi — ${selectedAmbiente?.nome ?? "ambiente"}`}
+        confirmLabel="Ho letto, procedo"
+        icon={AlertTriangle}
+      >
+        <p>
+          Tutti i rischi individuati all&apos;interno della piattaforma devono
+          essere preventivamente ed espressamente oggetto di valutazione
+          manuale da parte dell&apos;operatore umano preposto.
+        </p>
+        <p>
+          La valutazione generata dai sistemi di intelligenza artificiale ha
+          carattere meramente indicativo e di supporto e non sostituisce in
+          alcun caso l&apos;analisi, il giudizio e la decisione finale
+          dell&apos;operatore.
+        </p>
+      </NoticeDialog>
       {/* Ambiente selector */}
       <div>
         <div className="space-y-3">
@@ -1110,7 +1145,7 @@ export function RischiEditor({
               type="button"
               variant="outline"
               size="sm"
-              onClick={fetchAIRischi}
+              onClick={() => fetchAIRischi(false)}
               disabled={
                 !selectedAmbiente ||
                 aiLoadingByAmbiente[selectedAmbiente.id] === true
@@ -1129,6 +1164,21 @@ export function RischiEditor({
                   Suggerisci con AI
                 </>
               )}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fetchAIRischi(true)}
+              disabled={
+                !selectedAmbiente ||
+                aiLoadingByAmbiente[selectedAmbiente.id] === true
+              }
+              title="Proposta basata sulle foto dell'ambiente caricate nel sopralluogo"
+              className="border-[rgba(124,58,237,0.34)] text-[#5b21b6] hover:bg-[rgba(124,58,237,0.08)]"
+            >
+              <Camera className="mr-1.5 h-3.5 w-3.5" />
+              Suggerisci dalle foto
             </Button>
             <Button
               type="button"

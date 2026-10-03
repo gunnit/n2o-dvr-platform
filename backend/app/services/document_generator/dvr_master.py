@@ -39,6 +39,7 @@ from app.data.regional_regulations import get_regulations_for_comune
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.design import finish_document, setup_document
 from app.services.document_generator.docx_utils import HEADER_BG, LIGHT_GRAY, RISK_COLORS
+from app.services.protocollo_sanitario import PROTOCOLLO_SANITARIO_ATTIVO
 from app.services.reference_data import (
     HAZARD_LIBRARY,
     RISK_CATEGORIES,
@@ -3794,7 +3795,9 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 self._add_sorveglianza_protocol_table(
                     doc,
                     employee_persons,
-                    extras.get("protocolli_sanitari") or [],
+                    (extras.get("protocolli_sanitari") or [])
+                    if PROTOCOLLO_SANITARIO_ATTIVO
+                    else [],
                 )
 
         # Cross-reference applicable allegati by name (audit F-016).

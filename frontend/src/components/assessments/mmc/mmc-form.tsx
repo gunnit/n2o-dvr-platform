@@ -451,20 +451,33 @@ export function MmcForm({
     return () => sub.unsubscribe();
   }, [form, onInputsChange]);
 
-  const onSubmit = form.handleSubmit(async (v) => {
-    const cpErr = validateCpOverride(v);
-    if (cpErr) {
-      form.setError("cp_motivazione", { type: "manual", message: cpErr });
-      return;
-    }
-    const result = await onFinalize?.(v, aggregate);
-    // Caller opts in to the dirty-reset by returning `true` from the
-    // success branch. Anything else leaves the form alone — operators
-    // need to see "Modifiche non salvate" stay on after a failed save.
-    if (result === true) {
-      form.reset(v);
-    }
-  });
+  // A blocked submit used to be silent: the failing field could sit in a
+  // collapsed panel (the CP motivazione) and the operator saw nothing happen.
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const onSubmit = form.handleSubmit(
+    async (v) => {
+      setSubmitError(null);
+      const cpErr = validateCpOverride(v);
+      if (cpErr) {
+        form.setError("cp_motivazione", { type: "manual", message: cpErr });
+        setSubmitError(cpErr);
+        return;
+      }
+      const result = await onFinalize?.(v, aggregate);
+      // Caller opts in to the dirty-reset by returning `true` from the
+      // success branch. Anything else leaves the form alone — operators
+      // need to see "Modifiche non salvate" stay on after a failed save.
+      if (result === true) {
+        form.reset(v);
+      }
+    },
+    () => {
+      setSubmitError(
+        "Valutazione non salvata: controlla i campi evidenziati in rosso.",
+      );
+    },
+  );
 
   const isDirty = form.formState.isDirty;
 
@@ -575,7 +588,12 @@ export function MmcForm({
                 : "Compila i parametri e salva la valutazione."}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {submitError && (
+              <p role="alert" className="text-xs font-medium text-destructive">
+                {submitError}
+              </p>
+            )}
             <Button type="submit" disabled={finalizing}>
               {finalizing ? "Salvataggio in corso..." : "Salva valutazione"}
             </Button>

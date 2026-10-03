@@ -233,9 +233,22 @@ class BiologicoChecklistItem(BaseModel):
     criticita: _Literal["alta", "media", "bassa"]
 
 
+class BiologicoAgenteDefault(BaseModel):
+    nome: str
+    gruppo: str
+    via: str
+    patologia: str
+    sintomi: str
+    cura: str
+
+
 class BiologicoChecklistResponse(BaseModel):
     settore: _Literal["alimentare", "asilo", "dentisti"]
     items: list[BiologicoChecklistItem]
+    # Prefill for the "malattie contraibili" and "DPI utilizzati" cards
+    # (segnalazione 2026-10-02); the operator edits them in the form.
+    agenti: list[BiologicoAgenteDefault] = []
+    dpi: list[str] = []
 
 
 # ---------------------------------------------------------------------------

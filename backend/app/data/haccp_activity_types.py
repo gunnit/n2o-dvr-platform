@@ -315,3 +315,107 @@ def merge_ccps(
             merged.append(dict(row))
 
     return merged, preserved
+
+
+# ---------------------------------------------------------------------------
+# Process order (segnalazione 2026-10-02 "da rivedere passaggi HACCP")
+# ---------------------------------------------------------------------------
+# The CCP codes are historical (Ricevimento is CCP4), so lists sorted by code
+# read out of order. The manual and the form present them along the Codex
+# flow instead, from receipt to service. Igiene del personale and
+# sanificazione are good-hygiene prerequisites (SOP-03 and SSOP in the
+# manual), shown apart from the process CCPs.
+
+PROCESS_PHASES: list[tuple[str, frozenset[str]]] = [
+    ("Ricevimento merci", frozenset({"CCP4"})),
+    ("Stoccaggio (refrigerato, congelato, a temperatura ambiente)", frozenset({"CCP2"})),
+    ("Scongelamento", frozenset({"CCP3"})),
+    ("Preparazione e lavorazione", frozenset()),
+    ("Cottura", frozenset({"CCP1"})),
+    ("Abbattimento della temperatura", frozenset({"CCP5"})),
+    ("Trasporto", frozenset({"CCP6"})),
+    ("Somministrazione / vendita", frozenset()),
+]
+
+PREREQUISITE_CCP_CODES = frozenset({"CCP7", "CCP8"})
+
+# Activity types whose products are sold as received (no preparation step).
+_NO_PREPARATION = frozenset({"supermercato_retail"})
+
+# Keywords on nome + fase, checked in this order (scongelamento before the
+# storage words, since "scongelamento" contains "congel"). Codes are only a
+# fallback: CCPs added by hand or proposed by the AI number themselves.
+_PREREQUISITE_KEYWORDS = ("igiene del personale", "igiene personale", "pulizia", "sanificazione")
+_PHASE_KEYWORDS: list[tuple[int, tuple[str, ...]]] = [
+    (0, ("ricevimento", "accettazione")),
+    (2, ("scongel",)),
+    (5, ("abbatt", "raffreddamento")),
+    (6, ("trasporto",)),
+    (4, ("cottura", "trattamento termico", "forno", "frittura")),
+    (7, ("somministr", "vendita", "distribuz", "rigenerazione", "mantenimento a caldo")),
+    (1, ("stoccaggio", "conservazione", "frigo", "congel", "magazzin")),
+    (3, ("preparaz", "lavoraz", "porzionat")),
+]
+
+
+def _text(ccp: dict) -> str:
+    return f"{ccp.get('nome') or ''} {ccp.get('fase') or ''}".lower()
+
+
+def is_prerequisite(ccp: dict) -> bool:
+    text = _text(ccp)
+    if any(k in text for k in _PREREQUISITE_KEYWORDS):
+        return True
+    known = any(k in text for _i, kws in _PHASE_KEYWORDS for k in kws)
+    return not known and str(ccp.get("codice") or "").strip().upper() in PREREQUISITE_CCP_CODES
+
+
+def phase_index(ccp: dict) -> int | None:
+    """Index into PROCESS_PHASES, or None for an unclassifiable CCP."""
+    text = _text(ccp)
+    for index, keywords in _PHASE_KEYWORDS:
+        if any(k in text for k in keywords):
+            return index
+    code = str(ccp.get("codice") or "").strip().upper()
+    for index, (_name, codes) in enumerate(PROCESS_PHASES):
+        if code in codes:
+            return index
+    return None
+
+
+def ccp_process_key(ccp: dict) -> tuple:
+    """Sort key: process CCPs in flow order, unclassified ones just before
+    service, prerequisites last."""
+    code = str(ccp.get("codice") or "").strip().upper()
+    if is_prerequisite(ccp):
+        return (1, 0, code)
+    index = phase_index(ccp)
+    if index is None:
+        index = len(PROCESS_PHASES) - 1
+        return (0, index, 0, code)
+    return (0, index, -1, code)
+
+
+def process_flow(ccps: list[dict], tipologia: str | None = None) -> list[str]:
+    """Ordered process phases for the flow diagram.
+
+    Receipt, storage and service always apply; the other phases appear when
+    a CCP covers them, plus "Preparazione" for any activity that prepares
+    food. Unclassifiable CCPs contribute their own phase name before
+    service.
+    """
+    process = [c for c in ccps if not is_prerequisite(c)]
+    present = {phase_index(c) for c in process}
+    flow: list[str] = []
+    for index, (name, _codes) in enumerate(PROCESS_PHASES):
+        always = index in (0, 1, len(PROCESS_PHASES) - 1)
+        preparazione = index == 3 and (tipologia or "") not in _NO_PREPARATION
+        if not (always or preparazione or index in present):
+            continue
+        if index == len(PROCESS_PHASES) - 1:
+            for c in sorted(process, key=ccp_process_key):
+                fase = (c.get("fase") or c.get("nome") or "").strip()
+                if phase_index(c) is None and fase and fase not in flow:
+                    flow.append(fase)
+        flow.append(name)
+    return flow

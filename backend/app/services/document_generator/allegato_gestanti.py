@@ -1,12 +1,12 @@
 """Allegato Gestanti - D.Lgs. 151/2001."""
 
 import os
-from datetime import timedelta
 
 from docx import Document
 from sqlalchemy import func, select
 
 from app.models.documento_generato import DocumentoGenerato
+from app.services.gestanti_scope import male_only_mansione_keys, normalize_mansione
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import (
     load_gestanti,
@@ -117,6 +117,10 @@ def render_mansioni_section(doc, mansioni_vals: list) -> None:
     )
 
 
+def _fmt_date(d) -> str:
+    return d.strftime("%d/%m/%Y") if d else "—"
+
+
 class AllegatoGestantiGenerator(BaseDocumentGenerator):
     async def generate(self) -> str:
         data = await self.load_data()
@@ -127,7 +131,13 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
 
         # Preventive per-mansione valutazione (art. 11): rendered even with
         # zero pregnant workers.
-        mansioni_vals = await load_gestanti_mansioni(self.db, self.azienda_id)
+        # Mansioni held only by men are not assessed (segnalazione 2026-10-02).
+        male_only = male_only_mansione_keys(persone)
+        mansioni_vals = [
+            m
+            for m in await load_gestanti_mansioni(self.db, self.azienda_id)
+            if normalize_mansione(m.mansione).lower() not in male_only
+        ]
 
         # Resolve org-sicurezza nominatives once so each scheda's firma
         # table pre-fills the names; the operator only needs to add the
@@ -180,22 +190,16 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
             nome = g.persona.nominativo if getattr(g, "persona", None) else "—"
             add_heading(doc, f"{idx}. Scheda lavoratrice", level=2)
 
-            # Astensione obbligatoria: 2 mesi pre-parto + 3 mesi post-parto
-            # (art. 16 D.Lgs. 151/2001). Compute the window so the operator
-            # has a concrete date range, not just a yes/no flag.
-            astensione_window = "—"
-            if g.data_presunto_parto:
-                inizio = g.data_presunto_parto - timedelta(days=60)
-                fine = g.data_presunto_parto + timedelta(days=90)
-                astensione_window = f"{inizio.strftime('%d/%m/%Y')} → {fine.strftime('%d/%m/%Y')}"
-
             add_kv_table(doc, [
                 ("Lavoratrice", nome),
                 ("Mansione", getattr(g.persona, "mansione", None) if getattr(g, "persona", None) else "—"),
                 ("Stato", (g.stato or "").capitalize()),
                 ("Data notifica", g.data_notifica.strftime("%d/%m/%Y") if g.data_notifica else "—"),
-                ("Data presunto parto", g.data_presunto_parto.strftime("%d/%m/%Y") if g.data_presunto_parto else "—"),
-                ("Astensione obbligatoria (art. 16)", astensione_window),
+                # Periodo di maternità as entered by the operator, not the
+                # expected delivery date (segnalazione 2026-10-02). Rows saved
+                # before were prefilled by migration e1f2a3b4c5d7.
+                ("Inizio periodo di maternità", _fmt_date(g.data_inizio_maternita)),
+                ("Fine periodo di maternità", _fmt_date(g.data_fine_maternita)),
                 ("Mansione alternativa", g.mansione_alternativa or "—"),
                 ("Astensione anticipata richiesta (art. 17)", "SI - richiesta ispettorato del lavoro" if g.richiesta_astensione_anticipata else "NO"),
             ])

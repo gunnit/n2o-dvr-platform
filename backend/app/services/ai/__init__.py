@@ -46,6 +46,7 @@ from app.services.ai.rischi_suggester import (
     RischiSuggeriti,
     RischioSuggerito,
     suggest_rischi,
+    suggest_rischi_from_photos,
 )
 from app.services.ai.sds_extractor import (
     extract_sds,
@@ -98,6 +99,7 @@ __all__ = [
     "InterferenzeSuggerite",
     # Rischi suggestions per ambiente (Phase 8.3)
     "suggest_rischi",
+    "suggest_rischi_from_photos",
     "RischioSuggerito",
     "RischiSuggeriti",
 ]

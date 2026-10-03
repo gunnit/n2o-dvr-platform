@@ -26,6 +26,7 @@ import {
 } from "@/components/assessments/stress-checklist";
 import type { Azienda } from "@/types";
 import { throwApiError } from "@/lib/api-errors";
+import { NoticeDialog, useOnceNotice } from "@/components/ui/notice-dialog";
 
 // Inline copy of the library type. The orchestrator wires the canonical
 // definition into `frontend/src/types/index.ts`; keeping this declared
@@ -51,12 +52,23 @@ interface PersistedValutazione {
   punteggio_totale?: number | null;
 }
 
-const DEFAULT_MANSIONI = [
-  "Operaio",
-  "Impiegato",
-  "Dirigente",
-  "Preposto",
-];
+/** Collapse whitespace so "Cuoco " and "cuoco" count as one mansione. */
+function normalizeMansione(m: string | null | undefined): string {
+  return (m ?? "").trim().split(/\s+/).filter(Boolean).join(" ");
+}
+
+/** Add mansioni not already present, comparing case-insensitively. */
+function mergeMansioni(prev: string[], incoming: string[]): string[] {
+  const seen = new Set(prev.map((m) => m.toLowerCase()));
+  const out = [...prev];
+  for (const raw of incoming) {
+    const m = normalizeMansione(raw);
+    if (!m || seen.has(m.toLowerCase())) continue;
+    seen.add(m.toLowerCase());
+    out.push(m);
+  }
+  return out;
+}
 
 const DEFAULT_MEASURES: Record<Livello, string[]> = {
   BASSO: [
@@ -164,6 +176,15 @@ export default function StressAssessmentPage() {
   const [addingMansione, setAddingMansione] = useState(false);
   const [newMansioneName, setNewMansioneName] = useState("");
   const [summaries, setSummaries] = useState<MansioneSummary[]>([]);
+  // Mansioni of the persone censite in the sopralluogo. They replace the old
+  // hard-coded defaults (Operaio, Impiegato, ...), segnalazione 2026-10-02.
+  const [mansioniSopralluogo, setMansioniSopralluogo] = useState<string[]>([]);
+  // Segnalazione 2026-10-02: remind the operator, each time they open the
+  // page, that every mansione present needs its own assessment.
+  const perMansioneNotice = useOnceNotice(
+    aziendaId ? `n2o:stress-per-mansione:${aziendaId}` : null,
+    "session",
+  );
 
   // The tab value string: null mansione maps to "__generale__"
   const activeTabValue = activeMansione ?? "__generale__";
@@ -220,10 +241,7 @@ export default function StressAssessmentPage() {
         const saved = data
           .map((v) => v.mansione)
           .filter((m): m is string => m !== null);
-        setMansioni((prev) => {
-          const set = new Set([...prev, ...saved]);
-          return Array.from(set);
-        });
+        setMansioni((prev) => mergeMansioni(prev, saved));
       }
     } catch {
       // non-critical
@@ -309,16 +327,44 @@ export default function StressAssessmentPage() {
         );
         if (res.ok && !cancelled) {
           const data = (await res.json()) as string[];
-          setMansioni((prev) => {
-            const set = new Set([...prev, ...data]);
-            return Array.from(set);
-          });
+          setMansioni((prev) => mergeMansioni(prev, data));
         }
       } catch {
         // non-critical
       }
     }
     fetchMansioni();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl, aziendaId]);
+
+  // Load the mansioni censite in the sopralluogo and open a tab for each,
+  // so every mansione present is in front of the operator to be assessed.
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchMansioniSopralluogo() {
+      try {
+        const token = await getAuthToken();
+        const res = await fetch(`${apiUrl}/api/v1/aziende/${aziendaId}/persone`, {
+          headers: token
+            ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
+            : { "Content-Type": "application/json" },
+        });
+        if (!res.ok || cancelled) return;
+        const persone = (await res.json()) as { mansione: string | null }[];
+        const distinct = mergeMansioni(
+          [],
+          persone.map((p) => p.mansione ?? ""),
+        ).sort((a, b) => a.localeCompare(b, "it"));
+        if (cancelled) return;
+        setMansioniSopralluogo(distinct);
+        setMansioni((prev) => mergeMansioni(prev, distinct));
+      } catch {
+        // non-critical: the operator can still add mansioni by hand
+      }
+    }
+    if (aziendaId) fetchMansioniSopralluogo();
     return () => {
       cancelled = true;
     };
@@ -652,11 +698,18 @@ export default function StressAssessmentPage() {
     return "Caricamento...";
   }, [azienda, aziendaId, loadError]);
 
+  // Sopralluogo mansioni whose tab the operator closed: offered back as
+  // quick-add buttons, in place of the old generic defaults.
+  const mansioniDaRiaggiungere = useMemo(() => {
+    const open = new Set(mansioni.map((m) => m.toLowerCase()));
+    return mansioniSopralluogo.filter((m) => !open.has(m.toLowerCase()));
+  }, [mansioni, mansioniSopralluogo]);
+
   // Handle adding a new custom mansione
   const handleAddMansione = useCallback(() => {
-    const trimmed = newMansioneName.trim();
+    const trimmed = normalizeMansione(newMansioneName);
     if (!trimmed) return;
-    if (mansioni.includes(trimmed)) {
+    if (mansioni.some((m) => m.toLowerCase() === trimmed.toLowerCase())) {
       toast.error("Questa mansione esiste già");
       return;
     }
@@ -706,6 +759,25 @@ export default function StressAssessmentPage() {
         </div>
       </div>
 
+      <NoticeDialog
+        open={perMansioneNotice.open}
+        onAcknowledge={perMansioneNotice.acknowledge}
+        title="Esegui la valutazione per ogni mansione presente"
+        icon={Users}
+      >
+        <p>
+          Lo stress lavoro-correlato va valutato separatamente per ogni
+          mansione presente in azienda. Compila la checklist in ciascuna
+          scheda qui sotto e archiviala con &laquo;Conferma
+          valutazione&raquo;.
+        </p>
+        {mansioniSopralluogo.length > 0 && (
+          <p>
+            Mansioni censite nel sopralluogo: {mansioniSopralluogo.join(", ")}.
+          </p>
+        )}
+      </NoticeDialog>
+
       {/* Mansione selector */}
       <Card>
         <CardHeader className="border-b pb-3">
@@ -714,7 +786,8 @@ export default function StressAssessmentPage() {
             <CardTitle className="text-sm">Valutazione per mansione</CardTitle>
           </div>
           <CardDescription className="text-xs">
-            Compila una checklist separata per ogni mansione. La valutazione
+            Compila una checklist separata per ogni mansione. Le mansioni
+            sono quelle censite nel sopralluogo; la valutazione
             &laquo;Generale&raquo; copre l&apos;azienda intera.
           </CardDescription>
         </CardHeader>
@@ -782,9 +855,9 @@ export default function StressAssessmentPage() {
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5">
-                  {DEFAULT_MANSIONI.filter((m) => !mansioni.includes(m)).length > 0 && (
+                  {mansioniDaRiaggiungere.length > 0 && (
                     <div className="flex flex-wrap gap-1">
-                      {DEFAULT_MANSIONI.filter((m) => !mansioni.includes(m)).map((m) => (
+                      {mansioniDaRiaggiungere.map((m) => (
                         <Button
                           key={m}
                           size="sm"

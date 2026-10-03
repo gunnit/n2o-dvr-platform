@@ -13,11 +13,16 @@ interface Props {
 }
 
 /**
- * Dropdown listing every female worker (Persona.sesso == 'F') for the
- * current azienda. Selecting one triggers the cross-reference call on
- * the parent page.
+ * Dropdown listing the azienda's female workers (Sesso "F", or a female
+ * codice fiscale when Sesso is empty), followed by persone whose sex was
+ * never recorded. Selecting one triggers the cross-reference call on the
+ * parent page.
  */
 export function WorkerSelector({ workers, selectedId, onSelect, loading }: Props) {
+  const women = workers.filter((w) => !w.sessoNonIndicato);
+  const unknown = workers.filter((w) => w.sessoNonIndicato);
+  const label = (w: FemaleWorker) =>
+    `${w.nominativo}${w.mansione ? ` — ${w.mansione}` : ""}`;
   return (
     <Card>
       <CardContent className="flex flex-col gap-2 py-4 md:flex-row md:items-center md:gap-4">
@@ -37,15 +42,24 @@ export function WorkerSelector({ workers, selectedId, onSelect, loading }: Props
                 ? "Nessuna lavoratrice censita per questa azienda"
                 : "— seleziona —"}
           </option>
-          {workers.map((w) => (
+          {women.map((w) => (
             <option key={w.id} value={w.id}>
-              {w.nominativo}
-              {w.mansione ? ` — ${w.mansione}` : ""}
+              {label(w)}
             </option>
           ))}
+          {unknown.length > 0 && (
+            <optgroup label="Sesso non indicato nel censimento">
+              {unknown.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {label(w)}
+                </option>
+              ))}
+            </optgroup>
+          )}
         </Select>
         <span className="text-xs text-muted-foreground md:whitespace-nowrap">
-          {workers.length} lavoratric{workers.length === 1 ? "e" : "i"}
+          {women.length} lavoratric{women.length === 1 ? "e" : "i"}
+          {unknown.length > 0 && ` · ${unknown.length} senza sesso`}
         </span>
       </CardContent>
     </Card>
