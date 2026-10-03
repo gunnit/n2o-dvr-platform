@@ -1,7 +1,7 @@
 ---
 title: "Guida Utente — N2O DVR"
 description: "Manuale completo della piattaforma N2O DVR: dal primo accesso alla generazione dei documenti di sicurezza."
-updated: "2026-04-21"
+updated: "2026-10-03"
 ---
 
 # Guida Utente — N2O DVR
@@ -111,7 +111,9 @@ In alto a destra il pulsante **Nuova Azienda** (visibile solo agli admin).
 Form diviso in sezioni:
 
 - **Dati Azienda**: Ragione Sociale (obbligatoria), Partita IVA (11 cifre), Codice ATECO (formato `NN.NN.NN`), Attività.
-- **Sede Legale** e **Sede Operativa**: indirizzo e città.
+- **Sede Legale** e **Sede Operativa**: indirizzo e città. Se la sede operativa coincide con quella legale, spunta *Stessa sede legale*.
+- **Più sedi operative**: ogni sede operativa è un'azienda a sé, con la stessa Partita IVA. Crea una nuova azienda per ciascuna sede: la piattaforma segnala che la Partita IVA è già usata ma non blocca il salvataggio. Se la compilazione automatica dal Registro Imprese trova altre unità locali, le elenca sotto la sede operativa come promemoria.
+- **Visura camerale**: puoi caricarla subito, all'inizio del censimento, per precompilare i dati anagrafici.
 - **Orario di Lavoro**, **Metratura Totale (mq)**, **Zona Sismica** (1–4 con indicazione della pericolosità).
 
 La validazione dei campi è istantanea: gli errori compaiono sotto il campo al blur.
@@ -248,6 +250,17 @@ L'indice **I = 2·D + P** viene calcolato automaticamente (range 3–12) e la pi
 ![Passo 5 — rischi Sala Stampa](./images/17-survey-step5-rischi-stampa.png)
 
 Le categorie non pertinenti all'ambiente possono essere disattivate con il toggle a sinistra. Il pulsante **Reset a default** ripristina i valori iniziali suggeriti per il tipo di ambiente.
+
+**Avviso all'inizio di ogni ambiente**
+
+La prima volta che apri un ambiente in una sessione di lavoro compare un avviso: tutti i rischi individuati vanno valutati manualmente dall'operatore e la proposta dell'AI ha carattere solo indicativo. Conferma con **Ho letto, procedo**.
+
+**Proposte AI**
+
+- **Suggerisci con AI** propone, per ciascuna delle 11 categorie, se è applicabile, il pericolo e i valori P e D, partendo dal tipo di ambiente, dalle attrezzature e dall'attività dell'azienda.
+- **Suggerisci dalle foto** fa lo stesso partendo dalle foto dell'ambiente caricate nel sopralluogo (formati JPEG, PNG, WebP). Più foto chiare carichi, migliore è la proposta.
+
+In entrambi i casi la proposta compare in un pannello di revisione: togli la spunta alle righe che non ti convincono e premi **Applica selezionate**. Se togli la spunta a una categoria che l'AI propone di escludere, la categoria resta com'è. Nel dettaglio dei pericoli, quelli scartati dal suggerimento automatico restano elencati con il motivo e il pulsante **Ripristina**.
 
 **Regola P e D per scenari realistici**
 
@@ -411,13 +424,13 @@ Cliccando **Genera** su *HACCP Schede* si apre un dialogo con le 16 schede (SA-0
 
 ### Valutazioni
 
-L'area **Valutazioni** raccoglie 11 tipologie di valutazione specifica accessibili dal selettore azienda:
+L'area **Valutazioni** raccoglie le valutazioni specifiche, accessibili dal selettore azienda:
 
 1. **MMC** — Movimentazione Manuale dei Carichi (metodo NIOSH, UNI EN ISO 11228).
 2. **VDT** — Videoterminali (D.Lgs. 81/2008, Titolo VII).
 3. **Stress Lavoro-Correlato** — Metodo INAIL.
 4. **Rischio Incendio** — D.M. 03/09/2021.
-5. **Microclima** — UNI EN ISO 7730 / 7933.
+5. **Microclima** — UNI EN ISO 7730 / 7933 (caldo) e UNI EN ISO 11079 (freddo).
 6. **Rischio Biologico** — D.Lgs. 81/2008, Titolo X.
 7. **Gestanti, Puerpere, Allattamento** — D.Lgs. 151/2001.
 8. **POS** — Piano Operativo di Sicurezza (cantieri).
@@ -427,6 +440,17 @@ L'area **Valutazioni** raccoglie 11 tipologie di valutazione specifica accessibi
 
 Ogni tessera apre il modulo di valutazione dedicato, con input specifici e calcolo automatico degli indici pertinenti. Queste valutazioni alimentano i relativi allegati nel DVR.
 
+**Indicazioni per modulo**
+
+- **MMC** — scegli il lavoratore: se ha già una valutazione, il modulo si riapre con i dati salvati e puoi modificarli. Il CP (costante di peso) si ricalcola da sesso ed età; per cambiarlo usa **Modifica CP** e scrivi una motivazione di almeno 5 caratteri. Se qualcosa impedisce il salvataggio, il motivo compare accanto a **Salva valutazione**.
+- **VDT** — la *Postazione* si sceglie dal menu a tendina degli ambienti dell'azienda; se la postazione non corrisponde a un ambiente, scegli *Altra postazione* e scrivila. Le ore di un lavoratore su più postazioni si sommano.
+- **Stress lavoro-correlato** — va eseguita per ogni mansione presente: all'apertura trovi già una scheda per ciascuna mansione censita nel sopralluogo, più la valutazione *Generale*. Compila la checklist in ogni scheda e confermala; il documento riporta tutte le mansioni con un quadro riepilogativo.
+- **Rischio incendio e PEE** — per ogni ambiente compila la scheda (descrizione, metratura, materiali, persone presenti, sorgenti di innesco); tutto tranne il numero di persone può essere proposto dalle foto caricate.
+- **Rischio biologico** — oltre alla checklist del settore trovi due schede: *Malattie contraibili: sintomi e cura* e *DPI utilizzati*. Sono precompilate dal settore: togli ciò che non serve, aggiungi ciò che manca e rivedi sintomi e cura con il Medico Competente.
+- **Gestanti** — la valutazione per mansione elenca solo le mansioni svolte da donne (o da persone di cui non è indicato il sesso); le mansioni ricoperte solo da uomini non compaiono. Per la scheda della singola lavoratrice indica la data di inizio e di fine del periodo di maternità. Se una lavoratrice non compare nel menu, controlla che nel censimento abbia il sesso indicato.
+- **DUVRI** — il documento riprende in automatico dal censimento il Datore di Lavoro, RSPP, Medico Competente, RLS, gli addetti alle emergenze e l'elenco dei lavoratori; dall'appalto le date, la durata e l'attività. Il livello di rischio incendio arriva dalla valutazione incendio. Restano da completare a mano i dati dell'impresa appaltatrice che la piattaforma non conosce.
+- **HACCP** — il manuale riporta il diagramma di flusso delle fasi (dal ricevimento alla somministrazione) e i CCP nello stesso ordine, con pericolo, limite critico, monitoraggio e azione correttiva. Igiene del personale e sanificazione sono riportate come prerequisiti igienici.
+
 ### Impostazioni
 
 L'area **Impostazioni** contiene:
@@ -434,6 +458,57 @@ L'area **Impostazioni** contiene:
 - **Profilo** — attualmente in fase di sviluppo (*"Le impostazioni del profilo saranno disponibili a breve"*).
 - **Backup & ripristino** (solo admin) — stato del backup, cronologia eventi, link alla dashboard Render per point-in-time recovery.
 - **Feedback AI** (solo admin) — vedi sezione Amministrazione.
+
+---
+
+## Linee guida per macrosettore
+
+Indicazioni operative per impostare sopralluogo e valutazioni secondo il settore dell'azienda. Sono un punto di partenza: la valutazione resta sempre in capo all'operatore e al RSPP, sulla base di ciò che si osserva in sopralluogo.
+
+### Ristorazione (ristoranti, bar, pizzerie, mense, catering)
+
+- **Ambienti da censire**: cucina, sala, bancone/bar, magazzino e dispensa, celle frigorifere, spogliatoi, servizi, dehor.
+- **Attrezzature tipiche**: forni, piani cottura a gas, friggitrici, affettatrici, impastatrici, abbattitore, lavastoviglie, celle e frigoriferi.
+- **Rischi da guardare con attenzione**: scivolamento su pavimenti bagnati, tagli, ustioni e contatto con superfici calde, incendio (gas, oli di frittura), microclima caldo in cucina, movimentazione di casse e fusti, lavoro prolungato in piedi.
+- **Valutazioni da attivare**: HACCP, Microclima (caldo; freddo se si lavora nelle celle), MMC, Rischio incendio e PEE, Rischio biologico (settore alimentare), Stress, Gestanti se ci sono lavoratrici.
+- **Attenzioni**: il manuale HACCP si costruisce dalla tipologia di attività; controlla l'elenco dei CCP e le attrezzature sottoposte a controllo HACCP.
+
+### Edilizia e cantieri
+
+- **Documenti**: per ogni cantiere il POS dell'impresa esecutrice (D.Lgs. 81/2008, Titolo IV e Allegato XV), oltre al DVR dell'impresa.
+- **Dati da avere pronti**: indirizzo del cantiere, date di inizio e fine lavori, eventuali subappalti, lavoratori presenti in cantiere, figure di sicurezza, sostanze pericolose usate.
+- **Rischi da guardare con attenzione**: caduta dall'alto (ponteggi, coperture, scavi), seppellimento, urti e schiacciamenti da mezzi, rumore e vibrazioni, polveri (silice, cemento), MMC, microclima esterno (caldo e freddo).
+- **Valutazioni da attivare**: POS, MMC, Microclima (anche stress da caldo e da freddo), Stress; il rischio chimico si valuta dal passo *Sostanze chimiche* del sopralluogo, caricando le schede di sicurezza.
+- **Attenzioni**: segna nel censimento le *attrezzature speciali* (PLE, gru, escavatori, carrelli) di ciascun lavoratore: la piattaforma ne deduce i rischi e i DPI. Verifica che ogni lavoratore abbia l'abilitazione richiesta per l'attrezzatura che usa.
+
+### Uffici e servizi
+
+- **Ambienti da censire**: uffici, sala riunioni, archivio, reception, servizi, eventuale locale tecnico.
+- **Rischi da guardare con attenzione**: uso dei videoterminali, postura, illuminazione e microclima, stress lavoro-correlato, incendio (di norma basso), inciampi su cavi e scaffalature.
+- **Valutazioni da attivare**: VDT (le ore di ogni lavoratore su più postazioni si sommano), Stress, Microclima (comfort), Rischio incendio e PEE, Gestanti se ci sono lavoratrici.
+
+### Commercio e negozi
+
+- **Ambienti da censire**: area vendita, casse, magazzino, retro, eventuali celle o banchi frigo.
+- **Rischi da guardare con attenzione**: movimentazione delle merci, scaffalature e scale, lavoro prolungato in piedi, lavoro alle casse (VDT), rapporto con il pubblico, incendio.
+- **Valutazioni da attivare**: MMC, VDT per le casse, Stress, Rischio incendio e PEE, HACCP se si vendono alimenti, Microclima freddo per chi lavora nelle celle.
+
+### Industria e officine
+
+- **Ambienti da censire**: reparti produttivi, officina, magazzino, area carico/scarico, deposito sostanze chimiche, uffici.
+- **Rischi da guardare con attenzione**: macchine e organi in movimento, rumore e vibrazioni, agenti chimici (carica le schede di sicurezza nel passo *Sostanze chimiche* per la valutazione MoVaRisCh), carrelli elevatori, MMC, incendio ed esplosione.
+- **Valutazioni da attivare**: MMC, Rischio incendio e PEE, Microclima, Stress, VDT per gli uffici, DUVRI per le imprese esterne che lavorano in azienda.
+
+### Logistica e magazzini
+
+- **Rischi da guardare con attenzione**: investimento da carrelli e mezzi, MMC ripetitiva, scaffalature, lavoro notturno e a turni, microclima freddo nelle celle.
+- **Valutazioni da attivare**: MMC, Microclima (freddo), Stress, Rischio incendio e PEE, DUVRI per trasportatori e imprese di servizi.
+
+### Sanità, cura della persona e scuole
+
+- **Studi odontoiatrici e ambulatori**: Rischio biologico (settore dentisti), sostanze chimiche (disinfettanti e prodotti) nel passo *Sostanze chimiche*, VDT, Gestanti.
+- **Centri estetici e parrucchieri**: sostanze chimiche (prodotti cosmetici e coloranti) nel passo *Sostanze chimiche*, MMC e postura, Gestanti, Rischio incendio. Il rischio biologico per questo settore è in preparazione.
+- **Asili nido e scuole dell'infanzia**: Rischio biologico (settore asilo: malattie infantili, vaccinazioni del personale), MMC per il sollevamento dei bambini, Stress, Gestanti (rischio per rosolia, varicella, citomegalovirus).
 
 ---
 
