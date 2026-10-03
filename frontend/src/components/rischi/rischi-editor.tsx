@@ -56,6 +56,7 @@ import {
 } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Callout } from "@/components/ui/callout";
+import { NoticeDialog, useOnceNotice } from "@/components/ui/notice-dialog";
 
 // Shape of POST .../rischi/suggerisci — held for review before it is
 // applied (see aiProposalByAmbiente).
@@ -1028,6 +1029,16 @@ export function RischiEditor({
     updateLocalValutazioni,
   ]);
 
+  // Segnalazione 2026-10-02: at the start of each ambiente's evaluation the
+  // operator acknowledges that every risk needs their own manual judgement.
+  // Once per ambiente per browser session, so it returns on the next visit.
+  const disclaimer = useOnceNotice(
+    !loadingInitial && selectedAmbiente
+      ? `n2o:rischi-disclaimer:${selectedAmbiente.id}`
+      : null,
+    "session",
+  );
+
   if (ambienti.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-input bg-muted/30 py-12">
@@ -1053,6 +1064,25 @@ export function RischiEditor({
 
   return (
     <div className="space-y-6">
+      <NoticeDialog
+        open={disclaimer.open}
+        onAcknowledge={disclaimer.acknowledge}
+        title={`Valutazione dei rischi — ${selectedAmbiente?.nome ?? "ambiente"}`}
+        confirmLabel="Ho letto, procedo"
+        icon={AlertTriangle}
+      >
+        <p>
+          Tutti i rischi individuati all&apos;interno della piattaforma devono
+          essere preventivamente ed espressamente oggetto di valutazione
+          manuale da parte dell&apos;operatore umano preposto.
+        </p>
+        <p>
+          La valutazione generata dai sistemi di intelligenza artificiale ha
+          carattere meramente indicativo e di supporto e non sostituisce in
+          alcun caso l&apos;analisi, il giudizio e la decisione finale
+          dell&apos;operatore.
+        </p>
+      </NoticeDialog>
       {/* Ambiente selector */}
       <div>
         <div className="space-y-3">
