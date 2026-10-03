@@ -5,7 +5,7 @@ Loads are async, reused across generators to avoid N+1 in Celery task.
 """
 
 import uuid
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -38,6 +38,20 @@ async def load_vdt(db: AsyncSession, azienda_id: uuid.UUID) -> list[VdtValutazio
 async def load_stress(db: AsyncSession, azienda_id: uuid.UUID) -> StressValutazione | None:
     r = await db.execute(select(StressValutazione).where(StressValutazione.azienda_id == azienda_id).limit(1))
     return r.scalar_one_or_none()
+
+
+async def load_stress_all(db: AsyncSession, azienda_id: uuid.UUID) -> list[StressValutazione]:
+    """Every stress valutazione of the azienda: the generale one (mansione
+    NULL) first, then one per mansione in alphabetical order."""
+    r = await db.execute(
+        select(StressValutazione)
+        .where(StressValutazione.azienda_id == azienda_id)
+        .order_by(
+            StressValutazione.mansione.is_not(None),
+            func.lower(StressValutazione.mansione),
+        )
+    )
+    return list(r.scalars().all())
 
 
 async def load_incendio(db: AsyncSession, azienda_id: uuid.UUID) -> list[IncendioValutazione]:
