@@ -213,3 +213,37 @@ def test_patch_no_changes_returns_empty_assignments():
     row = _seed_with_niosh()
     out = _build_patch_assignments(row, {})
     assert out == {}
+
+
+# ---------------------------------------------------------------------------
+# Segnalazione 2026-10-02 "non mi salva le valutazioni precedenti": the stored
+# CP is always resolved, so it must not be mistaken for an operator override.
+# ---------------------------------------------------------------------------
+
+
+def test_patch_sesso_recomputes_default_cp():
+    row = _seed_with_niosh()  # M, >18 -> table CP 25
+    out = _build_patch_assignments(row, {"sesso": "F"})
+    assert out["cp"] == _apply_niosh({"sesso": "F", "fascia_eta": ">18"})["cp"]
+    assert out["cp"] != 25.0
+
+
+def test_patch_keeps_a_real_override_when_inputs_change():
+    row = _seed_with_niosh()
+    row.cp = 18.0  # operator override, differs from the table value
+    out = _build_patch_assignments(row, {"frequenza_atti_min": 2.0})
+    assert out["cp"] == 18.0
+
+
+def test_patch_cp_null_resets_override_to_table_value():
+    row = _seed_with_niosh()
+    row.cp = 18.0
+    out = _build_patch_assignments(row, {"cp": None})
+    assert out["cp"] == 25.0
+
+
+def test_patch_cp_override_is_persisted():
+    row = _seed_with_niosh()
+    out = _build_patch_assignments(row, {"cp": 15.0})
+    assert out["cp"] == 15.0
+    assert out["plr"] < row.plr
