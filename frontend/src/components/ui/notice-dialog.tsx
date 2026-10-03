@@ -100,7 +100,9 @@ export function NoticeDialog({
             </span>
             <div className="space-y-2">
               <DialogTitle>{title}</DialogTitle>
-              <DialogDescription render={<div />}>{children}</DialogDescription>
+              <DialogDescription render={<div className="space-y-2" />}>
+                {children}
+              </DialogDescription>
             </div>
           </div>
         </DialogHeader>
