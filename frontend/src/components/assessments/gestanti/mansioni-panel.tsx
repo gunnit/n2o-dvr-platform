@@ -449,8 +449,9 @@ export function MansioniPanel({ aziendaId }: { aziendaId: string }) {
             </CardTitle>
             <p className="text-xs text-muted-foreground">
               Art. 11 D.Lgs. 151/2001 — la valutazione preventiva dei rischi
-              per gravidanza/allattamento è richiesta per ogni mansione, anche
-              senza lavoratrici in gestazione.
+              per gravidanza/allattamento è richiesta per ogni mansione svolta
+              da donne, anche senza lavoratrici in gestazione. Le mansioni
+              ricoperte solo da uomini non sono elencate.
             </p>
           </div>
           <Badge variant="outline">
@@ -487,6 +488,8 @@ export function MansioniPanel({ aziendaId }: { aziendaId: string }) {
                     <span className="text-sm font-medium">{item.mansione}</span>
                     <Badge variant="secondary">
                       {item.num_persone} person{item.num_persone === 1 ? "a" : "e"}
+                      {item.num_persone > 0 &&
+                        ` · ${item.num_lavoratrici} donn${item.num_lavoratrici === 1 ? "a" : "e"}`}
                     </Badge>
                     {item.valutazione ? (
                       <Badge

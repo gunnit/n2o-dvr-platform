@@ -35,6 +35,7 @@ import { MatchesPanel } from "@/components/assessments/gestanti/matches-panel";
 import { RelocationDialog } from "@/components/assessments/gestanti/relocation-dialog";
 import { WorkerSelector } from "@/components/assessments/gestanti/worker-selector";
 import { parseApiError, throwApiError } from "@/lib/api-errors";
+import { personaSex } from "@/lib/codice-fiscale";
 import type {
   CrossReferenceResponse,
   FemaleWorker,
@@ -91,7 +92,8 @@ export default function GestantiAssessmentPage() {
     "gestante",
   );
   const [dataNotifica, setDataNotifica] = useState("");
-  const [dataPresuntoParto, setDataPresuntoParto] = useState("");
+  const [dataInizioMaternita, setDataInizioMaternita] = useState("");
+  const [dataFineMaternita, setDataFineMaternita] = useState("");
   const [firmaLavoratrice, setFirmaLavoratrice] = useState("");
   const [firmaDdl, setFirmaDdl] = useState("");
   const [firmaRspp, setFirmaRspp] = useState("");
@@ -174,14 +176,23 @@ export default function GestantiAssessmentPage() {
         if (!res.ok) throw new Error(`Errore ${res.status}`);
         const data = (await res.json()) as Persona[];
         if (cancelled) return;
+        // Women by the Sesso field or, when it was left empty, by the codice
+        // fiscale. Persone with no recorded sex at all stay selectable at the
+        // bottom of the list: excluding them is what left the selector empty
+        // ("non mi fa scegliere la lavoratrice", segnalazione 2026-10-02).
+        const toWorker = (p: Persona, sessoNonIndicato: boolean) => ({
+          id: p.id,
+          nominativo: p.nominativo,
+          mansione: p.mansione,
+          sessoNonIndicato,
+        });
         const females = data
-          .filter((p) => p.sesso === "F")
-          .map((p) => ({
-            id: p.id,
-            nominativo: p.nominativo,
-            mansione: p.mansione,
-          }));
-        setWorkers(females);
+          .filter((p) => personaSex(p) === "F")
+          .map((p) => toWorker(p, false));
+        const unknown = data
+          .filter((p) => personaSex(p) === null)
+          .map((p) => toWorker(p, true));
+        setWorkers([...females, ...unknown]);
       } catch (err) {
         if (!cancelled) {
           setMatchError(
@@ -312,7 +323,8 @@ export default function GestantiAssessmentPage() {
         const data = (await res.json()) as {
           stato: "gestante" | "puerpera" | "allattamento";
           data_notifica: string | null;
-          data_presunto_parto: string | null;
+          data_inizio_maternita: string | null;
+          data_fine_maternita: string | null;
           firma_lavoratrice: string | null;
           firma_datore_lavoro: string | null;
           firma_rspp: string | null;
@@ -321,7 +333,8 @@ export default function GestantiAssessmentPage() {
         if (cancelled) return;
         setStato(data.stato || "gestante");
         setDataNotifica(data.data_notifica || "");
-        setDataPresuntoParto(data.data_presunto_parto || "");
+        setDataInizioMaternita(data.data_inizio_maternita || "");
+        setDataFineMaternita(data.data_fine_maternita || "");
         setFirmaLavoratrice(data.firma_lavoratrice || "");
         setFirmaDdl(data.firma_datore_lavoro || "");
         setFirmaRspp(data.firma_rspp || "");
@@ -356,7 +369,8 @@ export default function GestantiAssessmentPage() {
       const body = JSON.stringify({
         stato,
         data_notifica: dataNotifica || null,
-        data_presunto_parto: dataPresuntoParto || null,
+        data_inizio_maternita: dataInizioMaternita || null,
+        data_fine_maternita: dataFineMaternita || null,
         firma_lavoratrice: firmaLavoratrice || null,
         firma_datore_lavoro: firmaDdl || null,
         firma_rspp: firmaRspp || null,
@@ -374,7 +388,8 @@ export default function GestantiAssessmentPage() {
               persona_id: selectedId,
               stato,
               data_notifica: dataNotifica || null,
-              data_presunto_parto: dataPresuntoParto || null,
+              data_inizio_maternita: dataInizioMaternita || null,
+              data_fine_maternita: dataFineMaternita || null,
               firma_lavoratrice: firmaLavoratrice || null,
               firma_datore_lavoro: firmaDdl || null,
               firma_rspp: firmaRspp || null,
@@ -405,7 +420,8 @@ export default function GestantiAssessmentPage() {
     matchLoading,
     stato,
     dataNotifica,
-    dataPresuntoParto,
+    dataInizioMaternita,
+    dataFineMaternita,
     firmaLavoratrice,
     firmaDdl,
     firmaRspp,
@@ -523,7 +539,7 @@ export default function GestantiAssessmentPage() {
               <option value="allattamento">Allattamento</option>
             </Select>
           </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div className="grid gap-2">
               <Label htmlFor="notifica">Data notifica</Label>
               <Input
@@ -537,13 +553,28 @@ export default function GestantiAssessmentPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="parto">Data presunto parto</Label>
+              <Label htmlFor="inizio-maternita">
+                Inizio periodo di maternità
+              </Label>
               <Input
-                id="parto"
+                id="inizio-maternita"
                 type="date"
-                value={dataPresuntoParto}
+                value={dataInizioMaternita}
                 onChange={(e) => {
-                  setDataPresuntoParto(e.target.value);
+                  setDataInizioMaternita(e.target.value);
+                  markDirty();
+                }}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="fine-maternita">Fine periodo di maternità</Label>
+              <Input
+                id="fine-maternita"
+                type="date"
+                min={dataInizioMaternita || undefined}
+                value={dataFineMaternita}
+                onChange={(e) => {
+                  setDataFineMaternita(e.target.value);
                   markDirty();
                 }}
               />

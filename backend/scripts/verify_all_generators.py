@@ -155,6 +155,8 @@ def build_fixture() -> dict:
            stato="gestante",
            data_notifica=date(2026, 3, 20),
            data_presunto_parto=date(2026, 10, 15),
+           data_inizio_maternita=date(2026, 8, 16),
+           data_fine_maternita=date(2027, 1, 13),
            rischi_vietati=[{"rischio": "Posizioni prolungate in piedi", "allegato": "A", "misura": "Astensione anticipata"}],
            misure_adeguamento="Mansione alternativa di supporto amministrativo seduta.",
            mansione_alternativa="Impiegata back-office",

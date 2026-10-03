@@ -37,7 +37,11 @@ class GestantiValutazione(Base):
     persona: Mapped["Persona"] = relationship(lazy="raise_on_sql")
     stato: Mapped[str] = mapped_column(String, default="gestante")  # gestante / puerpera / allattamento
     data_notifica: Mapped[date | None] = mapped_column(Date)
+    # Legacy: no longer edited (segnalazione 2026-10-02), kept so old rows
+    # keep their value; the scheda uses the maternity period below.
     data_presunto_parto: Mapped[date | None] = mapped_column(Date)
+    data_inizio_maternita: Mapped[date | None] = mapped_column(Date)
+    data_fine_maternita: Mapped[date | None] = mapped_column(Date)
     # Rischi identificati (mappati agli Allegati A, B, C del D.Lgs. 151/2001)
     rischi_vietati: Mapped[list] = mapped_column(JSONB, default=list)  # list of dicts
     misure_adeguamento: Mapped[str | None] = mapped_column(Text)
