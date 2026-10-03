@@ -242,3 +242,44 @@ def test_surveillance_periodicita_flips_on_50th_birthday():
     assert (
         surveillance_periodicita(on=date(2026, 8, 1), **common) == "biennale"
     )
+
+
+# ---------------------------------------------------------------------------
+# Postazione picked from the ambienti (segnalazione 2026-10-02)
+# ---------------------------------------------------------------------------
+
+
+def test_elenco_postazioni_merges_attivita_of_a_shared_ambiente():
+    import uuid as _uuid
+    from types import SimpleNamespace
+
+    from docx import Document
+
+    from app.services.document_generator.allegato_vdt import AllegatoVdtGenerator
+
+    ufficio = SimpleNamespace(id=_uuid.uuid4(), nome="Ufficio")
+    rows = [
+        SimpleNamespace(postazione="Ufficio", ambiente_id=ufficio.id, attivita="Contabilità"),
+        SimpleNamespace(postazione="Ufficio", ambiente_id=ufficio.id, attivita="Segreteria"),
+        SimpleNamespace(postazione="Ufficio", ambiente_id=ufficio.id, attivita="Contabilità"),
+        SimpleNamespace(postazione="Ufficio", ambiente_id=ufficio.id, attivita=None),
+    ]
+    doc = Document()
+    AllegatoVdtGenerator._add_elenco_postazioni(
+        AllegatoVdtGenerator.__new__(AllegatoVdtGenerator), doc, rows, {ufficio.id: ufficio}
+    )
+    cells = [[c.text for c in r.cells] for r in doc.tables[-1].rows]
+    assert cells[1:] == [["Ufficio", "Contabilità; Segreteria"]]
+
+
+def test_attivita_falls_back_to_dash_when_ambiente_is_the_postazione():
+    import uuid as _uuid
+    from types import SimpleNamespace
+
+    from app.services.document_generator.allegato_vdt import AllegatoVdtGenerator
+
+    amb = SimpleNamespace(id=_uuid.uuid4(), nome="Reception")
+    same = SimpleNamespace(postazione="Reception", ambiente_id=amb.id, attivita="")
+    legacy = SimpleNamespace(postazione="PC 1", ambiente_id=amb.id, attivita="")
+    assert AllegatoVdtGenerator._attivita_label(same, {amb.id: amb}) == "—"
+    assert AllegatoVdtGenerator._attivita_label(legacy, {amb.id: amb}) == "Reception"
