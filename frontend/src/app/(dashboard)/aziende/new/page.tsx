@@ -10,7 +10,6 @@ import {
   Check,
   FileUp,
   Loader2,
-  Plus,
   Sparkles,
   Trash2,
   X,
@@ -117,24 +116,15 @@ const ADMIN_FIELDS: ReadonlyArray<keyof AziendaFormState> = [
   "numero_dipendenti_dichiarati",
 ];
 
-// Feedback issue #11 (2026-05-14): clients with more than one operating
-// location need to declare them all. We keep a single primary
-// `sede_operativa_*` (the columns already on `aziende`) and store the
-// extras as a JSONB list. UI-side this is just a small list editor.
-type SedeExtra = {
+// Unità locali the Registro Imprese lookup returns beyond the primary sede.
+// They are shown, not saved: each sede operativa is its own azienda with the
+// same P.IVA (segnalazione 2026-10-02), so the operator creates one per sede.
+type SedeRegistro = {
   via: string;
   citta: string;
   comune: string;
   provincia: string;
   cap: string;
-};
-
-const EMPTY_SEDE: SedeExtra = {
-  via: "",
-  citta: "",
-  comune: "",
-  provincia: "",
-  cap: "",
 };
 
 // Result of /api/v1/lookup/seismic-zone — kept in lockstep with the survey
@@ -241,7 +231,9 @@ export default function NewAziendaPage() {
   const [stessaSede, setStessaSede] = useState(false);
   // Feedback issue #11 (2026-05-14): additional sedi operative beyond the
   // primary one. Stored server-side as JSONB on aziende.sedi_operative_extra.
-  const [sediExtra, setSediExtra] = useState<SedeExtra[]>([]);
+  const [altreSediRegistro, setAltreSediRegistro] = useState<SedeRegistro[]>(
+    [],
+  );
 
   // US-5.1: non-admins cannot create clients. Bounce them with a toast.
   useEffect(() => {
@@ -418,8 +410,8 @@ export default function NewAziendaPage() {
       const next = { ...prev };
       for (const [key, raw] of Object.entries(data.values)) {
         if (raw == null) continue;
-        // Issue #11: extras come back as a list — they don't belong in
-        // the scalar form state, they go to sediExtra below.
+        // Extras come back as a list — they don't belong in the scalar
+        // form state, they go to altreSediRegistro below.
         if (Array.isArray(raw)) continue;
         const k = key as keyof AziendaFormState;
         if (!(k in next)) continue;
@@ -428,22 +420,18 @@ export default function NewAziendaPage() {
       }
       return next;
     });
-    // Issue #11: route additional sedi operative (from openapi.com
-    // Registro Imprese unità locali) into the sediExtra state. Only
-    // fills the list when it's currently empty — never overwrites
-    // operator-entered rows.
+    // Additional unità locali from the Registro Imprese: listed under the
+    // sede operativa as a reminder to create one azienda per sede.
     const extrasFromApi = data.values.sedi_operative_extra;
     if (Array.isArray(extrasFromApi) && extrasFromApi.length > 0) {
-      setSediExtra((prev) =>
-        prev.length === 0
-          ? extrasFromApi.map((s) => ({
-              via: s.via || "",
-              citta: s.citta || "",
-              comune: s.comune || "",
-              provincia: s.provincia || "",
-              cap: s.cap || "",
-            }))
-          : prev,
+      setAltreSediRegistro(
+        extrasFromApi.map((s) => ({
+          via: s.via || "",
+          citta: s.citta || "",
+          comune: s.comune || "",
+          provincia: s.provincia || "",
+          cap: s.cap || "",
+        })),
       );
     }
     setAiMeta((prev) => {
@@ -633,18 +621,6 @@ export default function NewAziendaPage() {
         orario_lavoro: str(form.orario_lavoro),
         metratura_totale: num(form.metratura_totale),
         zona_sismica: num(form.zona_sismica),
-        // Issue #11: ship the extras as JSONB. Drop completely-empty rows
-        // (operator added then never filled in) and normalise province to
-        // uppercase to match the primary columns' contract.
-        sedi_operative_extra: sediExtra
-          .map((s) => ({
-            via: s.via.trim(),
-            citta: s.citta.trim(),
-            comune: s.comune.trim(),
-            provincia: s.provincia.trim().toUpperCase(),
-            cap: s.cap.trim(),
-          }))
-          .filter((s) => s.via || s.citta || s.comune || s.cap),
       };
 
       const res = await fetch(`${API_URL}/api/v1/aziende`, {
@@ -839,8 +815,10 @@ export default function NewAziendaPage() {
                 {existingAzienda && (
                   <Callout tone="warn" dense>
                     <p>
-                      Cliente già presente in piattaforma:{" "}
+                      Partita IVA già usata da:{" "}
                       <span className="font-semibold">{existingAzienda.ragione_sociale}</span>
+                      . Se stai censendo un&apos;altra sede operativa della
+                      stessa azienda puoi proseguire.
                     </p>
                     <Link
                       href={`/aziende/${existingAzienda.id}`}
@@ -1092,183 +1070,29 @@ export default function NewAziendaPage() {
               )}
             </div>
 
-            {/* Altre sedi operative (issue #11) — additional sedi beyond the
-                primary one above. Stored as JSONB on the row. We deliberately
-                make this a simple list editor (no AI fill) — the operator can
-                add as many as they need and remove any row. */}
-            {!stessaSede && (
-              <div className="space-y-3 border-t border-[#e5edf5] pt-6">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <h3 className="type-eyebrow">Altre sedi operative</h3>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setSediExtra((prev) => [...prev, { ...EMPTY_SEDE }])
-                    }
-                    className="gap-1.5"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Aggiungi sede
-                  </Button>
-                </div>
-                {sediExtra.length === 0 ? (
-                  <p className="text-[12px] text-[#64748d]">
-                    Nessuna sede aggiuntiva. Premi &quot;Aggiungi sede&quot; per
-                    inserirne una.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {sediExtra.map((sede, idx) => (
-                      <div
-                        key={idx}
-                        className="rounded-md border border-[#e5edf5] bg-[#f6f9fc] p-3"
-                      >
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <span className="text-[12px] font-medium text-[#273951]">
-                            Sede #{idx + 2}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              setSediExtra((prev) =>
-                                prev.filter((_, i) => i !== idx),
-                              )
-                            }
-                            className="h-7 gap-1 text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Rimuovi
-                          </Button>
-                        </div>
-                        <div className="grid gap-3 sm:grid-cols-6">
-                          <div className="space-y-1 sm:col-span-3">
-                            <Label
-                              htmlFor={`sede-extra-${idx}-via`}
-                              className="text-[11px]"
-                            >
-                              Via / Indirizzo
-                            </Label>
-                            <Input
-                              id={`sede-extra-${idx}-via`}
-                              value={sede.via}
-                              onChange={(e) =>
-                                setSediExtra((prev) =>
-                                  prev.map((s, i) =>
-                                    i === idx ? { ...s, via: e.target.value } : s,
-                                  ),
-                                )
-                              }
-                            />
-                          </div>
-                          <div className="space-y-1 sm:col-span-3">
-                            <Label
-                              htmlFor={`sede-extra-${idx}-citta`}
-                              className="text-[11px]"
-                            >
-                              Citt&agrave;
-                            </Label>
-                            <Input
-                              id={`sede-extra-${idx}-citta`}
-                              value={sede.citta}
-                              onChange={(e) =>
-                                setSediExtra((prev) =>
-                                  prev.map((s, i) =>
-                                    i === idx
-                                      ? { ...s, citta: e.target.value }
-                                      : s,
-                                  ),
-                                )
-                              }
-                            />
-                          </div>
-                          <div className="space-y-1 sm:col-span-2">
-                            <Label
-                              htmlFor={`sede-extra-${idx}-comune`}
-                              className="text-[11px]"
-                            >
-                              Comune (se diverso)
-                            </Label>
-                            <Input
-                              id={`sede-extra-${idx}-comune`}
-                              value={sede.comune}
-                              onChange={(e) =>
-                                setSediExtra((prev) =>
-                                  prev.map((s, i) =>
-                                    i === idx
-                                      ? { ...s, comune: e.target.value }
-                                      : s,
-                                  ),
-                                )
-                              }
-                            />
-                          </div>
-                          <div className="space-y-1 sm:col-span-2">
-                            <Label
-                              htmlFor={`sede-extra-${idx}-prov`}
-                              className="text-[11px]"
-                            >
-                              Prov.
-                            </Label>
-                            <Input
-                              id={`sede-extra-${idx}-prov`}
-                              value={sede.provincia}
-                              onChange={(e) =>
-                                setSediExtra((prev) =>
-                                  prev.map((s, i) =>
-                                    i === idx
-                                      ? {
-                                          ...s,
-                                          provincia: e.target.value
-                                            .toUpperCase()
-                                            .slice(0, 2),
-                                        }
-                                      : s,
-                                  ),
-                                )
-                              }
-                              maxLength={2}
-                            />
-                          </div>
-                          <div className="space-y-1 sm:col-span-2">
-                            <Label
-                              htmlFor={`sede-extra-${idx}-cap`}
-                              className="text-[11px]"
-                            >
-                              CAP
-                            </Label>
-                            <Input
-                              id={`sede-extra-${idx}-cap`}
-                              value={sede.cap}
-                              onChange={(e) =>
-                                setSediExtra((prev) =>
-                                  prev.map((s, i) =>
-                                    i === idx
-                                      ? {
-                                          ...s,
-                                          cap: e.target.value
-                                            .replace(/\D/g, "")
-                                            .slice(0, 5),
-                                        }
-                                      : s,
-                                  ),
-                                )
-                              }
-                              inputMode="numeric"
-                              maxLength={5}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+            {/* Segnalazione 2026-10-02: no "Aggiungi sede" here. A company
+                with more sedi operative gets one azienda per sede, all with
+                the same P.IVA; the Registro Imprese extras are only listed. */}
+            {altreSediRegistro.length > 0 && (
+              <Callout tone="info" dense>
+                <p>
+                  Il Registro Imprese riporta {altreSediRegistro.length}{" "}
+                  {altreSediRegistro.length === 1
+                    ? "altra sede operativa"
+                    : "altre sedi operative"}
+                  . Per valutarle, crea un&apos;azienda per ogni sede con la
+                  stessa Partita IVA:
+                </p>
+                <ul className="mt-1 list-disc pl-5">
+                  {altreSediRegistro.map((s, i) => (
+                    <li key={i}>
+                      {[s.via, s.cap, s.comune || s.citta, s.provincia]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </li>
+                  ))}
+                </ul>
+              </Callout>
             )}
 
             {/* Contatti */}
