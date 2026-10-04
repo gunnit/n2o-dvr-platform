@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import {
   VdtForm,
   summarize,
+  type AmbienteOption,
   type PersonaOption,
   type VdtSummary,
 } from "@/components/assessments/vdt-form";
@@ -60,6 +61,7 @@ export default function VdtAssessmentPage() {
 
   const [azienda, setAzienda] = useState<Azienda | null>(null);
   const [persone, setPersone] = useState<PersonaOption[]>([]);
+  const [ambienti, setAmbienti] = useState<AmbienteOption[]>([]);
   const [existingValutazioni, setExistingValutazioni] = useState<VdtValutazioneRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -128,10 +130,11 @@ export default function VdtAssessmentPage() {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         const headers = await authHeaders();
-        const [azRes, persRes, vdtRes] = await Promise.all([
+        const [azRes, persRes, vdtRes, ambRes] = await Promise.all([
           fetch(`${apiUrl}/api/v1/aziende/${aziendaId}`, { headers }),
           fetch(`${apiUrl}/api/v1/aziende/${aziendaId}/persone`, { headers }),
           fetch(`${apiUrl}/api/v1/aziende/${aziendaId}/vdt`, { headers }),
+          fetch(`${apiUrl}/api/v1/aziende/${aziendaId}/ambienti`, { headers }),
         ]);
         if (!azRes.ok) throw new Error(`Errore ${azRes.status}`);
         const azData = (await azRes.json()) as Azienda;
@@ -139,6 +142,17 @@ export default function VdtAssessmentPage() {
         if (persRes.ok) {
           const persData = (await persRes.json()) as PersonaOption[];
           if (!cancelled) setPersone(persData);
+        }
+        if (ambRes.ok) {
+          const ambData = (await ambRes.json()) as AmbienteOption[];
+          if (!cancelled) {
+            setAmbienti(
+              (Array.isArray(ambData) ? ambData : []).map((a) => ({
+                id: a.id,
+                nome: a.nome,
+              })),
+            );
+          }
         }
         if (vdtRes.ok) {
           const vdtData = (await vdtRes.json()) as VdtValutazioneRow[];
@@ -200,6 +214,7 @@ export default function VdtAssessmentPage() {
       for (const w of validRows) {
         const body: Record<string, unknown> = {
           persona_id: w.persona_id,
+          ambiente_id: w.ambiente_id,
           postazione: w.postazione.trim(),
           attivita: w.attivita.trim() || null,
           ore_settimanali: w.ore_settimanali ?? 0,
@@ -365,6 +380,7 @@ export default function VdtAssessmentPage() {
       <VdtForm
         aziendaId={aziendaId}
         persone={persone}
+        ambienti={ambienti}
         onSummaryChange={setSummary}
         clearSignal={clearSignal}
       />

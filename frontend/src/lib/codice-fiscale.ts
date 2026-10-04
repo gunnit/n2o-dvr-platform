@@ -96,6 +96,20 @@ export function extractSex(cf: string | null | undefined): "M" | "F" | null {
 }
 
 /**
+ * A persona's sex as recorded in the censimento, falling back to the codice
+ * fiscale when the Sesso field was left empty. Tolerates "f", " F " and the
+ * like, which a strict `=== "F"` comparison silently dropped.
+ */
+export function personaSex(p: {
+  sesso?: string | null;
+  codice_fiscale?: string | null;
+}): "M" | "F" | null {
+  const s = (p.sesso ?? "").trim().toUpperCase();
+  if (s === "F" || s === "M") return s;
+  return extractSex(p.codice_fiscale);
+}
+
+/**
  * Map an age in years to the MMC fascia_eta band.
  * - <=18 → "15-18" (giovane lavoratore, lower CP)
  * - >18  → ">18"  (adulto)

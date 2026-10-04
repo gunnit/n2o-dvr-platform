@@ -111,7 +111,15 @@ function rowsToFormValues(
   return {
     worker_sesso: first.sesso === "F" ? "F" : "M",
     worker_eta: 30, // will be overridden by CF-derived if available
-    cp_override: first.cp ?? undefined,
+    // Every saved row carries a resolved CP, including the plain table value,
+    // so `cp` alone is not an override. Only a motivazione (min. 5 caratteri,
+    // required by the form for any override) marks one. Reading every CP as an
+    // override made "Salva valutazione" fail silently on reload: the hidden
+    // motivazione check rejected the submit (segnalazione 2026-10-02).
+    cp_override:
+      first.cp != null && (first.note ?? "").trim().length >= 5
+        ? first.cp
+        : undefined,
     cp_motivazione: first.note ?? "",
     lifts,
     measures: first.misure_proposte
@@ -282,15 +290,16 @@ export default function MmcAssessmentPage() {
   // DVR. Before this, the form opened blank for already-evaluated workers,
   // making operators think their data hadn't been saved (Luca, 2026-05-28).
   useEffect(() => {
-    const rowsForPersona = selectedPersonaId
-      ? existingValutazioni
-          .filter((r) => r.persona_id === selectedPersonaId)
-          .sort(
-            (a, b) =>
-              new Date(a.created_at).getTime() -
-              new Date(b.created_at).getTime(),
-          )
-      : [];
+    // "" is the generic evaluation (no persona): its rows have persona_id
+    // null. Matching them too stops every save of a generic evaluation from
+    // POSTing a fresh duplicate of the previous one.
+    const wantedPersonaId = selectedPersonaId || null;
+    const rowsForPersona = existingValutazioni
+      .filter((r) => (r.persona_id ?? null) === wantedPersonaId)
+      .sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
 
     if (rowsForPersona.length > 0) {
       const newIds = rowsForPersona.map((r) => r.id);
@@ -415,7 +424,9 @@ export default function MmcAssessmentPage() {
         giudizio_presa: GRIP_TO_LABEL[lift.presa],
         frequenza_atti_min: lift.frequenza,
         durata_min: DURATION_TO_MIN[lift.durata],
-        cp: values.cp_override,
+        // null, not undefined: JSON.stringify drops undefined, and the API
+        // needs an explicit null to drop a previous override on PATCH.
+        cp: values.cp_override ?? null,
         note: values.cp_motivazione || null,
         misure_proposte: measuresText || null,
       });

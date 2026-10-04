@@ -431,7 +431,13 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         if att:
             return att
         ambiente = ambiente_by_id.get(r.ambiente_id) if r.ambiente_id else None
-        return (ambiente.nome if ambiente else None) or "—"
+        nome = (ambiente.nome if ambiente else None) or ""
+        # Since the postazione is picked from the ambienti (2026-10-02), the
+        # ambiente name often *is* the postazione: repeating it as the
+        # attività says nothing.
+        if not nome or nome.strip().lower() == (r.postazione or "").strip().lower():
+            return "—"
+        return nome
 
     def _add_elenco_postazioni(self, doc, vdt_rows: list, ambiente_by_id: dict) -> None:
         add_heading(doc, "Elenco postazioni VDT", level=1)
@@ -447,14 +453,18 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         # Group by postazione name to deduplicate (multiple workers may share one).
         # Client feedback 2026-08: the "Ambienti di lavoro" column becomes
         # "ATTIVITÀ" (operator-entered; ambiente name as legacy fallback).
-        postazioni: dict[str, str] = {}
+        # Several workers often share a postazione now that it is picked
+        # from the ambienti (2026-10-02): list each distinct attività once
+        # instead of keeping only the first worker's.
+        postazioni: dict[str, list[str]] = {}
         for r in vdt_rows:
             name = (r.postazione or "—").strip()
-            if name in postazioni:
-                continue
-            postazioni[name] = self._attivita_label(r, ambiente_by_id)
+            attivita = self._attivita_label(r, ambiente_by_id)
+            seen = postazioni.setdefault(name, [])
+            if attivita != "—" and attivita not in seen:
+                seen.append(attivita)
 
-        rows = [[name, attivita] for name, attivita in postazioni.items()]
+        rows = [[name, "; ".join(att) or "—"] for name, att in postazioni.items()]
         add_data_table(doc, ["Postazione VDT", "ATTIVITÀ"], rows)
         page_break(doc)
 

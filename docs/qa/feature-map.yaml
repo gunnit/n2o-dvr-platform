@@ -22,13 +22,13 @@
 
 version: 1
 totals:
-  endpoints: 219
+  endpoints: 220
   areas: 35
   frontend_pages: 35
-  ui_api_call_sites: 93
-  capability_gated: 130
+  ui_api_call_sites: 94
+  capability_gated: 131
   billing_gated: 10
-  ai_metered: 15
+  ai_metered: 16
 endpoints_by_area:
   - area: "admin-backups"
     endpoints: 2
@@ -81,7 +81,7 @@ endpoints_by_area:
   - area: "protocollo-sanitario"
     endpoints: 4
   - area: "rischi"
-    endpoints: 6
+    endpoints: 7
   - area: "rischi-misure-libreria"
     endpoints: 4
   - area: "sorveglianza"
@@ -785,6 +785,25 @@ endpoints:
     billing_gates: []
     ai_credits:
       - "reasoning"
+    called_by_ui: true
+    in_openapi: true
+  - id: "rischi.suggerisci_rischi_da_foto"
+    method: "POST"
+    path: "/api/v1/aziende/{azienda_id}/ambienti/{ambiente_id}/rischi/suggerisci-da-foto"
+    area: "rischi"
+    source: "backend/app/api/v1/rischi.py"
+    function: "suggerisci_rischi_da_foto"
+    auth: "required"
+    capabilities:
+      - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits:
+      - "vision"
     called_by_ui: true
     in_openapi: true
   - id: "rischi.update_rischio"

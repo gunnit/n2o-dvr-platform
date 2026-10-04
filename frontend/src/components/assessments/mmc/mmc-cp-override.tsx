@@ -34,6 +34,15 @@ export function MmcCpOverride({
   const [editing, setEditing] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
 
+  // Open the editor when the motivazione is rejected on submit, otherwise the
+  // error renders inside a collapsed panel and nobody sees it.
+  const motivazioneError = form.formState.errors.cp_motivazione?.message;
+  useEffect(() => {
+    if (!motivazioneError) return;
+    const t = setTimeout(() => setEditing(true), 0);
+    return () => clearTimeout(t);
+  }, [motivazioneError]);
+
   useEffect(() => {
     if (!sesso || !eta || Number.isNaN(eta) || eta < 15) {
       // Defer so we don't trigger cascading renders inside the effect body.
@@ -95,7 +104,6 @@ export function MmcCpOverride({
   }, [sesso, eta, onAutoCpChange]);
 
   const effectiveCp = override ?? autoCp;
-  const motivazioneError = form.formState.errors.cp_motivazione?.message;
 
   return (
     <Card>

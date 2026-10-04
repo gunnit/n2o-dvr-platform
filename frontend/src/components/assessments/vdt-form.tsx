@@ -25,6 +25,9 @@ import { Select } from "@/components/ui/select";
 
 export const VDT_EXPOSURE_THRESHOLD_HOURS = 20;
 
+/** Select value for "type the postazione instead of picking an ambiente". */
+const ALTRA_POSTAZIONE = "__altra__";
+
 export type Esposizione = "ESPOSTO" | "NON_ESPOSTO";
 export type IdoneitaVisiva = "idoneo" | "con prescrizioni" | "non idoneo";
 
@@ -34,9 +37,19 @@ export interface PersonaOption {
   mansione: string | null;
 }
 
+export interface AmbienteOption {
+  id: string;
+  nome: string;
+}
+
 export interface VdtWorker {
   id: string; // client-side id only, never sent to server
   persona_id: string | null;
+  // Postazione is picked from the azienda's ambienti (segnalazione
+  // 2026-10-02); `postazione` then carries the ambiente's name. With
+  // `postazione_libera` the operator types it instead.
+  ambiente_id: string | null;
+  postazione_libera: boolean;
   postazione: string;
   attivita: string; // ATTIVITÀ svolta alla postazione (client feedback 2026-08)
   ore_settimanali: number | null;
@@ -175,6 +188,8 @@ function makeWorker(): VdtWorker {
   return {
     id: makeId(),
     persona_id: null,
+    ambiente_id: null,
+    postazione_libera: false,
     postazione: "",
     attivita: "",
     ore_settimanali: null,
@@ -211,6 +226,7 @@ const CHECKLIST_FIELDS: Array<{ key: keyof VdtWorker; label: string }> = [
 export interface VdtFormProps {
   aziendaId: string;
   persone: PersonaOption[];
+  ambienti?: AmbienteOption[];
   onSummaryChange?: (summary: VdtSummary) => void;
   // Feedback #56: parent bumps this counter after a successful save so
   // the form clears its workers + localStorage draft. Operators were
@@ -223,6 +239,7 @@ export interface VdtFormProps {
 export function VdtForm({
   aziendaId,
   persone,
+  ambienti = [],
   onSummaryChange,
   clearSignal,
 }: VdtFormProps) {
@@ -243,7 +260,17 @@ export function VdtForm({
         const parsed = JSON.parse(raw) as Partial<VdtWorker>[];
         if (Array.isArray(parsed)) {
           // Merge defaults so older drafts don't crash on missing fields.
-          setWorkers(parsed.map((p) => ({ ...makeWorker(), ...p })));
+          // A draft typed before the ambienti dropdown keeps its text as a
+          // free postazione.
+          setWorkers(
+            parsed.map((p) => ({
+              ...makeWorker(),
+              ...p,
+              postazione_libera:
+                p.postazione_libera ??
+                (!p.ambiente_id && Boolean(p.postazione?.trim())),
+            })),
+          );
         }
       }
     } catch {
@@ -453,17 +480,59 @@ export function VdtForm({
                       >
                         Postazione
                       </Label>
-                      <Input
-                        id={`${w.id}-post`}
-                        type="text"
-                        placeholder="es. PC ufficio amministrazione"
-                        maxLength={200}
-                        required
-                        value={w.postazione}
-                        onChange={(e) =>
-                          updateWorker(w.id, "postazione", e.target.value)
-                        }
-                      />
+                      {ambienti.length > 0 && (
+                        <Select
+                          id={`${w.id}-post`}
+                          size="sm"
+                          value={
+                            w.ambiente_id ??
+                            (w.postazione_libera ? ALTRA_POSTAZIONE : "")
+                          }
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === ALTRA_POSTAZIONE) {
+                              updateWorkerFields(w.id, {
+                                ambiente_id: null,
+                                postazione_libera: true,
+                                postazione: "",
+                              });
+                              return;
+                            }
+                            const amb = ambienti.find((a) => a.id === value);
+                            updateWorkerFields(w.id, {
+                              ambiente_id: amb?.id ?? null,
+                              postazione_libera: false,
+                              postazione: amb?.nome ?? "",
+                            });
+                          }}
+                        >
+                          <option value="" disabled>
+                            — seleziona l&apos;ambiente —
+                          </option>
+                          {ambienti.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.nome}
+                            </option>
+                          ))}
+                          <option value={ALTRA_POSTAZIONE}>
+                            Altra postazione (scrivi)…
+                          </option>
+                        </Select>
+                      )}
+                      {(ambienti.length === 0 || w.postazione_libera) && (
+                        <Input
+                          id={ambienti.length === 0 ? `${w.id}-post` : `${w.id}-post-libera`}
+                          aria-label="Postazione"
+                          type="text"
+                          placeholder="es. PC ufficio amministrazione"
+                          maxLength={200}
+                          required
+                          value={w.postazione}
+                          onChange={(e) =>
+                            updateWorker(w.id, "postazione", e.target.value)
+                          }
+                        />
+                      )}
                     </div>
 
                     <div className="min-w-[180px] flex-1 space-y-1">

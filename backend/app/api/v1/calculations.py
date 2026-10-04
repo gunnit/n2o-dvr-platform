@@ -26,6 +26,7 @@ from app.schemas.calculation import (
 )
 from app.services.document_generator.reference_data_biologico import (
     get_checklist as get_biologico_checklist,
+    get_sector_defaults as get_biologico_defaults,
 )
 from app.services.microclima_calculator import calculate_phs, calculate_pmv_ppd
 from app.services.risk_calculator import calculate_fire_risk
@@ -332,9 +333,15 @@ async def biologico_checklist(settore: str) -> BiologicoChecklistResponse:
     """
     try:
         items = get_biologico_checklist(settore)
+        defaults = get_biologico_defaults(settore)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return BiologicoChecklistResponse(settore=settore.lower(), items=items)  # type: ignore[arg-type]
+    return BiologicoChecklistResponse(  # type: ignore[arg-type]
+        settore=settore.lower(),
+        items=items,
+        agenti=defaults["agenti"],
+        dpi=defaults["dpi"],
+    )
 
 
 @router.get("/fire-measures", response_model=FireMeasuresResponse)

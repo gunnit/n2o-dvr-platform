@@ -53,6 +53,11 @@ from app.schemas.gestanti import (
     GestantiUpdate,
     RiskMatch,
 )
+from app.services.gestanti_scope import (
+    male_only_mansione_keys,
+    normalize_mansione,
+    persona_sex,
+)
 from app.services.ai.gestanti_suggester import (
     PericoloContesto,
     suggest_gestanti_mansione,
@@ -130,7 +135,7 @@ def _suggest_alternative_mansione(
 
 def _normalize_mansione(mansione: str | None) -> str:
     """Collapse whitespace so 'Cuoco ' and 'cuoco' upsert the same row."""
-    return " ".join((mansione or "").strip().split())
+    return normalize_mansione(mansione)
 
 
 def _catalog_risks_for(mansione: str) -> list[CatalogRisk]:
@@ -155,9 +160,11 @@ def build_mansioni_overview(
 
     Every distinct mansione among the persone appears once — even with ZERO
     pregnant workers, per art. 11 D.Lgs. 151/2001 the valutazione must exist
-    preventively. Saved valutazioni whose mansione no longer occurs among the
-    persone are still listed (the assessment outlives staff turnover).
+    preventively — except mansioni held only by men (segnalazione
+    2026-10-02, see ``male_only_mansione_keys``). Saved valutazioni whose
+    mansione nobody holds any more (or added by hand) are still listed.
     """
+    excluded = male_only_mansione_keys(persone)
     by_key: dict[str, GestantiMansioneOverviewItem] = {}
 
     for p in persone:
@@ -172,7 +179,7 @@ def build_mansioni_overview(
             )
             by_key[key] = item
         item.num_persone += 1
-        if (getattr(p, "sesso", None) or "").strip().upper() == "F":
+        if persona_sex(p) == "F":
             item.num_lavoratrici += 1
 
     for row in saved:
@@ -188,7 +195,10 @@ def build_mansioni_overview(
             by_key[key] = item
         item.valutazione = GestantiMansioneResponse.model_validate(row)
 
-    return sorted(by_key.values(), key=lambda it: it.mansione.lower())
+    return sorted(
+        (it for key, it in by_key.items() if key not in excluded),
+        key=lambda it: it.mansione.lower(),
+    )
 
 
 def _index_existing_decisions(
@@ -398,11 +408,10 @@ async def list_gestanti_mansioni(
 ) -> GestantiMansioniOverview:
     """Overview of the preventive per-mansione assessment.
 
-    Prefilled from the azienda's organigramma: every distinct mansione among
-    the persone appears, each with the D.Lgs. 151/2001 catalog risks already
-    matched (the operator reviews, never re-enters). Saved valutazioni are
-    merged in; ones whose mansione no longer occurs among the persone are
-    still listed.
+    Prefilled from the azienda's organigramma: every distinct mansione not
+    held only by men appears, each with the D.Lgs. 151/2001 catalog risks
+    already matched (the operator reviews, never re-enters). Saved
+    valutazioni are merged in.
     """
     await _get_azienda(azienda_id, org_id, db)
 

@@ -13,11 +13,14 @@ import os
 from docx import Document
 from sqlalchemy import func, select
 
+from app.data.haccp_activity_types import ccp_process_key, is_prerequisite, process_flow
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_haccp
 from app.services.document_generator.design import finish_document
 from app.services.document_generator.docx_utils import (
+    _set_cell_text_keep_format,
+    _set_paragraph_text_keep_format,
     scrub_body,
     TEMPLATES_DIR,
     add_data_table,
@@ -33,37 +36,73 @@ from app.services.document_generator.docx_utils import (
 TEMPLATE = TEMPLATES_DIR / "HACCP.docx"
 TIPO_DOC = "haccp"
 
-# Standard food-safety SOPs that the customization section reminds the
-# operator are documented in the template body. Helps an inspector see at
-# a glance which SOPs apply to this azienda's tipologia.
+# The procedures the template body actually documents, with its own codes,
+# so the index and the body cross-reference each other. The previous index
+# listed 25 invented codes (SOP 02 = sanificazione, SOP 10 = abbattimento…)
+# that contradicted the body (SOP 02 = infestanti, SOP-10 = ricevimento).
 SOP_INDEX: list[tuple[str, str]] = [
+    ("SSOP", "Procedure operative standard di sanificazione"),
     ("SOP 01", "Manutenzione dei locali e delle attrezzature"),
-    ("SOP 02", "Sanificazione (pulizia e disinfezione)"),
-    ("SOP 03", "Lotta agli infestanti"),
-    ("SOP 04", "Approvvigionamento idrico"),
-    ("SOP 05", "Gestione rifiuti"),
-    ("SOP 06", "Ricevimento materie prime e qualifica fornitori"),
-    ("SOP 07", "Stoccaggio (temperatura, separazione crudo/cotto, FIFO)"),
-    ("SOP 08", "Preparazione e lavorazione alimenti"),
-    ("SOP 09", "Cottura e trattamenti termici"),
-    ("SOP 10", "Raffreddamento rapido (blast-chiller)"),
-    ("SOP 11", "Conservazione a caldo / a freddo"),
-    ("SOP 12", "Rigenerazione e somministrazione"),
-    ("SOP 13", "Trasporto degli alimenti"),
-    ("SOP 14", "Igiene del personale"),
-    ("SOP 15", "Formazione del personale"),
-    ("SOP 16", "Gestione allergeni (Reg. UE 1169/2011)"),
-    ("SOP 17", "Tracciabilita e rintracciabilità (Reg. CE 178/2002)"),
-    ("SOP 18", "Gestione non conformità e azioni correttive"),
-    ("SOP 19", "Verifica e revisione del piano HACCP"),
-    ("SOP 20", "Botulino - controllo conserve e sottovuoto"),
-    ("SOP 21", "Listeria - controllo prodotti pronti al consumo (RTE)"),
-    ("SOP 22", "Salmonella - uova, pollame, prodotti a base di carne"),
-    ("SOP 23", "Anisakis - prodotti ittici crudi/marinati"),
-    ("SOP 24", "Acrilamide (Reg. UE 2017/2158)"),
-    ("SOP 25", "Tarature termometri e strumenti di misura"),
+    ("SOP 02", "Controllo degli infestanti"),
+    ("SOP 03", "Igiene e salute del personale"),
+    ("SOP 04", "Formazione"),
+    ("SOP 06", "Qualità dell'acqua"),
+    ("SOP 07", "Gestione dei rifiuti"),
+    ("SOP 08", "Selezione dei fornitori"),
+    ("SOP 09", "Rintracciabilità"),
+    ("SOP 10", "Ricevimento delle materie prime"),
+    ("SOP 12", "Gestione della catena del freddo"),
+    ("SOP 21", "Materiali e oggetti a contatto con gli alimenti (MOCA)"),
 ]
 
+_DONOR_PRODUCT_TITLE = "Prodotti di panetteria per la vendita"
+_DONOR_PRODUCT_MARKERS = (
+    "Trattasi di prodotti finiti pronti alla vendita",
+    "Successivamente vengono mondati, lavati e puliti",
+)
+
+
+def _customize_donor_body(doc: Document, azienda, config, ambienti) -> None:
+    """Replace the donor restaurant's specifics left in the template body
+    (segnalazione 2026-10-02): its HACCP manager's name, its bakery product
+    description and its list of premises."""
+    resp = ((config.responsabile_haccp if config else None) or "").strip()
+    scrub_body(doc, {
+        "Sig. BARONI ANDREA GUALTIERO": resp or "Responsabile HACCP",
+        "BARONI ANDREA GUALTIERO": resp or "________________",
+    })
+
+    tipi = [t for t in ((config.tipi_alimenti_trattati if config else None) or []) if t]
+    tipologia = ((config.tipologia_attivita if config else None) or "").replace("_", " ")
+    for paragraph in list(doc.paragraphs):
+        text = paragraph.text.strip()
+        if text == _DONOR_PRODUCT_TITLE:
+            label = ", ".join(tipi) if tipi else "da definire al primo audit"
+            _set_paragraph_text_keep_format(paragraph, f"Alimenti trattati: {label}")
+        elif any(text.startswith(m) for m in _DONOR_PRODUCT_MARKERS):
+            if text.startswith(_DONOR_PRODUCT_MARKERS[0]):
+                _set_paragraph_text_keep_format(
+                    paragraph,
+                    "Le materie prime vengono controllate al ricevimento, conservate secondo "
+                    "la loro natura e lavorate nelle fasi indicate nel diagramma di flusso "
+                    f"dell'attività{f' ({tipologia})' if tipologia else ''}, riportato nella "
+                    "personalizzazione aziendale in calce al presente manuale.",
+                )
+            else:
+                paragraph._p.getparent().remove(paragraph._p)
+
+    nomi = [(getattr(a, "nome", None) or "").strip() for a in ambienti]
+    nomi = [n for n in nomi if n]
+    if nomi:
+        for table in doc.tables:
+            if table.rows and table.rows[0].cells[0].text.strip().upper() == "LOCALI":
+                body = list(table.rows)[1:]
+                for index, nome in enumerate(nomi):
+                    row = body[index] if index < len(body) else table.add_row()
+                    _set_cell_text_keep_format(row.cells[0], nome.upper())
+                for row in body[len(nomi):]:
+                    row._tr.getparent().remove(row._tr)
+                break
 
 class HaccpManualeGenerator(BaseDocumentGenerator):
     async def generate(self) -> str:
@@ -88,6 +127,7 @@ class HaccpManualeGenerator(BaseDocumentGenerator):
                 'via Increa, 70': _via,
                 'Brugherio': _citta,
             })
+            _customize_donor_body(doc, azienda, config, data.get("ambienti") or [])
         else:
             doc = Document()
 
@@ -118,17 +158,63 @@ class HaccpManualeGenerator(BaseDocumentGenerator):
             else:
                 add_paragraph(doc, "Da definire — completare al primo audit del Responsabile HACCP.", italic=True)
 
+            ccps = sorted(
+                [c for c in (config.ccps or []) if isinstance(c, dict)],
+                key=ccp_process_key,
+            )
+
+            # Segnalazione 2026-10-02 "da rivedere passaggi HACCP": the
+            # process steps, in order, then the CCPs along the same flow with
+            # every field the operator entered (fase, pericolo, frequenza
+            # and azione correttiva used to be dropped).
+            add_heading(doc, "Diagramma di flusso delle fasi", level=2)
+            flow = process_flow(ccps, config.tipologia_attivita)
+            add_data_table(doc, ["N.", "Fase del processo"], [
+                [str(i), fase] for i, fase in enumerate(flow, 1)
+            ], column_widths_cm=[1.5, 15.0])
+            add_paragraph(doc, " → ".join(flow), italic=True, size=9)
+
             add_heading(doc, "Punti critici di controllo (CCP) - personalizzazione azienda", level=2)
-            ccps = config.ccps or []
-            if ccps:
-                rows = [[
-                    c.get("codice", ""),
-                    c.get("nome", ""),
-                    c.get("limite_critico", ""),
-                    c.get("monitoraggio", "Verifica giornaliera + registrazione su scheda"),
-                ] for c in ccps]
-                add_data_table(doc, ["Codice", "CCP", "Limite critico", "Monitoraggio"], rows)
-            else:
+            process_ccps = [c for c in ccps if not is_prerequisite(c)]
+            prerequisiti = [c for c in ccps if is_prerequisite(c)]
+            if process_ccps:
+                add_data_table(
+                    doc,
+                    ["CCP", "Fase", "Pericolo", "Limite critico", "Monitoraggio e frequenza", "Azione correttiva"],
+                    [[
+                        f"{c.get('codice', '')} {c.get('nome', '')}".strip(),
+                        c.get("fase", "") or "",
+                        c.get("pericolo", "") or "",
+                        c.get("limite_critico", "") or "",
+                        "; ".join(x for x in (
+                            c.get("monitoraggio") or "Verifica e registrazione su scheda",
+                            c.get("frequenza") or "",
+                        ) if x),
+                        c.get("azione_correttiva", "") or "",
+                    ] for c in process_ccps],
+                )
+            if prerequisiti:
+                add_heading(doc, "Prerequisiti igienici (buone prassi)", level=3)
+                add_paragraph(
+                    doc,
+                    "Igiene del personale e sanificazione sono prerequisiti del sistema "
+                    "(SOP 03 e SSOP del presente manuale): sono controllati con continuità "
+                    "come i CCP, ma non sono fasi del processo.",
+                    italic=True,
+                    size=9,
+                )
+                add_data_table(
+                    doc,
+                    ["Prerequisito", "Pericolo", "Requisito", "Controllo e frequenza", "Azione correttiva"],
+                    [[
+                        c.get("nome", "") or "",
+                        c.get("pericolo", "") or "",
+                        c.get("limite_critico", "") or "",
+                        "; ".join(x for x in (c.get("monitoraggio") or "", c.get("frequenza") or "") if x),
+                        c.get("azione_correttiva", "") or "",
+                    ] for c in prerequisiti],
+                )
+            if not ccps:
                 add_paragraph(doc, "CCP da definire — il piano di base prevede CCP su Ricevimento, Stoccaggio, Cottura, Raffreddamento, Conservazione. Confermare al primo audit.", italic=True)
 
             # Feedback #65 — equipment list, highlighting which items are

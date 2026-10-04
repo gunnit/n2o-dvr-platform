@@ -155,6 +155,8 @@ def build_fixture() -> dict:
            stato="gestante",
            data_notifica=date(2026, 3, 20),
            data_presunto_parto=date(2026, 10, 15),
+           data_inizio_maternita=date(2026, 8, 16),
+           data_fine_maternita=date(2027, 1, 13),
            rischi_vietati=[{"rischio": "Posizioni prolungate in piedi", "allegato": "A", "misura": "Astensione anticipata"}],
            misure_adeguamento="Mansione alternativa di supporto amministrativo seduta.",
            mansione_alternativa="Impiegata back-office",
@@ -407,6 +409,12 @@ def patch_generators(fixture: dict, output_dir: str):
     data_loader.load_mmc = lm
     data_loader.load_vdt = lv
     data_loader.load_stress = ls
+    async def lsa(db, aid):
+        if fixture.get("stress_all") is not None:
+            return fixture["stress_all"]
+        row = await ls(db, aid)
+        return [row] if row is not None else []
+    data_loader.load_stress_all = lsa
     data_loader.load_incendio = li
     data_loader.load_microclima = lmc
     data_loader.load_gestanti = lg
@@ -419,7 +427,7 @@ def patch_generators(fixture: dict, output_dir: str):
     # Also patch the module-level imports in each generator that did `from ... import load_X`
     for mod, (attr, fn) in [
         (g_mmc, ("load_mmc", lm)), (g_vdt, ("load_vdt", lv)),
-        (g_stress, ("load_stress", ls)), (g_inc, ("load_incendio", li)),
+        (g_stress, ("load_stress_all", lsa)), (g_inc, ("load_incendio", li)),
         (g_micro, ("load_microclima", lmc)), (g_micros, ("load_microclima", lmc)),
         (g_gest, ("load_gestanti", lg)), (g_gest, ("load_gestanti_mansioni", lgm)),
         (g_duvri, ("load_duvri", ld)),

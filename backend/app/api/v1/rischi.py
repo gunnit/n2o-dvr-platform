@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.billing.entitlements import Entitlements, get_entitlements
 from app.billing.metering import metered
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.permissions import ASSESSMENTS_WRITE
 from app.db.session import get_db
 from app.dependencies import get_current_org, require_capability
@@ -21,7 +21,9 @@ from app.services.ai import (
     RischioSuggerito,
     suggest_measures,
     suggest_rischi,
+    suggest_rischi_from_photos,
 )
+from app.services.ambiente_photo import photos_digest, usable_vision_photos
 
 
 class SuggestMeasuresResponse(BaseModel):
@@ -271,4 +273,72 @@ async def suggerisci_rischi(
     # environment is one billable action, not one per click.
     async with metered(org_id, "reasoning", f"rischi-suggest:{ambiente_id}", db, ent):
         response = await suggest_rischi(ambiente, azienda, list(attrezzature))
+    return SuggestRischiResponse(items=response.items, sintesi=response.sintesi)
+
+
+@router.post(
+    "/ambienti/{ambiente_id}/rischi/suggerisci-da-foto",
+    response_model=SuggestRischiResponse,
+    dependencies=[Depends(require_capability(ASSESSMENTS_WRITE))],
+)
+async def suggerisci_rischi_da_foto(
+    azienda_id: uuid.UUID,
+    ambiente_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org),
+    ent: Entitlements = Depends(get_entitlements),
+    db: AsyncSession = Depends(get_db),
+):
+    """AI risk proposal grounded in the ambiente's photos.
+
+    Segnalazione 2026-10-02: "creare una valutazione del rischio prendendo
+    spunto dall'immagine caricata dell'ambiente". Same response as
+    ``/rischi/suggerisci`` and, like it, never persists: the editor shows
+    the proposal in its review panel and the operator applies it. 400 when
+    the ambiente has no usable photo.
+    """
+    azienda = (
+        await db.execute(
+            select(Azienda).where(
+                Azienda.id == azienda_id, Azienda.organization_id == org_id
+            )
+        )
+    ).scalar_one_or_none()
+    if azienda is None:
+        raise NotFoundError("Azienda not found")
+
+    ambiente = (
+        await db.execute(
+            select(Ambiente).where(
+                Ambiente.id == ambiente_id, Ambiente.azienda_id == azienda_id
+            )
+        )
+    ).scalar_one_or_none()
+    if ambiente is None:
+        raise NotFoundError("Ambiente not found")
+
+    paths = await usable_vision_photos(db, ambiente_id)
+    if not paths:
+        raise BadRequestError(
+            "Nessuna foto utilizzabile per questo ambiente (formati supportati: "
+            "JPEG, PNG, WebP, GIF). Carica almeno una foto nel sopralluogo."
+        )
+
+    attrezzature = (
+        await db.execute(
+            select(Attrezzatura).where(Attrezzatura.ambiente_id == ambiente_id)
+        )
+    ).scalars().all()
+
+    # MB-2.4 — vision weight; keyed on the exact photo set so a retry of
+    # the same photos is free and a new photo is new work.
+    async with metered(
+        org_id,
+        "vision",
+        f"rischi-suggest-foto:{ambiente_id}:{photos_digest(paths)}",
+        db,
+        ent,
+    ):
+        response = await suggest_rischi_from_photos(
+            ambiente, azienda, list(attrezzature), list(paths)
+        )
     return SuggestRischiResponse(items=response.items, sintesi=response.sintesi)

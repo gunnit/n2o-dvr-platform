@@ -1,5 +1,4 @@
 import asyncio
-import hashlib
 import logging
 import uuid
 from pathlib import Path
@@ -33,6 +32,8 @@ from app.services.ambiente_photo import (
     DocumentImageNormalizationError,
     MAX_ORIGINAL_IMAGE_BYTES,
     normalize_document_image,
+    photos_digest,
+    usable_vision_photos,
 )
 
 router = APIRouter(prefix="/aziende/{azienda_id}/ambienti", tags=["ambienti"])
@@ -143,11 +144,6 @@ async def update_ambiente(
     return ambiente
 
 
-# Formats OpenAI's input_image accepts; HEIC is skipped, as for the
-# attrezzature extraction, rather than failing the whole call.
-_OPENAI_VISION_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
-
-
 class SchedaEstrattaResponse(BaseModel):
     """AI proposal for the scheda ambiente — never persisted by this call."""
 
@@ -191,18 +187,7 @@ async def estrai_scheda_da_foto(
     if ambiente is None:
         raise NotFoundError("Ambiente not found")
 
-    foto_rows = (
-        await db.execute(
-            select(AmbienteFoto).where(AmbienteFoto.ambiente_id == ambiente_id)
-        )
-    ).scalars().all()
-    usable_paths: list[Path] = []
-    for foto in foto_rows:
-        if foto.content_type not in _OPENAI_VISION_MIME_TYPES or not foto.file_path:
-            continue
-        path = Path(foto.file_path)
-        if path.is_file():
-            usable_paths.append(path)
+    usable_paths = await usable_vision_photos(db, ambiente_id)
     if not usable_paths:
         raise BadRequestError(
             "Nessuna foto utilizzabile per questo ambiente (formati supportati: "
@@ -212,11 +197,9 @@ async def estrai_scheda_da_foto(
 
     # MB-2.4 — vision costs 4x a text suggester. Keyed on the exact photo
     # set, so a retry of the same photos is free and a new photo is new work.
-    photos_digest = hashlib.sha1(
-        ",".join(sorted(str(p) for p in usable_paths)).encode()
-    ).hexdigest()[:12]
+    digest = photos_digest(usable_paths)
     async with metered(
-        org_id, "vision", f"ambiente-scheda-vision:{ambiente_id}:{photos_digest}", db, ent
+        org_id, "vision", f"ambiente-scheda-vision:{ambiente_id}:{digest}", db, ent
     ):
         scheda = await extract_scheda_from_photos(ambiente, azienda, list(usable_paths))
     return SchedaEstrattaResponse(
