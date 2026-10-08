@@ -84,6 +84,15 @@ These bit us the first time; don't undo them:
 | Auth.js v5 errors `UntrustedHost` | Render's reverse proxy rewrites Host; NextAuth v5 refuses it for open-redirect protection | Set `AUTH_TRUST_HOST=true` on `n2o-dvr-frontend` |
 | Next.js 16 build fails: `useSearchParams() should be wrapped in a suspense boundary` | Strict prerender rule in app router | Wrap the consuming component in `<Suspense>` (see `frontend/src/app/(auth)/login/page.tsx`) |
 
+**A commit that changes `backend/render.yaml` re-applies the whole file.** The
+`n2o-dvr-platform` Blueprint has auto-sync on, so such a commit syncs every
+resource the file declares, not only the lines it changed, and a dashboard edit
+to anything declared here is reverted. On 2026-09-28, #87 only added
+`PYTHON_VERSION`, yet its sync emptied `n2o-dvr-db`'s IP allowlist, because the
+database is declared with `ipAllowList: []`. An address outside Render keeps
+access only if it is declared in this file (which puts it in the repo); an
+entry added in the dashboard lasts until the next change to the file.
+
 ## 4. Known gaps (acceptable for v1, track for follow-up)
 
 | Gap | Impact | Workaround |
