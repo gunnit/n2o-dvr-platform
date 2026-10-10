@@ -7,16 +7,20 @@ PATCH /feedback/{id}    — admin updates status
 Every successful create is mirrored to a GitHub issue (best-effort) so
 the team triages from the repo. Status changes flow back: `risolto` and
 `non_fara` close the issue; reopening a triaged item reopens it.
+
+A repeated create inside `DUPLICATE_WINDOW` answers with the row already
+stored, so one report never becomes two rows or two public issues.
 """
 
 import logging
+import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import desc, select
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -32,13 +36,51 @@ log = logging.getLogger(__name__)
 FeedbackType = Literal["bug", "idea", "observation"]
 FeedbackStatus = Literal["nuovo", "in_revisione", "risolto", "non_fara"]
 
+# Bounds for the context the browser attaches by itself. They cap what we
+# store; they never reject a submission — see FeedbackCreate.
+PAGE_URL_MAX = 2048
+ROUTE_MAX = 512
+USER_AGENT_MAX = 512
+
+_WEB_URL = re.compile(r"^https?://", re.IGNORECASE)
+
+# A submission retried after a client-side timeout, a second tab, or a
+# double tap is the same report — not a second one. Without this window it
+# also became a second issue in the public repo.
+DUPLICATE_WINDOW = timedelta(minutes=5)
+
 
 class FeedbackCreate(BaseModel):
     type: FeedbackType
     description: str = Field(min_length=1, max_length=5000)
-    page_url: str | None = Field(default=None, max_length=2048)
-    route: str | None = Field(default=None, max_length=512)
-    user_agent: str | None = Field(default=None, max_length=512)
+    page_url: str | None = None
+    route: str | None = None
+    user_agent: str | None = None
+
+    # `description` is what the operator wrote, so an oversized one is a
+    # real 422. The three fields below are not: the browser fills them in
+    # and the operator never sees them. A 2100-character URL used to fail
+    # the whole call, and the report the operator typed was lost with it.
+    # Clamp instead, and keep the request.
+    @field_validator("route")
+    @classmethod
+    def _clamp_route(cls, value: str | None) -> str | None:
+        return None if value is None else value[:ROUTE_MAX]
+
+    @field_validator("user_agent")
+    @classmethod
+    def _clamp_user_agent(cls, value: str | None) -> str | None:
+        return None if value is None else value[:USER_AGENT_MAX]
+
+    @field_validator("page_url")
+    @classmethod
+    def _web_url_only(cls, value: str | None) -> str | None:
+        # The triage table renders this as a clickable link, so anything
+        # that is not a plain web URL is dropped rather than handed to an
+        # admin as something to click.
+        if value is None or not _WEB_URL.match(value):
+            return None
+        return value[:PAGE_URL_MAX]
 
 
 class FeedbackUpdate(BaseModel):
@@ -85,6 +127,30 @@ async def create_feedback(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> UserFeedback:
+    # Same author, same type, same words, inside the window: a retry, not a
+    # second report. Answering with the row we already have keeps the
+    # triage queue clean and — because mirroring only runs on a fresh row —
+    # stops one report becoming several issues in the public repo. The
+    # cutoff is computed by the database so it shares a clock with the
+    # `now()` server default that wrote `created_at`.
+    duplicate = (
+        await db.execute(
+            select(UserFeedback)
+            .where(
+                UserFeedback.organization_id == user.organization_id,
+                UserFeedback.user_id == user.id,
+                UserFeedback.type == body.type,
+                UserFeedback.description == body.description,
+                UserFeedback.created_at >= func.now() - DUPLICATE_WINDOW,
+            )
+            .order_by(desc(UserFeedback.created_at), desc(UserFeedback.id))
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if duplicate is not None:
+        log.info("feedback: repeat submission by %s, returning %s", user.id, duplicate.id)
+        return duplicate
+
     fb = UserFeedback(
         organization_id=user.organization_id,
         user_id=user.id,
