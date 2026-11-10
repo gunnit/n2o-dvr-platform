@@ -1065,15 +1065,16 @@ _OVERRIDE_ADDR_RE = re.compile(r"^\d+(:\d+){0,3}$")
 # per value) but repeated PATCHes could still grow the JSONB unboundedly.
 _OVERRIDES_MAX_SERIALIZED = 2_000_000
 
-# Parsed-blocks LRU for the preview endpoint. Keyed by document_id: a
-# completed row's bytes are IMMUTABLE — regenerate, restore, sync-from-gdoc
+# Parsed-preview LRU for the preview endpoint: parse_docx_preview's whole
+# result (blocks, furniture, page setup, style props). Keyed by document_id:
+# a completed row's bytes are IMMUTABLE — regenerate, restore, sync-from-gdoc
 # and save-edited-version all mint NEW rows with new ids — so a cached
 # parse can never go stale and needs no invalidation. Entries are treated
 # as read-only by consumers. Thread-safety is best-effort under the GIL:
 # worst case two concurrent misses parse the same document twice and the
 # second insert wins.
-_PREVIEW_BLOCKS_CACHE: OrderedDict[uuid.UUID, list[dict]] = OrderedDict()
-_PREVIEW_BLOCKS_CACHE_MAX = 4
+_PREVIEW_CACHE: OrderedDict[uuid.UUID, dict] = OrderedDict()
+_PREVIEW_CACHE_MAX = 4
 
 
 async def _get_org_document(
@@ -1142,36 +1143,38 @@ async def preview_document(
 ):
     """Parse the stored .docx into the addressed block model for the editor.
 
-    The .docx stays the source of truth — we re-parse on every call (no
-    persisted snapshot), so a regenerated file immediately yields fresh
-    blocks. Saved overrides ride along so the frontend can rehydrate
-    pending edits onto the matching addresses.
+    The .docx stays the source of truth — the preview is parsed from it (no
+    persisted snapshot; an in-process LRU only), so a regenerated file
+    immediately yields fresh blocks. Besides the blocks the payload carries
+    the document's look: running header/footer, page setup and resolved
+    paragraph styles. Saved overrides ride along so the frontend can
+    rehydrate pending edits onto the matching addresses.
     """
     doc, azienda_nome = await _get_org_document(document_id, org_id, db)
     filename = _resolve_docx_filename(doc)
 
     # LRU hit: the row's bytes are immutable after completion (see cache
-    # comment above) so the parsed blocks can be reused as-is.
-    blocks = _PREVIEW_BLOCKS_CACHE.get(doc.id)
-    if blocks is not None:
-        _PREVIEW_BLOCKS_CACHE.move_to_end(doc.id)
+    # comment above) so the parsed preview can be reused as-is.
+    preview = _PREVIEW_CACHE.get(doc.id)
+    if preview is not None:
+        _PREVIEW_CACHE.move_to_end(doc.id)
     else:
         docx_bytes = _load_docx_bytes(doc)
 
-        from app.services.document_preview import parse_docx_to_blocks
+        from app.services.document_preview import parse_docx_preview
 
         try:
             # CPU-bound parse (~seconds on the DVR) — off the event loop (B5).
-            blocks = await asyncio.to_thread(parse_docx_to_blocks, docx_bytes)
+            preview = await asyncio.to_thread(parse_docx_preview, docx_bytes)
         except Exception as exc:
             import logging
             logging.getLogger(__name__).exception("Preview parse failed for %s", doc.id)
             raise BadRequestError(
                 "Impossibile generare l'anteprima. Rigenera il documento."
             ) from exc
-        _PREVIEW_BLOCKS_CACHE[doc.id] = blocks
-        while len(_PREVIEW_BLOCKS_CACHE) > _PREVIEW_BLOCKS_CACHE_MAX:
-            _PREVIEW_BLOCKS_CACHE.popitem(last=False)
+        _PREVIEW_CACHE[doc.id] = preview
+        while len(_PREVIEW_CACHE) > _PREVIEW_CACHE_MAX:
+            _PREVIEW_CACHE.popitem(last=False)
 
     return DocumentPreviewResponse(
         id=doc.id,
@@ -1186,8 +1189,11 @@ async def preview_document(
             if doc.generation_completed_at
             else None
         ),
-        blocks=blocks,
+        blocks=preview["blocks"],
         overrides=doc.content_overrides or {},
+        furniture=preview["furniture"],
+        page_setup=preview["page_setup"],
+        style_props=preview["style_props"],
     )
 
 
@@ -1198,10 +1204,13 @@ async def preview_document_image(
     org_id: uuid.UUID = Depends(get_current_org),
     db: AsyncSession = Depends(get_db),
 ):
-    """Stream one inline image part (by relationship id) for the preview.
+    """Stream one image part (by relationship id) for the preview.
 
-    ``image_id`` is the rId the parse output emitted in ``images[].image_id``;
-    unknown ids (or ids pointing at non-image parts) 404.
+    ``image_id`` is an id the preview emitted: a main-part rId
+    (``images[].image_id``, ``background_image_id``) or a header/footer
+    picture scoped to its part, ``hdr:<part>:<rId>`` / ``ftr:<part>:<rId>``
+    (``furniture.footer_logo_image_id``). Unknown or malformed ids, and ids
+    pointing at non-image parts, 404.
     """
     doc, _ = await _get_org_document(document_id, org_id, db)
     _resolve_docx_filename(doc)
