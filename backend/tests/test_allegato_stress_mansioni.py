@@ -38,10 +38,10 @@ def _text(path: str) -> str:
 
 
 def _generate(module, fixture, tmp_path) -> str:
-    module.patch_generators(fixture, str(tmp_path))
-    ok, path, message = asyncio.run(
-        module.run_one("ALLEGATO_STRESS", fixture["azienda"].id)
-    )
+    with module.patched_generators(fixture, str(tmp_path)):
+        ok, path, message = asyncio.run(
+            module.run_one("ALLEGATO_STRESS", fixture["azienda"].id)
+        )
     assert ok, message
     return path
 

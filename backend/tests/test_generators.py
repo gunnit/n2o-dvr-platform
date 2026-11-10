@@ -88,8 +88,8 @@ def _paragraph_with_text_after(doc: Document, marker: str, element):
 
 
 def _generate_duvri(module, fixture, output_dir: Path) -> tuple[Document, str]:
-    module.patch_generators(fixture, str(output_dir))
-    ok, path, message = asyncio.run(module.run_one("DUVRI", fixture["azienda"].id))
+    with module.patched_generators(fixture, str(output_dir)):
+        ok, path, message = asyncio.run(module.run_one("DUVRI", fixture["azienda"].id))
     assert ok, message
     return Document(path), path
 
@@ -110,7 +110,6 @@ def generated_outputs(tmp_path_factory):
     out = tmp_path_factory.mktemp("gen_out")
     module = _load_verify()
     fixture = module.build_fixture()
-    module.patch_generators(fixture, str(out))
 
     from app.services.document_generator.dispatcher import ALL_DOCUMENT_TYPES
 
@@ -124,7 +123,9 @@ def generated_outputs(tmp_path_factory):
             except Exception as e:
                 results[tipo] = (False, "", str(e))
 
-    asyncio.run(run_all())
+    # The tests read the files; the fakes go once they are written.
+    with module.patched_generators(fixture, str(out)):
+        asyncio.run(run_all())
     return results
 
 
@@ -359,11 +360,11 @@ def test_fire_does_not_claim_a_drill_cadence_for_small_employer(tmp_path):
     fixture = module.build_fixture()
     fixture["azienda"].numero_dipendenti_dichiarati = 4
     fixture["persone"] = fixture["persone"][:4]
-    module.patch_generators(fixture, str(tmp_path))
 
-    ok, path, msg = asyncio.run(
-        module.run_one("ALLEGATO_INCENDIO", fixture["azienda"].id)
-    )
+    with module.patched_generators(fixture, str(tmp_path)):
+        ok, path, msg = asyncio.run(
+            module.run_one("ALLEGATO_INCENDIO", fixture["azienda"].id)
+        )
     assert ok, msg
     text = _document_text(path)
 
@@ -386,11 +387,11 @@ def test_fire_does_not_count_registered_consultants_as_declared_workers(tmp_path
         )
         for index in range(10)
     ]
-    module.patch_generators(fixture, str(tmp_path))
 
-    ok, path, msg = asyncio.run(
-        module.run_one("ALLEGATO_INCENDIO", fixture["azienda"].id)
-    )
+    with module.patched_generators(fixture, str(tmp_path)):
+        ok, path, msg = asyncio.run(
+            module.run_one("ALLEGATO_INCENDIO", fixture["azienda"].id)
+        )
     assert ok, msg
     text = _document_text(path)
 

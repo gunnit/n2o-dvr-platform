@@ -50,10 +50,10 @@ def _generate_with_selection(tmp_path, misure_prevenzione):
     row = next(r for r in fixture["incendio"] if r.livello_rischio == "ALTO")
     row.misure_prevenzione = misure_prevenzione
     fixture["incendio"] = [row]
-    module.patch_generators(fixture, str(tmp_path))
-    ok, path, msg = asyncio.run(
-        module.run_one("ALLEGATO_INCENDIO", fixture["azienda"].id)
-    )
+    with module.patched_generators(fixture, str(tmp_path)):
+        ok, path, msg = asyncio.run(
+            module.run_one("ALLEGATO_INCENDIO", fixture["azienda"].id)
+        )
     assert ok, msg
     return _document_text(path)
 

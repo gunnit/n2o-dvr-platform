@@ -9,7 +9,9 @@ Prints PASS/FAIL per generator and saves output to the given directory
 (default /tmp/dlg_verify).
 
 This bypasses the DB entirely by monkey-patching BaseDocumentGenerator.load_data
-and the data loader functions to return pre-built in-memory objects.
+and the data loader functions to return pre-built in-memory objects. In a test
+the patches must not outlive it: use ``with patched_generators(...)``, or call
+the restore function ``patch_generators`` returns.
 """
 
 import asyncio
@@ -17,6 +19,8 @@ import os
 import sys
 import types
 import uuid
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -316,7 +320,60 @@ def build_fixture() -> dict:
 # Patch generators to use fixture instead of DB
 # ---------------------------------------------------------------------------
 
-def patch_generators(fixture: dict, output_dir: str):
+_MISSING = object()
+
+
+class _Patches:
+    """Every attribute the harness replaces, with what it replaced, so that
+    the real methods and loaders can be put back."""
+
+    def __init__(self) -> None:
+        self._undo: list[tuple[object, str, object]] = []
+
+    def set(self, owner: object, name: str, value: object) -> None:
+        # vars(): the owner's own attribute (or none), not one it inherits.
+        self._undo.append((owner, name, vars(owner).get(name, _MISSING)))
+        setattr(owner, name, value)
+
+    def restore(self) -> None:
+        """Undo every patch, newest first. Safe to call more than once."""
+        while self._undo:
+            owner, name, original = self._undo.pop()
+            if original is _MISSING:
+                if name in vars(owner):
+                    delattr(owner, name)
+            else:
+                setattr(owner, name, original)
+
+
+@contextmanager
+def patched_generators(fixture: dict, output_dir: str) -> Iterator[None]:
+    """``patch_generators`` for the duration of a ``with`` block."""
+    restore = patch_generators(fixture, output_dir)
+    try:
+        yield
+    finally:
+        restore()
+
+
+def patch_generators(fixture: dict, output_dir: str) -> Callable[[], None]:
+    """Point every generator at ``fixture`` and ``output_dir`` instead of the
+    database and the storage disk.
+
+    Returns the function that undoes it. The CLI never calls it; a test must
+    (or use ``patched_generators``), or the fakes stay in place for the rest
+    of the session.
+    """
+    patches = _Patches()
+    try:
+        _apply_patches(patches, fixture, output_dir)
+    except BaseException:
+        patches.restore()
+        raise
+    return patches.restore
+
+
+def _apply_patches(patches: _Patches, fixture: dict, output_dir: str) -> None:
     from app.services.document_generator import base, data_loader
     from app.services.document_generator.dvr_master import DVRMasterGenerator
     import app.services.document_generator.allegato_mmc as g_mmc
@@ -342,7 +399,7 @@ def patch_generators(fixture: dict, output_dir: str):
             "sostanze_chimiche": fixture["sostanze_chimiche"],
             "generated_at": fixture["generated_at"],
         }
-    base.BaseDocumentGenerator.load_data = fake_load_data
+    patches.set(base.BaseDocumentGenerator, "load_data", fake_load_data)
 
     # DVR Master also pulls extras (foto, allegati, misure miglioramento)
     # directly from the DB. Bypass with empty collections in the off-DB
@@ -362,14 +419,14 @@ def patch_generators(fixture: dict, output_dir: str):
             "misure_miglioramento": [],
             "foto_presentazione": None,
         }
-    DVRMasterGenerator._load_dvr_extras = fake_load_dvr_extras
+    patches.set(DVRMasterGenerator, "_load_dvr_extras", fake_load_dvr_extras)
 
     # Override output dir
     def fake_output_dir(self):
         p = os.path.join(output_dir, str(fixture["azienda"].id))
         os.makedirs(p, exist_ok=True)
         return p
-    base.BaseDocumentGenerator._get_output_dir = fake_output_dir
+    patches.set(base.BaseDocumentGenerator, "_get_output_dir", fake_output_dir)
 
     async def v1(self):
         return 1
@@ -381,14 +438,14 @@ def patch_generators(fixture: dict, output_dir: str):
                 g_peea.PeeAziendaGenerator, g_peec.PeeComuneGenerator,
                 g_duvri.DuvriGenerator, g_pos.PosGenerator,
                 g_haccp.HaccpManualeGenerator, g_haccpf.HaccpFormsGenerator]:
-        mod._next_version = v1
+        patches.set(mod, "_next_version", v1)
     # DVR Master already uses its own _get_next_version
-    DVRMasterGenerator._get_next_version = v1
+    patches.set(DVRMasterGenerator, "_get_next_version", v1)
     # Biologico uses _next_version helper from _biologico_common
     from app.services.document_generator import _biologico_common
     async def bio_v1(gen, tipo_doc, aliases):
         return 1
-    _biologico_common._next_version = bio_v1
+    patches.set(_biologico_common, "_next_version", bio_v1)
 
     # Patch data loaders
     async def lm(db, aid): return fixture["mmc"]
@@ -408,24 +465,20 @@ def patch_generators(fixture: dict, output_dir: str):
     async def ld(db, aid): return fixture["duvri"]
     async def lp(db, aid): return fixture["pos"]
 
-    data_loader.load_mmc = lm
-    data_loader.load_vdt = lv
-    data_loader.load_stress = ls
     async def lsa(db, aid):
         if fixture.get("stress_all") is not None:
             return fixture["stress_all"]
         row = await ls(db, aid)
         return [row] if row is not None else []
-    data_loader.load_stress_all = lsa
-    data_loader.load_incendio = li
-    data_loader.load_microclima = lmc
-    data_loader.load_gestanti = lg
-    data_loader.load_gestanti_mansioni = lgm
-    data_loader.load_biologico = lb
-    data_loader.load_haccp = lh
-    data_loader.load_pee = lpee
-    data_loader.load_duvri = ld
-    data_loader.load_pos = lp
+
+    for attr, fn in [
+        ("load_mmc", lm), ("load_vdt", lv), ("load_stress", ls),
+        ("load_stress_all", lsa), ("load_incendio", li), ("load_microclima", lmc),
+        ("load_gestanti", lg), ("load_gestanti_mansioni", lgm),
+        ("load_biologico", lb), ("load_haccp", lh), ("load_pee", lpee),
+        ("load_duvri", ld), ("load_pos", lp),
+    ]:
+        patches.set(data_loader, attr, fn)
     # Also patch the module-level imports in each generator that did `from ... import load_X`
     for mod, (attr, fn) in [
         (g_mmc, ("load_mmc", lm)), (g_vdt, ("load_vdt", lv)),
@@ -437,10 +490,9 @@ def patch_generators(fixture: dict, output_dir: str):
         (g_haccpf, ("load_haccp", lh)), (g_peea, ("load_pee", lpee)),
         (g_peec, ("load_pee", lpee)),
     ]:
-        setattr(mod, attr, fn)
+        patches.set(mod, attr, fn)
     # For biologico common
-    from app.services.document_generator import _biologico_common as bc
-    bc.load_biologico = lb
+    patches.set(_biologico_common, "load_biologico", lb)
 
 
 # ---------------------------------------------------------------------------

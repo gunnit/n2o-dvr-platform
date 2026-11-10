@@ -207,10 +207,10 @@ def _document_text(path: str) -> str:
 
 
 def _generate_severo(module, fixture, output_dir) -> str:
-    module.patch_generators(fixture, str(output_dir))
-    ok, path, message = asyncio.run(
-        module.run_one("ALLEGATO_MICROCLIMA_SEVERO", fixture["azienda"].id)
-    )
+    with module.patched_generators(fixture, str(output_dir)):
+        ok, path, message = asyncio.run(
+            module.run_one("ALLEGATO_MICROCLIMA_SEVERO", fixture["azienda"].id)
+        )
     assert ok, message
     return path
 
