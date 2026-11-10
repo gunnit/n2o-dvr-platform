@@ -581,7 +581,7 @@ _NUMBER_RE = re.compile(r"^[+-]?\d+(?:[.,]\d+)*\s?%?$")
 _DASHES = {"—", "–", "-"}
 
 
-def _write_cell(
+def write_cell(
     cell,
     text: str,
     *,
@@ -653,8 +653,8 @@ def add_kv_table(
         value_text = "" if value is None else str(value)
         row = table.add_row()
         label, cell = row.cells
-        _write_cell(label, label_text, bold=True, color=label_colour)
-        _write_cell(cell, value_text)
+        write_cell(label, label_text, bold=True, color=label_colour)
+        write_cell(cell, value_text)
         shade_cell(label, label_fill)
         if _is_short(label_text, value_text):
             keep_row_together(row)
@@ -672,11 +672,11 @@ def add_role_band(doc: Document, title: str, value: str):
     style_applied = _try_set_table_style(table)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     band = table.rows[0].cells[0]
-    _write_cell(band, str(title or ""), bold=True, color=HEADER_TEXT, align=WD_ALIGN_PARAGRAPH.CENTER)
+    write_cell(band, str(title or ""), bold=True, color=HEADER_TEXT, align=WD_ALIGN_PARAGRAPH.CENTER)
     shade_cell(band, BRAND_TABLE_HEADER_HEX)
     band.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
     holder = (value or "").strip() or "—"
-    _write_cell(table.rows[1].cells[0], holder, align=WD_ALIGN_PARAGRAPH.CENTER)
+    write_cell(table.rows[1].cells[0], holder, align=WD_ALIGN_PARAGRAPH.CENTER)
     _keep_with_next_in(table.rows[0])
     if _is_short(title, holder):
         for row in table.rows:
@@ -713,10 +713,10 @@ def add_signature_grid(doc: Document, cells: list[tuple[str, str]], *, sign_heig
             else:
                 role_text, holder = "", ""
             role_cell = roles.cells[index]
-            _write_cell(role_cell, role_text, bold=True, color=HEADER_TEXT, align=WD_ALIGN_PARAGRAPH.CENTER)
+            write_cell(role_cell, role_text, bold=True, color=HEADER_TEXT, align=WD_ALIGN_PARAGRAPH.CENTER)
             shade_cell(role_cell, BRAND_NAVY_HEX)
             role_cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-            _write_cell(names.cells[index], holder, align=WD_ALIGN_PARAGRAPH.CENTER)
+            write_cell(names.cells[index], holder, align=WD_ALIGN_PARAGRAPH.CENTER)
         # Rounded up to whole twips, the unit Word stores: 2.5 cm would
         # otherwise come back as 2.4998 cm.
         signs.height = Twips(math.ceil(Cm(sign_height_cm) / Twips(1)))
@@ -842,7 +842,7 @@ def add_data_table(
 
     hdr = table.rows[0]
     for i, h in enumerate(headers):
-        _write_cell(hdr.cells[i], "" if h is None else str(h))
+        write_cell(hdr.cells[i], "" if h is None else str(h))
     style_header_row(hdr)
 
     # No cantSplit on data rows: a keep-together row taller than a page makes
@@ -854,7 +854,7 @@ def add_data_table(
         for i, cell_val in enumerate(row_data):
             text = "" if cell_val is None else str(cell_val)
             centred = WD_ALIGN_PARAGRAPH.CENTER if i in centred_columns or _is_centred_value(text) else None
-            _write_cell(row.cells[i], text, align=centred)
+            write_cell(row.cells[i], text, align=centred)
             if zebra:
                 shade_cell(row.cells[i], BRAND_SURFACE_HEX)
 

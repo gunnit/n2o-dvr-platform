@@ -27,13 +27,13 @@ from docx.text.paragraph import Paragraph
 
 from app.services.document_generator.design import (
     REVISION_TABLE_PREFIX,
-    _crop_to_cover,
-    _is_page_break_only,
-    _page_size,
     add_cover,
     add_revision_table,
     art_marker,
     cover_block_lead,
+    crop_to_cover,
+    is_page_break_only,
+    page_size,
 )
 from app.services.document_generator.docx_utils import (
     FONT_FAMILY,
@@ -113,7 +113,7 @@ def _starts_new_page(element, styles) -> bool:
     it would leave an empty page."""
     if element is None or element.tag != qn("w:p"):
         return False
-    if _is_page_break_only(element):
+    if is_page_break_only(element):
         return True
     if _page_break_before(element, styles):
         return True
@@ -163,7 +163,7 @@ def _fit_art_to_section(doc: Document, art, section) -> None:
     anchor = art.find(f".//{qn('wp:anchor')}")
     if anchor is None:
         return
-    width, height = _page_size(section)
+    width, height = page_size(section)
     extent = anchor.find(qn("wp:extent"))
     if extent is not None:
         extent.set("cx", str(width))
@@ -177,7 +177,7 @@ def _fit_art_to_section(doc: Document, art, section) -> None:
     blip = anchor.find(f".//{qn('a:blip')}")
     image_part = doc.part.related_parts.get(blip.get(qn("r:embed"))) if blip is not None else None
     if image_part is not None:
-        _crop_to_cover(anchor, image_part.image, width, height)
+        crop_to_cover(anchor, image_part.image, width, height)
 
 
 def insert_kit_cover_at_top(doc: Document, *, revision_table: bool = False, **cover: Any) -> int:
@@ -236,7 +236,7 @@ def insert_kit_cover_at_top(doc: Document, *, revision_table: bool = False, **co
     Paragraph(lead, doc._body).paragraph_format.space_before = cover_block_lead(first)
 
     page_break = added[cover_blocks - 1]
-    if _is_page_break_only(page_break) and _starts_new_page(page_break.getnext(), doc.styles.element):
+    if is_page_break_only(page_break) and _starts_new_page(page_break.getnext(), doc.styles.element):
         body.remove(page_break)
         added.remove(page_break)
     return len(added)

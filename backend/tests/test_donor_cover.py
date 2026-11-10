@@ -208,7 +208,7 @@ def _starts_new_page(element) -> bool:
     of it would leave an empty page."""
     if element is None or element.tag != qn("w:p"):
         return False
-    if design._is_page_break_only(element):
+    if design.is_page_break_only(element):
         return True
     flag = element.find(f"{qn('w:pPr')}/{qn('w:pageBreakBefore')}")
     if flag is not None and flag.get(qn("w:val")) not in ("0", "false", "off"):
@@ -439,7 +439,7 @@ def test_insert_kit_cover_at_top_fits_the_art_to_the_first_section():
     assert doc.sections[0].different_first_page_header_footer
     assert not doc.sections[-1].different_first_page_header_footer
     # The cover ends with its page break, then the donor body follows.
-    assert design._is_page_break_only(blocks[added - 1])
+    assert design.is_page_break_only(blocks[added - 1])
     assert _w_text(blocks[added]) == "Contenuto della prima sezione"
     assert "Piano Operativo di Sicurezza" in "".join(_w_text(el) for el in blocks[:added])
 
@@ -510,7 +510,7 @@ def test_insert_kit_cover_at_top_on_a_multi_section_donor():
     assert design.section_first_blocks(doc)[1] is blocks[added + 1]
     # ...which opens the next page: a page break of the cover's own would
     # leave an empty page between the two.
-    assert not any(design._is_page_break_only(el) for el in blocks[:added])
+    assert not any(design.is_page_break_only(el) for el in blocks[:added])
     first = doc.sections[0]
     extent = blocks[0].find(f".//{qn('wp:anchor')}").find(qn("wp:extent"))
     assert (int(extent.get("cx")), int(extent.get("cy"))) == (first.page_width, first.page_height)
@@ -551,7 +551,7 @@ def test_insert_kit_cover_at_top_puts_the_revision_table_after_the_cover():
     (table,) = _revision_tables(doc)
     index = blocks.index(table._tbl)
     # On the page after the cover, before the donor body.
-    assert design._is_page_break_only(blocks[index - 2])
+    assert design.is_page_break_only(blocks[index - 2])
     assert _w_text(blocks[index - 1]) == "Storico delle revisioni"
     assert [_w_text(el) for el in blocks].count("Storico delle revisioni") == 1
     assert index < added and blocks[added] is body_start
@@ -587,8 +587,8 @@ def test_insert_kit_cover_at_top_drops_its_break_before_a_page_break():
     doc.add_paragraph("POS - ACME")
     added = insert_kit_cover_at_top(doc, **_cover_kwargs())
     blocks = _blocks(doc)
-    assert not any(design._is_page_break_only(el) for el in blocks[:added])
-    assert design._is_page_break_only(blocks[added])
+    assert not any(design.is_page_break_only(el) for el in blocks[:added])
+    assert design.is_page_break_only(blocks[added])
     assert _w_text(blocks[added + 1]) == "POS - ACME"
 
 
@@ -651,7 +651,7 @@ def test_donor_attachments_get_kit_cover_and_back_cover(generated, tipo):
     for index, element in enumerate(blocks[:60]):
         if element.find(SECT) is not None:
             break
-        if design._is_page_break_only(element):
+        if design.is_page_break_only(element):
             assert not _starts_new_page(blocks[index + 1]), "empty page after the cover"
             break
 
@@ -698,7 +698,7 @@ def test_donor_attachments_keep_one_revision_table(generated, tipo):
     assert _rows(table) == [REVISION_HEADER, [revision[1], "Emissione", revision[2]]]
     # The first table of the document, on the page after the cover.
     assert _w_text(blocks[index - 1]) == "Storico delle revisioni"
-    assert design._is_page_break_only(blocks[index - 2])
+    assert design.is_page_break_only(blocks[index - 2])
     assert not any(el.tag == qn("w:tbl") for el in blocks[:index])
 
 

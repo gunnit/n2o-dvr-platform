@@ -150,7 +150,7 @@ ART: dict[str, str] = {
 }
 
 
-def _resolve_art(key: str, *, role: str = "divider") -> tuple[str, Path] | None:
+def resolve_art(key: str, *, role: str = "divider") -> tuple[str, Path] | None:
     """``(key actually used, file)`` for ``key``: its own file when present.
 
     For a divider (and :func:`art_path`) an unknown key or a missing file
@@ -179,14 +179,14 @@ def _resolve_art(key: str, *, role: str = "divider") -> tuple[str, Path] | None:
 def art_path(key: str) -> Path | None:
     """The file for art ``key``; an unknown key or a missing file falls back to
     ``div_generico``, and ``None`` means even that is missing."""
-    resolved = _resolve_art(key)
+    resolved = resolve_art(key)
     return resolved[1] if resolved else None
 
 
 def _usable_art(key: str, *, role: str) -> tuple[str, Path] | None:
-    """Like :func:`_resolve_art` for a page of ``role`` (``cover``,
+    """Like :func:`resolve_art` for a page of ``role`` (``cover``,
     ``divider`` or ``back_cover``), but only an image python-docx can read."""
-    resolved = _resolve_art(key, role=role)
+    resolved = resolve_art(key, role=role)
     if resolved is None:
         return None
     try:
@@ -475,7 +475,7 @@ def _is_empty_paragraph(p) -> bool:
     )
 
 
-def _is_page_break_only(p) -> bool:
+def is_page_break_only(p) -> bool:
     """A paragraph that holds nothing but page breaks (``doc.add_page_break``)."""
     if p.tag != qn("w:p") or p.find(_PARA_SECTPR) is not None:
         return False
@@ -497,7 +497,7 @@ def _is_page_break_only(p) -> bool:
 
 def _drop_trailing_page_break(doc: Document) -> bool:
     last = _last_block(doc)
-    if last is None or not _is_page_break_only(last):
+    if last is None or not is_page_break_only(last):
         return False
     last.getparent().remove(last)
     return True
@@ -588,13 +588,14 @@ _ANCHOR_XML = (
 )
 
 
-def _page_size(section) -> tuple[int, int]:
+def page_size(section) -> tuple[int, int]:
+    """Width and height of ``section``'s page in EMU; A4 where unset."""
     width = section.page_width or Cm(PAGE_W_CM)
     height = section.page_height or Cm(PAGE_H_CM)
     return int(width), int(height)
 
 
-def _crop_to_cover(inline, image, width: int, height: int) -> None:
+def crop_to_cover(inline, image, width: int, height: int) -> None:
     """Crop the picture's long side so it fills the page undistorted
     (``object-fit: cover``). Art is cut to A4, so on A4 this does nothing;
     a donor template on another paper size keeps its own page setup."""
@@ -636,7 +637,7 @@ def _anchor_behind_page(inline, name: str) -> None:
 def _add_art_paragraph(doc: Document, key: str, path: Path, *, role: str, section):
     """Append the empty 1 pt paragraph holding the full-page picture for
     ``section``. Returns it, or ``None`` (with nothing appended) on failure."""
-    width, height = _page_size(section)
+    width, height = page_size(section)
     paragraph = doc.add_paragraph()
     _shrink(paragraph)
     run = paragraph.add_run()
@@ -650,7 +651,7 @@ def _add_art_paragraph(doc: Document, key: str, path: Path, *, role: str, sectio
     blip = inline.find(".//" + qn("a:blip"))
     image_part = run.part.related_parts.get(blip.get(qn("r:embed"))) if blip is not None else None
     if image_part is not None:
-        _crop_to_cover(inline, image_part.image, width, height)
+        crop_to_cover(inline, image_part.image, width, height)
     _anchor_behind_page(inline, f"{ART_MARKER_PREFIX}{role}:{key}")
     return paragraph
 

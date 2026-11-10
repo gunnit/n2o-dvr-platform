@@ -375,7 +375,7 @@ def test_sign_panels_without_artwork_are_left_out(tmp_path, monkeypatch):
 def test_dvr_writes_table_cells_with_the_kit_helper():
     """The DVR kept a copy of the kit's cell writer (same body, plus an
     ``italic`` flag no caller passed); it uses the kit's own now."""
-    assert dvr_master._write_cell is docx_utils._write_cell
+    assert dvr_master.write_cell is docx_utils.write_cell
 
 
 def test_signage_colour_table_aligns_each_column_alike():

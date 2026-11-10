@@ -43,7 +43,6 @@ from docx.table import Table
 from app.data.regional_regulations import get_regulations_for_comune
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.design import (
-    _resolve_art,
     add_art_cover,
     add_back_cover,
     add_divider,
@@ -52,6 +51,7 @@ from app.services.document_generator.design import (
     add_toc,
     finalize_toc,
     finish_document,
+    resolve_art,
     setup_document,
 )
 from app.services.document_generator.docx_utils import (
@@ -61,9 +61,6 @@ from app.services.document_generator.docx_utils import (
     HEADER_TEXT,
     NOTE_GREY,
     TYPE_SCALE,
-    # The kit's cell writer (10 pt Arial, no paragraph spacing, line breaks
-    # as w:br): every table cell the DVR fills by hand goes through it.
-    _write_cell,
     add_body_paragraph,
     add_bullets,
     add_data_table,
@@ -77,6 +74,9 @@ from app.services.document_generator.docx_utils import (
     set_table_borders,
     shade_cell,
     style_header_row,
+    # The kit's cell writer (10 pt Arial, no paragraph spacing, line breaks
+    # as w:br): every table cell the DVR fills by hand goes through it.
+    write_cell,
 )
 from app.services.protocollo_sanitario import PROTOCOLLO_SANITARIO_ATTIVO
 from app.services.reference_data import (
@@ -954,7 +954,7 @@ def _note(doc: Document, text: str):
 def _bullet_cell(cell, items: list[str]) -> None:
     """Fill a cell with a real bulleted list, or "—" when there is nothing."""
     if not add_bullets(cell, items, size_pt=TYPE_SCALE["table"]):
-        _write_cell(cell, "—", align=_CENTER)
+        write_cell(cell, "—", align=_CENTER)
 
 
 def _add_picture_border(inline) -> None:
@@ -1805,12 +1805,12 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         band_row, sign_row = table.rows
         band = band_row.cells[0]
-        _write_cell(band, "Timbro e Firma", bold=True, color=HEADER_TEXT, align=_CENTER)
+        write_cell(band, "Timbro e Firma", bold=True, color=HEADER_TEXT, align=_CENTER)
         shade_cell(band, BRAND_NAVY_HEX)
         band.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
         for paragraph in band.paragraphs:
             paragraph.paragraph_format.keep_with_next = True
-        _write_cell(sign_row.cells[0], "")
+        write_cell(sign_row.cells[0], "")
         sign_row.height = Cm(3.5)
         sign_row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
         for row in table.rows:
@@ -2175,7 +2175,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 _bullet_cell(row.cells[2], names)
             else:
                 label = _no_environment_label(person).upper()
-                _write_cell(row.cells[2], label, align=_CENTER if label == "—" else None)
+                write_cell(row.cells[2], label, align=_CENTER if label == "—" else None)
 
     def _add_single_role_title_table(
         self, doc: Document, title: str, role_persone: list
@@ -2205,13 +2205,13 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
         band = table.rows[0].cells[0].merge(table.rows[0].cells[1])
-        _write_cell(band, title)
+        write_cell(band, title)
         style_header_row(table.rows[0])
 
         sub_row = table.rows[1]
         for i, text in enumerate(["Nominativo", "Mansione"]):
             cell = sub_row.cells[i]
-            _write_cell(cell, text, bold=True, color=BRAND_NAVY, align=_CENTER)
+            write_cell(cell, text, bold=True, color=BRAND_NAVY, align=_CENTER)
             shade_cell(cell, BRAND_SURFACE_HEX)
         _repeat_as_header(sub_row)
 
@@ -2222,7 +2222,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         for values in holders:
             row = table.add_row()
             for cell, text in zip(row.cells, values):
-                _write_cell(cell, text, align=_CENTER if text == "—" else None)
+                write_cell(cell, text, align=_CENTER if text == "—" else None)
         set_table_borders(table)
 
     def _add_servizi_igienico_assistenziali_section(
@@ -2926,7 +2926,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         for key, title in _SIGN_PANELS:
             # The resolver says which manifest key it used: anything but the
             # panel's own key is the generic divider standing in for it.
-            resolved = _resolve_art(key)
+            resolved = resolve_art(key)
             if resolved is None or resolved[0] != key:
                 logger.warning("Sign panel %r has no artwork; panel left out", key)
                 continue
@@ -3188,7 +3188,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         header_row = table.rows[0]
         for cell, text in zip(header_row.cells, ["Categoria di Rischio", "Applicabile"]):
-            _write_cell(cell, text)
+            write_cell(cell, text)
         style_header_row(header_row)
 
         current_macro = None
@@ -3196,7 +3196,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             if macro != current_macro:
                 macro_row = table.add_row()
                 merged = macro_row.cells[0].merge(macro_row.cells[1])
-                _write_cell(merged, macro, bold=True, color=BRAND_NAVY)
+                write_cell(merged, macro, bold=True, color=BRAND_NAVY)
                 shade_cell(merged, BRAND_SURFACE_HEX)
                 # A short label row: kept whole and with the first category.
                 keep_row_together(macro_row)
@@ -3205,9 +3205,9 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 current_macro = macro
 
             row = table.add_row()
-            _write_cell(row.cells[0], categoria)
+            write_cell(row.cells[0], categoria)
             flag = "SI" if categoria in applicable_categories else "NO"
-            _write_cell(row.cells[1], flag, align=_CENTER)
+            write_cell(row.cells[1], flag, align=_CENTER)
         set_table_borders(table)
 
     def _add_env_risk_tables(
@@ -3604,7 +3604,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             if isinstance(entry, list):
                 _bullet_cell(row.cells[1], entry)
             else:
-                _write_cell(row.cells[1], entry)
+                write_cell(row.cells[1], entry)
         _note(
             doc,
             "Fonte: D.M. 9 aprile 2008 (tabelle delle malattie professionali "

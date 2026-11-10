@@ -919,3 +919,42 @@ def test_finalize_toc_entries_have_a_dot_leader_tab_at_text_width():
         assert tab.get(qn("w:val")) == "right" and tab.get(qn("w:leader")) == "dot"
         assert abs(int(tab.get(qn("w:pos"))) - text_width_twips) <= 1
         assert el.xpath(".//w:r/w:tab")
+
+
+_KIT_MODULES = {
+    "app.services.document_generator.design": "design",
+    "app.services.document_generator.docx_utils": "docx_utils",
+}
+# docx_utils helpers that duvri, donor_front_matter and haccp_manuale have
+# imported since before the 2026-11 redesign; they wait for a change of
+# their own.
+_PRE_REDESIGN_PRIVATE = {"_norm_text", "_set_cell_text_keep_format", "_set_paragraph_text_keep_format"}
+
+
+def test_other_modules_use_only_the_kits_public_names():
+    """Final review H-1: a kit helper another module needs is public (the
+    DVR's resolve_art and write_cell, donor_cover's page_size,
+    crop_to_cover and is_page_break_only), so a rename inside the kit
+    cannot silently break its callers."""
+    import ast
+    from pathlib import Path
+
+    app_root = Path(design.__file__).resolve().parents[2]
+    offenders = []
+    for path in sorted(app_root.rglob("*.py")):
+        module = ".".join(path.relative_to(app_root.parent).with_suffix("").parts)
+        if module in _KIT_MODULES:
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ImportFrom) and node.module in _KIT_MODULES:
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in _KIT_MODULES.values():
+                names = [node.attr]
+            else:
+                continue
+            offenders += [
+                f"{module}: {name}"
+                for name in names
+                if name.startswith("_") and not name.startswith("__") and name not in _PRE_REDESIGN_PRIVATE
+            ]
+    assert offenders == []
