@@ -658,6 +658,60 @@ def _art_page(p_el) -> tuple[str | None, str | None]:
     return role, None
 
 
+# Section starts that open a new page (ST_SectionMark); a missing w:type is
+# Word's default, nextPage. continuous and nextColumn keep the page.
+_PAGE_STARTING_SECTION_TYPES = frozenset({"nextPage", "oddPage", "evenPage"})
+_PARA_SECTPR = f"{qn('w:pPr')}/{qn('w:sectPr')}"
+
+
+def _next_sect_pr(p_el):
+    """The ``w:sectPr`` after the one ``p_el`` carries: a later body
+    paragraph's, else the body's own. None outside the body (a cell)."""
+    parent = p_el.getparent()
+    if parent is None or parent.tag != qn("w:body"):
+        return None
+    for sibling in p_el.itersiblings():
+        if sibling.tag == qn("w:sectPr"):
+            return sibling
+        if sibling.tag == qn("w:p"):
+            found = sibling.find(_PARA_SECTPR)
+        elif sibling.tag in (qn("w:sdt"), qn("w:customXml")):
+            # Paragraphs wrapped in a content control or custom XML.
+            found = next(sibling.iter(qn("w:sectPr")), None)
+        else:
+            found = None
+        if found is not None:
+            return found
+    return None
+
+
+def _page_geometry(sect_pr) -> tuple:
+    size = sect_pr.find(qn("w:pgSz"))
+    if size is None:
+        return (None, None, None)
+    return tuple(size.get(qn(attr)) for attr in ("w:w", "w:h", "w:orient"))
+
+
+def _section_break_opens_page(p_el, sect_pr) -> bool:
+    """Whether what follows the section ``sect_pr`` ends starts on a new
+    page, as Word prints it — where the editor opens a new sheet.
+
+    A section's own ``w:type`` says how it starts after the previous one, so
+    the next ``w:sectPr`` decides, not this one: absent, nextPage, oddPage or
+    evenPage open a page; continuous and nextColumn keep it, unless the page
+    size or orientation changes, which Word and LibreOffice only do on a new
+    page (the old DVR's landscape improvement table).
+    """
+    following = _next_sect_pr(p_el)
+    if following is None:
+        return False
+    kind = following.find(qn("w:type"))
+    start = (kind.get(qn("w:val")) if kind is not None else None) or "nextPage"
+    if start in _PAGE_STARTING_SECTION_TYPES:
+        return True
+    return _page_geometry(following) != _page_geometry(sect_pr)
+
+
 def _cell_v_align(tc_pr) -> str | None:
     if tc_pr is None:
         return None
@@ -918,6 +972,7 @@ class _PreviewContext:
         else:
             outline_level = self._defaults.get("outline_level")
         page_role, background_image_id = _art_page(p_el)
+        sect_pr = ppr.find(qn("w:sectPr")) if ppr is not None else None
         return {
             "outline_level": outline_level,
             # Only the keys the paragraph sets (a None value is a real
@@ -926,7 +981,7 @@ class _PreviewContext:
             "list": self._list(ppr, style_el),
             "page_role": page_role,
             "background_image_id": background_image_id,
-            "section_break_after": ppr is not None and ppr.find(qn("w:sectPr")) is not None,
+            "section_break_after": sect_pr is not None and _section_break_opens_page(p_el, sect_pr),
         }
 
     def style_props(self) -> dict[str, dict]:

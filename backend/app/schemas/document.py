@@ -205,8 +205,9 @@ class DocumentPreviewCellParagraph(BaseModel):
     # main-part rId for /preview/images/{image_id}.
     page_role: Literal["cover", "divider", "back_cover"] | None = None
     background_image_id: str | None = None
-    # Layout redesign — the paragraph ends a section (pPr carries w:sectPr):
-    # what follows starts on a new sheet.
+    # Layout redesign — the paragraph ends a section (pPr carries w:sectPr)
+    # and the next section starts on a new page: what follows starts on a
+    # new sheet. False at a continuous break that keeps the page.
     section_break_after: bool = False
     # Layout redesign — numbering from numPr and numbering.xml. Named "list"
     # by the contract; see the comment at the top of this class for what the

@@ -365,7 +365,11 @@ export interface PreviewParagraph {
   page_role?: PreviewPageRole | null;
   /** Layout redesign: that art picture, for /preview/images/{image_id}. */
   background_image_id?: string | null;
-  /** Layout redesign: the paragraph ends a section; what follows starts a new sheet. */
+  /**
+   * Layout redesign: the paragraph ends a section and the next one starts on
+   * a new page, so what follows starts a new sheet. False at a continuous
+   * section break, which keeps the page.
+   */
   section_break_after?: boolean;
 }
 

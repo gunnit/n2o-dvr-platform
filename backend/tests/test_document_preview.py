@@ -811,6 +811,69 @@ def _set_mark(paragraph, *, bold: bool = False, color: str | None = None, half_p
     paragraph._p.get_or_add_pPr().append(rpr)
 
 
+def _section_break_flags(doc) -> list[tuple[str, bool]]:
+    """(text, section_break_after) of every top-level paragraph."""
+    blocks = parse_docx_preview(_to_bytes(doc))["blocks"]
+    return [(_para_text(b), b["section_break_after"]) for b in blocks if b["kind"] == "paragraph"]
+
+
+@pytest.mark.parametrize(
+    ("start_type", "opens_a_page"),
+    [
+        (None, True),  # no w:type, Word's default: nextPage
+        ("nextPage", True),
+        ("oddPage", True),
+        ("evenPage", True),
+        ("continuous", False),
+        ("nextColumn", False),
+    ],
+)
+def test_section_break_opens_a_sheet_only_where_the_next_section_opens_a_page(start_type, opens_a_page):
+    """Final review P-1: a continuous section break keeps the page in Word,
+    so the editor must not open a sheet there. How a section starts is the
+    w:type of its OWN sectPr — the next one in the body, not the one on the
+    paragraph that ends the previous section."""
+    doc = Document()
+    doc.add_paragraph("Prima sezione")
+    section = doc.add_section(WD_SECTION.NEW_PAGE)  # python-docx writes no w:type for it
+    assert section._sectPr.find(qn("w:type")) is None
+    if start_type is not None:
+        kind = OxmlElement("w:type")
+        kind.set(qn("w:val"), start_type)
+        section._sectPr.insert(0, kind)
+    doc.add_paragraph("Seconda sezione")
+    assert _section_break_flags(doc) == [("Prima sezione", False), ("", opens_a_page), ("Seconda sezione", False)]
+
+
+def test_section_break_follows_the_section_it_opens_not_the_one_it_ends():
+    # A continuous section (B) and, after it, one on a new page (C): B keeps
+    # A's page, C opens its own. python-docx, like Word, writes each type on
+    # the section it starts.
+    doc = Document()
+    doc.add_paragraph("A")
+    doc.add_section(WD_SECTION.CONTINUOUS)
+    doc.add_paragraph("B")
+    doc.add_section(WD_SECTION.NEW_PAGE)
+    doc.add_paragraph("C")
+    assert _section_break_flags(doc) == [("A", False), ("", False), ("B", False), ("", True), ("C", False)]
+
+
+def test_a_continuous_break_into_another_page_size_still_opens_a_sheet():
+    # Word and LibreOffice cannot change orientation mid-page: the old DVR's
+    # landscape improvement table starts after a continuous break, on a page
+    # of its own.
+    doc = Document()
+    doc.add_paragraph("Verticale")
+    section = doc.add_section(WD_SECTION.CONTINUOUS)
+    section.orientation = WD_ORIENT.LANDSCAPE
+    section.page_width, section.page_height = section.page_height, section.page_width
+    doc.add_paragraph("Orizzontale")
+    assert _section_break_flags(doc) == [("Verticale", False), ("", True), ("Orizzontale", False)]
+
+    legacy = parse_docx_preview(LEGACY_DOCX.read_bytes())["blocks"]
+    assert [b["addr"] for b in legacy if b.get("section_break_after")] == ["394", "396"]
+
+
 def test_art_paragraph_reports_page_role_not_inline_image():
     docx_bytes = _kit_docx()
     blocks = parse_docx_preview(docx_bytes)["blocks"]
