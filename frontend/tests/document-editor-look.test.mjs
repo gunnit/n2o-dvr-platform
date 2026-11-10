@@ -29,7 +29,8 @@ function run(fields = {}) {
     underline: false,
     color: null,
     size: null,
-    caps: false,
+    // Unset: null. false is "explicitly off" (see the caps test).
+    caps: null,
     ...fields,
   };
 }
@@ -428,6 +429,22 @@ test("a run adds only what it sets: unset bold, size and colour inherit the styl
     },
   );
   assert.deepEqual(effectiveRunStyle(run({ size: 12.0 }), body), {});
+});
+
+test("a run's capitals: explicitly off prints as typed in a capitalised title, unset inherits", () => {
+  const title = resolveParagraph(para("10", { style: "Heading 2" }), KIT_STYLES);
+  const body = resolveParagraph(para("11"), KIT_STYLES);
+  // "(Riferimento)" under ELENCO FATTORI DI PERICOLO: Word prints it as typed.
+  assert.deepEqual(effectiveRunStyle(run({ caps: false }), title), { textTransform: "none" });
+  // Unset inherits the paragraph's capitals: null, or no caps key at all as
+  // in a payload from before the layout redesign.
+  assert.deepEqual(effectiveRunStyle(run({ caps: null }), title), {});
+  const legacy = run();
+  delete legacy.caps;
+  assert.deepEqual(effectiveRunStyle(legacy, title), {});
+  // On adds capitals; off has nothing to undo in a paragraph without them.
+  assert.deepEqual(effectiveRunStyle(run({ caps: true }), body), { textTransform: "uppercase" });
+  assert.deepEqual(effectiveRunStyle(run({ caps: false }), body), {});
 });
 
 test("text typed into an empty paragraph shows at its style's size, not at its mark's", () => {

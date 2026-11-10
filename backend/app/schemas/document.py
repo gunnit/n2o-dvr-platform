@@ -159,8 +159,10 @@ class DocumentPreviewRun(BaseModel):
     color: str | None = None
     # Font size in points; None when inherited from the style.
     size: float | None = None
-    # Layout redesign: the run itself sets capitals (w:caps).
-    caps: bool = False
+    # Layout redesign: the run's own capitals (w:caps). True: on. False:
+    # explicitly off, so the text prints as typed even in a capitalised
+    # heading. None: unset, the paragraph's capitals apply.
+    caps: bool | None = None
 
 
 class DocumentPreviewImage(BaseModel):

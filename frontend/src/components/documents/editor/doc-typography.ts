@@ -213,7 +213,9 @@ export function effectiveParagraphStyle(
 /**
  * CSS a run adds to its paragraph box: only what it sets. A run reports
  * `bold: false` both when unset and when off, so false inherits the style;
- * `size` and `color` null inherit too.
+ * `size` and `color` null inherit too. Capitals are three-state: `caps:
+ * false` is explicitly off and prints the text as typed even in a
+ * capitalised heading; null or absent inherits.
  */
 export function effectiveRunStyle(
   run: PreviewRun,
@@ -226,7 +228,8 @@ export function effectiveRunStyle(
   if (run.bold && !look.bold) css.fontWeight = 700;
   if (run.italic && !look.italic) css.fontStyle = "italic";
   if (run.underline) css.textDecoration = "underline";
-  if (run.caps && !look.caps) css.textTransform = "uppercase";
+  if (run.caps === true && !look.caps) css.textTransform = "uppercase";
+  if (run.caps === false && look.caps) css.textTransform = "none";
   return css;
 }
 

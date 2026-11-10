@@ -981,6 +981,40 @@ def test_style_props_resolve_chain_to_doc_defaults():
     assert props["Titolo variante"]["outline_level"] == 2
 
 
+def test_run_caps_tell_explicitly_off_from_unset():
+    """Final review M-2: under a capitalised divider title the DVR keeps
+    "(Riferimento)" in its own case — caps explicitly off, which Word prints
+    as typed. A run's caps are sent as true, false (explicitly off) or null
+    (unset), and the response model keeps all three."""
+    from app.services.document_generator.dvr_master import _keep_case
+
+    doc = Document()
+    design.setup_document(doc, profile="dvr")
+    title = design.add_divider(
+        doc,
+        "ELENCO FATTORI DI PERICOLO (Riferimento)",
+        "div_fattori_pericolo",
+        part_label="PARTE I — DATI GENERALI DELL'AZIENDA",
+    )
+    _keep_case(title, "(Riferimento)")
+    preview = parse_docx_preview(_to_bytes(doc))
+
+    label = _paragraph_starting(preview["blocks"], "PARTE I", style="Heading 1")
+    heading = _paragraph_starting(preview["blocks"], "ELENCO", style="Heading 2")
+    expected = [
+        [("PARTE I — DATI GENERALI DELL'AZIENDA", True)],
+        [("ELENCO FATTORI DI PERICOLO ", None), ("(Riferimento)", False)],
+    ]
+    assert [[(r["text"], r["caps"]) for r in p["runs"]] for p in (label, heading)] == expected
+
+    resp = DocumentPreviewResponse(
+        id=uuid.uuid4(), azienda_id=uuid.uuid4(), azienda_nome="Acme",
+        tipo_documento="dvr_master", versione=1, **preview,
+    )
+    dumped = {b["addr"]: b for b in resp.model_dump(mode="json")["blocks"]}
+    assert [[(r["text"], r["caps"]) for r in dumped[p["addr"]]["runs"]] for p in (label, heading)] == expected
+
+
 def test_paragraph_direct_formatting_outline_and_run_caps():
     blocks = parse_docx_preview(_kit_docx())["blocks"]
     # The part label: Heading 1 with the label look applied directly.
@@ -996,7 +1030,7 @@ def test_paragraph_direct_formatting_outline_and_run_caps():
     assert _paragraph_starting(blocks, "ANAGRAFICA AZIENDALE")["outline_level"] is None
     body = _paragraph_starting(blocks, "Il documento")
     assert body["direct"] == {"alignment": "justify"} and body["outline_level"] is None
-    assert body["runs"][0]["caps"] is False
+    assert body["runs"][0]["caps"] is None  # unset: the style's capitals apply
     # A sub-title in the index is a Heading 3: outline level 3 from its style.
     caption = _paragraph_starting(blocks, "Storico delle revisioni", style="Heading 3")
     assert caption["outline_level"] == 3
@@ -1364,7 +1398,7 @@ def test_preview_response_validates_enriched_preview():
     paragraph = legacy.blocks[0]
     assert paragraph.outline_level is None and paragraph.direct is None and paragraph.list is None
     assert paragraph.page_role is None and paragraph.section_break_after is False
-    assert paragraph.runs[0].caps is False
+    assert paragraph.runs[0].caps is None  # no caps key: unset, not "off"
     assert legacy.blocks[4].col_widths_pct is None and legacy.blocks[4].rows[0][0].v_align is None
 
 

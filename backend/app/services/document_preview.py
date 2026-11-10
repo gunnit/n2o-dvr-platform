@@ -167,7 +167,9 @@ def _paragraph_run_elements(p_el) -> list:
 def _run_payload(run, *, with_caps: bool = False) -> dict:
     """Serialise one run. color/size come from run.font — None when inherited.
 
-    ``with_caps`` (preview contract only) adds the run's own capitals flag.
+    ``with_caps`` (preview contract only) adds the run's own capitals: True,
+    False when the run turns them off (Word then prints it as typed even in
+    a capitalised heading: the DVR's "(Riferimento)"), None when unset.
     """
     font = run.font
     color = None
@@ -185,7 +187,7 @@ def _run_payload(run, *, with_caps: bool = False) -> dict:
         "size": float(font.size.pt) if font.size is not None else None,
     }
     if with_caps:
-        payload["caps"] = bool(font.all_caps)
+        payload["caps"] = font.all_caps
     return payload
 
 

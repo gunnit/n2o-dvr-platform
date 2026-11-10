@@ -285,8 +285,12 @@ export interface PreviewRun {
   color: string | null;
   /** Font size in points; null when inherited. */
   size: number | null;
-  /** Layout redesign: the run sets capitals (w:caps). */
-  caps?: boolean;
+  /**
+   * Layout redesign: the run's own capitals (w:caps). true: on. false:
+   * explicitly off, the text prints as typed even in a capitalised heading.
+   * null, or absent (payloads from before the redesign): the paragraph's.
+   */
+  caps?: boolean | null;
 }
 
 export interface PreviewInlineImage {
