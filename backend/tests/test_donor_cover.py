@@ -41,6 +41,7 @@ from app.services.document_generator.donor_cover import (
     normalize_fonts,
     strip_donor_cover,
 )
+from scripts.verify_dvr_luca_fixture import _generator_patch_objects
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 GENERATED_AT = datetime(2026, 11, 10, 9, 30)
@@ -81,6 +82,29 @@ def _load_verify():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+_MISSING = object()
+
+
+def _harness_state() -> list[tuple[object, dict]]:
+    """What every object the generator harness patches holds now."""
+    return [(owner, dict(vars(owner))) for owner in _generator_patch_objects()]
+
+
+def _changed_since(state) -> list[str]:
+    """The attributes that are no longer the ones ``state`` recorded."""
+    changed = []
+    for owner, before in state:
+        now = vars(owner)
+        for name in before.keys() | now.keys():
+            if now.get(name, _MISSING) is not before.get(name, _MISSING):
+                changed.append(f"{getattr(owner, '__name__', owner)}.{name}")
+    return sorted(changed)
+
+
+# Taken while the module is collected, before any test can have patched.
+_REAL_HARNESS = _harness_state()
 
 
 def _azienda(**overrides):
@@ -578,15 +602,25 @@ def generated(tmp_path_factory):
     out = tmp_path_factory.mktemp("donors")
     module = _load_verify()
     fixture = module.build_fixture()
-    module.patch_generators(fixture, str(out))
     results = {}
 
     async def run_all():
         for tipo in (*DONOR_TEMPLATES, "HACCP_FORMS"):
             results[tipo] = await module.run_one(tipo, fixture["azienda"].id)
 
-    asyncio.run(run_all())
+    # The tests read the files; the fakes go once they are written.
+    with module.patched_generators(fixture, str(out)):
+        asyncio.run(run_all())
     return results
+
+
+def test_generating_the_donors_puts_the_real_generators_back(generated):
+    """Final review L-1: the harness's fakes (load_data, _load_dvr_extras,
+    the loaders, the output directory) must not outlive the generation, or
+    every later test that runs a generator — a DB-backed one included —
+    silently gets them."""
+    assert generated  # the generation has run
+    assert _changed_since(_REAL_HARNESS) == []
 
 
 @pytest.mark.parametrize("tipo", list(DONOR_TEMPLATES))
@@ -679,10 +713,13 @@ def test_haccp_forms_have_no_cover_art(tmp_path, monkeypatch):
     shutil.copy(TEMPLATES_DIR / "haccp" / "Sostanze allergeniche.docx", forms_dir / "SA-14 Sostanze allergeniche.docx")
     module = _load_verify()
     fixture = module.build_fixture()
-    module.patch_generators(fixture, str(tmp_path / "out"))
     monkeypatch.setattr(haccp_forms, "HACCP_TEMPLATES_DIR", forms_dir)
+    before = _harness_state()
 
-    ok, path, message = asyncio.run(module.run_one("HACCP_FORMS", fixture["azienda"].id))
+    with module.patched_generators(fixture, str(tmp_path / "out")):
+        ok, path, message = asyncio.run(module.run_one("HACCP_FORMS", fixture["azienda"].id))
+    # The harness is gone once the forms are written (final review L-1).
+    assert _changed_since(before) == []
     assert ok, message
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
