@@ -139,8 +139,8 @@ def _in_one_loop(body: Callable[..., Any], *, needs_org: bool = True) -> Any:
                     )
                     await s.execute(
                         text(
-                            "INSERT INTO aziende (id, organization_id, ragione_sociale)"
-                            " VALUES (:a, :o, 'Foto SRL')"
+                            "INSERT INTO aziende (id, organization_id, ragione_sociale, survey_status)"
+                            " VALUES (:a, :o, 'Foto SRL', 'draft')"
                         ),
                         {"a": azienda_id, "o": org_id},
                     )
