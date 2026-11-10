@@ -372,6 +372,36 @@ def test_sign_panels_without_artwork_are_left_out(tmp_path, monkeypatch):
     assert "CARTELLI DI DIVIETO" not in _all_text(doc)
 
 
+def test_dvr_writes_table_cells_with_the_kit_helper():
+    """The DVR kept a copy of the kit's cell writer (same body, plus an
+    ``italic`` flag no caller passed); it uses the kit's own now."""
+    assert dvr_master._write_cell is docx_utils._write_cell
+
+
+def test_sign_panels_are_judged_by_manifest_key_not_file_name(tmp_path, monkeypatch):
+    """A panel prints when the art resolver used the panel's own manifest
+    key, whatever its file is called (here, kept in a sub-folder), and a
+    missing panel never borrows the generic divider that stands in for it."""
+    art = tmp_path / "art"
+    (art / "signs").mkdir(parents=True)
+    for key, _title in dvr_master._SIGN_PANELS:
+        monkeypatch.setitem(design.ART, key, f"signs/{key}.jpg")
+        Image.new("RGB", (40, 30), "red").save(art / "signs" / f"{key}.jpg", "JPEG")
+    Image.new("RGB", (40, 56), "blue").save(
+        art / design.ART[design._FALLBACK_ART_KEY], "JPEG"
+    )
+    (art / "signs" / "sign_obbligo.jpg").unlink()
+    monkeypatch.setattr(design, "ART_DIR", art)
+
+    doc = Document()
+    _new_generator()._add_sign_panels(doc)
+
+    text = _all_text(doc)
+    assert len(doc.inline_shapes) == 4
+    assert "CARTELLI DI DIVIETO" in text
+    assert "CARTELLI DI OBBLIGO" not in text
+
+
 def test_photo_image_sources_put_database_bytes_before_local_path(tmp_path):
     local = tmp_path / "legacy.jpg"
     local.write_bytes(_jpeg_bytes("green"))
@@ -663,13 +693,66 @@ def test_improvement_table_has_four_portrait_columns_in_saved_order():
     assert [[c.text for c in row.cells] for row in table.rows[1:]] == [
         ["M1", "S1", "A1", "GRAVE"],
         ["M2", "S2", "A2", "MODESTO"],
-        # No concrete measure yet: its risk-reduction text, not a dash.
-        ["Riduzione del rischio — Macchine", "S3", "A3", "MEDIA"],
+        # No concrete measure yet: its drafted activity, never the risk text
+        # (``misura`` is the "Rischio" column of the app's grid).
+        ["P3", "S3", "A3", "MEDIA"],
     ]
     fills = [row.cells[3]._tc.xpath("./w:tcPr/w:shd/@w:fill") for row in table.rows[1:]]
     assert fills == [["F97316"], ["F59E0B"], ["F59E0B"]]
     # Portrait: no landscape section is opened for the table.
     assert len(doc.sections) == 1
+
+
+def test_improvement_measure_falls_back_to_activity_then_risk_then_dash():
+    rows = [
+        _measure(1, "ALTA", "R1", None, "1"),
+        _measure(2, "ALTA", "R2", "  ", "2"),
+        _measure(3, "ALTA", "R3", None, "3"),
+        _measure(4, "ALTA", "  ", None, "4"),
+    ]
+    rows[1].procedura = None
+    rows[2].procedura = "   "
+    rows[3].procedura = ""
+    doc = Document()
+    _new_generator()._add_improvement_program_table(doc, rows)
+    table = doc.tables[-1]
+    assert [row.cells[0].text for row in table.rows[1:]] == ["P1", "R2", "R3", "—"]
+
+
+def test_auto_seeded_measure_prints_its_drafted_actions_not_the_risk():
+    """A seeded row keeps the risk summary in ``misura`` and the drafted
+    actions, flagged for the RSPP, in ``procedura``; the printed Misura
+    column carries the actions (final review I-2)."""
+    from unittest.mock import AsyncMock, Mock
+
+    machine_risk = SimpleNamespace(
+        id=uuid.uuid4(), pericolo="Contatto con organi in movimento",
+        indice_i=7, applicabile=True, livello_rischio="GRAVE",
+    )
+    officina = SimpleNamespace(
+        nome="Officina", preposto_id=None, persone=[],
+        valutazioni_rischio=[
+            SimpleNamespace(categoria_rischio="Macchine", pericoli=[machine_risk]),
+        ],
+    )
+    generator = _new_generator()
+    generator.azienda_id = uuid.uuid4()
+    generator.db = AsyncMock()
+    generator.db.add = Mock()
+
+    seeded = asyncio.run(
+        generator._auto_seed_misure({"ambienti": [officina], "persone": []})
+    )
+    (measure,) = seeded
+    assert measure.misura.startswith("Riduzione del rischio — Macchine")
+    assert not measure.misura_miglioramento
+
+    doc = Document()
+    generator._add_improvement_program_table(doc, seeded)
+    printed = doc.tables[-1].rows[1].cells[0].text
+    assert printed == measure.procedura
+    assert printed.startswith("[DA COMPILARE — RSPP] Verifica della marcatura CE")
+    assert "Riduzione del rischio" not in printed
 
 
 def test_declaration_page_and_signature_grid(full_dvr_doc):

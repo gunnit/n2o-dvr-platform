@@ -234,6 +234,29 @@ def test_dpi_documents_a_person_with_no_dpi():
     assert "Sorveglianza sanitaria" in note
 
 
+def test_dpi_no_dpi_row_cites_the_vdt_allegato_only_for_vdt_workers():
+    """The no-DPI wording points to the Allegato VDT only for a person the
+    survey marks as a VDT worker (>= 20 h/week, ``vdt_esposti_persona_ids``);
+    a warehouse worker without DPI is not covered by that allegato."""
+    persone = [
+        _FakePersona(id="p1", nominativo="Anna Bianchi", mansione="Impiegata", ordine=1),
+        _FakePersona(id="p2", nominativo="Luca Verdi", mansione="Magazziniere", ordine=2),
+    ]
+    gen = _new_generator()
+    doc = Document()
+    gen._add_dpi_per_persona_section(
+        doc, persone, extras={"vdt_esposti_persona_ids": {"p1"}}
+    )
+
+    (anna_title, anna), (luca_title, luca) = _dpi_blocks(doc)
+    assert (anna_title, luca_title) == ("ANNA BIANCHI", "LUCA VERDI")
+    anna_text, luca_text = anna[1][0], luca[1][0]
+    assert anna_text.startswith("Nessun DPI specifico richiesto")
+    assert luca_text.startswith("Nessun DPI specifico richiesto")
+    assert "(allegato VDT)" in anna_text
+    assert "VDT" not in luca_text
+
+
 def test_dpi_gestante_note_follows_the_person_whose_mansione_triggers_it():
     """art. 12 D.Lgs. 151/2001 requires documented protective measures for
     a gestante worker even when no PPE is prescribed. The note goes on the

@@ -93,6 +93,11 @@ _ZONE_HEADINGS = {
     "Rossa": "Area Rossa - Riprogettazione e intervento (IR > 1,00)",
 }
 
+# Space (pt) above the notice an empty zone prints under its long heading:
+# without it LibreOffice crowds the note into the Heading 2 above. The kit
+# has no spacing token for this.
+EMPTY_ZONE_NOTICE_SPACE_BEFORE_PT = 6
+
 _DEFAULT_MEASURES_BY_ZONE = {
     "Verde": (
         "Mantenere le condizioni operative attuali. Sorveglianza sanitaria "
@@ -803,9 +808,7 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
             add_heading(doc, _ZONE_HEADINGS.get(zone, zone), level=2)
             if not rows:
                 notice = _note(doc, f"Nessun lavoratore classificato in {zone.lower()}.")
-                # LibreOffice can visually crowd this notice into the long
-                # Heading 2 above it unless the separation is explicit.
-                notice.paragraph_format.space_before = Pt(6)
+                notice.paragraph_format.space_before = Pt(EMPTY_ZONE_NOTICE_SPACE_BEFORE_PT)
                 continue
 
             # Table: lavoratore | AZIONE | misure — one row per employee

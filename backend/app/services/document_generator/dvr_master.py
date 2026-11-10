@@ -43,14 +43,13 @@ from docx.table import Table
 from app.data.regional_regulations import get_regulations_for_comune
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.design import (
-    ART,
+    _resolve_art,
     add_art_cover,
     add_back_cover,
     add_divider,
     add_section_title,
     add_sub_title,
     add_toc,
-    art_path,
     finalize_toc,
     finish_document,
     setup_document,
@@ -62,6 +61,9 @@ from app.services.document_generator.docx_utils import (
     HEADER_TEXT,
     NOTE_GREY,
     TYPE_SCALE,
+    # The kit's cell writer (10 pt Arial, no paragraph spacing, line breaks
+    # as w:br): every table cell the DVR fills by hand goes through it.
+    _write_cell,
     add_body_paragraph,
     add_bullets,
     add_data_table,
@@ -259,7 +261,7 @@ _DEFINIZIONI_ROWS: list[tuple[str, str]] = [
      "e la sicurezza dei lavoratori presenti nell'ambito "
      "dell'organizzazione in cui essi prestano la propria attività."),
     ("PERICOLO",
-     "Proprieta o qualità intrinseca di un determinato fattore avente "
+     "Proprietà o qualità intrinseca di un determinato fattore avente "
      "il potenziale di causare danni."),
     ("RISCHIO",
      "Probabilità di raggiungimento del livello potenziale di danno "
@@ -327,11 +329,11 @@ _PROBABILITA_CRITERI_ROWS = [
     ("4", "ELEVATA",
      "Esiste correlazione diretta tra mancanza rilevata e possibilità "
      "che l'evento dannoso si verifichi; si sono già verificati casi "
-     "analoghi in azienda o in realta simili."),
+     "analoghi in azienda o in realtà simili."),
     ("3", "MEDIO ALTA",
      "La mancanza rilevata può provocare un danno, anche se non "
      "direttamente, seppur in modo automatico; sono noti rari episodi "
-     "in azienda o in realta simili."),
+     "in azienda o in realtà simili."),
     ("2", "MEDIO BASSA",
      "La mancanza rilevata può provocare un danno in circostanze "
      "particolari; non sono noti episodi in azienda."),
@@ -646,7 +648,7 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
         art_key="div_sorveglianza",
         body=(
             "Il Datore di Lavoro, tramite il Servizio di Prevenzione e "
-            "Protezione, verifica la necessita di sottoporre i lavoratori "
+            "Protezione, verifica la necessità di sottoporre i lavoratori "
             "a sorveglianza sanitaria nei casi previsti dalla normativa "
             "(art. 41 D.Lgs. 81/2008) e in funzione degli esiti della "
             "valutazione dei rischi.",
@@ -705,7 +707,7 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
             "le aziende con più di 15 lavoratori, ed in occasione di "
             "significative variazioni delle condizioni di esposizione al "
             "rischio.",
-            "Della riunione e redatto verbale tenuto a disposizione dei "
+            "Della riunione è redatto verbale tenuto a disposizione dei "
             "partecipanti per la consultazione.",
         ),
         docs=(
@@ -813,9 +815,9 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
         art_key="div_acquisti",
         body=(
             "Ogni acquisto di macchine, attrezzature, sostanze chimiche, "
-            "DPI e arredi e preceduto dalla verifica della conformità ai "
+            "DPI e arredi è preceduto dalla verifica della conformità ai "
             "requisiti di sicurezza e salute previsti dalla normativa "
-            "vigente. Il RSPP e coinvolto nella definizione dei capitolati "
+            "vigente. Il RSPP è coinvolto nella definizione dei capitolati "
             "tecnici e nella valutazione preventiva dei rischi introdotti.",
         ),
     ),
@@ -849,7 +851,7 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
 # ---------------------------------------------------------------------------
 
 _METODOLOGIA_INTRO_1 = (
-    "La presente valutazione dei rischi e redatta ai sensi dell'art. 28 del "
+    "La presente valutazione dei rischi è redatta ai sensi dell'art. 28 del "
     "D.Lgs. 9 aprile 2008, n. 81 e s.m.i., che impone al Datore di Lavoro la "
     "valutazione di tutti i rischi per la sicurezza e la salute dei lavoratori, "
     "tenendo conto della specificità delle mansioni, delle attrezzature e degli "
@@ -861,8 +863,8 @@ _METODOLOGIA_INTRO_2 = (
     "calcolato attraverso la formula I = 2*D + P, dove P rappresenta la "
     "Probabilità di accadimento dell'evento dannoso (scala 1-4) e D il Danno "
     "atteso per il lavoratore esposto (scala 1-4). L'indice risultante, "
-    "compreso nell'intervallo 3-12, e associato a un livello di rischio e a "
-    "una relativa priorità di intervento. L'impianto metodologico e coerente "
+    "compreso nell'intervallo 3-12, è associato a un livello di rischio e a "
+    "una relativa priorità di intervento. L'impianto metodologico è coerente "
     "con i principi di valutazione del rischio della norma UNI EN ISO 14121-1."
 )
 
@@ -947,19 +949,6 @@ def _note(doc: Document, text: str):
     paragraph.paragraph_format.space_before = Pt(4)
     set_run_font(paragraph.add_run(text), size=TYPE_SCALE["note"], italic=True, color=NOTE_GREY)
     return paragraph
-
-
-def _write_cell(cell, text: str, *, bold=None, color=None, align=None, italic=None) -> None:
-    """Replace a cell's content with ``text`` in the kit's table type: 10 pt
-    Arial, no paragraph spacing. Line breaks become ``w:br``."""
-    cell.text = text
-    for paragraph in cell.paragraphs:
-        paragraph.paragraph_format.space_before = Pt(0)
-        paragraph.paragraph_format.space_after = Pt(0)
-        if align is not None:
-            paragraph.alignment = align
-        for run in paragraph.runs:
-            set_run_font(run, size=TYPE_SCALE["table"], bold=bold, italic=italic, color=color)
 
 
 def _bullet_cell(cell, items: list[str]) -> None:
@@ -2810,12 +2799,15 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         A person with no DPI gets an explicit "Nessun DPI specifico
         richiesto" row instead of silent omission, so an inspector can tell
         "no PPE for this worker, and why" from "this worker was forgotten".
-        When the person's mansione names a gestante, the row cites the
+        The row cites the Allegato VDT only for a VDT worker (the survey's
+        VDT assessment, ``vdt_esposti_persona_ids``): nobody else is covered
+        by it. When the person's mansione names a gestante, the row cites the
         art. 12 D.Lgs. 151/2001 measures, documented even when no PPE is
         prescribed.
         """
         from app.services.reference_data import DPI_CATALOG
 
+        vdt_ids = extras.get("vdt_esposti_persona_ids", set())
         add_divider(doc, "DISPOSITIVI DI PROTEZIONE INDIVIDUALE (DPI)", "div_dpi")
 
         if not persone:
@@ -2851,11 +2843,14 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             ]
             if not rows:
                 gestante = "GESTANTE" in (person.mansione or "").upper()
+                allegato_vdt = (
+                    " (allegato VDT)" if getattr(person, "id", None) in vdt_ids else ""
+                )
                 rows.append([
                     "Nessun DPI specifico richiesto — esposizione "
                     "limitata; tutela attraverso ergonomia della "
-                    "postazione, sorveglianza sanitaria periodica "
-                    "(allegato VDT) e formazione.",
+                    f"postazione, sorveglianza sanitaria periodica{allegato_vdt} "
+                    "e formazione.",
                     "—",
                     "Misure di tutela art. 12 D.Lgs. 151/2001 — "
                     "rimozione dei rischi ex Allegati A/B/C; "
@@ -2929,10 +2924,13 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         is missing is left out rather than shown with another picture."""
         placed = 0
         for key, title in _SIGN_PANELS:
-            path = art_path(key)
-            if path is None or path.name != ART.get(key):
+            # The resolver says which manifest key it used: anything but the
+            # panel's own key is the generic divider standing in for it.
+            resolved = _resolve_art(key)
+            if resolved is None or resolved[0] != key:
                 logger.warning("Sign panel %r has no artwork; panel left out", key)
                 continue
+            path = resolved[1]
             caption = add_sub_title(doc, title, in_toc=False, new_page=placed % 2 == 0)
             picture = doc.add_paragraph()
             picture.alignment = _CENTER
@@ -3751,8 +3749,9 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         their data stays in the database and the app (spec §4.2.2: the
         intro maps priority to timing for art. 28 c.2 lett. c, Responsabile
         and the GESTIONE procedures cover lett. d). A row whose concrete
-        measure is still empty prints its risk-reduction text rather than a
-        dash.
+        measure is still empty prints its activity instead — an auto-seeded
+        row keeps its drafted "[DA COMPILARE — RSPP]" actions there — then
+        its risk text (``misura``, the app's "Rischio"), then a dash.
 
         When ``misure`` is empty the operator has actively cleared all
         rows — a single italic placeholder row keeps the table and flags it
@@ -3770,7 +3769,10 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         rows = [
             [
-                (m.misura_miglioramento or "").strip() or (m.misura or "").strip() or "—",
+                (m.misura_miglioramento or "").strip()
+                or (m.procedura or "").strip()
+                or (m.misura or "").strip()
+                or "—",
                 m.risorse or "—",
                 m.responsabile or "—",
                 m.priorita or "—",
