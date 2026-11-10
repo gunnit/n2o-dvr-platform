@@ -1,3 +1,4 @@
+import builtins
 import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
@@ -100,12 +101,17 @@ class DocumentPreviewStyleProps(BaseModel):
     Serialized with only the fields it holds. In ``style_props`` that is all
     of them, *resolved*: the style, then its ``basedOn`` chain, then
     ``docDefaults``; ``bold``/``italic``/``caps`` are then always true or
-    false, and any other value nothing in the chain sets is null. As a
-    paragraph's ``direct`` it holds only what the paragraph sets itself (a
-    missing key: not set; null: set to "auto" colour or body-text level).
-    There ``font_size_pt``, ``bold``, ``italic``, ``caps`` and ``color`` come
-    from the paragraph mark's run properties, which give an empty paragraph
-    its height.
+    false, and any other value nothing in the chain sets is null.
+
+    As a paragraph's ``direct`` it holds only what the paragraph sets itself
+    (a missing key: not set; null: set to "auto" colour or body-text level).
+    ``alignment``, the spacing, ``indent_left_pt`` and ``outline_level`` come
+    from the paragraph's properties. ``font_size_pt``, ``bold``, ``italic``,
+    ``caps`` and ``color`` appear only on a paragraph without text (nothing
+    but whitespace in its runs): they are its mark's run properties, which
+    give an empty paragraph its height. A paragraph with text never carries
+    them — its text looks as its runs and its style say, whatever the mark
+    is formatted as.
     """
 
     font_size_pt: float | None = None
@@ -165,6 +171,12 @@ class DocumentPreviewImage(BaseModel):
 class DocumentPreviewCellParagraph(BaseModel):
     """Paragraph inside a table cell — addr is "table:row:cell:para"."""
 
+    # This class has a field named "list", which rebinds that name in its
+    # body. Python 3.14 evaluates class annotations lazily, after the body
+    # has run (PEP 649/749), so a bare list[...] annotation here would
+    # resolve to the field's default, None, and the whole API would fail to
+    # import (production pins 3.14 in render.yaml). Every list annotation in
+    # this class is therefore spelled builtins.list.
     addr: str
     style: str | None = None
     # 1-4 when the style is "Heading N" / "Titolo N", else None.
@@ -173,14 +185,15 @@ class DocumentPreviewCellParagraph(BaseModel):
     # False when the paragraph carries drawings or field machinery (TOC) —
     # the apply side skips overrides on locked paragraphs too.
     editable: bool
-    runs: list[DocumentPreviewRun]
+    runs: builtins.list[DocumentPreviewRun]
     # Pictures drawn in the text. A full-page art picture is not one: it is
     # the paragraph's background_image_id.
-    images: list[DocumentPreviewImage] = Field(default_factory=list)
+    images: builtins.list[DocumentPreviewImage] = Field(default_factory=builtins.list)
     # Layout redesign — effective outline level 1-9 (direct, else the
     # style's), for the sidebar index; None for body text.
     outline_level: int | None = None
     # Layout redesign — the paragraph's own formatting; None when it has none.
+    # Run-level keys only on a paragraph without text (see the model).
     direct: DocumentPreviewStyleProps | None = None
     # Layout redesign — the art page this paragraph opens (wp:docPr named
     # "vera-art:<role>:<key>"), and that page's background picture: a
@@ -190,8 +203,9 @@ class DocumentPreviewCellParagraph(BaseModel):
     # Layout redesign — the paragraph ends a section (pPr carries w:sectPr):
     # what follows starts on a new sheet.
     section_break_after: bool = False
-    # Layout redesign — kept last: a field named "list" shadows the builtin
-    # for any annotation after it in this class body.
+    # Layout redesign — numbering from numPr and numbering.xml. Named "list"
+    # by the contract; see the comment at the top of this class for what the
+    # name costs.
     list: DocumentPreviewList | None = None
 
 

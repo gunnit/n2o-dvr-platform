@@ -795,12 +795,19 @@ def _set_v_align(cell, value: str) -> None:
     cell._tc.get_or_add_tcPr().append(v_align)
 
 
-def _set_mark_color(paragraph, value: str) -> None:
-    """Colour of the paragraph mark (pPr/rPr), as Word writes it."""
+def _set_mark(paragraph, *, bold: bool = False, color: str | None = None, half_points: int | None = None) -> None:
+    """Run properties of the paragraph mark (pPr/rPr), as Word writes them."""
     rpr = OxmlElement("w:rPr")
-    color = OxmlElement("w:color")
-    color.set(qn("w:val"), value)
-    rpr.append(color)
+    if bold:
+        rpr.append(OxmlElement("w:b"))
+    if color is not None:
+        element = OxmlElement("w:color")
+        element.set(qn("w:val"), color)
+        rpr.append(element)
+    if half_points is not None:
+        element = OxmlElement("w:sz")
+        element.set(qn("w:val"), str(half_points))
+        rpr.append(element)
     paragraph._p.get_or_add_pPr().append(rpr)
 
 
@@ -1007,12 +1014,37 @@ def test_paragraph_direct_formatting_outline_and_run_caps():
     outline = OxmlElement("w:outlineLvl")
     outline.set(qn("w:val"), "9")  # "body text": overrides the heading's level 1
     body_text._p.get_or_add_pPr().append(outline)
-    _set_mark_color(doc.add_paragraph("Inchiostro automatico"), "auto")
+    _set_mark(doc.add_paragraph(), color="auto")
     parsed = parse_docx_preview(_to_bytes(doc))["blocks"]
     assert parsed[0]["outline_level"] == 4 and parsed[0]["direct"] == {"outline_level": 4}
     assert parsed[1]["outline_level"] is None and parsed[1]["direct"] == {"outline_level": None}
-    # A null value is a setting ("auto"), not a missing key.
+    # A null value is a setting ("auto" on an empty paragraph's mark), not a
+    # missing key.
     assert parsed[2]["direct"] == {"color": None}
+
+
+def test_paragraph_mark_formatting_only_reaches_paragraphs_without_text():
+    """The mark's run properties (pPr/rPr) size an empty paragraph; under
+    text they only format the pilcrow, and Word draws the text from its runs
+    and style. "direct" must not paint the mark over the text."""
+    doc = Document()
+    # As in DUVRI.docx: a bold mark over an unbolded run — Word shows plain text.
+    marked = doc.add_paragraph()
+    marked.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    _set_mark(marked, bold=True, color="C00000", half_points=40)
+    marked.add_run("Testo normale")
+    # The kit's 1 pt spacer: an empty paragraph, sized by its mark.
+    _set_mark(doc.add_paragraph(), half_points=2)
+    # Spaces and tabs show nothing either: the mark still sizes the line.
+    blank = doc.add_paragraph(" \t ")
+    _set_mark(blank, bold=True, half_points=16)
+    blocks = parse_docx_preview(_to_bytes(doc))["blocks"]
+
+    # Paragraph-level keys stay; no bold, colour or size from the mark.
+    assert blocks[0]["direct"] == {"alignment": "center"}
+    assert blocks[0]["runs"][0]["bold"] is False and blocks[0]["runs"][0]["size"] is None
+    assert blocks[1]["direct"] == {"font_size_pt": 1.0}
+    assert blocks[2]["direct"] == {"bold": True, "font_size_pt": 8.0}
 
 
 def test_list_paragraph_reports_bullet_glyph():
@@ -1267,7 +1299,7 @@ def test_preview_response_validates_enriched_preview():
 
     # "direct" serializes exactly the keys it holds: a null is a setting.
     doc = Document()
-    _set_mark_color(doc.add_paragraph("Inchiostro automatico"), "auto")
+    _set_mark(doc.add_paragraph(), color="auto")
     small = parse_docx_preview(_to_bytes(doc))
     resp = DocumentPreviewResponse(
         id=uuid.uuid4(), azienda_id=uuid.uuid4(), azienda_nome="Acme",

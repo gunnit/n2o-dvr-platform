@@ -240,20 +240,22 @@ def _paragraph_payload(
         match = _HEADING_STYLE_RE.match(style_name)
         if match:
             heading_level = int(match.group(1))
+    runs = [
+        _run_payload(Run(r_el, para), with_caps=ctx is not None)
+        for r_el in _paragraph_run_elements(p_el)
+    ]
     payload = {
         "addr": addr,
         "style": style_name,
         "heading_level": heading_level,
         "alignment": _ALIGNMENT_MAP.get(para.alignment),
         "editable": not in_nested_table and not _paragraph_is_locked(p_el),
-        "runs": [
-            _run_payload(Run(r_el, para), with_caps=ctx is not None)
-            for r_el in _paragraph_run_elements(p_el)
-        ],
+        "runs": runs,
         "images": _image_payloads(p_el, skip_art=ctx is not None),
     }
     if ctx is not None:
-        payload.update(ctx.paragraph_fields(p_el, style_name, style))
+        has_text = any(run["text"].strip() for run in runs)
+        payload.update(ctx.paragraph_fields(p_el, style_name, style, has_text=has_text))
     return payload
 
 
@@ -861,30 +863,39 @@ class _PreviewContext:
         info = self._lists[key]
         return dict(info) if info is not None else None
 
-    def paragraph_fields(self, p_el, style_name: str | None, style) -> dict:
+    def paragraph_fields(self, p_el, style_name: str | None, style, *, has_text: bool) -> dict:
         """The preview contract's paragraph fields for one ``w:p``.
+
+        ``has_text``: some run of the paragraph shows text — anything but
+        whitespace. A paragraph of spaces, tabs or line breaks is empty on
+        the page, and its mark sets its height like an empty one's.
 
         The look is an addition: a paragraph it cannot be read for gets the
         plain defaults rather than costing the reader the preview the
         legacy parser would have shown.
         """
         try:
-            return self._paragraph_fields(p_el, style_name, style)
+            return self._paragraph_fields(p_el, style_name, style, has_text)
         except Exception:
             if not self._warned:
                 self._warned = True
                 logger.warning("Preview: paragraph look unreadable, left plain", exc_info=True)
             return dict(_PLAIN_PARAGRAPH_FIELDS)
 
-    def _paragraph_fields(self, p_el, style_name: str | None, style) -> dict:
+    def _paragraph_fields(self, p_el, style_name: str | None, style, has_text: bool) -> dict:
         style_el = style.element if style is not None else None
         if style_name is not None and style_el is not None:
             self._used.setdefault(style_name, style_el)
         ppr = p_el.pPr
-        rpr = ppr.find(qn("w:rPr")) if ppr is not None else None
-        # Direct formatting: the paragraph's own pPr, plus its mark's rPr —
-        # what sets the height of an empty paragraph.
-        direct = {**_ppr_props(ppr), **_rpr_props(rpr)}
+        # Direct formatting: the paragraph's own pPr.
+        direct = _ppr_props(ppr)
+        if not has_text and ppr is not None:
+            # And, on a paragraph without text, its mark's run properties
+            # (pPr/rPr): they give an empty paragraph its height. Under text
+            # they only format the pilcrow — Word draws the text from its
+            # runs and style, so the mark must not paint over them (a bold
+            # mark over unbolded text, a 1 pt mark over 12 pt text).
+            direct.update(_rpr_props(ppr.find(qn("w:rPr"))))
         if "outline_level" in direct:
             outline_level = direct["outline_level"]
         elif style_el is not None:
