@@ -9,6 +9,7 @@ import {
 } from "react";
 import { ImageOff } from "lucide-react";
 
+import { isPageBreakLine } from "@/components/documents/editor/doc-sheets";
 import {
   DOC_CELL_PADDING,
   DOC_TABLE_BORDER,
@@ -147,19 +148,6 @@ function DocParagraph({
         trailing={paragraphImages(documentId, paragraph)}
       />
     </div>
-  );
-}
-
-/**
- * A paragraph that only carries a page break (`w:br w:type="page"`): it
- * opens its sheet, and Word prints nothing for it at the top of the page.
- */
-function isPageBreakLine(block: PreviewParagraphBlock): boolean {
-  return (
-    block.page_break_before &&
-    !block.editable &&
-    block.images.length === 0 &&
-    block.runs.every((run) => run.text.trim() === "")
   );
 }
 

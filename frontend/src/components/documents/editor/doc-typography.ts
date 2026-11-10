@@ -24,6 +24,10 @@ import type {
   PreviewStyleProps,
 } from "@/types";
 
+// With its extension: the unit tests load these modules in Node, which
+// resolves no extensionless path (tsconfig allowImportingTsExtensions).
+import { hasVisibleText } from "./doc-sheets.ts";
+
 // Tokens of the design kit (backend/app/services/document_generator/design.py).
 export const DOC_FONT_FAMILY = 'Arial, "Liberation Sans", Helvetica, sans-serif';
 export const DOC_NAVY = "#003D74";
@@ -139,10 +143,6 @@ function styleOf(
   return FALLBACK_BODY;
 }
 
-function hasText(paragraph: PreviewParagraph): boolean {
-  return paragraph.runs.some((run) => run.text.length > 0);
-}
-
 /**
  * The look of a paragraph: its style's resolved properties, then its own
  * paragraph-level formatting (`direct`, or the legacy `alignment`).
@@ -154,7 +154,7 @@ export function resolveParagraph(
   const style = styleOf(paragraph, styleProps);
   const direct = paragraph.direct ?? {};
   const textSizePt = positive(style.font_size_pt) ?? DEFAULT_SIZE_PT;
-  const markSizePt = hasText(paragraph) ? null : positive(direct.font_size_pt);
+  const markSizePt = hasVisibleText(paragraph.runs) ? null : positive(direct.font_size_pt);
 
   const list = paragraph.list ?? null;
   let indentLeftPt: number;

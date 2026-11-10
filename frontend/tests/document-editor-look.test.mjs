@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   groupIntoSheets,
+  hasVisibleText,
+  isPageBreakLine,
   sheetGeometry,
 } from "../src/components/documents/editor/doc-sheets.ts";
 import {
@@ -10,6 +12,7 @@ import {
   effectiveParagraphStyle,
   effectiveRunStyle,
   listMarkerStyle,
+  replacementRunStyle,
   resolveParagraph,
 } from "../src/components/documents/editor/doc-typography.ts";
 
@@ -53,11 +56,12 @@ function para(addr, fields = {}) {
 }
 
 /** A paragraph that holds only a page break (`w:br w:type="page"`). */
-function pageBreak(addr) {
+function pageBreak(addr, fields = {}) {
   return para(addr, {
     editable: false,
     runs: [run({ text: "" })],
     page_break_before: true,
+    ...fields,
   });
 }
 
@@ -150,6 +154,42 @@ test("art right after a page-break line takes over that sheet instead of leaving
     pageBreak("1"),
     art("2", "divider", "rId11"),
     para("3"),
+  ]);
+  assert.deepEqual(sheetsOf(sheets), [
+    ["content", null, ["0"]],
+    ["divider", "rId11", ["1", "2", "3"]],
+  ]);
+});
+
+test("whitespace is not text: one predicate, the backend's (a run shows text if it is more than whitespace)", () => {
+  assert.equal(hasVisibleText([]), false);
+  assert.equal(hasVisibleText([run({ text: "" }), run({ text: " \t\n " })]), false);
+  assert.equal(hasVisibleText([run({ text: "  " }), run({ text: "x" })]), true);
+});
+
+test("a page-break line is a locked paragraph that carries the break and nothing visible", () => {
+  assert.equal(isPageBreakLine(pageBreak("2")), true);
+  assert.equal(
+    isPageBreakLine(pageBreak("3", { runs: [run({ text: "  " }), run({ text: "\t" })] })),
+    true,
+  );
+  assert.equal(isPageBreakLine(pageBreak("4", { runs: [run({ text: "Indice" })] })), false);
+  assert.equal(isPageBreakLine(pageBreak("5", { editable: true })), false);
+  assert.equal(
+    isPageBreakLine(
+      pageBreak("6", { images: [{ image_id: "rId7", width_px: 100, height_px: 80 }] }),
+    ),
+    false,
+  );
+  assert.equal(isPageBreakLine(pageBreak("7", { page_break_before: false })), false);
+});
+
+test("lines of whitespace before art count as blank: the art takes their sheet over", () => {
+  const sheets = groupIntoSheets([
+    para("0"),
+    pageBreak("1", { runs: [run({ text: " " })] }),
+    para("2", { editable: false, runs: [run({ text: "\t" })] }),
+    art("3", "divider", "rId11"),
   ]);
   assert.deepEqual(sheetsOf(sheets), [
     ["content", null, ["0"]],
@@ -396,6 +436,42 @@ test("text typed into an empty paragraph shows at its style's size, not at its m
     KIT_STYLES,
   );
   assert.deepEqual(effectiveRunStyle(run(), spacer), { fontSize: "12pt" });
+});
+
+test("a whitespace-only spacer is sized by its paragraph mark, like an empty one", () => {
+  // The backend sends the mark's keys for it (no run shows text) and Word
+  // prints it at the mark's height: 1 pt, not the style's 12 pt.
+  const spacer = para("19", {
+    editable: false,
+    runs: [run({ text: " " }), run({ text: "\t" })],
+    direct: { font_size_pt: 1.0, space_before_pt: 0.0, space_after_pt: 0.0 },
+  });
+  const look = lookOf(effectiveParagraphStyle(spacer, KIT_STYLES));
+  assert.equal(look.fontSize, "1pt");
+  assert.equal(look.marginTop, "0pt");
+  assert.equal(look.marginBottom, "0pt");
+});
+
+test("replacement text takes the first run's look, and the style's when there is no run", () => {
+  const body = para("20", {
+    runs: [
+      run({ text: "Primo", bold: true, color: "C00000", size: 10.0 }),
+      run({ text: " secondo", italic: true, underline: true, size: 14.0 }),
+    ],
+  });
+  assert.deepEqual(replacementRunStyle(body, resolveParagraph(body, KIT_STYLES)), {
+    fontSize: "10pt",
+    color: "#C00000",
+    fontWeight: 700,
+  });
+
+  const title = para("21", { style: "Heading 2", heading_level: 2 });
+  assert.deepEqual(replacementRunStyle(title, resolveParagraph(title, KIT_STYLES)), {});
+
+  const empty = para("22", { runs: [], direct: { font_size_pt: 1.0 } });
+  assert.deepEqual(replacementRunStyle(empty, resolveParagraph(empty, KIT_STYLES)), {
+    fontSize: "12pt",
+  });
 });
 
 test("without style_props a heading falls back to a navy bold scale, and the legacy alignment still applies", () => {

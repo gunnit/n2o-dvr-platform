@@ -14,6 +14,8 @@ import type {
   PreviewPageRole,
   PreviewPageSetup,
   PreviewParagraph,
+  PreviewParagraphBlock,
+  PreviewRun,
 } from "@/types";
 
 export type SheetRole = PreviewPageRole | "content";
@@ -26,12 +28,35 @@ export interface Sheet {
   blocks: PreviewBlock[];
 }
 
+/**
+ * Whether some run shows text: anything but whitespace. The preview contract
+ * judges a paragraph so (the backend's `has_text`): spaces, tabs or line
+ * breaks print nothing, and the paragraph mark sets the line's height. The
+ * one predicate behind blank lines, page-break lines and the mark's size.
+ */
+export function hasVisibleText(runs: readonly PreviewRun[]): boolean {
+  return runs.some((run) => run.text.trim() !== "");
+}
+
 /** No text and no picture: a line that only holds a break or spacing. */
 function isBlankParagraph(block: PreviewBlock): boolean {
   return (
     block.kind === "paragraph" &&
     block.images.length === 0 &&
-    block.runs.every((run) => run.text.trim() === "")
+    !hasVisibleText(block.runs)
+  );
+}
+
+/**
+ * A paragraph that only carries a page break (`w:br w:type="page"`): it
+ * opens its sheet, and Word prints nothing for it at the top of the page.
+ */
+export function isPageBreakLine(block: PreviewParagraphBlock): boolean {
+  return (
+    block.page_break_before &&
+    !block.editable &&
+    block.images.length === 0 &&
+    !hasVisibleText(block.runs)
   );
 }
 
