@@ -19,7 +19,11 @@ from app.models.ambiente_foto import AmbienteFoto
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_pee
-from app.services.document_generator.design import finish_document
+from app.services.document_generator.design import (
+    add_back_cover,
+    finish_document,
+    setup_document,
+)
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
     add_data_table,
@@ -33,6 +37,11 @@ from app.services.document_generator.docx_utils import (
     scrub_body,
     slugify,
 )
+from app.services.document_generator.donor_cover import (
+    insert_kit_cover_at_top,
+    normalize_fonts,
+    strip_donor_cover,
+)
 from app.services.document_generator.donor_front_matter import fill_front_matter
 from app.services.document_generator.schede_ambienti import add_schede_ambienti
 
@@ -40,6 +49,15 @@ logger = logging.getLogger(__name__)
 
 TEMPLATE = TEMPLATES_DIR / "PIANO GESTIONE EMERGENZE - AZIENDA.docx"
 TIPO_DOC = "pee_azienda"
+DOC_TITLE = "Piano di Gestione delle Emergenze"
+
+# The kit cover carries what the donor's own cover said (wording from
+# draft PR #82).
+COVER = {
+    "title": "Piano di gestione delle emergenze",
+    "eyebrow": "Gestione delle emergenze",
+    "legal_basis": "ai sensi dell'art. 46 del D.Lgs. 81/2008 e s.m.i. e del D.M. 02/09/2021",
+}
 
 
 def _remove_donor_collection_point_images(doc: Document) -> None:
@@ -135,6 +153,10 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
+            # The donor's cover (identity, revision and stamp forms in a page
+            # frame) ends at a section break; the kit cover takes its place
+            # once the body is complete (spec 2026-11-10 §4.4).
+            strip_donor_cover(doc)
             replace_placeholders(doc, {
                 "RAGIONE SOCIALE": azienda.ragione_sociale or "",
                 "[AZIENDA]": azienda.ragione_sociale or "",
@@ -158,6 +180,7 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
             )
         else:
             doc = Document()
+            setup_document(doc, profile="attachment")
 
         drill_frequency = (pee.frequenza_prove if pee else None) or "non configurata"
         # Alarm type configured on the plan; the default keeps the document
@@ -285,20 +308,32 @@ class PeeAziendaGenerator(BaseDocumentGenerator):
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")
+        # The kit's look on the donor (spec 2026-11-10 §4.4): its cover,
+        # Arial at the donor's own sizes, the back cover.
+        insert_kit_cover_at_top(
+            doc,
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=generated_at,
+            **COVER,
+        )
+        normalize_fonts(doc)
+        add_back_cover(doc)
         # Audit 2026-09-03: the donor template's header/footer carried the
         # legacy N2O letterhead and literal placeholders; rewrite them from
         # the organization's branding and set honest file properties.
         finish_document(
             doc,
-            title='Piano di Gestione delle Emergenze',
+            title=DOC_TITLE,
             azienda=azienda,
             branding=self.branding,
             version=version,
             generated_at=generated_at,
             fill_cover=True,
         )
-        # After the cover is filled: what is still a blank two-column form is
-        # a donor sheet with no data behind it.
+        # After finish_document's fills: what is still a blank two-column
+        # form is a donor sheet with no data behind it.
         remove_blank_label_forms(doc)
         doc.save(filepath)
         return filepath

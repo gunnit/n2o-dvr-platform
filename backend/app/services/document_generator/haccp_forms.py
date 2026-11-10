@@ -42,6 +42,7 @@ from app.services.document_generator.docx_utils import (
     replace_placeholders,
     slugify,
 )
+from app.services.document_generator.donor_cover import normalize_fonts
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +199,8 @@ class HaccpFormsGenerator(BaseDocumentGenerator):
                     break
 
         if template_candidate and template_candidate.exists():
+            # A donor form keeps its own page and type sizes; only its fonts
+            # change (normalize_fonts below, spec 2026-11-10 §4.4).
             doc = Document(str(template_candidate))
             replace_placeholders(doc, {
                 "RAGIONE SOCIALE": azienda.ragione_sociale or "",
@@ -205,7 +208,7 @@ class HaccpFormsGenerator(BaseDocumentGenerator):
             })
         else:
             doc = Document()
-        setup_document(doc)
+            setup_document(doc, profile="attachment")
 
         # US-4.4 AC1: consultancy letterhead + client ragione sociale on
         # every form, regardless of whether the source template provided
@@ -240,6 +243,9 @@ class HaccpFormsGenerator(BaseDocumentGenerator):
         add_heading(doc, "Firma responsabile", level=2)
         add_paragraph(doc, "________________________")
 
+        # A sheet printed and filled in by hand: Arial and the running header
+        # and footer from its first page on, no art pages.
+        normalize_fonts(doc)
         finish_document(
             doc,
             title=f"{code} · {form.form_title}",

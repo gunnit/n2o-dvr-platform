@@ -18,7 +18,11 @@ from app.models.ambiente_foto import AmbienteFoto
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_pee
-from app.services.document_generator.design import finish_document, insert_logo_at_top
+from app.services.document_generator.design import (
+    add_back_cover,
+    finish_document,
+    setup_document,
+)
 from app.services.document_generator.docx_utils import (
     scrub_body,
     strip_body_images,
@@ -31,6 +35,11 @@ from app.services.document_generator.docx_utils import (
     page_break,
     replace_placeholders,
     slugify,
+)
+from app.services.document_generator.donor_cover import (
+    insert_kit_cover_at_top,
+    normalize_fonts,
+    strip_donor_cover,
 )
 
 logger = logging.getLogger(__name__)
@@ -60,6 +69,15 @@ async def _find_planimetria_path(db, azienda_id) -> str | None:
 
 TEMPLATE = TEMPLATES_DIR / "PIANO GESTIONE EMERGENZE - COMUNE.docx"
 TIPO_DOC = "pee_comune"
+DOC_TITLE = "Piano di Gestione delle Emergenze"
+
+# The kit cover carries what the donor's own cover said (wording from
+# draft PR #82).
+COVER = {
+    "title": "Piano di gestione delle emergenze",
+    "eyebrow": "Gestione delle emergenze",
+    "legal_basis": "ai sensi dell'art. 46 del D.Lgs. 81/2008 e s.m.i. e del D.M. 02/09/2021",
+}
 
 
 class PeeComuneGenerator(BaseDocumentGenerator):
@@ -71,11 +89,15 @@ class PeeComuneGenerator(BaseDocumentGenerator):
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
+            # The donor's cover (a photo of the parish church over its
+            # identity and revision forms) runs up to the index; the kit
+            # cover takes its place once the body is complete (spec
+            # 2026-11-10 §4.4).
+            strip_donor_cover(doc, stop_text="Indice")
             replace_placeholders(doc, {"RAGIONE SOCIALE": azienda.ragione_sociale or "", "[AZIENDA]": azienda.ragione_sociale or ""})
-            # Audit 2026-09-03: the template is a parish's emergency plan,
-            # cover photo of its church included. Remove every donor picture
-            # and name; the plan's structure is still the donor's and is
-            # flagged for a rebuild.
+            # Audit 2026-09-03: the template is a parish's emergency plan.
+            # Remove every donor picture and name; the plan's structure is
+            # still the donor's and is flagged for a rebuild.
             _citta = (getattr(azienda, 'sede_legale_citta', None) or '').strip()
             scrub_body(doc, {
                 'PARROCCHIA SAN MAJOLO ABATE': azienda.ragione_sociale or '',
@@ -90,9 +112,9 @@ class PeeComuneGenerator(BaseDocumentGenerator):
                 'madonnina-parrocchia': 'azienda',
             })
             strip_body_images(doc)
-            insert_logo_at_top(doc, self.branding)
         else:
             doc = Document()
+            setup_document(doc, profile="attachment")
 
         page_break(doc)
         add_heading(doc, f"PIANO DI EMERGENZA EDIFICIO - {azienda.ragione_sociale}", level=1)
@@ -170,12 +192,24 @@ class PeeComuneGenerator(BaseDocumentGenerator):
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")
+        # The kit's look on the donor (spec 2026-11-10 §4.4): its cover,
+        # Arial at the donor's own sizes, the back cover.
+        insert_kit_cover_at_top(
+            doc,
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=generated_at,
+            **COVER,
+        )
+        normalize_fonts(doc)
+        add_back_cover(doc)
         # Audit 2026-09-03: the donor template's header/footer carried the
         # legacy N2O letterhead and literal placeholders; rewrite them from
         # the organization's branding and set honest file properties.
         finish_document(
             doc,
-            title='Piano di Gestione delle Emergenze',
+            title=DOC_TITLE,
             azienda=azienda,
             branding=self.branding,
             version=version,

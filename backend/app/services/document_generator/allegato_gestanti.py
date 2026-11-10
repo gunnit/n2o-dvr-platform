@@ -12,7 +12,11 @@ from app.services.document_generator.data_loader import (
     load_gestanti,
     load_gestanti_mansioni,
 )
-from app.services.document_generator.design import finish_document, insert_logo_at_top
+from app.services.document_generator.design import (
+    add_back_cover,
+    finish_document,
+    setup_document,
+)
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
     add_data_table,
@@ -24,6 +28,11 @@ from app.services.document_generator.docx_utils import (
     scrub_n2o_legacy_donor,
     strip_body_images,
     slugify,
+)
+from app.services.document_generator.donor_cover import (
+    insert_kit_cover_at_top,
+    normalize_fonts,
+    strip_donor_cover,
 )
 
 
@@ -38,6 +47,14 @@ def _role_nominativo(persone: list, attr: str) -> str | None:
 
 TEMPLATE = TEMPLATES_DIR / "ALLEGATO GESTANTI.docx"
 TIPO_DOC = "allegato_gestanti"
+DOC_TITLE = "Valutazione del Rischio Lavoratrici Gestanti"
+
+# The kit cover carries what the donor's own cover said (wording from
+# draft PR #82).
+COVER = {
+    "title": "Valutazione dei rischi per la tutela delle lavoratrici madri",
+    "legal_basis": "ai sensi dell'art. 11 del D.Lgs. 151/2001 e dell'art. 28 del D.Lgs. 81/2008 e s.m.i.",
+}
 
 ESITO_LABELS = {
     "compatibile": "Compatibile",
@@ -148,21 +165,23 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
+            # The donor's cover (a text box over the legacy logo and N2O's
+            # identity table) ends at a section break; the kit cover takes
+            # its place once the body is complete (spec 2026-11-10 §4.4).
+            strip_donor_cover(doc)
             # The template carries N2O's own anagrafica in the body as the
             # assessed company (the placeholder tokens it was meant to use were
-            # never present). Scrub the donor identity to the client; the
-            # header/footer letterhead is preserved.
+            # never present). Scrub the donor identity to the client.
             scrub_n2o_legacy_donor(doc, azienda)
             # Audit 2026-09-03: the body repeats the legacy ENNE.DUE.O logo
-            # (cover and chapter heads) and ends with a donor-era
-            # acknowledgment roster. Strip the pictures, put the
-            # organization's mark above the title, and leave the roster
-            # as ten blank rows for the client's own workers to sign.
+            # on its chapter heads and ends with a donor-era acknowledgment
+            # roster. Strip the pictures and leave the roster as ten blank
+            # rows for the client's own workers to sign.
             strip_body_images(doc)
-            insert_logo_at_top(doc, self.branding)
             reset_table_rows(doc, "Nome e cognome | Mansione", [["", "", "", ""] for _ in range(10)])
         else:
             doc = Document()
+            setup_document(doc, profile="attachment")
 
         page_break(doc)
         add_heading(doc, f"VALUTAZIONE SPECIFICA - {azienda.ragione_sociale}", level=1)
@@ -249,12 +268,24 @@ class AllegatoGestantiGenerator(BaseDocumentGenerator):
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")
+        # The kit's look on the donor (spec 2026-11-10 §4.4): its cover,
+        # Arial at the donor's own sizes, the back cover.
+        insert_kit_cover_at_top(
+            doc,
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=generated_at,
+            **COVER,
+        )
+        normalize_fonts(doc)
+        add_back_cover(doc)
         # Audit 2026-09-03: the donor template's header/footer carried the
         # legacy N2O letterhead and literal placeholders; rewrite them from
         # the organization's branding and set honest file properties.
         finish_document(
             doc,
-            title='Valutazione del Rischio Lavoratrici Gestanti',
+            title=DOC_TITLE,
             azienda=azienda,
             branding=self.branding,
             version=version,

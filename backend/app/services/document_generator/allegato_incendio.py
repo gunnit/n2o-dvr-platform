@@ -9,7 +9,11 @@ from app.data.fire_measures import get_measures_for_level
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_incendio
-from app.services.document_generator.design import finish_document
+from app.services.document_generator.design import (
+    add_back_cover,
+    finish_document,
+    setup_document,
+)
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
     add_data_table,
@@ -26,11 +30,24 @@ from app.services.document_generator.docx_utils import (
     scrub_body,
     slugify,
 )
+from app.services.document_generator.donor_cover import (
+    insert_kit_cover_at_top,
+    normalize_fonts,
+    strip_donor_cover,
+)
 from app.services.document_generator.donor_front_matter import fill_front_matter
 from app.services.document_generator.schede_ambienti import add_schede_ambienti
 
 TEMPLATE = TEMPLATES_DIR / "ALLEGATO RISCHIO INCENDIO.docx"
 TIPO_DOC = "allegato_incendio"
+DOC_TITLE = "Valutazione del Rischio Incendio"
+
+# The kit cover carries what the donor's own cover said (wording from
+# draft PR #82).
+COVER = {
+    "title": "Valutazione del rischio incendio",
+    "legal_basis": "ai sensi dell'art. 46 del D.Lgs. 81/2008 e s.m.i., del D.M. 03/09/2021 e del D.M. 02/09/2021",
+}
 
 # The donor chapters between these two headings are the assessment itself:
 # six blank per-ambiente sheets, the aree-omogenee matrix pre-filled with the
@@ -93,6 +110,10 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
+            # The donor's cover (title, identity, revision and stamp forms in
+            # a page frame) ends at a section break; the kit cover takes its
+            # place once the body is complete (spec 2026-11-10 §4.4).
+            strip_donor_cover(doc)
             # Template normativa corrections (body only; the header/footer is
             # the consultancy letterhead). The title page cited only the
             # emergency-management decree and the body referenced the repealed
@@ -125,6 +146,7 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
             self._sign_declaration(doc, azienda, data["persone"], generated_at)
         else:
             doc = Document()
+            setup_document(doc, profile="attachment")
 
         page_break(doc)
         add_heading(doc, f"VALUTAZIONE SPECIFICA - {azienda.ragione_sociale}", level=1)
@@ -257,20 +279,32 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")
+        # The kit's look on the donor (spec 2026-11-10 §4.4): its cover,
+        # Arial at the donor's own sizes, the back cover.
+        insert_kit_cover_at_top(
+            doc,
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=generated_at,
+            **COVER,
+        )
+        normalize_fonts(doc)
+        add_back_cover(doc)
         # Audit 2026-09-03: the donor template's header/footer carried the
         # legacy N2O letterhead and literal placeholders; rewrite them from
         # the organization's branding and set honest file properties.
         finish_document(
             doc,
-            title='Valutazione del Rischio Incendio',
+            title=DOC_TITLE,
             azienda=azienda,
             branding=self.branding,
             version=version,
             generated_at=generated_at,
             fill_cover=True,
         )
-        # After the cover is filled, so a cover awaiting its values is never
-        # mistaken for an abandoned form: what is still blank here is a donor
+        # After finish_document's fills, so a form awaiting its values is
+        # never mistaken for an abandoned one: what is still blank is a donor
         # sheet the platform has no data for.
         remove_blank_label_forms(doc)
         doc.save(filepath)

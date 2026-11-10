@@ -8,7 +8,11 @@ from sqlalchemy import func, select
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_pos
-from app.services.document_generator.design import finish_document
+from app.services.document_generator.design import (
+    add_back_cover,
+    finish_document,
+    setup_document,
+)
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
     add_data_table,
@@ -16,8 +20,12 @@ from app.services.document_generator.docx_utils import (
     add_kv_table,
     add_paragraph,
     page_break,
-    replace_placeholders,
     slugify,
+)
+from app.services.document_generator.donor_cover import (
+    insert_kit_cover_at_top,
+    normalize_fonts,
+    strip_donor_cover,
 )
 from app.services.dpi_rules import (
     DPI_CATALOG,
@@ -280,6 +288,15 @@ from pydantic import ValidationError
 
 TEMPLATE = TEMPLATES_DIR / "POS.docx"
 TIPO_DOC = "pos"
+DOC_TITLE = "Piano Operativo di Sicurezza"
+
+# The kit cover carries what the donor's own cover said (wording from
+# draft PR #82).
+COVER = {
+    "title": "Piano Operativo di Sicurezza",
+    "eyebrow": "Sicurezza nei cantieri temporanei o mobili",
+    "legal_basis": "ai sensi degli artt. 17 e 96 e dell'Allegato XV del D.Lgs. 81/2008 e s.m.i.",
+}
 
 
 class PosGenerator(BaseDocumentGenerator):
@@ -291,10 +308,15 @@ class PosGenerator(BaseDocumentGenerator):
         pos_rows = await load_pos(self.db, self.azienda_id)
 
         if TEMPLATE.exists():
+            # The donor body is nothing but its cover (title, identity and
+            # revision forms, a blank activity grid): it goes whole, and the
+            # donor's page setup and styles stay. The kit cover goes in front
+            # once the body is complete (spec 2026-11-10 §4.4).
             doc = Document(str(TEMPLATE))
-            replace_placeholders(doc, {"RAGIONE SOCIALE": azienda.ragione_sociale or "", "[AZIENDA]": azienda.ragione_sociale or ""})
+            strip_donor_cover(doc, whole_body=True)
         else:
             doc = Document()
+            setup_document(doc, profile="attachment")
 
         page_break(doc)
         add_heading(doc, f"POS - {azienda.ragione_sociale}", level=1)
@@ -396,21 +418,31 @@ class PosGenerator(BaseDocumentGenerator):
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")
-        # Audit 2026-09-03: the donor template's header/footer carried the
-        # legacy N2O letterhead and literal placeholders; rewrite them from
-        # the organization's branding and set honest file properties.
-        finish_document(
+        # The kit's look on the donor (spec 2026-11-10 §4.4): its cover,
+        # Arial at the donor's own sizes, the back cover.
+        insert_kit_cover_at_top(
             doc,
-            title='Piano Operativo di Sicurezza',
             azienda=azienda,
             branding=self.branding,
             version=version,
             generated_at=generated_at,
-            fill_cover=True,
-            cover_values={
-                "Oggetto dell'appalto": (pos_rows[0].cantiere_descrizione or '') if pos_rows else '',
-                'Indirizzo del cantiere': (pos_rows[0].cantiere_indirizzo or '') if pos_rows else '',
-            },
+            **COVER,
+        )
+        normalize_fonts(doc)
+        add_back_cover(doc)
+        # Audit 2026-09-03: the donor template's header/footer carried the
+        # legacy N2O letterhead and literal placeholders; rewrite them from
+        # the organization's branding and set honest file properties. No
+        # donor form is left to fill: the cover forms went with the donor
+        # body, and each cantiere's address and object print in its own
+        # section above.
+        finish_document(
+            doc,
+            title=DOC_TITLE,
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=generated_at,
         )
         doc.save(filepath)
         return filepath
