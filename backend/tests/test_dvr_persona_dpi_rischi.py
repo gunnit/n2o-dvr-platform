@@ -1,9 +1,12 @@
 """Tests for per-persona DPI and specific-risk rendering in DVR Master.
 
 Two persone with the same mansione can carry divergent flags. The
-generator must:
-  - retain each person's identity in the specific-risk table
-  - aggregate (union) their codes only for the per-mansione DPI tables
+generator keeps each person's identity:
+  - in the specific-risk table (one row per exposed person);
+  - in the DPI section: one sub-title (the person's name) and one DPI
+    table per person, as in N2O's model of 2026-10-20 (spec §4.2.1 row 22).
+Only the Sorveglianza Sanitaria protocol, which the Medico Competente sets
+per mansione, still aggregates (union) codes up to mansione.
 """
 
 from dataclasses import dataclass, field
@@ -11,9 +14,12 @@ from dataclasses import dataclass, field
 from docx import Document
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.table import Table
 
 from app.services.document_generator import dvr_master
 from app.services.document_generator.dvr_master import DVRMasterGenerator
+
+DPI_HEADER = ["Descrizione DPI", "Marca / Modello", "Note"]
 
 
 @dataclass
@@ -24,6 +30,7 @@ class _FakePersona:
     dpi_codes: list[str] = field(default_factory=list)
     rischi_specifici_codes: list[str] = field(default_factory=list)
     attrezzature_speciali: list[str] = field(default_factory=list)
+    ordine: int | None = None
 
 
 def _new_generator() -> DVRMasterGenerator:
@@ -42,9 +49,26 @@ def _all_text(doc: Document) -> str:
     return "\n".join(parts)
 
 
-def test_dpi_per_mansione_unions_codes_across_persone():
-    """Two saldatori with overlapping but different DPI codes should both
-    contribute to the mansione's DPI grid via union."""
+def _dpi_blocks(doc: Document) -> list[tuple[str, list[list[str]]]]:
+    """(sub-title, table rows) of every person in the DPI section, in order.
+    Each sub-title must be directly followed by its table."""
+    blocks = []
+    for paragraph in doc.paragraphs:
+        if paragraph.style.name != "Heading 3":
+            continue
+        following = paragraph._p.getnext()
+        assert following is not None and following.tag.endswith("}tbl"), paragraph.text
+        table = Table(following, doc._body)
+        blocks.append(
+            (paragraph.text, [[cell.text for cell in row.cells] for row in table.rows])
+        )
+    return blocks
+
+
+def test_dpi_gives_each_person_a_sub_title_and_their_own_table():
+    """Two saldatori with different DPI: each gets their own sub-title and
+    only their own DPI — no union across the shared mansione, no "varia"
+    note."""
     persone = [
         _FakePersona(
             id="p1",
@@ -62,42 +86,34 @@ def test_dpi_per_mansione_unions_codes_across_persone():
 
     gen = _new_generator()
     doc = Document()
-    gen._add_dpi_per_mansione_section(doc, persone, extras={})
+    gen._add_dpi_per_persona_section(doc, persone, extras={})
 
-    text = _all_text(doc).lower()
-    # Union: all three DPI labels (any per-code keyword) should appear
-    # under the SALDATORE heading.
-    assert "caschi" in text
-    assert "guanti" in text
-    assert "occhiali" in text
-    # Divergent flags → varia note must appear
-    assert "varia tra i lavoratori" in text
+    blocks = _dpi_blocks(doc)
+    assert [title for title, _rows in blocks] == ["MARIO ROSSI", "ANNA BIANCHI"]
+    (_m, mario), (_a, anna) = blocks
+    assert mario[0] == DPI_HEADER and anna[0] == DPI_HEADER
+    assert [row[0] for row in mario[1:]] == [
+        "Mani: Guanti contro le aggressioni meccaniche",
+        "Testa: Caschi di protezione per l'industria",
+    ]
+    assert [row[0] for row in anna[1:]] == [
+        "Mani: Guanti contro le aggressioni meccaniche",
+        "Vista: Occhiali a stanghette",
+    ]
+    assert "varia tra i lavoratori" not in _all_text(doc).lower()
 
 
-def test_dpi_per_mansione_no_varia_note_when_aligned():
-    """When all persone with the mansione carry identical DPI flags,
-    the 'varia per lavoratore' note must NOT appear."""
+def test_dpi_sub_titles_follow_saved_order_and_are_indexed():
+    """Sub-titles are Heading 3 (in the index) in the persone's saved order."""
     persone = [
-        _FakePersona(
-            id="p1",
-            nominativo="Mario Rossi",
-            mansione="Saldatore",
-            dpi_codes=["caschi_industria", "guanti_meccanici"],
-        ),
-        _FakePersona(
-            id="p2",
-            nominativo="Anna Bianchi",
-            mansione="Saldatore",
-            dpi_codes=["caschi_industria", "guanti_meccanici"],
-        ),
+        _FakePersona(id="b", nominativo="Zeta Operaio", mansione="Operaio", ordine=2),
+        _FakePersona(id="a", nominativo="Alfa Operaio", mansione="Operaio", ordine=1),
     ]
 
-    gen = _new_generator()
     doc = Document()
-    gen._add_dpi_per_mansione_section(doc, persone, extras={})
+    _new_generator()._add_dpi_per_persona_section(doc, persone, extras={})
 
-    text = _all_text(doc).lower()
-    assert "varia tra i lavoratori" not in text
+    assert [title for title, _rows in _dpi_blocks(doc)] == ["ALFA OPERAIO", "ZETA OPERAIO"]
 
 
 def test_specific_risks_render_one_row_per_exposed_person_without_cross_inheritance():
@@ -169,7 +185,7 @@ def test_person_specific_risks_keep_saved_order_and_deduplicate_labels():
 
 def test_only_dpi_marca_modello_dash_is_centered_both_ways():
     doc = Document()
-    _new_generator()._add_dpi_per_mansione_section(
+    _new_generator()._add_dpi_per_persona_section(
         doc, [_FakePersona("p", "Mario", "Operaio")], {}
     )
     table = next(
@@ -192,54 +208,70 @@ def test_only_dpi_marca_modello_dash_is_centered_both_ways():
     )
 
 
-def test_dpi_per_mansione_documents_mansione_with_no_flags():
-    """A mansione whose persone carry no DPI flags still gets its own grid
-    with an explicit "nessun DPI" row (b780497).
+def test_dpi_documents_a_person_with_no_dpi():
+    """A person with no DPI flags still gets their sub-title and an explicit
+    "nessun DPI" row (b780497).
 
-    Silently omitting the mansione is the failure mode this guards: an
+    Silently omitting the person is the failure mode this guards: an
     inspector reading the DVR must be able to tell "no PPE is prescribed
-    for this role, and here is why" apart from "this role was forgotten".
+    for this worker, and here is why" apart from "this worker was forgotten".
     """
     persone = [
         _FakePersona(id="p1", nominativo="Mario Rossi", mansione="Operaio"),
     ]
     gen = _new_generator()
     doc = Document()
-    gen._add_dpi_per_mansione_section(doc, persone, extras={})
+    gen._add_dpi_per_persona_section(doc, persone, extras={})
 
-    text = _all_text(doc).lower()
-    assert "operaio" in text
-    assert "nessun dpi specifico richiesto" in text
+    ((title, rows),) = _dpi_blocks(doc)
+    assert title == "MARIO ROSSI"
+    assert rows[0] == DPI_HEADER
+    ((descrizione, marca, note),) = rows[1:]
+    assert descrizione.startswith("Nessun DPI specifico richiesto")
+    assert marca == "—"
     # The justification is the point of the row — a bare "nessuno" would
     # not be defensible at audit.
-    assert "sorveglianza sanitaria" in text
+    assert "Sorveglianza sanitaria" in note
 
 
-def test_dpi_per_mansione_gestante_row_cites_dlgs_151():
+def test_dpi_gestante_note_follows_the_person_whose_mansione_triggers_it():
     """art. 12 D.Lgs. 151/2001 requires documented protective measures for
-    a gestante worker even when no PPE is prescribed."""
+    a gestante worker even when no PPE is prescribed. The note goes on the
+    row of the person whose mansione says so, not on a colleague's."""
     persone = [
         _FakePersona(id="p1", nominativo="Anna Bianchi", mansione="Impiegata gestante"),
+        _FakePersona(id="p2", nominativo="Lia Verdi", mansione="Impiegata"),
     ]
     gen = _new_generator()
     doc = Document()
-    gen._add_dpi_per_mansione_section(doc, persone, extras={})
+    gen._add_dpi_per_persona_section(doc, persone, extras={})
 
-    text = _all_text(doc).lower()
-    assert "151/2001" in text
+    (anna_title, anna), (lia_title, lia) = _dpi_blocks(doc)
+    assert (anna_title, lia_title) == ("ANNA BIANCHI", "LIA VERDI")
+    assert "151/2001" in anna[1][2]
+    assert "151/2001" not in lia[1][2]
 
 
-def test_dpi_per_mansione_falls_back_when_no_mansioni_at_all():
-    """With nothing to tabulate (no persona carries a mansione), the section
-    must emit the 'in fase di compilazione' paragraph rather than a bare
-    heading followed by nothing."""
+def test_dpi_lists_a_person_without_mansione_too():
+    """The section is per person, so a person without a mansione still gets
+    their sub-title and table."""
     persone = [
         _FakePersona(id="p1", nominativo="Mario Rossi", mansione=None),
         _FakePersona(id="p2", nominativo="Anna Bianchi", mansione="   "),
     ]
     gen = _new_generator()
     doc = Document()
-    gen._add_dpi_per_mansione_section(doc, persone, extras={})
+    gen._add_dpi_per_persona_section(doc, persone, extras={})
+
+    assert [title for title, _rows in _dpi_blocks(doc)] == ["MARIO ROSSI", "ANNA BIANCHI"]
+
+
+def test_dpi_falls_back_when_there_is_nobody():
+    """With nobody to tabulate, the section emits the 'in fase di
+    compilazione' paragraph rather than a bare divider."""
+    gen = _new_generator()
+    doc = Document()
+    gen._add_dpi_per_persona_section(doc, [], extras={})
 
     text = _all_text(doc).lower()
     assert "in fase di compilazione" in text

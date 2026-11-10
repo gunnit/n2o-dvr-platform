@@ -1776,10 +1776,8 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         add_section_title(
             doc, "DOCUMENTO ELABORATO SUGLI ESITI DELLA VALUTAZIONE DEI RISCHI"
         )
-        # The model spreads this page out: about 2 cm under the title and
-        # between the three tables.
-        _gap(doc, space_pt=12)
         self._add_azienda_header_table(doc, azienda)
+        # The model spreads the three tables out, about 2 cm apart.
         _gap(doc, space_pt=24)
         self._add_revision_history_table(doc, generated_at, version)
         _gap(doc, space_pt=24)
@@ -2189,33 +2187,6 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             else:
                 label = _no_environment_label(person).upper()
                 _write_cell(row.cells[2], label, align=_CENTER if label == "—" else None)
-
-    def _add_dati_occupazionali_table(self, doc: Document, persone: list) -> None:
-        """The combined 5-column roster (old Template Table 5): Nominativo |
-        Mansione | Ambiente di Lavoro | Codice Fiscale | Tipologia
-        contrattuale.
-
-        The DVR itself prints it split since N2O's model (DATI ANAGRAFICI and
-        DATI OCCUPAZIONALI). Allegato MMC still renders this one, "identical
-        to the DVR Master" by client request (2026-08-13): it goes when the
-        MMC adopts the split.
-        """
-        headers = ["Nominativo", "Mansione", "Ambiente di Lavoro", "Codice Fiscale", "Tipologia contrattuale"]
-        if not persone:
-            self._add_data_table(doc, headers, [["—", "—", "—", "—", "—"]])
-            return
-
-        rows = []
-        for p in persone:
-            ambienti_names = ", ".join(_environment_names(p)) or _no_environment_label(p)
-            rows.append([
-                (p.nominativo or "—").upper(),
-                (p.mansione or "—").upper(),
-                ambienti_names.upper(),
-                getattr(p, "codice_fiscale", None) or "—",
-                (p.tipologia_contrattuale or "—").upper(),
-            ])
-        self._add_data_table(doc, headers, rows)
 
     def _add_single_role_title_table(
         self, doc: Document, title: str, role_persone: list
@@ -2632,7 +2603,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 )
 
         self._add_mansioni_rischi_specifici_section(doc, persone, extras)
-        self._add_dpi_per_mansione_section(doc, persone, extras)
+        self._add_dpi_per_persona_section(doc, persone, extras)
         self._add_segnaletica_section(doc)
         self._add_formazione_programma_section(doc, persone)
 
@@ -2827,113 +2798,71 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         for row, (_person, labels) in zip(table.rows[1:], exposed):
             _bullet_cell(row.cells[2], labels)
 
-    def _add_dpi_per_mansione_section(
+    def _add_dpi_per_persona_section(
         self, doc: Document, persone: list, extras: dict
     ) -> None:
         """Row 22 — DISPOSITIVI DI PROTEZIONE INDIVIDUALE (DPI), on its own
-        divider: one sub-title and DPI grid per mansione, listing the codes
-        the operator has ticked on each persona in the wizard.
+        divider: one sub-title per employee (the name in capitals, in the
+        index, in saved order) over that person's own DPI — the codes ticked
+        on the persona in the wizard — as in N2O's model (pp. 56–57). Two
+        people with the same mansione keep their own tables.
 
-        Aggregates per-persona ``dpi_codes`` up to mansione (union). When
-        the persone with the same mansione have divergent DPI selections,
-        a "varia per lavoratore" note is appended so the operator and
-        the Medico del Lavoro know to consult the per-persona detail.
-
-        Every mansione gets its own grid. For mansioni without explicit DPI
-        selections (typically VDT/office roles), an explicit "Nessun DPI
-        specifico" row is emitted instead of silent omission — required by
-        art. 12 D.Lgs. 151/2001 for gestante workers and preferred by
-        inspectors for traceability.
+        A person with no DPI gets an explicit "Nessun DPI specifico
+        richiesto" row instead of silent omission, so an inspector can tell
+        "no PPE for this worker, and why" from "this worker was forgotten".
+        When the person's mansione names a gestante, the row cites the
+        art. 12 D.Lgs. 151/2001 measures, documented even when no PPE is
+        prescribed.
         """
         from app.services.reference_data import DPI_CATALOG
 
         add_divider(doc, "DISPOSITIVI DI PROTEZIONE INDIVIDUALE (DPI)", "div_dpi")
 
-        # Aggregate per-persona DPI codes up to mansione (union). Track
-        # every mansione that appears on a persona — even those without
-        # any DPI flags — so the rendered table mirrors T109.
-        mansione_codes: dict[str, set[str]] = {}
-        mansione_persona_codes: dict[str, list[frozenset[str]]] = {}
-        mansione_is_gestante: dict[str, bool] = {}
-        for p in persone:
-            nome = (p.mansione or "").strip()
-            if not nome:
-                continue
-            codes = list(getattr(p, "dpi_codes", None) or [])
-            mansione_codes.setdefault(nome, set()).update(codes)
-            mansione_persona_codes.setdefault(nome, []).append(frozenset(codes))
-            if getattr(p, "gestante", False) or "GESTANTE" in nome.upper():
-                mansione_is_gestante[nome] = True
-
-        mansioni: dict[str, list[str]] = {
-            nome: sorted(codes) for nome, codes in mansione_codes.items()
-        }
-
-        if not mansioni:
+        if not persone:
             _italic_body(
                 doc,
-                "Le matrici DPI per mansione sono in fase di compilazione "
-                "tramite la procedura di Sorveglianza Sanitaria. Nel "
-                "frattempo, i DPI sono assegnati in base alla valutazione "
+                "Le dotazioni DPI per lavoratore sono in fase di compilazione. "
+                "Nel frattempo, i DPI sono assegnati in base alla valutazione "
                 "dei rischi descritta in Parte III e secondo la procedura "
                 "di gestione dei DPI della Parte IV.",
             )
             return
 
-        for mansione, codes in sorted(mansioni.items()):
-            add_sub_title(doc, mansione.upper())
+        for person in sorted(persone, key=_saved_order_key):
+            add_sub_title(doc, (person.nominativo or "").strip().upper() or "—")
 
-            persona_sets = mansione_persona_codes.get(mansione, [])
-            distinct_nonempty = {s for s in persona_sets if s}
-            if len(distinct_nonempty) > 1:
-                varia = _note(
-                    doc,
-                    "Nota: la dotazione DPI varia tra i lavoratori con "
-                    "questa mansione — la tabella riporta l'unione delle "
-                    "selezioni. Per l'assegnazione individuale fare "
-                    "riferimento alla scheda persona.",
-                )
-                varia.paragraph_format.space_after = Pt(6)
-                varia.paragraph_format.keep_with_next = True
-
-            rows = []
             # Group by area so the table mirrors the DPI catalog layout.
             # Spec §3.N+2 requires Descrizione | Marca/Modello | Note;
             # Marca/Modello and Note are operator-completed at first audit
             # so we emit a defensible placeholder rather than blanks.
             by_area: dict[str, list[str]] = {}
-            for code in codes:
+            for code in sorted(set(getattr(person, "dpi_codes", None) or [])):
                 meta = DPI_CATALOG.get(code) or {}
-                area = meta.get("area", "Altro")
-                etichetta = meta.get("etichetta", code)
-                by_area.setdefault(area, []).append(etichetta)
-            for area in sorted(by_area.keys()):
-                rows.append([
-                    f"{area}: {'; '.join(sorted(by_area[area]))}",
+                by_area.setdefault(meta.get("area", "Altro"), []).append(
+                    meta.get("etichetta", code)
+                )
+            rows = [
+                [
+                    f"{area}: {'; '.join(sorted(labels))}",
                     "Da definire al primo audit DPI",
                     "Conforme a Reg. UE 2016/425; verifica annuale",
-                ])
+                ]
+                for area, labels in sorted(by_area.items())
+            ]
             if not rows:
-                # No DPI codes selected for any persona under this mansione
-                # (typically VDT/office roles). Emit an explicit "no DPI"
-                # row rather than dropping the section silently. For gestante
-                # workers art. 12 D.Lgs. 151/2001 requires documented
-                # protective measures even when no PPE is prescribed.
-                is_gestante = mansione_is_gestante.get(mansione, False)
-                descrizione = (
+                gestante = "GESTANTE" in (person.mansione or "").upper()
+                rows.append([
                     "Nessun DPI specifico richiesto — esposizione "
                     "limitata; tutela attraverso ergonomia della "
                     "postazione, sorveglianza sanitaria periodica "
-                    "(allegato VDT) e formazione."
-                )
-                note = (
+                    "(allegato VDT) e formazione.",
+                    "—",
                     "Misure di tutela art. 12 D.Lgs. 151/2001 — "
                     "rimozione dei rischi ex Allegati A/B/C; "
                     "se non rimovibili, modifica orario o mansione."
-                    if is_gestante
-                    else "Sorveglianza sanitaria e formazione ex art. 36-37 D.Lgs. 81/2008."
-                )
-                rows.append([descrizione, "—", note])
+                    if gestante
+                    else "Sorveglianza sanitaria e formazione ex art. 36-37 D.Lgs. 81/2008.",
+                ])
             dpi_table = self._add_data_table(
                 doc,
                 headers=["Descrizione DPI", "Marca / Modello", "Note"],

@@ -707,7 +707,7 @@ def test_declaration_page_and_signature_grid(full_dvr_doc):
 def test_luca_fixture_auditor_reports_all_acceptance_checks(tmp_path):
     report = build_and_audit(tmp_path)
     assert report == {key: True for key in luca_fixture_verifier._REPORT_KEYS}
-    assert len(report) == 24
+    assert len(report) == 25
 
 
 def _all_paragraph_texts(doc: Document) -> list[str]:

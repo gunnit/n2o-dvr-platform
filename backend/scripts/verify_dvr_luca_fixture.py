@@ -84,6 +84,7 @@ _REPORT_KEYS = (
     "signature_grid",
     "cover_and_back_art",
     "company_photo",
+    "dpi_per_person",
 )
 
 # ---------------------------------------------------------------------------
@@ -340,7 +341,9 @@ def build_luca_fixture() -> dict:
         ruolo_antincendio=False,
         ruolo_preposto=False,
         ambienti=[zulu_env],
-        dpi_codes=[],
+        # The only person with DPI: the DPI section must give him his own
+        # table, not share it with Alpha Worker, who has the same mansione.
+        dpi_codes=["guanti_meccanici", "caschi_industria"],
         rischi_specifici_codes=["af_rumore"],
         attrezzature_speciali=[],
     )
@@ -531,6 +534,20 @@ def build_luca_fixture() -> dict:
         "DATORE FIXTURE",
         "ZULU WORKER",
         "ALPHA WORKER",
+    ]
+    # DISPOSITIVI DI PROTEZIONE INDIVIDUALE: one sub-title per employee, in
+    # saved order, over that person's own DPI; None = the explicit
+    # "Nessun DPI specifico richiesto" row.
+    fixture["expected_dpi"] = [
+        ("DATORE FIXTURE", None),
+        (
+            "ZULU WORKER",
+            [
+                "Mani: Guanti contro le aggressioni meccaniche",
+                "Testa: Caschi di protezione per l'industria",
+            ],
+        ),
+        ("ALPHA WORKER", None),
     ]
     # DATI OCCUPAZIONALI: one bullet per environment, in each person's order.
     fixture["expected_environment_bullets"] = [
@@ -878,27 +895,62 @@ def _audit_person_specific_risks(doc: Document, fixture: dict) -> bool:
     ]
 
 
+_DPI_HEADERS = ["Descrizione DPI", "Marca / Modello", "Note"]
+_NO_DPI_PREFIX = "Nessun DPI specifico richiesto"
+
+
 def _audit_dpi_dash_alignment(doc: Document) -> bool:
-    headers = ["Descrizione DPI", "Marca / Modello", "Note"]
+    """The "—" of a no-DPI row (Marca / Modello) is centred both ways; the
+    Luca fixture has three DPI tables (one per employee), two without DPI."""
     tables = [
         table
         for table in doc.tables
         if table.rows
-        and [cell.text.strip() for cell in table.rows[0].cells] == headers
+        and [cell.text.strip() for cell in table.rows[0].cells] == _DPI_HEADERS
     ]
     cells = [row.cells[1] for table in tables for row in table.rows[1:]]
+    dashes = [cell for cell in cells if cell.text.strip() == "—"]
     return (
-        len(tables) == 2
-        and [cell.text.strip() for cell in cells] == ["—", "—"]
+        len(tables) == 3
+        and len(dashes) == 2
         and all(
             cell.vertical_alignment == WD_CELL_VERTICAL_ALIGNMENT.CENTER
             and all(
                 paragraph.alignment == WD_ALIGN_PARAGRAPH.CENTER
                 for paragraph in cell.paragraphs
             )
-            for cell in cells
+            for cell in dashes
         )
     )
+
+
+def _audit_dpi_per_person(doc: Document, fixture: dict) -> bool:
+    """Row 22 as in N2O's model (pp. 56–57): under the DPI divider, one
+    indexed sub-title per employee (name in capitals, saved order), each
+    directly over that person's own DPI table; no per-mansione union and no
+    "varia" note."""
+    blocks = _blocks(doc)
+    start = _heading_index(blocks, "DISPOSITIVI DI PROTEZIONE INDIVIDUALE (DPI)")
+    end = _heading_index(blocks, "SEGNALETICA DI SICUREZZA")
+    if start is None or end is None or start > end:
+        return False
+    section = blocks[start + 1 : end]
+    titles = [(index, block) for index, block in enumerate(section) if _is_heading(block, 3)]
+    expected = fixture["expected_dpi"]
+    if [block.text for _index, block in titles] != [name for name, _labels in expected]:
+        return False
+    for (index, _title), (_name, labels) in zip(titles, expected):
+        table = section[index + 1] if index + 1 < len(section) else None
+        if not isinstance(table, Table) or _header_texts(table) != _DPI_HEADERS:
+            return False
+        first_cells = [row.cells[0].text for row in table.rows[1:]]
+        if labels is None:
+            if len(first_cells) != 1 or not first_cells[0].startswith(_NO_DPI_PREFIX):
+                return False
+        elif first_cells != labels:
+            return False
+    notes = " ".join(block.text for block in section if isinstance(block, Paragraph))
+    return "varia tra i lavoratori" not in notes
 
 
 def _audit_topic_separators(doc: Document, fixture: dict) -> bool:
@@ -1579,6 +1631,7 @@ def audit_luca_docx(path: Path, fixture: dict) -> dict[str, bool]:
         "company_photo": _audit_company_photo(
             doc, fixture.get("expected_company_photo")
         ),
+        "dpi_per_person": _audit_dpi_per_person(doc, fixture),
     }
 
 
