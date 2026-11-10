@@ -13,8 +13,11 @@ export interface TocEntry {
 }
 
 /**
- * TOC entries from the top-level heading blocks. Uses the effective text
- * (override first) so inline edits to a heading update the sidebar too.
+ * TOC entries from the top-level paragraphs with an outline level (the
+ * document's own: its headings and anything else Word lists in the index),
+ * falling back to the heading style on payloads from before the layout
+ * redesign. Uses the effective text (override first) so inline edits to a
+ * heading update the sidebar too.
  */
 export function buildTocEntries(
   blocks: PreviewBlock[],
@@ -22,12 +25,14 @@ export function buildTocEntries(
 ): TocEntry[] {
   const entries: TocEntry[] = [];
   for (const block of blocks) {
-    if (block.kind !== "paragraph" || block.heading_level === null) continue;
+    if (block.kind !== "paragraph") continue;
+    const level = block.outline_level ?? block.heading_level;
+    if (level === null || level === undefined) continue;
     const text = (
       overrides[block.addr] ?? block.runs.map((r) => r.text).join("")
     ).trim();
     if (!text) continue;
-    entries.push({ addr: block.addr, level: block.heading_level, text });
+    entries.push({ addr: block.addr, level, text });
   }
   return entries;
 }

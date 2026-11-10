@@ -92,9 +92,11 @@ export function EditorHeader({
   const canSaveVersion = editedCount > 0 && !savingVersion;
 
   return (
-    // Bleeds into the dashboard shell's px-8/py-8 padding so the bar spans
-    // the full content column and sticks to the very top of the viewport.
-    <div className="sticky top-0 z-30 -mx-8 -mt-8 border-b border-[#e5edf5] bg-white/95 px-8 py-3 backdrop-blur-sm">
+    // Bleeds into the dashboard shell's padding (px-4 py-6, sm:px-6 sm:py-8,
+    // lg:px-8) so the bar spans the full content column and sticks to the
+    // very top of the viewport — by exactly that padding at every width: a
+    // wider bleed scrolled a 390 px phone sideways.
+    <div className="sticky top-0 z-30 -mx-4 -mt-6 border-b border-[#e5edf5] bg-white/95 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:-mt-8 sm:px-6 lg:-mx-8 lg:px-8">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <Link
           href="/documents"
