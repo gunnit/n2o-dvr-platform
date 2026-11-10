@@ -12,6 +12,7 @@ from docx import Document
 from docx.shared import Pt
 
 from app.services.codice_fiscale import extract_age
+from app.services.document_generator import allegato_mmc
 from app.services.document_generator.allegato_mmc import (
     AllegatoMmcGenerator,
     group_mmc_rows,
@@ -279,4 +280,8 @@ def test_empty_prevention_zone_notice_has_explicit_spacing_after_long_heading():
         for paragraph in doc.paragraphs
         if paragraph.text == "Nessun lavoratore classificato in gialla."
     )
-    assert notice.paragraph_format.space_before == Pt(6)
+    # A named module constant, not a literal (final review, T7 minor).
+    assert allegato_mmc.EMPTY_ZONE_NOTICE_SPACE_BEFORE_PT == 6
+    assert notice.paragraph_format.space_before == Pt(
+        allegato_mmc.EMPTY_ZONE_NOTICE_SPACE_BEFORE_PT
+    )

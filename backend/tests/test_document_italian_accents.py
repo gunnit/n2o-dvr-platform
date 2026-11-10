@@ -60,14 +60,21 @@ FORBIDDEN: dict[str, str] = {
     "verra": "verrà",
     "potra": "potrà",
     "dovra": "dovrà",
+    "realta": "realtà",
+    "proprieta": "proprietà",
 }
 
 # `è` written as a bare `e` before a participle/adjective — the error that
 # changes the meaning of a sentence rather than just its spelling.
 BARE_E = re.compile(
     r"(?<![\w.])e\s+(stat[ao]|previst[ao]|conservat[ao]|riportat[ao]|definit[ao]"
-    r"|obbligatori[ao]|vietat[ao]|consentit[ao]|richiest[ao]|necessari[ao])\b"
+    r"|obbligatori[ao]|vietat[ao]|consentit[ao]|richiest[ao]|necessari[ao]"
+    r"|redatt[ao]|coinvolt[ao]|precedut[ao]|associat[ao]|coerent[ei])\b"
 )
+
+# `necessita` is the verb ("needs") and stays bare; after an article it is
+# the noun, `necessità`.
+NOUN_NECESSITA = re.compile(r"(?<![\w.])(?:la|della|alla|dalla|nella|sulla)\s+necessita\b", re.IGNORECASE)
 
 
 def _string_literals(path: Path):
@@ -132,6 +139,16 @@ def test_no_bare_e_where_the_verb_is_meant(path: Path):
         for m in BARE_E.finditer(literal):
             offenders.append(f"{path.name}:{line} «{m.group(0)}» -> «è {m.group(1)}»")
     assert not offenders, "«e» used where «è» is meant:\n  " + "\n  ".join(offenders)
+
+
+@pytest.mark.parametrize("path", GENERATOR_FILES, ids=lambda p: p.name)
+def test_the_noun_necessita_takes_its_accent(path: Path):
+    offenders = [
+        f"{path.name}:{line} «{m.group(0)}» -> «…necessità»"
+        for line, literal, _source_line in _string_literals(path)
+        for m in NOUN_NECESSITA.finditer(literal)
+    ]
+    assert not offenders, "«necessita» used where «necessità» is meant:\n  " + "\n  ".join(offenders)
 
 
 def test_the_dvr_master_actually_contains_accents():

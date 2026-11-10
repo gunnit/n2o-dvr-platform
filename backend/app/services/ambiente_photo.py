@@ -74,6 +74,12 @@ def normalize_document_image(content: bytes) -> NormalizedDocumentImage:
                 reducing_gap=2.0,
             )
             image = _flatten_to_rgb(ImageOps.exif_transpose(opened))
+            # What the decoder kept beside the pixels has no place in a
+            # document: Pillow's JPEG writer re-emits ``info["comment"]`` on
+            # save (a phone or editor may put a name or an address there).
+            # EXIF (with GPS) and XMP are only written when passed to save,
+            # which this never does; clearing the lot keeps it that way.
+            image.info.clear()
     except DocumentImageNormalizationError:
         raise
     except (

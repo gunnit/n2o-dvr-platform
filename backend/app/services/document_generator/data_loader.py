@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.azienda_foto_presentazione import AziendaFotoPresentazione
 from app.models.biologico_valutazione import BiologicoValutazione
 from app.models.duvri import Duvri
 from app.models.gestanti_valutazione import (
@@ -131,3 +132,17 @@ async def load_duvri(db: AsyncSession, azienda_id: uuid.UUID) -> list[Duvri]:
 async def load_pos(db: AsyncSession, azienda_id: uuid.UUID) -> list[Pos]:
     r = await db.execute(select(Pos).where(Pos.azienda_id == azienda_id))
     return list(r.scalars().all())
+
+
+async def load_foto_presentazione(
+    db: AsyncSession, azienda_id: uuid.UUID
+) -> tuple[bytes, str] | None:
+    """The company photo as ``(document_image_bytes, content_type)``, if any."""
+    r = await db.execute(
+        select(
+            AziendaFotoPresentazione.document_image_bytes,
+            AziendaFotoPresentazione.content_type,
+        ).where(AziendaFotoPresentazione.azienda_id == azienda_id)
+    )
+    row = r.first()
+    return (bytes(row[0]), row[1]) if row else None

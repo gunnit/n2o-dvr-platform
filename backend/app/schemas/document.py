@@ -1,8 +1,9 @@
+import builtins
 import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, model_serializer
 
 
 class DocumentGenerateRequest(BaseModel):
@@ -80,11 +81,71 @@ class DocumentSnapshotResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # In-browser preview + inline editing (documenti/{id}/preview & /overrides)
 #
-# The block model mirrors services/document_preview.parse_docx_to_blocks
-# 1:1 — the frontend renders these shapes directly, and every `addr` is a
-# stable address the PATCH /overrides endpoint accepts back. Keep the two
-# in lock-step: a field added here must be emitted by the parser.
+# The block model mirrors services/document_preview.parse_docx_preview 1:1
+# (parse_docx_to_blocks is its frozen legacy subset) — the frontend renders
+# these shapes directly, and every `addr` is a stable address the PATCH
+# /overrides endpoint accepts back. Keep the two in lock-step: a field added
+# here must be emitted by the parser.
+#
+# Fields marked "layout redesign" are the spec 2026-11-10 §4.3.1 additions.
+# All are optional with a default, so an old client ignores them and an old
+# payload (or an old document) still validates.
 # ---------------------------------------------------------------------------
+
+PreviewAlignment = Literal["left", "center", "right", "justify"]
+
+
+class DocumentPreviewStyleProps(BaseModel):
+    """Paragraph look in points and "RRGGBB" (layout redesign).
+
+    Serialized with only the fields it holds. In ``style_props`` that is all
+    of them, *resolved*: the style, then its ``basedOn`` chain, then
+    ``docDefaults``; ``bold``/``italic``/``caps`` are then always true or
+    false, and any other value nothing in the chain sets is null.
+
+    As a paragraph's ``direct`` it holds only what the paragraph sets itself
+    (a missing key: not set; null: set to "auto" colour or body-text level).
+    ``alignment``, the spacing, ``indent_left_pt`` and ``outline_level`` come
+    from the paragraph's properties. ``font_size_pt``, ``bold``, ``italic``,
+    ``caps`` and ``color`` appear only on a paragraph without text (nothing
+    but whitespace in its runs): they are its mark's run properties, which
+    give an empty paragraph its height. A paragraph with text never carries
+    them — its text looks as its runs and its style say, whatever the mark
+    is formatted as.
+    """
+
+    font_size_pt: float | None = None
+    bold: bool | None = None
+    italic: bool | None = None
+    caps: bool | None = None
+    # "RRGGBB"; None for "auto" or not set.
+    color: str | None = None
+    alignment: PreviewAlignment | None = None
+    space_before_pt: float | None = None
+    space_after_pt: float | None = None
+    indent_left_pt: float | None = None
+    # 1-9 (w:outlineLvl + 1); None for body text.
+    outline_level: int | None = None
+
+    @model_serializer(mode="wrap")
+    def _held_fields_only(self, handler: SerializerFunctionWrapHandler):
+        # A paragraph's direct formatting is a handful of keys; spelling out
+        # the other nulls on every paragraph of a DVR costs ~10% of the payload.
+        # No return annotation, on purpose: pydantic publishes a serializer's
+        # return type as the model's serialization schema, so "-> dict" made
+        # OpenAPI show a bare object. Without one, it shows these fields.
+        data = handler(self)
+        return {key: value for key, value in data.items() if key in self.model_fields_set}
+
+
+class DocumentPreviewList(BaseModel):
+    """List membership from numPr and numbering.xml (layout redesign)."""
+
+    # w:ilvl, 0-based.
+    level: int
+    # A bullet's glyph as drawn ("•", "▪" — symbol-font code points mapped);
+    # for numbered formats the lvlText pattern, e.g. "%1.".
+    glyph: str
 
 
 class DocumentPreviewRun(BaseModel):
@@ -98,6 +159,10 @@ class DocumentPreviewRun(BaseModel):
     color: str | None = None
     # Font size in points; None when inherited from the style.
     size: float | None = None
+    # Layout redesign: the run's own capitals (w:caps). True: on. False:
+    # explicitly off, so the text prints as typed even in a capitalised
+    # heading. None: unset, the paragraph's capitals apply.
+    caps: bool | None = None
 
 
 class DocumentPreviewImage(BaseModel):
@@ -111,16 +176,43 @@ class DocumentPreviewImage(BaseModel):
 class DocumentPreviewCellParagraph(BaseModel):
     """Paragraph inside a table cell — addr is "table:row:cell:para"."""
 
+    # This class has a field named "list", which rebinds that name in its
+    # body. Python 3.14 evaluates class annotations lazily, after the body
+    # has run (PEP 649/749), so a bare list[...] annotation here would
+    # resolve to the field's default, None, and the whole API would fail to
+    # import (production pins 3.14 in render.yaml). Every list annotation in
+    # this class is therefore spelled builtins.list.
     addr: str
     style: str | None = None
     # 1-4 when the style is "Heading N" / "Titolo N", else None.
     heading_level: int | None = None
-    alignment: Literal["left", "center", "right", "justify"] | None = None
+    alignment: PreviewAlignment | None = None
     # False when the paragraph carries drawings or field machinery (TOC) —
     # the apply side skips overrides on locked paragraphs too.
     editable: bool
-    runs: list[DocumentPreviewRun]
-    images: list[DocumentPreviewImage] = Field(default_factory=list)
+    runs: builtins.list[DocumentPreviewRun]
+    # Pictures drawn in the text. A full-page art picture is not one: it is
+    # the paragraph's background_image_id.
+    images: builtins.list[DocumentPreviewImage] = Field(default_factory=builtins.list)
+    # Layout redesign — effective outline level 1-9 (direct, else the
+    # style's), for the sidebar index; None for body text.
+    outline_level: int | None = None
+    # Layout redesign — the paragraph's own formatting; None when it has none.
+    # Run-level keys only on a paragraph without text (see the model).
+    direct: DocumentPreviewStyleProps | None = None
+    # Layout redesign — the art page this paragraph opens (wp:docPr named
+    # "vera-art:<role>:<key>"), and that page's background picture: a
+    # main-part rId for /preview/images/{image_id}.
+    page_role: Literal["cover", "divider", "back_cover"] | None = None
+    background_image_id: str | None = None
+    # Layout redesign — the paragraph ends a section (pPr carries w:sectPr)
+    # and the next section starts on a new page: what follows starts on a
+    # new sheet. False at a continuous break that keeps the page.
+    section_break_after: bool = False
+    # Layout redesign — numbering from numPr and numbering.xml. Named "list"
+    # by the contract; see the comment at the top of this class for what the
+    # name costs.
+    list: DocumentPreviewList | None = None
 
 
 class DocumentPreviewParagraphBlock(DocumentPreviewCellParagraph):
@@ -138,18 +230,50 @@ class DocumentPreviewCell(BaseModel):
     # gridSpan — horizontal merge width, 1 when unmerged.
     col_span: int = 1
     v_merge: Literal["restart", "continue"] | None = None
+    # Layout redesign — tcPr/vAlign ("both" is drawn centred); None when unset.
+    v_align: Literal["top", "center", "bottom"] | None = None
 
 
 class DocumentPreviewTableBlock(BaseModel):
     kind: Literal["table"] = "table"
     addr: str
     rows: list[list[DocumentPreviewCell]]
+    # Layout redesign — tblGrid column widths as percentages of the table
+    # (they sum to ~100); None without a grid.
+    col_widths_pct: list[float] | None = None
 
 
 DocumentPreviewBlock = Annotated[
     DocumentPreviewParagraphBlock | DocumentPreviewTableBlock,
     Field(discriminator="kind"),
 ]
+
+
+class DocumentPreviewFurniture(BaseModel):
+    """Running header and footer of the body's final section (layout redesign).
+
+    The header's first paragraph with text, split at its first tab (title |
+    client); the footer's text before its right tab without field results
+    (the revision line); the footer's first inline picture as a part-scoped
+    image id, "ftr:<part>:<rId>", for /preview/images/{image_id}.
+    """
+
+    header_left: str | None = None
+    header_right: str | None = None
+    footer_text: str | None = None
+    footer_logo_image_id: str | None = None
+
+
+class DocumentPreviewPageSetup(BaseModel):
+    """Page size and margins of the body's final section, in points (layout
+    redesign). Donor-template documents keep their own geometry."""
+
+    width_pt: float | None = None
+    height_pt: float | None = None
+    margin_top_pt: float | None = None
+    margin_bottom_pt: float | None = None
+    margin_left_pt: float | None = None
+    margin_right_pt: float | None = None
 
 
 class DocumentPreviewResponse(BaseModel):
@@ -167,6 +291,12 @@ class DocumentPreviewResponse(BaseModel):
     blocks: list[DocumentPreviewBlock]
     # Currently saved overrides keyed by block address ({} when none).
     overrides: dict[str, str] = Field(default_factory=dict)
+    # Layout redesign — None when the final section has no header or footer.
+    furniture: DocumentPreviewFurniture | None = None
+    page_setup: DocumentPreviewPageSetup | None = None
+    # Layout redesign — each paragraph style the blocks use, keyed by the
+    # name in their "style" field, resolved (see DocumentPreviewStyleProps).
+    style_props: dict[str, DocumentPreviewStyleProps] = Field(default_factory=dict)
 
 
 class OverridesPatchRequest(BaseModel):

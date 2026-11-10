@@ -22,11 +22,11 @@
 
 version: 1
 totals:
-  endpoints: 220
+  endpoints: 223
   areas: 35
   frontend_pages: 35
-  ui_api_call_sites: 94
-  capability_gated: 131
+  ui_api_call_sites: 95
+  capability_gated: 133
   billing_gated: 10
   ai_metered: 16
 endpoints_by_area:
@@ -41,7 +41,7 @@ endpoints_by_area:
   - area: "auth"
     endpoints: 6
   - area: "aziende"
-    endpoints: 13
+    endpoints: 16
   - area: "billing"
     endpoints: 13
   - area: "biologico"
@@ -1448,6 +1448,59 @@ endpoints:
     auth: "required"
     capabilities:
       - "assessments:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "azienda_foto_presentazione.delete_foto_presentazione"
+    method: "DELETE"
+    path: "/api/v1/aziende/{azienda_id}/foto-presentazione"
+    area: "aziende"
+    source: "backend/app/api/v1/azienda_foto_presentazione.py"
+    function: "delete_foto_presentazione"
+    auth: "required"
+    capabilities:
+      - "survey:write"
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "azienda_foto_presentazione.get_foto_presentazione"
+    method: "GET"
+    path: "/api/v1/aziende/{azienda_id}/foto-presentazione"
+    area: "aziende"
+    source: "backend/app/api/v1/azienda_foto_presentazione.py"
+    function: "get_foto_presentazione"
+    auth: "required"
+    capabilities: []
+    roles_allowed:
+      - "admin"
+      - "operatore_campo"
+      - "operatore_ufficio"
+    platform_admin: false
+    billing_gates: []
+    ai_credits: []
+    called_by_ui: true
+    in_openapi: true
+  - id: "azienda_foto_presentazione.put_foto_presentazione"
+    method: "PUT"
+    path: "/api/v1/aziende/{azienda_id}/foto-presentazione"
+    area: "aziende"
+    source: "backend/app/api/v1/azienda_foto_presentazione.py"
+    function: "put_foto_presentazione"
+    auth: "required"
+    capabilities:
+      - "survey:write"
     roles_allowed:
       - "admin"
       - "operatore_campo"

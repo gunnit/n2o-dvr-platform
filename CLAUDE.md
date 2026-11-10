@@ -14,7 +14,7 @@ Live: https://dvr-sicurezza.it (frontend) · https://n2o-dvr-api.onrender.com/do
   `wsl -e bash -lc 'cd /mnt/c/Dev/dlg/backend && PYTHONPATH=.venv/lib/python3.12/site-packages:. python3 -m pytest'`
   (`app/services/__init__.py` eagerly imports `app.config`, so even a stdlib-only module won't import without the full deps.)
 - **Frontend typecheck** — `node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json`. `npm run` fails in git-bash because the cmd-shim doesn't resolve `node_modules/.bin`; `./node_modules/.bin/tsc` fails too.
-- **Frontend build** — `node node_modules/next/dist/bin/next build`, after `npm install --no-save lightningcss-win32-x64-msvc@<version from node_modules/lightningcss>` (node_modules was installed under Linux, so the win32 native binary is absent). `next build` runs ESLint and typechecking itself, so a clean build plus `tsc --noEmit` is the real gate for a type change.
+- **Frontend build** — `node node_modules/next/dist/bin/next build`, after `npm install --no-save lightningcss-win32-x64-msvc@<version from node_modules/lightningcss>` (node_modules was installed under Linux, so the win32 native binary is absent). The gate for a type change is `tsc --noEmit` plus a clean `next build`. Next 16's build typechecks but no longer lints, so run ESLint separately on the files you changed: `node node_modules/eslint/bin/eslint.js <paths>`.
 - DB-backed tests skip themselves when no Postgres is reachable at `DATABASE_URL`.
 
 ## Language
@@ -33,6 +33,7 @@ DVR (master risk assessment) · MMC (manual handling, NIOSH) · VDT (display scr
 ## Invariants worth knowing before you edit
 
 - **The risk index is `I = 2*D + P`, not the usual `P × D`.** Range 3–12: 3–4 accettabile, 5–6 modesto, 7–8 grave, 9–12 gravissimo. This looks like a bug and isn't.
+- **Generated documents print in Arial**, in every font slot: N2O's requirement (no reflow between Windows and Mac), kept when we adopted their 20 Oct 2026 model, which is set in Avenir Next. Never reintroduce Calibri or Avenir. The tokens (`FONT_FAMILY`, `TYPE_SCALE`) live in `backend/app/services/document_generator/docx_utils.py`.
 - **Money and roles are two separate gates on the same endpoints.** `app/billing/*` answers what the organization bought and fails with `402`; `app/core/permissions.py` answers what this person may do inside it and fails with `403`. Neither substitutes for the other.
 - **Read and download paths are gated by neither** — D.Lgs. 81/2008 retention means a lapsed tenant, and every role, keeps access to existing documents.
 - Any new write path that creates work needs an entitlement gate. `backend/tests/test_billing_enforcement.py` and `test_permissions.py` fail the build when one is missed.
@@ -52,6 +53,7 @@ Read the relevant `docs/context/` file *before* building a module, not after:
 | System blueprint: schema, endpoints, folder layout, auth flow | `ARCHITECTURE.md` |
 | Entities with field-level detail and privacy flags | `DATA_MODEL.md` |
 | **The DVR generator's spec** — 111 tables, 269 dynamic cells mapped to fields | `DVR_TEMPLATE_MAPPING.md` |
+| Layout of every generated document: design kit, art pages, tokens, page map | `DESIGN_KIT.md` |
 | All 7 calculation methods with input/output specs | `FORMULAS_AND_CALCULATIONS.md` |
 | Lookup tables for seeding and dropdowns (NIOSH factors, 60+ hazards, 76 INAIL indicators) | `REFERENCE_DATA.md` |
 | Italian and EU law, article numbers, which document each affects | `LEGISLATION_REFERENCE.md` |

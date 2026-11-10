@@ -9,17 +9,21 @@ from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_biologico
 from app.services.document_generator.design import (
+    add_back_cover,
     add_cover,
     add_revision_table,
     finish_document,
     setup_document,
 )
 from app.services.document_generator.docx_utils import (
+    NOTE_GREY,
+    TYPE_SCALE,
+    add_body_paragraph,
     add_data_table,
     add_heading,
     add_kv_table,
-    add_paragraph,
     format_sede,
+    set_run_font,
     slugify,
 )
 from app.services.document_generator.reference_data_biologico import (
@@ -28,6 +32,13 @@ from app.services.document_generator.reference_data_biologico import (
 )
 
 DOC_TITLE = "Allegato Rischio Biologico"
+
+
+def _note(doc, text: str):
+    """The kit's note: 10 pt italic grey."""
+    paragraph = doc.add_paragraph()
+    set_run_font(paragraph.add_run(text), size=TYPE_SCALE["note"], italic=True, color=NOTE_GREY)
+    return paragraph
 
 
 async def build_biologico_document(
@@ -52,9 +63,10 @@ async def build_biologico_document(
     settore_label = settore_label or settore_key.capitalize()
 
     doc = Document()
-    setup_document(doc)
+    setup_document(doc, profile="attachment")
     # Audit 2026-09-03: the three biologico annexes shipped as 1-2 US-Letter
-    # pages with no cover, header, footer or logo. Shared furniture now.
+    # pages with no cover, header, footer or logo. Shared furniture now: the
+    # kit's art cover and back cover (spec 2026-11-10 §4.4).
     add_cover(
         doc,
         title=DOC_TITLE,
@@ -77,7 +89,7 @@ async def build_biologico_document(
     ])
 
     add_heading(doc, "Inquadramento", level=1)
-    add_paragraph(
+    add_body_paragraph(
         doc,
         "La valutazione segue il Titolo X (artt. 266-286) del D.Lgs. 81/2008. "
         "Il Titolo X classifica gli agenti biologici in quattro gruppi in base a patogenicità, "
@@ -114,13 +126,11 @@ async def build_biologico_document(
         ])
     if malattie_rows:
         add_heading(doc, "Malattie contraibili: sintomi e cura", level=1)
-        add_paragraph(
+        _note(
             doc,
             "Informazioni generali per i lavoratori sulle malattie trasmissibili dagli agenti "
             "identificati. Non sostituiscono la valutazione del Medico Competente: in presenza "
             "di sintomi il lavoratore si rivolge al proprio medico e lo segnala al datore di lavoro.",
-            italic=True,
-            size=9,
         )
         add_data_table(
             doc,
@@ -132,18 +142,18 @@ async def build_biologico_document(
     add_heading(doc, "Misure di prevenzione e protezione collettive", level=1)
     misure = (row.misure_protettive if row and row.misure_protettive else None) or [{"descrizione": m} for m in misure_default]
     for m in misure:
-        add_paragraph(doc, f"• {m.get('descrizione', '')}")
+        add_body_paragraph(doc, f"• {m.get('descrizione', '')}")
 
     add_heading(doc, "Dispositivi di protezione individuale (DPI) utilizzati", level=1)
     dpi = (row.dpi_richiesti if row and row.dpi_richiesti else None) or [{"descrizione": d} for d in dpi_default]
     for d in dpi:
-        add_paragraph(doc, f"• {d.get('descrizione', '')}")
+        add_body_paragraph(doc, f"• {d.get('descrizione', '')}")
 
     add_heading(doc, "Sorveglianza sanitaria e formazione", level=1)
-    add_paragraph(doc, (row.protocollo_sanitario if row and row.protocollo_sanitario else protocollo_default))
+    add_body_paragraph(doc, (row.protocollo_sanitario if row and row.protocollo_sanitario else protocollo_default))
     if row and row.formazione_specifica:
         add_heading(doc, "Formazione specifica", level=2)
-        add_paragraph(doc, row.formazione_specifica)
+        add_body_paragraph(doc, row.formazione_specifica)
     classification = None
     if row and row.risposte_checklist:
         # Audit 2026-09-03: the checklist printed bare ids ("AL.01 | NO") and
@@ -168,15 +178,10 @@ async def build_biologico_document(
             column_widths_cm=[1.8, 10.2, 2.2, 2.3],
         )
         if classification["unanswered"]:
-            add_paragraph(
-                doc,
-                "Controlli senza risposta: " + ", ".join(classification["unanswered"]) + ".",
-                italic=True,
-                size=9,
-            )
+            _note(doc, "Controlli senza risposta: " + ", ".join(classification["unanswered"]) + ".")
     if row and row.note:
         add_heading(doc, "Note valutazione biologica", level=1)
-        add_paragraph(doc, row.note)
+        add_body_paragraph(doc, row.note)
 
     add_heading(doc, "Esito valutazione", level=1)
     livello = (
@@ -194,6 +199,7 @@ async def build_biologico_document(
     esito.append(("Periodicità revisione", "Annuale o in caso di modifiche organizzative rilevanti"))
     add_kv_table(doc, esito)
 
+    add_back_cover(doc)
     finish_document(
         doc,
         title=f"{DOC_TITLE} — {settore_label}",

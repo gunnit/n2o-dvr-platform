@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from app.billing.entitlements import Entitlements, get_entitlements
 from app.billing.gates import (
@@ -94,6 +95,27 @@ async def _resolve_user_name(user_id: uuid.UUID | None, db: AsyncSession) -> str
         return None
     result = await db.execute(select(User.full_name).where(User.id == user_id))
     return result.scalar_one_or_none()
+
+
+async def _next_version(
+    azienda_id: uuid.UUID, tipo_documento: str, db: AsyncSession
+) -> int:
+    """One more than the highest ``versione`` of this document type for the
+    azienda, 1 for the first.
+
+    Reads the number alone: loading the latest row to read its ``versione``
+    would also pull its ``file_content`` (about 3 MB for a DVR) out of
+    Postgres.
+    """
+    result = await db.execute(
+        select(func.max(DocumentoGenerato.versione)).where(
+            DocumentoGenerato.azienda_id == azienda_id,
+            DocumentoGenerato.tipo_documento == tipo_documento,
+        )
+    )
+    latest = result.scalar_one_or_none()
+    return latest + 1 if latest is not None else 1
+
 
 router = APIRouter(prefix="/aziende/{azienda_id}/documents", tags=["documents"])
 
@@ -372,18 +394,7 @@ async def generate_document(
 
     await _preflight_dvr_photo_transport(azienda_id, [body.tipo_documento], db)
 
-    # Determine the next version number for this document type
-    result = await db.execute(
-        select(DocumentoGenerato)
-        .where(
-            DocumentoGenerato.azienda_id == azienda_id,
-            DocumentoGenerato.tipo_documento == body.tipo_documento,
-        )
-        .order_by(DocumentoGenerato.versione.desc())
-        .limit(1)
-    )
-    latest = result.scalar_one_or_none()
-    next_version = (latest.versione + 1) if latest else 1
+    next_version = await _next_version(azienda_id, body.tipo_documento, db)
 
     doc = DocumentoGenerato(
         azienda_id=azienda_id,
@@ -438,12 +449,16 @@ async def list_documents(
         )
 
     # Left-join on users so rows with a NULL generated_by (legacy records)
-    # still appear, just without an author name.
+    # still appear, just without an author name. The list only describes the
+    # documents, and the page polls it every 3 s while one is generating: the
+    # bytes stay in Postgres (_doc_to_response never reads them; in an async
+    # session a deferred column that is read raises).
     result = await db.execute(
         select(DocumentoGenerato, User.full_name)
         .outerjoin(User, User.id == DocumentoGenerato.generated_by)
         .where(DocumentoGenerato.azienda_id == azienda_id)
         .order_by(DocumentoGenerato.created_at.desc())
+        .options(defer(DocumentoGenerato.file_content))
     )
     return [_doc_to_response(doc, name) for doc, name in result.all()]
 
@@ -457,6 +472,7 @@ async def get_document_status(
 ):
     """Check generation status for a specific document."""
     await _get_azienda(azienda_id, org_id, db)
+    # Polled while the document generates: metadata only, as in the list.
     result = await db.execute(
         select(DocumentoGenerato, User.full_name)
         .outerjoin(User, User.id == DocumentoGenerato.generated_by)
@@ -464,6 +480,7 @@ async def get_document_status(
             DocumentoGenerato.id == document_id,
             DocumentoGenerato.azienda_id == azienda_id,
         )
+        .options(defer(DocumentoGenerato.file_content))
     )
     row = result.one_or_none()
     if not row:
@@ -576,18 +593,7 @@ async def batch_generate_documents(
     created_docs: list[DocumentoGenerato] = []
 
     for tipo in body.tipi_documento:
-        # Determine the next version number for each document type
-        result = await db.execute(
-            select(DocumentoGenerato)
-            .where(
-                DocumentoGenerato.azienda_id == azienda_id,
-                DocumentoGenerato.tipo_documento == tipo,
-            )
-            .order_by(DocumentoGenerato.versione.desc())
-            .limit(1)
-        )
-        latest = result.scalar_one_or_none()
-        next_version = (latest.versione + 1) if latest else 1
+        next_version = await _next_version(azienda_id, tipo, db)
 
         doc = DocumentoGenerato(
             azienda_id=azienda_id,
@@ -717,18 +723,7 @@ async def restore_document(
     # (D.Lgs. 81/2008 retention); only minting v+1 is charged for.
     await _ensure_new_version_allowed(ent, org_id, azienda_id, source.tipo_documento, db)
 
-    # Next version number for this document type
-    result = await db.execute(
-        select(DocumentoGenerato)
-        .where(
-            DocumentoGenerato.azienda_id == azienda_id,
-            DocumentoGenerato.tipo_documento == source.tipo_documento,
-        )
-        .order_by(DocumentoGenerato.versione.desc())
-        .limit(1)
-    )
-    latest = result.scalar_one_or_none()
-    next_version = (latest.versione + 1) if latest else 1
+    next_version = await _next_version(azienda_id, source.tipo_documento, db)
 
     # Build restored filename
     src_name = source.file_name or (os.path.basename(source.file_path) if source.file_path else f"{source.tipo_documento}_v{source.versione}")
@@ -940,18 +935,7 @@ async def sync_document_from_gdoc(
             detail="Impossibile esportare il documento da Google Docs",
         )
 
-    # Next version for this document type
-    result = await db.execute(
-        select(DocumentoGenerato)
-        .where(
-            DocumentoGenerato.azienda_id == source.azienda_id,
-            DocumentoGenerato.tipo_documento == source.tipo_documento,
-        )
-        .order_by(DocumentoGenerato.versione.desc())
-        .limit(1)
-    )
-    latest = result.scalar_one_or_none()
-    next_version = (latest.versione + 1) if latest else 1
+    next_version = await _next_version(source.azienda_id, source.tipo_documento, db)
 
     # Build filename: append -edited to stem
     src_name = source.file_name or f"{source.tipo_documento}_v{source.versione}.docx"
@@ -1065,15 +1049,16 @@ _OVERRIDE_ADDR_RE = re.compile(r"^\d+(:\d+){0,3}$")
 # per value) but repeated PATCHes could still grow the JSONB unboundedly.
 _OVERRIDES_MAX_SERIALIZED = 2_000_000
 
-# Parsed-blocks LRU for the preview endpoint. Keyed by document_id: a
-# completed row's bytes are IMMUTABLE — regenerate, restore, sync-from-gdoc
+# Parsed-preview LRU for the preview endpoint: parse_docx_preview's whole
+# result (blocks, furniture, page setup, style props). Keyed by document_id:
+# a completed row's bytes are IMMUTABLE — regenerate, restore, sync-from-gdoc
 # and save-edited-version all mint NEW rows with new ids — so a cached
 # parse can never go stale and needs no invalidation. Entries are treated
 # as read-only by consumers. Thread-safety is best-effort under the GIL:
 # worst case two concurrent misses parse the same document twice and the
 # second insert wins.
-_PREVIEW_BLOCKS_CACHE: OrderedDict[uuid.UUID, list[dict]] = OrderedDict()
-_PREVIEW_BLOCKS_CACHE_MAX = 4
+_PREVIEW_CACHE: OrderedDict[uuid.UUID, dict] = OrderedDict()
+_PREVIEW_CACHE_MAX = 4
 
 
 async def _get_org_document(
@@ -1082,8 +1067,15 @@ async def _get_org_document(
     db: AsyncSession,
     *,
     for_update: bool = False,
+    with_bytes: bool = False,
 ) -> tuple[DocumentoGenerato, str]:
     """Org-scoped fetch by document id, joined with the owning Azienda's name.
+
+    The row comes without ``file_content`` (the whole .docx, ~3 MB for a DVR
+    with its art) unless ``with_bytes``: the preview needs it only on a
+    cache miss and fetches it with :func:`_document_bytes`, the overrides
+    PATCH never. Never read ``file_content`` off a row loaded without it:
+    the lazy load fails under the async session.
 
     ``for_update=True`` row-locks the DocumentoGenerato (Postgres
     ``FOR UPDATE OF``) so concurrent mutating handlers serialise —
@@ -1095,6 +1087,8 @@ async def _get_org_document(
         .join(Azienda, Azienda.id == DocumentoGenerato.azienda_id)
         .where(DocumentoGenerato.id == document_id, Azienda.organization_id == org_id)
     )
+    if not with_bytes:
+        stmt = stmt.options(defer(DocumentoGenerato.file_content))
     if for_update:
         stmt = stmt.with_for_update(of=DocumentoGenerato)
     result = await db.execute(stmt)
@@ -1125,11 +1119,27 @@ def _resolve_docx_filename(doc: DocumentoGenerato) -> str:
 
 
 def _load_docx_bytes(doc: DocumentoGenerato) -> bytes:
-    """Document bytes — DB content preferred, disk fallback (mirrors download)."""
-    if doc.file_content:
-        return doc.file_content
-    if doc.file_path and os.path.exists(doc.file_path):
-        with open(doc.file_path, "rb") as f:
+    """Document bytes of a row loaded ``with_bytes`` — DB content preferred,
+    disk fallback (mirrors download)."""
+    return _content_or_file(doc.file_content, doc.file_path)
+
+
+async def _document_bytes(doc: DocumentoGenerato, db: AsyncSession) -> bytes:
+    """Document bytes of a row loaded without them: one SELECT of that
+    column alone, then the same disk fallback."""
+    content = (
+        await db.execute(
+            select(DocumentoGenerato.file_content).where(DocumentoGenerato.id == doc.id)
+        )
+    ).scalar_one_or_none()
+    return _content_or_file(content, doc.file_path)
+
+
+def _content_or_file(content: bytes | None, file_path: str | None) -> bytes:
+    if content:
+        return content
+    if file_path and os.path.exists(file_path):
+        with open(file_path, "rb") as f:
             return f.read()
     raise NotFoundError("File non disponibile. Rigenera il documento.")
 
@@ -1142,36 +1152,39 @@ async def preview_document(
 ):
     """Parse the stored .docx into the addressed block model for the editor.
 
-    The .docx stays the source of truth — we re-parse on every call (no
-    persisted snapshot), so a regenerated file immediately yields fresh
-    blocks. Saved overrides ride along so the frontend can rehydrate
-    pending edits onto the matching addresses.
+    The .docx stays the source of truth — the preview is parsed from it (no
+    persisted snapshot; an in-process LRU only), so a regenerated file
+    immediately yields fresh blocks. Besides the blocks the payload carries
+    the document's look: running header/footer, page setup and resolved
+    paragraph styles. Saved overrides ride along so the frontend can
+    rehydrate pending edits onto the matching addresses.
     """
     doc, azienda_nome = await _get_org_document(document_id, org_id, db)
     filename = _resolve_docx_filename(doc)
 
     # LRU hit: the row's bytes are immutable after completion (see cache
-    # comment above) so the parsed blocks can be reused as-is.
-    blocks = _PREVIEW_BLOCKS_CACHE.get(doc.id)
-    if blocks is not None:
-        _PREVIEW_BLOCKS_CACHE.move_to_end(doc.id)
+    # comment above) so the parsed preview can be reused as-is.
+    preview = _PREVIEW_CACHE.get(doc.id)
+    if preview is not None:
+        _PREVIEW_CACHE.move_to_end(doc.id)
     else:
-        docx_bytes = _load_docx_bytes(doc)
+        # A miss only: the row was loaded without its bytes.
+        docx_bytes = await _document_bytes(doc, db)
 
-        from app.services.document_preview import parse_docx_to_blocks
+        from app.services.document_preview import parse_docx_preview
 
         try:
             # CPU-bound parse (~seconds on the DVR) — off the event loop (B5).
-            blocks = await asyncio.to_thread(parse_docx_to_blocks, docx_bytes)
+            preview = await asyncio.to_thread(parse_docx_preview, docx_bytes)
         except Exception as exc:
             import logging
             logging.getLogger(__name__).exception("Preview parse failed for %s", doc.id)
             raise BadRequestError(
                 "Impossibile generare l'anteprima. Rigenera il documento."
             ) from exc
-        _PREVIEW_BLOCKS_CACHE[doc.id] = blocks
-        while len(_PREVIEW_BLOCKS_CACHE) > _PREVIEW_BLOCKS_CACHE_MAX:
-            _PREVIEW_BLOCKS_CACHE.popitem(last=False)
+        _PREVIEW_CACHE[doc.id] = preview
+        while len(_PREVIEW_CACHE) > _PREVIEW_CACHE_MAX:
+            _PREVIEW_CACHE.popitem(last=False)
 
     return DocumentPreviewResponse(
         id=doc.id,
@@ -1186,8 +1199,11 @@ async def preview_document(
             if doc.generation_completed_at
             else None
         ),
-        blocks=blocks,
+        blocks=preview["blocks"],
         overrides=doc.content_overrides or {},
+        furniture=preview["furniture"],
+        page_setup=preview["page_setup"],
+        style_props=preview["style_props"],
     )
 
 
@@ -1198,12 +1214,16 @@ async def preview_document_image(
     org_id: uuid.UUID = Depends(get_current_org),
     db: AsyncSession = Depends(get_db),
 ):
-    """Stream one inline image part (by relationship id) for the preview.
+    """Stream one image part (by relationship id) for the preview.
 
-    ``image_id`` is the rId the parse output emitted in ``images[].image_id``;
-    unknown ids (or ids pointing at non-image parts) 404.
+    ``image_id`` is an id the preview emitted: a main-part rId
+    (``images[].image_id``, ``background_image_id``) or a header/footer
+    picture scoped to its part, ``hdr:<part>:<rId>`` / ``ftr:<part>:<rId>``
+    (``furniture.footer_logo_image_id``). Unknown or malformed ids, and ids
+    pointing at non-image parts, 404.
     """
-    doc, _ = await _get_org_document(document_id, org_id, db)
+    # Every picture is read out of the bytes: load them with the row.
+    doc, _ = await _get_org_document(document_id, org_id, db, with_bytes=True)
     _resolve_docx_filename(doc)
     docx_bytes = _load_docx_bytes(doc)
 
@@ -1266,7 +1286,8 @@ async def patch_document_overrides(
     # empties out so "no pending edits" stays queryable as IS NULL.
     doc.content_overrides = merged or None
     await db.commit()
-    await db.refresh(doc)
+    # The map is all the response needs; the row's bytes stay in Postgres.
+    await db.refresh(doc, attribute_names=["content_overrides"])
     return OverridesResponse(overrides=doc.content_overrides or {})
 
 
@@ -1292,7 +1313,8 @@ async def save_edited_version(
     # read the same overrides and mint duplicate version rows. The second
     # transaction blocks here, re-reads the cleared content_overrides after
     # the first commits, and hits the 409 below.
-    source, _ = await _get_org_document(document_id, org_id, db, for_update=True)
+    # The bytes are what this endpoint rewrites: loaded with the locked row.
+    source, _ = await _get_org_document(document_id, org_id, db, for_update=True, with_bytes=True)
     _resolve_docx_filename(source)
 
     if not source.content_overrides:
@@ -1315,18 +1337,7 @@ async def save_edited_version(
         apply_overrides_to_docx, docx_bytes, source.content_overrides
     )
 
-    # Next version for this document type
-    result = await db.execute(
-        select(DocumentoGenerato)
-        .where(
-            DocumentoGenerato.azienda_id == source.azienda_id,
-            DocumentoGenerato.tipo_documento == source.tipo_documento,
-        )
-        .order_by(DocumentoGenerato.versione.desc())
-        .limit(1)
-    )
-    latest = result.scalar_one_or_none()
-    next_version = (latest.versione + 1) if latest else 1
+    next_version = await _next_version(source.azienda_id, source.tipo_documento, db)
 
     # Build filename: append -edited to stem
     src_name = source.file_name or f"{source.tipo_documento}_v{source.versione}.docx"

@@ -4,41 +4,80 @@ DVR Master document generator.
 Generates the Documento di Valutazione dei Rischi (DVR) — the master risk
 assessment document required by D.Lgs. 81/2008 for every Italian workplace.
 
-Output: A .docx file with professional formatting including:
-- Cover page with company name, date, and logo placeholder
-- Table of contents placeholder
-- Part I: Company data tables
-- Part III: Risk assessment tables per environment with P/D/I color coding
-- Part IV: Improvement measures placeholder
+The page sequence is N2O's model of 2026-10-20 (spec
+docs/superpowers/specs/2026-11-10-document-layout-redesign-design.md §4.2.1),
+built from the design kit (``design`` page types, ``docx_utils`` tables):
+
+- the VERA cover, the index and the Premessa;
+- in-page titles for the identity pages, Part I's company data and Part II's
+  method, and divider pages (full-page art, title mid-page) for the 23
+  topics N2O chose — Part III opens on one, every Part IV procedure too;
+- per environment: its name as a title, then machines, photos, the risk
+  checklist and one page per risk category;
+- the 4-column improvement table, the GESTIONE procedures, the related
+  documents, the employer's declaration with its signature grid, and the
+  back cover.
 """
 
 import logging
 import os
 import re
-import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 
 from docx import Document
-from docx.enum.section import WD_ORIENT, WD_SECTION
 from docx.enum.table import (
     WD_CELL_VERTICAL_ALIGNMENT,
     WD_ROW_HEIGHT_RULE,
     WD_TABLE_ALIGNMENT,
 )
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.image.image import Image as DocxImage
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.oxml.xmlchemy import BaseOxmlElement
-from docx.shared import Cm, Inches, Mm, Pt, RGBColor
+from docx.shared import Cm, Emu, Pt
 from docx.table import Table
 
 from app.data.regional_regulations import get_regulations_for_comune
 from app.services.document_generator.base import BaseDocumentGenerator
-from app.services.document_generator.design import finish_document, setup_document
-from app.services.document_generator.docx_utils import HEADER_BG, LIGHT_GRAY, RISK_COLORS
+from app.services.document_generator.design import (
+    add_art_cover,
+    add_back_cover,
+    add_divider,
+    add_section_title,
+    add_sub_title,
+    add_toc,
+    finalize_toc,
+    finish_document,
+    resolve_art,
+    setup_document,
+)
+from app.services.document_generator.docx_utils import (
+    BRAND_NAVY,
+    BRAND_NAVY_HEX,
+    BRAND_SURFACE_HEX,
+    HEADER_TEXT,
+    NOTE_GREY,
+    TYPE_SCALE,
+    add_body_paragraph,
+    add_bullets,
+    add_data_table,
+    add_kv_table,
+    add_role_band,
+    add_signature_grid,
+    insert_in_order,
+    keep_row_together,
+    level_cell,
+    set_run_font,
+    set_table_borders,
+    shade_cell,
+    style_header_row,
+    # The kit's cell writer (10 pt Arial, no paragraph spacing, line breaks
+    # as w:br): every table cell the DVR fills by hand goes through it.
+    write_cell,
+)
 from app.services.protocollo_sanitario import PROTOCOLLO_SANITARIO_ATTIVO
 from app.services.reference_data import (
     HAZARD_LIBRARY,
@@ -222,7 +261,7 @@ _DEFINIZIONI_ROWS: list[tuple[str, str]] = [
      "e la sicurezza dei lavoratori presenti nell'ambito "
      "dell'organizzazione in cui essi prestano la propria attività."),
     ("PERICOLO",
-     "Proprieta o qualità intrinseca di un determinato fattore avente "
+     "Proprietà o qualità intrinseca di un determinato fattore avente "
      "il potenziale di causare danni."),
     ("RISCHIO",
      "Probabilità di raggiungimento del livello potenziale di danno "
@@ -290,11 +329,11 @@ _PROBABILITA_CRITERI_ROWS = [
     ("4", "ELEVATA",
      "Esiste correlazione diretta tra mancanza rilevata e possibilità "
      "che l'evento dannoso si verifichi; si sono già verificati casi "
-     "analoghi in azienda o in realta simili."),
+     "analoghi in azienda o in realtà simili."),
     ("3", "MEDIO ALTA",
      "La mancanza rilevata può provocare un danno, anche se non "
      "direttamente, seppur in modo automatico; sono noti rari episodi "
-     "in azienda o in realta simili."),
+     "in azienda o in realtà simili."),
     ("2", "MEDIO BASSA",
      "La mancanza rilevata può provocare un danno in circostanze "
      "particolari; non sono noti episodi in azienda."),
@@ -338,7 +377,8 @@ _MACRO_LABELS: list[str] = [
 
 
 # ---------------------------------------------------------------------------
-# Parte IV §4.2–4.12 — static procedural sections.
+# Parte IV — the 11 GESTIONE procedures (the template's §4.2–4.12; N2O's
+# model titles them unnumbered, in capitals, each on its own divider page).
 #
 # Each entry mirrors the master template (DVR_TEMPLATE_MAPPING.md §10, paragraphs
 # #1800–#2425) and is condensed to the procedural intent + responsibilities,
@@ -350,7 +390,11 @@ _MACRO_LABELS: list[str] = [
 
 @dataclass(frozen=True)
 class _ProceduralSection:
+    """One GESTIONE procedure of Part IV: a divider page (``heading`` over
+    the ``art_key`` photo) followed by its text."""
+
     heading: str
+    art_key: str
     body: tuple[str, ...] = ()
     bullets: tuple[str, ...] = ()
     docs: tuple[str, ...] = ()
@@ -583,7 +627,8 @@ def _classify_mansione_family(nome: str) -> str:
 
 _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
     _ProceduralSection(
-        heading="4.2 Gestione Leggi e Regolamenti",
+        heading="GESTIONE LEGGI E REGOLAMENTI",
+        art_key="div_leggi",
         body=(
             "Il RSPP, in collaborazione con il Datore di Lavoro, ha la "
             "responsabilità di mantenere aggiornata la mappa delle leggi e "
@@ -599,10 +644,11 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
         ),
     ),
     _ProceduralSection(
-        heading="4.3 Gestione Sorveglianza Sanitaria",
+        heading="GESTIONE SORVEGLIANZA SANITARIA",
+        art_key="div_sorveglianza",
         body=(
             "Il Datore di Lavoro, tramite il Servizio di Prevenzione e "
-            "Protezione, verifica la necessita di sottoporre i lavoratori "
+            "Protezione, verifica la necessità di sottoporre i lavoratori "
             "a sorveglianza sanitaria nei casi previsti dalla normativa "
             "(art. 41 D.Lgs. 81/2008) e in funzione degli esiti della "
             "valutazione dei rischi.",
@@ -623,7 +669,8 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
         ),
     ),
     _ProceduralSection(
-        heading="4.4 Gestione Informazione, Formazione ed Addestramento",
+        heading="GESTIONE INFORMAZIONE, FORMAZIONE ED ADDESTRAMENTO",
+        art_key="div_formazione",
         body=(
             "Il Datore di Lavoro, in collaborazione con il RSPP e previa "
             "consultazione del RLS, programma le attività di informazione, "
@@ -651,7 +698,8 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
         ),
     ),
     _ProceduralSection(
-        heading="4.5 Riunione Periodica",
+        heading="RIUNIONE PERIODICA",
+        art_key="div_riunione",
         body=(
             "Il Datore di Lavoro, direttamente o tramite il RSPP, indice "
             "la riunione periodica ai sensi dell'art. 35 del D.Lgs. "
@@ -659,7 +707,7 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
             "le aziende con più di 15 lavoratori, ed in occasione di "
             "significative variazioni delle condizioni di esposizione al "
             "rischio.",
-            "Della riunione e redatto verbale tenuto a disposizione dei "
+            "Della riunione è redatto verbale tenuto a disposizione dei "
             "partecipanti per la consultazione.",
         ),
         docs=(
@@ -668,7 +716,8 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
         ),
     ),
     _ProceduralSection(
-        heading="4.6 Gestione degli Infortuni",
+        heading="GESTIONE DEGLI INFORTUNI",
+        art_key="div_infortuni",
         body=(
             "Ogni infortunio e ogni mancato infortunio (near miss) sono "
             "segnalati al preposto e, per il tramite del RSPP, al Datore "
@@ -692,7 +741,8 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
         ),
     ),
     _ProceduralSection(
-        heading="4.7 Gestione Comportamenti Scorretti dei Lavoratori",
+        heading="GESTIONE COMPORTAMENTI SCORRETTI DEI LAVORATORI",
+        art_key="div_comportamenti",
         body=(
             "Il preposto vigila sull'osservanza da parte dei lavoratori "
             "degli obblighi di legge e delle disposizioni aziendali in "
@@ -703,7 +753,8 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
         ),
     ),
     _ProceduralSection(
-        heading="4.8 Gestione DPI",
+        heading="GESTIONE DPI",
+        art_key="div_gestione_dpi",
         body=(
             "I Dispositivi di Protezione Individuale sono forniti ai "
             "lavoratori a titolo personale, ai sensi degli artt. 74-79 "
@@ -729,7 +780,8 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
         ),
     ),
     _ProceduralSection(
-        heading="4.9 Gestione Infrastrutture",
+        heading="GESTIONE INFRASTRUTTURE",
+        art_key="div_infrastrutture",
         body=(
             "Per tutte le macchine, attrezzature, impianti e infrastrutture "
             "presenti in azienda sono definite le responsabilità di "
@@ -744,7 +796,8 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
         ),
     ),
     _ProceduralSection(
-        heading="4.10 Gestione dei Lavoratori particolarmente sensibili al rischio",
+        heading="GESTIONE DEI LAVORATORI PARTICOLARMENTE SENSIBILI AL RISCHIO",
+        art_key="div_sensibili",
         body=(
             "L'azienda individua e tutela i lavoratori appartenenti a "
             "gruppi particolarmente sensibili al rischio: lavoratrici "
@@ -758,17 +811,19 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
         ),
     ),
     _ProceduralSection(
-        heading="4.11 Gestione Acquisti",
+        heading="GESTIONE ACQUISTI",
+        art_key="div_acquisti",
         body=(
             "Ogni acquisto di macchine, attrezzature, sostanze chimiche, "
-            "DPI e arredi e preceduto dalla verifica della conformità ai "
+            "DPI e arredi è preceduto dalla verifica della conformità ai "
             "requisiti di sicurezza e salute previsti dalla normativa "
-            "vigente. Il RSPP e coinvolto nella definizione dei capitolati "
+            "vigente. Il RSPP è coinvolto nella definizione dei capitolati "
             "tecnici e nella valutazione preventiva dei rischi introdotti.",
         ),
     ),
     _ProceduralSection(
-        heading="4.12 Gestione delle Lavorazioni affidate in Appalto",
+        heading="GESTIONE DELLE LAVORAZIONI AFFIDATE IN APPALTO",
+        art_key="div_appalti",
         body=(
             "Per le lavorazioni affidate in appalto o a lavoratori "
             "autonomi, il Datore di Lavoro committente verifica i "
@@ -796,7 +851,7 @@ _PART_IV_PROCEDURAL_SECTIONS: tuple[_ProceduralSection, ...] = (
 # ---------------------------------------------------------------------------
 
 _METODOLOGIA_INTRO_1 = (
-    "La presente valutazione dei rischi e redatta ai sensi dell'art. 28 del "
+    "La presente valutazione dei rischi è redatta ai sensi dell'art. 28 del "
     "D.Lgs. 9 aprile 2008, n. 81 e s.m.i., che impone al Datore di Lavoro la "
     "valutazione di tutti i rischi per la sicurezza e la salute dei lavoratori, "
     "tenendo conto della specificità delle mansioni, delle attrezzature e degli "
@@ -808,8 +863,8 @@ _METODOLOGIA_INTRO_2 = (
     "calcolato attraverso la formula I = 2*D + P, dove P rappresenta la "
     "Probabilità di accadimento dell'evento dannoso (scala 1-4) e D il Danno "
     "atteso per il lavoratore esposto (scala 1-4). L'indice risultante, "
-    "compreso nell'intervallo 3-12, e associato a un livello di rischio e a "
-    "una relativa priorità di intervento. L'impianto metodologico e coerente "
+    "compreso nell'intervallo 3-12, è associato a un livello di rischio e a "
+    "una relativa priorità di intervento. L'impianto metodologico è coerente "
     "con i principi di valutazione del rischio della norma UNI EN ISO 14121-1."
 )
 
@@ -821,19 +876,208 @@ _RISK_LEVEL_TABLE_ROWS = [
 ]
 
 # ---------------------------------------------------------------------------
-# Color palette for risk levels
+# Page map (spec §4.2.1): part labels, the titles that more than one method
+# needs, sign panels and picture boxes.
 # ---------------------------------------------------------------------------
 
-# Shared brand tokens (docx_utils): the DVR used to carry its own Material
-# indigo/amber palette; audit 2026-09-03 aligned every document to the app.
-_RISK_COLORS = {
-    key: RISK_COLORS[key] for key in ("ACCETTABILE", "MODESTO", "GRAVE", "GRAVISSIMO")
-}
+_PART_I_LABEL = "PARTE I — DATI GENERALI DELL'AZIENDA"
+_PART_II_LABEL = "PARTE II — METODOLOGIA DI VALUTAZIONE"
+_PART_III_LABEL = "PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO"
+_PART_IV_LABEL = "PARTE IV — PROGRAMMA DI MIGLIORAMENTO"
 
-_HEADER_BG = HEADER_BG                             # Brand navy for table headers
-_HEADER_TEXT = RGBColor(0xFF, 0xFF, 0xFF)          # White text on headers
-_LIGHT_GRAY = LIGHT_GRAY                           # Alternating row background
-_DVR_VERA_LOGO_PATH: Path = Path(__file__).resolve().parents[3] / "assets" / "n2o_vera_dvr.png"
+# Row 19: Part III opens once on this divider; each environment then opens on
+# its own name (spec §4.2.3).
+_ENVIRONMENTS_TITLE = "IDENTIFICAZIONE DELL'AMBIENTE DI LAVORO E DEGLI ADDETTI"
+_IMPROVEMENT_TITLE = "PROGRAMMA E PROCEDURE DI ATTUAZIONE DELLE MISURE DI MIGLIORAMENTO"
+
+# Row 23: the five sign panels N2O added after FORMA E CATEGORIE DEI CARTELLI,
+# two per page.
+_SIGN_PANELS: tuple[tuple[str, str], ...] = (
+    ("sign_divieto", "CARTELLI DI DIVIETO"),
+    ("sign_avvertimento", "CARTELLI DI AVVERTIMENTO"),
+    ("sign_obbligo", "CARTELLI DI OBBLIGO"),
+    ("sign_emergenza", "SEGNALI DI EMERGENZA ED EVACUAZIONE"),
+    ("sign_antincendio", "SEGNALI DI PREVENZIONE INCENDI"),
+)
+_SIGN_PANEL_WIDTH_CM = 15.3
+
+# Boxes a picture is fitted into, aspect kept: environment photos (row 20b)
+# and the company photo on PRESENTAZIONE DELL'AZIENDA (row 5).
+_ENV_PHOTO_BOX_CM = (12.0, 9.0)
+_COMPANY_PHOTO_BOX_CM = (16.5, 11.0)
+_PICTURE_BORDER_HEX = "BFBFBF"
+
+# Priority words an operator may type in the improvement grid, mapped to the
+# colour scale (the model's own rows say "MEDIA").
+_PRIORITY_LEVELS = {"ALTA": "ALTO", "MEDIA": "MEDIO", "BASSA": "BASSO"}
+
+_CENTER = WD_ALIGN_PARAGRAPH.CENTER
+
+
+def _heading(doc: Document, text: str, level: int):
+    """``doc.add_heading`` with the kit's font on its run (front headings:
+    INDICE, Premessa)."""
+    paragraph = doc.add_heading(text, level=level)
+    for run in paragraph.runs:
+        set_run_font(run)
+    return paragraph
+
+
+def _gap(doc: Document, *, space_pt: float = 0):
+    """An empty line between two blocks, ``space_pt`` taller than a line.
+    Two tables need one: with nothing in between, Word draws them as a
+    single table. Never used to end a section, where it could spill onto a
+    page of its own."""
+    paragraph = doc.add_paragraph()
+    paragraph.paragraph_format.space_after = Pt(space_pt)
+    return paragraph
+
+
+def _italic_body(doc: Document, text: str):
+    """A justified body paragraph in italic: the introductory notes N2O's
+    model sets apart (programme, signage, training status) and the
+    statements that stand in for an empty section."""
+    paragraph = add_body_paragraph(doc, text)
+    for run in paragraph.runs:
+        run.font.italic = True
+    return paragraph
+
+
+def _note(doc: Document, text: str):
+    """The italic grey note under a table (spec token ``note``)."""
+    paragraph = doc.add_paragraph()
+    paragraph.paragraph_format.space_before = Pt(4)
+    set_run_font(paragraph.add_run(text), size=TYPE_SCALE["note"], italic=True, color=NOTE_GREY)
+    return paragraph
+
+
+def _bullet_cell(cell, items: list[str]) -> None:
+    """Fill a cell with a real bulleted list, or "—" when there is nothing."""
+    if not add_bullets(cell, items, size_pt=TYPE_SCALE["table"]):
+        write_cell(cell, "—", align=_CENTER)
+
+
+def _add_picture_border(inline) -> None:
+    """A hairline frame around an inline picture, as in N2O's model."""
+    sp_pr = inline.find(".//" + qn("pic:spPr"))
+    if sp_pr is None:
+        return
+    line = OxmlElement("a:ln")
+    line.set("w", "9525")
+    fill = OxmlElement("a:solidFill")
+    colour = OxmlElement("a:srgbClr")
+    colour.set("val", _PICTURE_BORDER_HEX)
+    fill.append(colour)
+    line.append(fill)
+    sp_pr.append(line)
+
+
+def _add_fitted_picture(paragraph, source, box_cm: tuple[float, float], *, border: bool = True):
+    """Add ``source`` (a path or a stream) to ``paragraph`` at the largest
+    size that fits ``box_cm`` (width, height) with its aspect kept.
+
+    Raises when the image is unreadable, so callers can fall back.
+    """
+    image = DocxImage.from_file(source)
+    if not image.px_width or not image.px_height:
+        raise ValueError("image without pixel dimensions")
+    box_w, box_h = Cm(box_cm[0]), Cm(box_cm[1])
+    scale = min(box_w / image.px_width, box_h / image.px_height)
+    width = Emu(int(image.px_width * scale))
+    height = Emu(int(image.px_height * scale))
+    if hasattr(source, "seek"):
+        source.seek(0)
+    shape = paragraph.add_run().add_picture(source, width=width, height=height)
+    if border:
+        _add_picture_border(shape._inline)
+    return shape
+
+
+def _keep_case(heading, tail: str) -> None:
+    """Print the ``tail`` of a title in its own case. The title style sets
+    capitals; N2O's model keeps "(Riferimento)" in lower case under
+    "ELENCO FATTORI DI PERICOLO". The paragraph's text is unchanged."""
+    runs = heading.runs
+    if not runs or not runs[-1].text.endswith(tail):
+        return
+    runs[-1].text = runs[-1].text[: -len(tail)]
+    set_run_font(heading.add_run(tail), caps=False)
+
+
+def _center_vertically(rows) -> None:
+    """Centre every cell of ``rows`` vertically."""
+    for row in rows:
+        for cell in row.cells:
+            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+
+
+def _repeat_as_header(row) -> None:
+    """Repeat ``row`` at the top of every page its table spans, and keep it
+    on one page (a header row is short)."""
+    tr_pr = row._tr.get_or_add_trPr()
+    if tr_pr.find(qn("w:tblHeader")) is None:
+        insert_in_order(
+            tr_pr,
+            OxmlElement("w:tblHeader"),
+            ("tblCellSpacing", "jc", "hidden", "ins", "del", "trPrChange"),
+        )
+    keep_row_together(row)
+
+
+def _empty_cell(cell) -> None:
+    """Leave a cell with one empty paragraph and a white fill, so a
+    vertical merge moves nothing into the cell above."""
+    tc = cell._tc
+    for child in list(tc):
+        if child.tag != qn("w:tcPr"):
+            tc.remove(child)
+    tc.append(OxmlElement("w:p"))
+    shade_cell(cell, "FFFFFF")
+
+
+def _merge_repeated_first_column(table) -> None:
+    """Print each first-column value once over the data rows it labels: a
+    vertical merge, centred on white (the hazard library of N2O's model)."""
+    rows = list(table.rows)[1:]
+    start = 0
+    while start < len(rows):
+        value = rows[start].cells[0].text
+        end = start
+        while end + 1 < len(rows) and rows[end + 1].cells[0].text == value:
+            end += 1
+        top = rows[start].cells[0]
+        shade_cell(top, "FFFFFF")
+        if end > start:
+            for row in rows[start + 1 : end + 1]:
+                _empty_cell(row.cells[0])
+            top = top.merge(rows[end].cells[0])
+        top.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+        for paragraph in top.paragraphs:
+            paragraph.alignment = _CENTER
+        start = end + 1
+
+
+_CROSS_SITE_LABEL = "Tutta l'azienda (ruolo trasversale)"
+
+
+def _environment_names(person: object) -> list[str]:
+    """The names of a person's environments, in the order assigned."""
+    return [
+        ambiente.nome
+        for ambiente in (getattr(person, "ambienti", None) or [])
+        if getattr(ambiente, "nome", None)
+    ]
+
+
+def _no_environment_label(person: object) -> str:
+    """What the environment cell says for a person assigned to none: the
+    cross-site roles (DdL, RSPP, RLS, MC) cover the whole company (audit
+    F-011); anyone else is a dash."""
+    cross_site = any(
+        getattr(person, flag, False)
+        for flag in ("ruolo_datore_lavoro", "ruolo_rspp", "ruolo_rls", "ruolo_medico_competente")
+    )
+    return _CROSS_SITE_LABEL if cross_site else "—"
 
 
 def _revision_label(version: int) -> str:
@@ -859,26 +1103,6 @@ def _saved_order_key(entity: object) -> tuple[bool, int, float, str]:
         created_key,
         str(getattr(entity, "id", "")),
     )
-
-
-def _start_landscape_section(doc: Document):
-    section = doc.add_section(WD_SECTION.CONTINUOUS)
-    section.orientation = WD_ORIENT.LANDSCAPE
-    section.page_width, section.page_height = section.page_height, section.page_width
-    section.left_margin = Cm(1.2)
-    section.right_margin = Cm(1.2)
-    return section
-
-
-def _restore_portrait_section(doc: Document):
-    section = doc.add_section(WD_SECTION.NEW_PAGE)
-    section.orientation = WD_ORIENT.PORTRAIT
-    section.page_width, section.page_height = section.page_height, section.page_width
-    section.top_margin = Cm(2.5)
-    section.bottom_margin = Cm(2.5)
-    section.left_margin = Cm(2.5)
-    section.right_margin = Cm(2.0)
-    return section
 
 
 def _is_external_safety_consultant(person: object) -> bool:
@@ -1025,26 +1249,26 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         employee_persons = _employee_persons(data["persone"])
         data["employee_persons"] = employee_persons
         azienda = data["azienda"]
-        # DVR-specific extras: foto per ambiente, sorveglianza-sanitaria
-        # rows per mansione, allegato presence flags, VDT exposure flags,
-        # and the misure di miglioramento program. Loaded once here so the
-        # Part III/IV renderers don't fan out into N+1 queries.
+        # DVR-specific extras: foto per ambiente, the company photo,
+        # sorveglianza-sanitaria rows per mansione, allegato presence flags,
+        # VDT exposure flags, and the misure di miglioramento program. Loaded
+        # once here so the renderers don't fan out into N+1 queries.
         extras = await self._load_dvr_extras(data)
 
-        # Look up the version BEFORE building the doc so the cover page
-        # can show it. Same value is used in the filename below — single
-        # source of truth.
+        # Look up the version BEFORE building the doc so the revision table
+        # and the footer can show it. Same value is used in the filename
+        # below — single source of truth.
         version = await self._get_next_version()
 
         doc = Document()
         self._setup_styles(doc)
 
-        # Build document sections
-        self._add_cover_page(doc, azienda, data["generated_at"], version)
-        toc_anchors = self._add_table_of_contents(doc)
-        self._add_premessa(doc)
-        self._add_pre_parte_i(doc, azienda, data["generated_at"], version)
-        self._add_part_i(
+        # The page map of N2O's model (spec §4.2.1), row by row.
+        add_art_cover(doc, "cover_dvr")                              # 1
+        toc_anchors = self._add_table_of_contents(doc)               # 2
+        self._add_premessa(doc)                                      # 3
+        self._add_pre_parte_i(doc, azienda, data["generated_at"], version)  # 4
+        self._add_part_i(                                            # 5–14
             doc,
             azienda,
             data["persone"],
@@ -1052,17 +1276,24 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             data["attrezzature"],
             data["sostanze_chimiche"],
             data["ambienti"],
+            foto_presentazione=extras.get("foto_presentazione"),
         )
-        self._add_part_ii(doc, azienda)
-        self._add_part_iii(
+        self._add_part_ii(doc)                                       # 15–18
+        self._add_part_iii(                                          # 19–24
             doc,
-            azienda,
             employee_persons,
             data["ambienti"],
             data["attrezzature"],
             extras,
         )
-        self._add_part_iv(doc, azienda, data["persone"], employee_persons, extras)
+        self._add_part_iv(                                           # 25–28
+            doc,
+            azienda,
+            data["persone"],
+            employee_persons,
+            extras,
+            generated_at=data["generated_at"],
+        )
 
         # Replace the TOC's cached body with the real outline that the
         # rest of the doc just emitted. Without this Word users who
@@ -1071,10 +1302,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         # esploso con paginazione e piu dettagliato"). After F9 the
         # field re-resolves with page numbers from the real headings.
         self._finalize_table_of_contents(doc, *toc_anchors)
+        add_back_cover(doc)                                          # 29
 
-        # Running header (title | client) and footer (consultancy · revision |
-        # Pagina X di Y) on every page but the cover, plus honest file
-        # properties. The cover itself stays exactly as Luca specified.
+        # Running header (title | client) and footer (logo · revision |
+        # Pag. X di Y) on every page but the art pages, plus honest file
+        # properties.
         finish_document(
             doc,
             title="Documento di Valutazione dei Rischi",
@@ -1119,6 +1351,9 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         Returns a dict with:
           - ``foto_by_ambiente``: ambiente_id -> list[AmbienteFoto]
+          - ``foto_presentazione``: the company photo as ``(bytes,
+            content_type)``, or ``None`` (PRESENTAZIONE DELL'AZIENDA then
+            prints no photo slot)
           - ``vdt_esposti_persona_ids``: set of persona_ids with VDT esposto=True
           - ``allegati_presenti``: ordered list of (slug, label) for applicable
             allegati, derived from MMC/VDT/Stress/Incendio/Gestanti/
@@ -1159,6 +1394,26 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             )
             for foto in r.scalars().all():
                 foto_by_ambiente.setdefault(foto.ambiente_id, []).append(foto)
+
+        # Company photo for PRESENTAZIONE DELL'AZIENDA (spec §4.2.4). A
+        # failed load prints the page without a photo slot rather than
+        # failing the whole DVR; the savepoint keeps the transaction usable
+        # for the loads below.
+        foto_presentazione = None
+        try:
+            from app.services.document_generator.data_loader import (
+                load_foto_presentazione,
+            )
+
+            async with self.db.begin_nested():
+                foto_presentazione = await load_foto_presentazione(
+                    self.db, self.azienda_id
+                )
+        except Exception:
+            logger.warning(
+                "DVR company photo could not be loaded; printing without it",
+                exc_info=True,
+            )
 
         # VDT esposti persona ids
         vdt_esposti_persona_ids: set = set()
@@ -1230,6 +1485,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         return {
             "foto_by_ambiente": foto_by_ambiente,
+            "foto_presentazione": foto_presentazione,
             "vdt_esposti_persona_ids": vdt_esposti_persona_ids,
             "allegati_presenti": allegati_presenti,
             "misure_miglioramento": misure,
@@ -1402,326 +1658,44 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     # ------------------------------------------------------------------
 
     def _setup_styles(self, doc: Document) -> None:
-        """Configure document-wide styles and defaults.
+        """A4, Arial everywhere, the DVR's heading roles: the kit's ``dvr``
+        profile (spec §4.1.4).
 
-        Pagination hardening (user feedback 2026-05-12 — "Impaginazzioe
-        dovrebbe rispettare più le tabelle ei capitoli"):
-          - All heading styles get `keepNext` and `keepLines` set on the
-            style itself so an H1/H2/H3 never sits orphaned at the bottom
-            of a page without at least one following content line and
-            never splits mid-heading on long titles.
-          - `Normal` keeps lines together so a single paragraph doesn't
-            split awkwardly across pages.
-        Both attributes are applied via the underlying XML because the
-        python-docx ParagraphFormat helpers only act on per-paragraph
-        overrides, not the base style.
+        Heading 1 is the 14 pt front heading (INDICE, Premessa; part labels
+        add their own look on top), Heading 2 the 25 pt centred title in
+        capitals, Heading 3 the 12 pt centred sub-title. Normal is Arial
+        12 pt; tables write their 10 pt themselves. Every heading keeps with
+        the next paragraph and never splits, so a title never ends a page on
+        its own (user feedback 2026-05-12: "Impaginazione dovrebbe rispettare
+        più le tabelle e i capitoli").
         """
-        from docx.oxml import OxmlElement
-
-        # A4, binding margins, Calibri, navy headings: the shared design
-        # system. The DVR keeps a denser 10pt body because it runs to ~90
-        # pages with wide risk tables.
-        setup_document(doc)
-        style = doc.styles["Normal"]
-        font = style.font
-        font.name = "Calibri"
-        font.size = Pt(10)
-
-        # Heading styles — bind pagination behavior to the style so every
-        # heading inherits it without per-call boilerplate.
-        for level in range(1, 4):
-            heading_style = doc.styles[f"Heading {level}"]
-            heading_style.font.name = "Calibri"
-            heading_style.font.color.rgb = _HEADER_BG
-
-            # `style.paragraph_format.keep_with_next = True` would set the
-            # value on a per-paragraph override; for a style we have to
-            # touch <w:pPr> directly via the element API.
-            pPr = heading_style.element.get_or_add_pPr()
-            for tag in ("w:keepNext", "w:keepLines"):
-                # Drop any existing entries so toggling is idempotent.
-                for existing in pPr.findall(qn(tag)):
-                    pPr.remove(existing)
-                pPr.append(OxmlElement(tag))
-
+        setup_document(doc, profile="dvr")
 
     # ------------------------------------------------------------------
-    # Cover page
-    # ------------------------------------------------------------------
-
-    def _add_vera_logo(self, doc: Document) -> None:
-        """Add the DVR-specific VERA mark, with a visible failure marker."""
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run()
-        try:
-            run.add_picture(str(_DVR_VERA_LOGO_PATH), width=Inches(4.8))
-        except Exception:
-            run.text = "[LOGO N2O VERA NON DISPONIBILE]"
-            run.font.size = Pt(14)
-            run.font.italic = True
-            run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-
-    def _add_cover_page(
-        self, doc: Document, azienda, generated_at: datetime, version: int
-    ) -> None:
-        """Add a professional cover page.
-
-        Layout (top → bottom): logo, title block, company identity block
-        (name + address + P.IVA + ATECO), date+version footer.
-        Every field falls back gracefully when missing so generation
-        never crashes on a sparse survey.
-        """
-        # Top spacer — kept tight (3 lines) so the title sits above the
-        # vertical center, leaving room for the identity block below.
-        for _ in range(3):
-            doc.add_paragraph("")
-
-        self._add_vera_logo(doc)
-
-        doc.add_paragraph("")
-
-        # Title
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run("DOCUMENTO DI VALUTAZIONE DEI RISCHI")
-        run.bold = True
-        run.font.size = Pt(24)
-        run.font.color.rgb = _HEADER_BG
-
-        # Subtitle
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run("ai sensi degli artt. 17 e 28 del D.Lgs. 81/2008 e s.m.i.")
-        run.font.size = Pt(13)
-        run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-
-        doc.add_paragraph("")
-        doc.add_paragraph("")
-
-        # Company name — guard against None ragione_sociale (sparse surveys
-        # were crashing here previously with AttributeError on .upper()).
-        ragione = (azienda.ragione_sociale or "—").upper()
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(ragione)
-        run.bold = True
-        run.font.size = Pt(18)
-
-        # Address (registered seat) — include CAP + provincia so the cover
-        # carries the full legal address, not just via + comune (audit F-301).
-        cover_address = self._format_address(
-            azienda.sede_legale_via,
-            azienda.sede_legale_citta,
-            getattr(azienda, "cap_legale", None),
-            getattr(azienda, "provincia_legale", None),
-        )
-        if cover_address and cover_address != "—":
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run(cover_address)
-            run.font.size = Pt(12)
-            run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-
-        # Identity line: P.IVA + ATECO when available
-        identity_bits: list[str] = []
-        partita_iva = getattr(azienda, "partita_iva", None)
-        if partita_iva:
-            identity_bits.append(f"P.IVA {partita_iva}")
-        codice_ateco = getattr(azienda, "codice_ateco", None)
-        if codice_ateco:
-            identity_bits.append(f"ATECO {codice_ateco}")
-        if identity_bits:
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run(" · ".join(identity_bits))
-            run.font.size = Pt(11)
-            run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-
-        # Spacer before footer
-        for _ in range(3):
-            doc.add_paragraph("")
-
-        # Date and version block — single centered paragraph with both bits.
-        # 2-digit pad (Rev. 00) to mirror the convention Luca uses on the master
-        # template, where the first emission is revision *zero*.
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(
-            f"Revisione {_revision_label(version)} — {generated_at.strftime('%d/%m/%Y')}"
-        )
-        run.font.size = Pt(12)
-        run.bold = True
-
-        # Page break
-        doc.add_page_break()
-
-    # ------------------------------------------------------------------
-    # Table of contents placeholder
+    # Rows 2–3 — index and Premessa
     # ------------------------------------------------------------------
 
     def _add_table_of_contents(self, doc: Document):
-        """Add a real Word TOC field that resolves to a clickable indice on
-        first open in Word/LibreOffice (Ctrl+A, F9 to refresh).
+        """INDICE: a real Word TOC field (``TOC \\o "1-3" \\h \\z \\u``).
 
-        We emit a `<w:fldChar fldCharType="begin">` + instrText `TOC \\o "1-3" \\h \\z \\u`
-        + `<w:fldChar fldCharType="end">` triplet wrapped in a paragraph. Word
-        auto-prompts to update fields on open via the `<w:updateFields/>`
-        setting below; after refresh the field resolves to the real heading
-        list with page numbers.
-
-        The cached body emitted here is a single placeholder line. It is
-        replaced post-generation by `_finalize_table_of_contents`, which
-        walks all real H1/H2/H3 headings emitted after the TOC and rebuilds
-        the body so the unrefreshed view also shows the full structure.
-
-        Returns ``(field_start_p, end_p)`` — the paragraph containing the
-        `fldChar` begin/separate runs and the paragraph containing the
-        `fldChar` end run. The finalizer uses these as anchors to identify
-        the cached-body span.
+        Its cached body is a placeholder until
+        :meth:`_finalize_table_of_contents` rewrites it from the headings the
+        rest of the document emits; Word refreshes the field, page numbers
+        included, on open. Returns ``(field_start_p, end_p)``, the anchors the
+        finalizer needs.
         """
-        from docx.oxml import OxmlElement
-
-        doc.add_heading("INDICE", level=1)
-
-        # The TOC field paragraph
-        field_start_p = doc.add_paragraph()
-        run = field_start_p.add_run()
-        # 1) fldChar begin
-        fld_begin = OxmlElement("w:fldChar")
-        fld_begin.set(qn("w:fldCharType"), "begin")
-        run._r.append(fld_begin)
-
-        # 2) instrText with the TOC instruction
-        instr = OxmlElement("w:instrText")
-        instr.set(qn("xml:space"), "preserve")
-        instr.text = ' TOC \\o "1-3" \\h \\z \\u '
-        run._r.append(instr)
-
-        # 3) fldChar separate — anything between separate and end is the
-        # cached TOC body that Word displays before the user refreshes.
-        fld_sep = OxmlElement("w:fldChar")
-        fld_sep.set(qn("w:fldCharType"), "separate")
-        run._r.append(fld_sep)
-
-        # Cached body — one placeholder line so the field is well-formed
-        # even if the finalizer never runs (e.g. exception during a later
-        # part). The finalizer replaces this with the real heading list.
-        placeholder_p = doc.add_paragraph()
-        placeholder_run = placeholder_p.add_run(
-            "Indice in fase di aggiornamento — premere Ctrl+A e poi F9 per "
-            "ricaricare la tabella dei contenuti."
-        )
-        placeholder_run.font.size = Pt(11)
-        placeholder_run.font.italic = True
-
-        # 4) fldChar end on a fresh run so the cached body sits between
-        end_p = doc.add_paragraph()
-        end_run = end_p.add_run()
-        fld_end = OxmlElement("w:fldChar")
-        fld_end.set(qn("w:fldCharType"), "end")
-        end_run._r.append(fld_end)
-
-        # Tell Word that the TOC needs an update on next open. The setting
-        # is on the document-level settings part; insert the element if it
-        # is not already present so we don't fight existing config.
-        try:
-            settings_root = doc.settings.element
-            update_fields = settings_root.find(qn("w:updateFields"))
-            if update_fields is None:
-                update_fields = OxmlElement("w:updateFields")
-                update_fields.set(qn("w:val"), "true")
-                settings_root.append(update_fields)
-        except Exception:
-            # Non-fatal — the TOC field still works, only the auto-update
-            # prompt is lost. Cached body covers the gap.
-            pass
-
-        doc.add_page_break()
-
-        return field_start_p, end_p
+        return add_toc(doc, title="INDICE")
 
     def _finalize_table_of_contents(self, doc: Document, field_start_p, end_p) -> None:
         """Replace the TOC field's cached body with the real outline.
 
-        Walks all paragraphs emitted after ``end_p`` (i.e. Premessa onward),
-        keeps Heading 1/2/3 styles, then rewrites the cached body between
-        ``field_start_p`` and ``end_p`` so the pre-F9 view of the TOC shows
-        the actual document structure instead of a generic placeholder.
-
-        We can't emit real page numbers here — those come from Word's layout
-        engine when the field is refreshed — so cached entries are
-        page-number-free. The `<w:updateFields/>` setting written by
-        `_add_table_of_contents` still prompts Word to refresh on first
-        open, restoring page numbers automatically.
+        One line per Heading 1–3 after the field, indented by level, with a
+        dot leader to the right margin, so the index reads complete before
+        any refresh (user feedback 2026-05-12: "indice deve essere esploso
+        con paginazione e più dettagliato"). Without headings the placeholder
+        stays.
         """
-        body = doc.element.body
-        children = list(body)
-        try:
-            start_idx = children.index(field_start_p._p)
-            end_idx = children.index(end_p._p)
-        except ValueError:
-            # Anchors not found — be defensive and leave the placeholder.
-            return
-
-        # Collect H1/H2/H3 headings emitted after the TOC. Anything before
-        # ``end_p`` belongs to the cover page or the TOC itself.
-        entries: list[tuple[int, str]] = []
-        for para in doc.paragraphs:
-            style_name = (para.style.name if para.style else "") or ""
-            if not style_name.startswith("Heading "):
-                continue
-            try:
-                level = int(style_name.split(" ")[1])
-            except (IndexError, ValueError):
-                continue
-            if level not in (1, 2, 3):
-                continue
-            # Only headings after the TOC end fldChar contribute.
-            try:
-                para_idx = children.index(para._p)
-            except ValueError:
-                continue
-            if para_idx <= end_idx:
-                continue
-            text = (para.text or "").strip()
-            if not text:
-                continue
-            entries.append((level, text))
-
-        if not entries:
-            return
-
-        # Remove the existing cached body paragraphs (between
-        # field_start_p exclusive and end_p exclusive).
-        for el in children[start_idx + 1 : end_idx]:
-            body.remove(el)
-
-        # Re-locate end_p after removals.
-        end_idx = list(body).index(end_p._p)
-
-        # Insert new cached body paragraphs in order before end_p. We
-        # create each via doc.add_paragraph (appended at body tail), then
-        # move the element to the correct slot. python-docx doesn't
-        # expose a public "insert paragraph before" helper.
-        for level, text in entries:
-            new_p = doc.add_paragraph()
-            # Indent by level so H2/H3 read as a sub-outline pre-refresh.
-            # 0.0/0.4/0.8cm matches what Word's default "TOC 1/2/3"
-            # styles render after F9 refresh — close enough that the
-            # cached view doesn't visually jump when the field updates.
-            indent_cm = (level - 1) * 0.4
-            if indent_cm > 0:
-                new_p.paragraph_format.left_indent = Cm(indent_cm)
-            new_p.paragraph_format.space_after = Pt(2)
-            run = new_p.add_run(text)
-            run.font.size = Pt(11) if level == 1 else Pt(10)
-            run.bold = level == 1
-
-            # Move new_p from body tail to just before end_p.
-            body.remove(new_p._p)
-            end_idx = list(body).index(end_p._p)
-            body.insert(end_idx, new_p._p)
+        finalize_toc(doc, field_start_p, end_p)
 
     def _add_premessa(self, doc: Document) -> None:
         """Premessa — the legal preamble required by D.Lgs. 81/2008 art. 28.
@@ -1732,7 +1706,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         the conservation requirement, and is sufficient for the document to
         read as a complete DVR rather than a numbered shell.
         """
-        doc.add_heading("Premessa", level=1)
+        _heading(doc, "Premessa", 1)
 
         for body in (
             "Il presente documento rappresenta l'attuazione dell'obbligo "
@@ -1763,63 +1737,51 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             "infortuni significativi, evoluzione della tecnica, esiti "
             "della sorveglianza sanitaria — e comunque ad ogni successiva "
             "modifica delle condizioni operative.",
+            # The sections are unnumbered since N2O's model, so the
+            # programme is named by its part rather than by "§4.1".
             "Le misure di prevenzione e protezione attuate sono descritte, "
             "per ogni ambiente di lavoro, nella Parte III. Il programma "
             "delle misure di miglioramento di cui all'art. 28, comma 2, "
-            "lettera c) è riportato in Parte IV §4.1.",
+            "lettera c) è riportato nella Parte IV.",
         ):
-            p = doc.add_paragraph()
-            run = p.add_run(body)
-            run.font.size = Pt(10)
-            p.paragraph_format.space_after = Pt(6)
-            p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-        doc.add_page_break()
+            add_body_paragraph(doc, body)
 
     # ------------------------------------------------------------------
-    # Pre-Parte I — Frontispiece (Template Tables 0, 1, 2)
+    # Row 4 — DOCUMENTO ELABORATO SUGLI ESITI DELLA VALUTAZIONE DEI RISCHI
+    # (Template Tables 0, 1, 2)
     # ------------------------------------------------------------------
 
     def _add_pre_parte_i(
         self, doc: Document, azienda, generated_at: datetime, version: int
     ) -> None:
-        """Render the front-matter block that appears before Parte I.
+        """The identity page before Parte I: the light identity strip, the
+        revision history and the Timbro e Firma box.
 
-        Tables 0, 1, 2 from DVR_TEMPLATE_MAPPING.md — azienda identity,
-        revision history, and a stamped-signature placeholder. ``version`` is
-        the same number the cover page prints, passed down so the two cannot
-        contradict each other (see :func:`_revision_label`).
+        ``version`` is the number the footer prints, passed down so the two
+        cannot contradict each other (see :func:`_revision_label`). N2O's
+        model dropped the "ex art. 17, comma 1, lettera a) …" line that used
+        to sit under the title.
         """
-        p = doc.add_paragraph()
-        run = p.add_run(
-            "ex art. 17, comma 1, lettera a) ed art. 28 del "
-            "D.Lgs. 81/2008 e s.m.i."
+        add_section_title(
+            doc, "DOCUMENTO ELABORATO SUGLI ESITI DELLA VALUTAZIONE DEI RISCHI"
         )
-        run.bold = True
-        run.font.size = Pt(11)
-
-        doc.add_paragraph("")
         self._add_azienda_header_table(doc, azienda)
-        doc.add_paragraph("")
-
-        doc.add_heading("Storico Revisioni", level=3)
+        # The model spreads the three tables out, about 2 cm apart.
+        _gap(doc, space_pt=24)
         self._add_revision_history_table(doc, generated_at, version)
-        doc.add_paragraph("")
-
+        _gap(doc, space_pt=24)
         self._add_timbro_firma_table(doc)
-        doc.add_page_break()
 
     def _add_revision_history_table(
         self, doc: Document, generated_at: datetime, version: int
     ) -> None:
-        """Template Table 1 — Rev./Motivazione/Data (7×3 DYNAMIC).
+        """Template Table 1 — Rev. | Motivazione | Data under a navy header.
 
         Emits a single row for the current emission, numbered from the same
-        source as the cover page. It used to be hardcoded to "00 — Emissione",
+        source as the footer. It used to be hardcoded to "00 — Emissione",
         so a regenerated DVR claimed to be a first issue no matter how many
         times it had been reissued.
         """
-        headers = ["Rev.", "Motivazione", "Data"]
         rows = [[
             _revision_label(version),
             # Art. 29 c.3 is what makes a DVR get reissued, so name it rather
@@ -1827,86 +1789,36 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             "Emissione" if version <= 1 else "Aggiornamento ex art. 29 c.3",
             generated_at.strftime("%d/%m/%Y"),
         ]]
-        self._add_data_table(doc, headers, rows)
+        table = add_data_table(
+            doc,
+            ["Rev.", "Motivazione", "Data"],
+            rows,
+            column_widths_cm=[2.0, 11.0, 3.5],
+        )
+        style_header_row(table.rows[0], bg_hex=BRAND_NAVY_HEX)
 
     def _add_timbro_firma_table(self, doc: Document) -> None:
-        """Template Table 2 — single-cell 'Timbro e Firma' placeholder (2×1)."""
+        """Template Table 2 — the "Timbro e Firma" box: a navy band over a
+        blank area tall enough to stamp and sign."""
         table = doc.add_table(rows=2, cols=1)
         table.style = "Table Grid"
-        table.alignment = WD_TABLE_ALIGNMENT.LEFT
-
-        header_cell = table.rows[0].cells[0]
-        header_cell.text = ""
-        p = header_cell.paragraphs[0]
-        run = p.add_run("Timbro e Firma")
-        run.bold = True
-        run.font.size = Pt(9)
-        run.font.color.rgb = _HEADER_TEXT
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        self._set_cell_bg(header_cell, _HEADER_BG)
-
-        body_cell = table.rows[1].cells[0]
-        body_cell.text = ""
-        body_cell.paragraphs[0].add_run("\n\n\n")
-
-    def _last_content_element(self, doc: Document) -> BaseOxmlElement | None:
-        """Return the final body element before the document-level sectPr."""
-        for element in reversed(doc._element.body):
-            if element.tag != qn("w:sectPr"):
-                return element
-        return None
-
-    def _ensure_page_boundary(self, doc: Document) -> None:
-        """Start the next separator at a page or paragraph section boundary.
-
-        A page-break-before marker is safe after a table that has filled the
-        preceding page: unlike an explicit break run, it cannot be pushed to
-        an otherwise empty page and then force the separator onto another.
-        """
-        last = self._last_content_element(doc)
-        if last is not None and last.tag == qn("w:p"):
-            if (
-                last.xpath('.//w:br[@w:type="page"]')
-                or last.xpath('./w:pPr/w:sectPr')
-                or last.xpath('./w:pPr/w:pageBreakBefore')
-            ):
-                return
-        boundary = doc.add_paragraph()
-        boundary.paragraph_format.page_break_before = True
-
-    def _add_topic_separator(
-        self,
-        doc: Document,
-        heading: str,
-        *,
-        part_heading: str | None = None,
-        part_label: str | None = None,
-    ) -> None:
-        """Emit one dedicated, boundary-safe level-2 topic separator."""
-        self._ensure_page_boundary(doc)
-        if part_heading:
-            part = doc.add_heading(part_heading, level=1)
-            part.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            for run in part.runs:
-                run.font.size = Pt(11)
-                run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-        elif part_label:
-            context = doc.add_paragraph()
-            context.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = context.add_run(part_label)
-            run.bold = True
-            run.font.size = Pt(11)
-            run.font.color.rgb = _HEADER_BG
-        topic = doc.add_heading(heading, level=2)
-        topic.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        topic.paragraph_format.space_before = Cm(6)
-        for run in topic.runs:
-            run.font.size = Pt(24)
-            run.font.bold = True
-        doc.add_page_break()
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        band_row, sign_row = table.rows
+        band = band_row.cells[0]
+        write_cell(band, "Timbro e Firma", bold=True, color=HEADER_TEXT, align=_CENTER)
+        shade_cell(band, BRAND_NAVY_HEX)
+        band.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+        for paragraph in band.paragraphs:
+            paragraph.paragraph_format.keep_with_next = True
+        write_cell(sign_row.cells[0], "")
+        sign_row.height = Cm(3.5)
+        sign_row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
+        for row in table.rows:
+            keep_row_together(row)
+        set_table_borders(table)
 
     # ------------------------------------------------------------------
-    # Part I — Company data (Template Tables 3–17)
+    # Parte I — rows 5–14 (Template Tables 3–17)
     # ------------------------------------------------------------------
 
     def _add_part_i(
@@ -1918,44 +1830,229 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         attrezzature: list,
         sostanze_chimiche: list,
         ambienti: list,
+        *,
+        foto_presentazione: tuple[bytes, str] | None = None,
     ) -> None:
-        """Full Parte I with 15-table parity against the master template.
+        """Parte I — DATI GENERALI DELL'AZIENDA.
 
-        Layout (Tables 3–17 in DVR_TEMPLATE_MAPPING.md):
-          3   Azienda header (5×2)
-          4   Anagrafica Aziendale (12×2)
-          5   Dati occupazionali grid (N×5)
-          6–9 Single-role titles (Datore di Lavoro / RSPP / RLS / Medico)
-          10  Addetti Primo Soccorso
-          11  Addetti Antincendio
-          12  Ambienti + N.Lavoratori
-          13  Attrezzature / Marcatura CE / Verifiche
-          14  Sostanze chimiche / Produttore / Attività
-          15–17 Static hazard library (Sicurezza / Salute / Trasversali)
+        In-page titles (rows 5–10): PRESENTAZIONE DELL'AZIENDA (identity
+        strip, company photo, activity description), ANAGRAFICA AZIENDALE,
+        DATI ANAGRAFICI, DATI OCCUPAZIONALI, ORGANIZZAZIONE AZIENDALE DELLA
+        SICUREZZA and AMBIENTI DI LAVORO. Then four divider pages (rows
+        11–14): SERVIZI IGIENICO-ASSISTENZIALI, MACCHINE, ATTREZZATURE ED
+        IMPIANTI, SOSTANZE, PRODOTTI E PREPARATI CHIMICI and ELENCO FATTORI
+        DI PERICOLO.
+
+        Template tables (DVR_TEMPLATE_MAPPING.md): 3 identity, 4 anagrafica,
+        5 occupational data (split in two by N2O), 6–9 roles, 10–11 addetti,
+        12 ambienti, 13 equipment, 14 chemicals, 15–17 hazard library.
         """
-        # Table 3 — Presentazione dell'azienda
-        self._add_topic_separator(
-            doc,
-            "1. Presentazione dell'Azienda",
-            part_heading="PARTE I — DATI GENERALI DELL'AZIENDA",
-        )
+        # Row 5 — the activity description moved here from Part II in
+        # N2O's model, after the identity strip and the company photo.
+        add_section_title(doc, "PRESENTAZIONE DELL'AZIENDA", part_label=_PART_I_LABEL)
         self._add_azienda_header_table(doc, azienda)
-        doc.add_paragraph("")
+        self._add_company_photo(doc, foto_presentazione)
+        self._add_activity_description(doc, azienda)
 
-        # Table 4 — Anagrafica Aziendale (key-value)
-        # Required rows (Ragione Sociale, Datore di Lavoro, Sede Legale,
-        # Sede Operativa) always render. Optional rows are SKIPPED entirely
-        # when null/empty — empty placeholder rows like "—" or
-        # "Non comunicato" are noise that an inspector flags. The audit
-        # gate in api/v1/documents._ensure_anagrafica_complete_for_dvr
-        # already blocks generation when ALL of CF/Tel/Email/PEC are
-        # missing, so at least one of those rows will always render.
-        self._add_topic_separator(
+        # Row 6 — Table 4.
+        add_section_title(doc, "ANAGRAFICA AZIENDALE")
+        self._add_anagrafica_table(doc, azienda, persone, employee_persons)
+
+        # Rows 7–8 — Table 5, split by N2O: who the workers are, then what
+        # they do and where.
+        add_section_title(doc, "DATI ANAGRAFICI")
+        self._add_dati_anagrafici_table(doc, employee_persons)
+        add_section_title(doc, "DATI OCCUPAZIONALI")
+        self._add_dati_occupazionali_ambienti_table(doc, employee_persons)
+
+        # Row 9 — Tables 6–11.
+        add_section_title(doc, "ORGANIZZAZIONE AZIENDALE DELLA SICUREZZA")
+        role_tables = [
+            ("Datore di Lavoro",
+             [p for p in persone if p.ruolo_datore_lavoro]),
+            ("Responsabile del Servizio di Prevenzione e Protezione",
+             [p for p in persone if p.ruolo_rspp]),
+            ("Rappresentante dei Lavoratori per la Sicurezza",
+             [p for p in persone if p.ruolo_rls]),
+            ("Medico Competente",
+             [p for p in persone if getattr(p, "ruolo_medico_competente", False)]),
+        ]
+        for index, (title, role_persone) in enumerate(role_tables):
+            if index:
+                _gap(doc, space_pt=4)
+            self._add_single_role_title_table(doc, title, role_persone)
+        _gap(doc, space_pt=6)
+        self._add_addetti_role_table(
             doc,
-            "2. Anagrafica Aziendale",
-            part_label="PARTE I — DATI GENERALI DELL'AZIENDA",
+            "Addetti al Primo Soccorso",
+            [p for p in persone if p.ruolo_primo_soccorso],
+        )
+        _gap(doc, space_pt=6)
+        self._add_addetti_role_table(
+            doc,
+            "Addetti alla Prevenzione Incendi e Lotta Antincendio",
+            [p for p in persone if p.ruolo_antincendio],
         )
 
+        # Row 10 — Table 12.
+        add_section_title(doc, "AMBIENTI DI LAVORO")
+        self._add_ambienti_summary_table(doc, ambienti, employee_persons)
+
+        # Row 11 — required under D.Lgs. 81/2008 Allegato IV §1.10-1.16
+        # (audit F-003).
+        self._add_servizi_igienico_assistenziali_section(doc, azienda, employee_persons)
+
+        # Row 12 — Table 13. Pass ambienti so the renderer can resolve
+        # ambiente_id → nome without lazy-loading `attrezzatura.ambiente`
+        # (the base loader doesn't selectinload that relationship, and lazy
+        # access in an async session raises MissingGreenlet).
+        add_divider(doc, "MACCHINE, ATTREZZATURE ED IMPIANTI", "div_macchine")
+        self._add_attrezzature_table(doc, attrezzature, ambienti)
+
+        # Row 13 — Table 14.
+        add_divider(doc, "SOSTANZE, PRODOTTI E PREPARATI CHIMICI", "div_sostanze")
+        self._add_sostanze_table(doc, sostanze_chimiche)
+
+        # Row 14 — Tables 15, 16, 17: the static hazard library.
+        title = add_divider(
+            doc, "ELENCO FATTORI DI PERICOLO (Riferimento)", "div_fattori_pericolo"
+        )
+        _keep_case(title, "(Riferimento)")
+        note = _note(
+            doc,
+            "N.B. Gli elenchi seguenti sono da intendersi indicativi e non "
+            "esaustivi. Sono valutati in dettaglio per ogni ambiente di "
+            "lavoro nella Parte III.",
+        )
+        note.paragraph_format.space_after = Pt(8)
+        self._add_hazard_library_group(doc, "Rischi per la Sicurezza", [
+            "Strutture", "Macchine", "Impianti Elettrici", "Incendio-Esplosioni",
+        ])
+        _gap(doc, space_pt=6)
+        self._add_hazard_library_group(doc, "Rischi per la Salute", [
+            "Agenti Chimici", "Agenti Fisici", "Agenti Biologici", "Agenti Cancerogeni",
+        ])
+        _gap(doc, space_pt=6)
+        self._add_hazard_library_group(doc, "Rischi Trasversali", [
+            "Organizzazione del Lavoro", "Fattori Psicologici", "Fattori Ergonomici",
+        ])
+
+    def _add_company_photo(self, doc: Document, foto) -> None:
+        """Row 5 — the company photo under the identity strip (spec §4.2.4).
+
+        Centred, as large as fits 16.5 × 11 cm with its aspect kept, framed
+        by a hairline. ``foto`` is ``(bytes, content_type)`` from
+        ``load_foto_presentazione``. No photo, no slot; unreadable bytes are
+        logged and the page prints without them.
+        """
+        content = foto[0] if isinstance(foto, (tuple, list)) else foto
+        if not content:
+            return
+        paragraph = doc.add_paragraph()
+        paragraph.alignment = _CENTER
+        paragraph.paragraph_format.space_before = Pt(12)
+        try:
+            _add_fitted_picture(paragraph, BytesIO(content), _COMPANY_PHOTO_BOX_CM)
+        except Exception:
+            paragraph._p.getparent().remove(paragraph._p)
+            logger.warning(
+                "DVR company photo could not be embedded; printing without it",
+                exc_info=True,
+            )
+
+    def _add_activity_description(self, doc: Document, azienda) -> None:
+        """Row 5 — what the company does: the narrative, the ciclo produttivo
+        line and the regional references (Part II §2.1 until N2O's model
+        moved them under PRESENTAZIONE DELL'AZIENDA)."""
+        paragraphs = []
+        descrizione = (azienda.descrizione_attivita or "").strip()
+        if descrizione:
+            # Split into multiple paragraphs on blank-line separators or on
+            # sentence-group boundaries so the section reads as the
+            # multi-paragraph narrative the spec expects (audit F-004).
+            for body in self._split_descrizione_paragraphs(descrizione):
+                paragraphs.append(add_body_paragraph(doc, body))
+        else:
+            placeholder = doc.add_paragraph()
+            set_run_font(
+                placeholder.add_run(
+                    "[Descrizione dell'attività da compilare durante la revisione]"
+                ),
+                italic=True,
+                color=NOTE_GREY,
+            )
+            paragraphs.append(placeholder)
+
+        # Synthesized "ciclo produttivo" paragraph from ATECO + attivita +
+        # zona sismica + orario lavoro — these structured fields exist
+        # on the Azienda but aren't surfaced in the descrizione narrative.
+        ciclo_bits: list[str] = []
+        ateco = getattr(azienda, "codice_ateco", None)
+        attivita = getattr(azienda, "attivita", None)
+        if ateco and attivita:
+            ciclo_bits.append(
+                f"Ciclo produttivo: l'attività è classificata sotto il "
+                f"codice ATECO {ateco} ({attivita})."
+            )
+        zona = getattr(azienda, "zona_sismica", None)
+        if zona:
+            ciclo_bits.append(
+                f"Zona sismica di appartenenza: {zona} "
+                "(O.P.C.M. 3274/2003 e successive deliberazioni regionali)."
+            )
+        orario = getattr(azienda, "orario_lavoro", None)
+        if orario:
+            ciclo_bits.append(
+                f"Articolazione dell'orario di lavoro: {orario}."
+            )
+        if ciclo_bits:
+            add_body_paragraph(doc, " ".join(ciclo_bits))
+
+        contesto = (getattr(azienda, "contesto_territoriale", None) or "").strip()
+        if contesto:
+            add_body_paragraph(doc, f"Contesto territoriale: {contesto}")
+
+        # US-2.2 AC1: regione + applicable regional regulations, driven off
+        # sede_legale_citta (falls back to sede_operativa_citta). Silent
+        # no-op for comuni not in the 158-entry lookup so the generator never
+        # fails because of a missing regulation match — the operator fills
+        # it in during review.
+        sede_citta = (
+            getattr(azienda, "sede_legale_citta", None)
+            or getattr(azienda, "sede_operativa_citta", None)
+            or ""
+        )
+        regione, regulations = get_regulations_for_comune(sede_citta.strip())
+        if regione and regulations:
+            add_body_paragraph(doc, f"Regione di riferimento: {regione}")
+            lead = doc.add_paragraph()
+            set_run_font(
+                lead.add_run(
+                    "Regolamenti regionali applicabili (in aggiunta al D.Lgs. 81/2008):"
+                ),
+                italic=True,
+            )
+            for reg in regulations:
+                bullet = add_bullets(doc, [f"{reg['titolo']} — {reg['riferimento']}"])[0]
+                set_run_font(bullet.add_run(f" ({reg['ambito']})"), italic=True)
+
+        if paragraphs:
+            paragraphs[0].paragraph_format.space_before = Pt(12)
+
+    def _add_anagrafica_table(
+        self, doc: Document, azienda, persone: list, employee_persons: list
+    ) -> None:
+        """Row 6 — ANAGRAFICA AZIENDALE (Template Table 4), the blue
+        key/value table.
+
+        Required rows (Ragione Sociale, Datore di Lavoro, Sede Legale, Sede
+        Operativa) always render. Optional rows are SKIPPED entirely when
+        null/empty — empty placeholder rows like "—" or "Non comunicato" are
+        noise that an inspector flags. The audit gate in
+        api/v1/documents._ensure_anagrafica_complete_for_dvr already blocks
+        generation when ALL of CF/Tel/Email/PEC are missing, so at least one
+        of those rows will always render.
+        """
         ddl = next((p for p in persone if p.ruolo_datore_lavoro), None)
         ddl_label = (
             f"{(ddl.nominativo or '').upper()}"
@@ -1978,12 +2075,13 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         anagrafica_rows: list[tuple[str, str]] = [
             ("Ragione Sociale", azienda.ragione_sociale or "—"),
             ("Datore di Lavoro", ddl_label),
-            ("Sede Legale", self._format_address(
+            # Street, then "CAP Comune (PROV)", on two lines as in the model.
+            ("Sede Legale", self._format_seat_lines(
                 azienda.sede_legale_via, azienda.sede_legale_citta,
                 getattr(azienda, "cap_legale", None),
                 getattr(azienda, "provincia_legale", None),
             )),
-            ("Sede Operativa", self._format_address(
+            ("Sede Operativa", self._format_seat_lines(
                 azienda.sede_operativa_via, azienda.sede_operativa_citta,
                 getattr(azienda, "cap_operativa", None),
                 getattr(azienda, "provincia_operativa", None),
@@ -2027,167 +2125,63 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             formatter=lambda v: str(v),
         )
 
-        self._add_key_value_table(doc, anagrafica_rows)
-        doc.add_paragraph("")
+        self._add_key_value_table(doc, anagrafica_rows, variant="blue")
 
-        # Table 5 — Dati occupazionali (Nominativo | Mansione | Ambiente | Note | Contratto)
-        self._add_topic_separator(
-            doc,
-            "3. Dati Occupazionali",
-            part_label="PARTE I — DATI GENERALI DELL'AZIENDA",
-        )
-        self._add_dati_occupazionali_table(doc, employee_persons)
-        doc.add_paragraph("")
+    def _add_dati_anagrafici_table(self, doc: Document, persone: list) -> None:
+        """Row 7 — DATI ANAGRAFICI: Nominativo | Codice Fiscale | Tipologia
+        contrattuale, one row per employee in saved order.
 
-        # Tables 6–9 — Organizzazione Aziendale della Sicurezza
-        self._add_topic_separator(
-            doc,
-            "4. Organizzazione Aziendale della Sicurezza",
-            part_label="PARTE I — DATI GENERALI DELL'AZIENDA",
-        )
-        role_tables = [
-            ("Datore di Lavoro",
-             [p for p in persone if p.ruolo_datore_lavoro]),
-            ("Responsabile del Servizio di Prevenzione e Protezione",
-             [p for p in persone if p.ruolo_rspp]),
-            ("Rappresentante dei Lavoratori per la Sicurezza",
-             [p for p in persone if p.ruolo_rls]),
-            ("Medico Competente",
-             [p for p in persone if getattr(p, "ruolo_medico_competente", False)]),
-        ]
-        for title, role_persone in role_tables:
-            self._add_single_role_title_table(doc, title, role_persone)
-            doc.add_paragraph("")
-
-        # Tables 10, 11 — Addetti Primo Soccorso / Antincendio
-        self._add_addetti_role_table(
-            doc,
-            "Addetti al Primo Soccorso",
-            [p for p in persone if p.ruolo_primo_soccorso],
-        )
-        doc.add_paragraph("")
-        self._add_addetti_role_table(
-            doc,
-            "Addetti alla Prevenzione Incendi e Lotta Antincendio",
-            [p for p in persone if p.ruolo_antincendio],
-        )
-        doc.add_paragraph("")
-
-        # Table 12 — Ambienti di Lavoro + N. Lavoratori
-        self._add_topic_separator(
-            doc,
-            "5. Ambienti di Lavoro",
-            part_label="PARTE I — DATI GENERALI DELL'AZIENDA",
-        )
-        self._add_ambienti_summary_table(doc, ambienti, employee_persons)
-        doc.add_paragraph("")
-
-        # §1.6 Servizi Igienico-Assistenziali — required under D.Lgs. 81/2008
-        # Allegato IV §1.10-1.16. Mandatory for >10 lavoratori (this client
-        # has 18). Boilerplate references the law and surfaces the existing
-        # azienda field if populated, otherwise emits a default paragraph
-        # referencing the legal requirement (audit F-003).
-        self._add_servizi_igienico_assistenziali_section(doc, azienda, employee_persons)
-
-        # Table 13 — Macchine, attrezzature ed impianti.
-        # Pass ambienti so the renderer can resolve ambiente_id → nome
-        # without lazy-loading `attrezzatura.ambiente` (the base loader
-        # doesn't selectinload that relationship, and lazy access in an
-        # async session raises MissingGreenlet).
-        self._add_topic_separator(
-            doc,
-            "7. Macchine, Attrezzature ed Impianti",
-            part_label="PARTE I — DATI GENERALI DELL'AZIENDA",
-        )
-        self._add_attrezzature_table(doc, attrezzature, ambienti)
-        doc.add_paragraph("")
-
-        # Table 14 — Sostanze, prodotti e preparati chimici
-        self._add_topic_separator(
-            doc,
-            "8. Sostanze, Prodotti e Preparati Chimici",
-            part_label="PARTE I — DATI GENERALI DELL'AZIENDA",
-        )
-        self._add_sostanze_table(doc, sostanze_chimiche)
-        doc.add_paragraph("")
-
-        # Tables 15, 16, 17 — Static hazard library
-        self._add_topic_separator(
-            doc,
-            "9. Elenco Fattori di Pericolo (Riferimento)",
-            part_label="PARTE I — DATI GENERALI DELL'AZIENDA",
-        )
-        p = doc.add_paragraph()
-        run = p.add_run(
-            "N.B. Gli elenchi seguenti sono da intendersi indicativi e non "
-            "esaustivi. Sono valutati in dettaglio per ogni ambiente di "
-            "lavoro nella Parte III."
-        )
-        run.font.size = Pt(9)
-        run.font.italic = True
-        doc.add_paragraph("")
-
-        self._add_hazard_library_group(doc, "Rischi per la Sicurezza", [
-            "Strutture", "Macchine", "Impianti Elettrici", "Incendio-Esplosioni",
-        ])
-        doc.add_paragraph("")
-        self._add_hazard_library_group(doc, "Rischi per la Salute", [
-            "Agenti Chimici", "Agenti Fisici", "Agenti Biologici", "Agenti Cancerogeni",
-        ])
-        doc.add_paragraph("")
-        self._add_hazard_library_group(doc, "Rischi Trasversali", [
-            "Organizzazione del Lavoro", "Fattori Psicologici", "Fattori Ergonomici",
-        ])
-
-    def _add_dati_occupazionali_table(self, doc: Document, persone: list) -> None:
-        """Template Table 5 — 5-col lavoratori grid including ambiente assignments.
-
-        Cross-site roles (DdL / RSPP / RLS / MC) typically operate across
-        the whole company and have no explicit ambiente assignment. We
-        surface that with an explicit "Tutta l'azienda" label rather than
-        an em-dash so reviewers don't read it as missing data
-        (audit F-011).
+        The first half of the old Table 5, which N2O's model splits in two.
+        The column holds the persona's codice fiscale, so a dash reads as
+        "CF not entered" (audit F-007, 2026-04-29 rerun).
         """
-        # Column 4 is the persona's codice fiscale, not a free-form Note —
-        # rename the header to match the actual content so an em-dash reads
-        # as "CF not entered" rather than "broken Note column" (audit F-007,
-        # 2026-04-29 rerun).
-        headers = ["Nominativo", "Mansione", "Ambiente di Lavoro", "Codice Fiscale", "Tipologia contrattuale"]
-        if not persone:
-            self._add_data_table(doc, headers, [["—", "—", "—", "—", "—"]])
-            return
-
-        rows = []
-        for p in persone:
-            ambienti_names = ", ".join(
-                (a.nome or "")
-                for a in (getattr(p, "ambienti", None) or [])
-                if getattr(a, "nome", None)
-            )
-            if not ambienti_names:
-                if (
-                    p.ruolo_datore_lavoro
-                    or p.ruolo_rspp
-                    or p.ruolo_rls
-                    or getattr(p, "ruolo_medico_competente", False)
-                ):
-                    ambienti_names = "Tutta l'azienda (ruolo trasversale)"
-                else:
-                    ambienti_names = "—"
-            cf = getattr(p, "codice_fiscale", None) or "—"
-            rows.append([
+        headers = ["Nominativo", "Codice Fiscale", "Tipologia contrattuale"]
+        rows = [
+            [
                 (p.nominativo or "—").upper(),
-                (p.mansione or "—").upper(),
-                ambienti_names.upper(),
-                cf,
+                getattr(p, "codice_fiscale", None) or "—",
                 (p.tipologia_contrattuale or "—").upper(),
-            ])
-        self._add_data_table(doc, headers, rows)
+            ]
+            for p in persone
+        ] or [["—", "—", "—"]]
+        self._add_data_table(doc, headers, rows, widths=[6.5, 5.5, 4.5])
+
+    def _add_dati_occupazionali_ambienti_table(self, doc: Document, persone: list) -> None:
+        """Row 8 — DATI OCCUPAZIONALI: Nominativo | Mansione | Ambiente di
+        Lavoro, the environments as a real bulleted list, one per line, in
+        the order they are assigned to the person.
+
+        Cross-site roles (DdL / RSPP / RLS / MC) typically operate across the
+        whole company and have no explicit ambiente assignment: they read
+        "Tutta l'azienda (ruolo trasversale)" rather than a dash, so
+        reviewers don't take it for missing data (audit F-011).
+        """
+        headers = ["Nominativo", "Mansione", "Ambiente di Lavoro"]
+        if not persone:
+            self._add_data_table(doc, headers, [["—", "—", "—"]])
+            return
+        table = self._add_data_table(
+            doc,
+            headers,
+            [
+                [(p.nominativo or "—").upper(), (p.mansione or "—").upper(), ""]
+                for p in persone
+            ],
+            widths=[5.0, 5.0, 6.5],
+        )
+        for row, person in zip(table.rows[1:], persone):
+            names = [name.upper() for name in _environment_names(person)]
+            if names:
+                _bullet_cell(row.cells[2], names)
+            else:
+                label = _no_environment_label(person).upper()
+                write_cell(row.cells[2], label, align=_CENTER if label == "—" else None)
 
     def _add_single_role_title_table(
         self, doc: Document, title: str, role_persone: list
     ) -> None:
-        """Template Tables 6–9 — single-column title table with the role-holder's name.
+        """Template Tables 6–9 — a role band: the role in white on the table
+        blue over who holds it, "—" when nobody does.
 
         Feedback #10 (2026-04-29): MC and RSPP are frequently external
         consultants. We append "(ESTERNO)" to the name when `is_esterno` is
@@ -2198,102 +2192,60 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             base = (p.nominativo or "").upper()
             return f"{base} (ESTERNO)" if getattr(p, "is_esterno", False) else base
 
-        names = [_format(p) for p in role_persone] or ["—"]
-        table = doc.add_table(rows=1 + len(names), cols=1)
-        table.style = "Table Grid"
-
-        header_cell = table.rows[0].cells[0]
-        header_cell.text = ""
-        hp = header_cell.paragraphs[0]
-        hrun = hp.add_run(title)
-        hrun.bold = True
-        hrun.font.size = Pt(9)
-        hrun.font.color.rgb = _HEADER_TEXT
-        hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        self._set_cell_bg(header_cell, _HEADER_BG)
-
-        for i, name in enumerate(names, start=1):
-            c = table.rows[i].cells[0]
-            c.text = ""
-            cp = c.paragraphs[0]
-            crun = cp.add_run(name)
-            crun.font.size = Pt(9)
-            cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        names = [name for name in (_format(p) for p in role_persone) if name.strip()]
+        add_role_band(doc, title, "\n".join(names))
 
     def _add_addetti_role_table(
         self, doc: Document, title: str, role_persone: list
     ) -> None:
-        """Template Tables 10, 11 — Nominativo/Mansione grid with a spanning header."""
+        """Template Tables 10, 11 — Nominativo | Mansione under a band naming
+        the emergency role. Both header rows repeat on every page."""
         table = doc.add_table(rows=2, cols=2)
         table.style = "Table Grid"
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
-        merged = table.rows[0].cells[0].merge(table.rows[0].cells[1])
-        merged.text = ""
-        p = merged.paragraphs[0]
-        run = p.add_run(title)
-        run.bold = True
-        run.font.size = Pt(9)
-        run.font.color.rgb = _HEADER_TEXT
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        self._set_cell_bg(merged, _HEADER_BG)
+        band = table.rows[0].cells[0].merge(table.rows[0].cells[1])
+        write_cell(band, title)
+        style_header_row(table.rows[0])
 
         sub_row = table.rows[1]
         for i, text in enumerate(["Nominativo", "Mansione"]):
-            c = sub_row.cells[i]
-            c.text = ""
-            cp = c.paragraphs[0]
-            crun = cp.add_run(text)
-            crun.bold = True
-            crun.font.size = Pt(9)
-            cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            self._set_cell_bg(c, _LIGHT_GRAY)
+            cell = sub_row.cells[i]
+            write_cell(cell, text, bold=True, color=BRAND_NAVY, align=_CENTER)
+            shade_cell(cell, BRAND_SURFACE_HEX)
+        _repeat_as_header(sub_row)
 
-        if not role_persone:
+        holders = [
+            [(p.nominativo or "—").upper(), (p.mansione or "—").upper()]
+            for p in role_persone
+        ] or [["—", "—"]]
+        for values in holders:
             row = table.add_row()
-            row.cells[0].text = "—"
-            row.cells[1].text = "—"
-            return
-
-        for p in role_persone:
-            row = table.add_row()
-            for i, text in enumerate([
-                (p.nominativo or "—").upper(),
-                (p.mansione or "—").upper(),
-            ]):
-                c = row.cells[i]
-                c.text = ""
-                cp = c.paragraphs[0]
-                crun = cp.add_run(text)
-                crun.font.size = Pt(9)
+            for cell, text in zip(row.cells, values):
+                write_cell(cell, text, align=_CENTER if text == "—" else None)
+        set_table_borders(table)
 
     def _add_servizi_igienico_assistenziali_section(
         self, doc: Document, azienda, persone: list
     ) -> None:
-        """§1.6 — Servizi Igienico-Assistenziali (D.Lgs. 81/2008 Allegato IV
-        §1.10-1.16). Mandatory section for any workplace; the M/F separation
-        requirement triggers above 10 lavoratori.
+        """Row 11 — SERVIZI IGIENICO-ASSISTENZIALI (D.Lgs. 81/2008 Allegato IV
+        §1.10-1.16), on its own divider page. Mandatory section for any
+        workplace; the M/F separation requirement triggers above 10
+        lavoratori.
         """
-        self._add_topic_separator(
-            doc,
-            "6. Servizi Igienico-Assistenziali",
-            part_label="PARTE I — DATI GENERALI DELL'AZIENDA",
-        )
+        add_divider(doc, "SERVIZI IGIENICO-ASSISTENZIALI", "div_servizi_igienici")
 
         n_dipendenti = len(persone or [])
         sex_distribution = {p.sesso for p in persone if getattr(p, "sesso", None)}
         mixed = sex_distribution >= {"M", "F"}
 
-        intro = (
+        add_body_paragraph(
+            doc,
             "Le dotazioni igienico-assistenziali sono conformi ai requisiti "
             "minimi previsti dall'Allegato IV del D.Lgs. 81/2008 (§1.10 - "
             "1.16) per quanto riguarda servizi igienici, lavabi, spogliatoi "
-            "e locali di riposo / refezione."
+            "e locali di riposo / refezione.",
         )
-        p = doc.add_paragraph()
-        run = p.add_run(intro)
-        run.font.size = Pt(10)
-        p.paragraph_format.space_after = Pt(4)
-
         if n_dipendenti > 10 and mixed:
             extra = (
                 f"Con un numero di lavoratori pari a {n_dipendenti} e in "
@@ -2312,20 +2264,15 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 "Sono garantiti servizi igienici e spogliatoi adeguati "
                 "al numero degli addetti (Allegato IV §1.13)."
             )
-        p = doc.add_paragraph()
-        run = p.add_run(extra)
-        run.font.size = Pt(10)
-        p.paragraph_format.space_after = Pt(4)
+        add_body_paragraph(doc, extra)
 
         servizi_descr = (
             getattr(azienda, "servizi_igienici_descrizione", None) or ""
         ).strip()
         if servizi_descr:
-            p = doc.add_paragraph()
-            run = p.add_run(servizi_descr)
-            run.font.size = Pt(10)
+            add_body_paragraph(doc, servizi_descr)
         else:
-            for bullet in (
+            add_bullets(doc, [
                 "Servizi igienici aerati e illuminati naturalmente o "
                 "con ricambio d'aria forzato.",
                 "Lavabi con acqua corrente e dispenser per il lavaggio "
@@ -2334,22 +2281,19 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 "ove l'attività comporti l'uso di indumenti da lavoro.",
                 "Locale di riposo/refezione adeguato quando i lavoratori "
                 "consumano i pasti in azienda.",
-            ):
-                bp = doc.add_paragraph(style="List Bullet")
-                run = bp.add_run(bullet)
-                run.font.size = Pt(10)
-        doc.add_paragraph("")
+            ])
 
     def _add_ambienti_summary_table(
         self, doc: Document, ambienti: list, employee_persons: list
     ) -> None:
-        """Template Table 12 — Ambiente | Tipo | Metratura | N. Lavoratori.
+        """Row 10 — Template Table 12: Ambiente | Tipo | Metratura | N. Lavoratori.
 
         Note on N. Lavoratori: a worker assigned to multiple ambienti is
         counted once per ambiente, so the column sum can exceed the total
-        dipendenti reported in T004 (e.g. preposti + addetti emergenza
-        operate across several aree). A footnote below the table makes the
-        convention explicit so an inspector does not flag the discrepancy.
+        dipendenti reported in the Anagrafica (e.g. preposti + addetti
+        emergenza operate across several aree). A footnote below the table
+        makes the convention explicit so an inspector does not flag the
+        discrepancy.
         """
         headers = ["Ambiente", "Tipo", "Metratura", "N. Lavoratori"]
         if not ambienti:
@@ -2364,19 +2308,16 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                     f"{mq} mq" if mq else "—",
                     str(len(_assigned_employee_persons(a, employee_persons))),
                 ])
-        self._add_data_table(doc, headers, rows)
-
-        note = doc.add_paragraph()
-        run = note.add_run(
+        self._add_data_table(doc, headers, rows, widths=[6.0, 4.5, 2.8, 3.2])
+        # N2O's model ends the note at "più righe": the old pointer to
+        # "§1.1" died with the section numbers.
+        _note(
+            doc,
             "Nota: la colonna \"N. Lavoratori\" conteggia ciascun addetto "
             "una volta per ogni ambiente in cui opera; preposti, addetti "
             "alle emergenze e personale con mansioni trasversali "
-            "compaiono pertanto in più righe. Il totale dei dipendenti "
-            "in forza all'azienda è riportato in §1.1."
+            "compaiono pertanto in più righe.",
         )
-        run.font.italic = True
-        run.font.size = Pt(8)
-        run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
 
     def _add_attrezzature_table(
         self,
@@ -2384,7 +2325,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         attrezzature: list,
         ambienti: list | None = None,
     ) -> None:
-        """Template Table 13 — global equipment inventory (Parte I §7).
+        """Row 12 — Template Table 13, the global equipment inventory.
 
         Columns: Descrizione | Ambiente | Marcata CE | Verifiche periodiche.
 
@@ -2393,20 +2334,15 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         3-column variant rendered 1 row per piece of equipment with no
         location context, so identical descriptions (e.g. two "TRAPANO A
         COLONNA" rows from two different ambienti) looked like
-        duplicates. Surfacing the ambiente name keeps the per-row signal
-        and lets the reader cross-reference the per-ambiente blocks in
-        Parte III.
+        duplicates. Rows are grouped by description, each listing every
+        ambiente that holds it, in the saved environment order.
 
         We resolve `ambiente_id → nome` via the in-memory ambienti list
         rather than lazy-loading `attrezzatura.ambiente`: the base
         loader doesn't selectinload that backref, and lazy access in an
         async session raises MissingGreenlet. ``ambienti=None`` keeps
         the old "Ambiente: —" behavior for any caller that doesn't
-        thread the list through (defensive — no current callsite hits
-        this branch).
-
-        Rows are grouped by ambiente name so identical ambienti cluster
-        together — matches operator expectation when scanning the list.
+        thread the list through.
         """
         headers = [
             "Macchine, Attrezzature ed Impianti",
@@ -2418,19 +2354,19 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             rows = [["Nessuna attrezzatura registrata.", "—", "—", "—"]]
         else:
             rows = _global_equipment_rows(attrezzature, ambienti or [])
-        self._add_data_table(doc, headers, rows)
+        self._add_data_table(doc, headers, rows, widths=[6.0, 5.5, 2.2, 2.8])
 
     def _add_sostanze_table(self, doc: Document, sostanze: list) -> None:
-        """Template Table 14 — chemical inventory + SDS hazard detail.
+        """Row 13 — Template Table 14, the chemical inventory + SDS detail.
 
         Two-block layout:
-          1. Inventory table (4 cols) — name, manufacturer, state, GHS
-             pictogram codes (joined). Uses SDS-extracted pittogrammi when
-             available; falls back to "—" for manually entered rows.
-          2. Per-sostanza H/P phrase detail block, emitted only for
-             sostanze that have at least one hazard phrase. Skipped
-             entirely when no SDS data exists, so manually-entered rows
-             stay compact.
+          1. Inventory table — name, manufacturer, use, destination, state,
+             GHS pictogram codes (SDS-extracted when available, "—" for
+             manually entered rows).
+          2. Per-sostanza H/P phrase detail: every substance in the
+             inventory gets an entry, those without SDS phrases an explicit
+             "SDS non disponibile" line, so an inspector sees no apparent gap
+             between the inventory count and the detail block.
         """
         headers = [
             "Sostanza / Prodotto",
@@ -2441,344 +2377,181 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             "Pittogrammi GHS",
         ]
         if not sostanze:
-            rows = [[
-                "Nessuna sostanza chimica registrata.",
-                "—",
-                "—",
-                "—",
-                "—",
-                "—",
-            ]]
-            self._add_data_table(doc, headers, rows)
+            self._add_data_table(
+                doc,
+                headers,
+                [["Nessuna sostanza chimica registrata.", "—", "—", "—", "—", "—"]],
+            )
             return
 
         rows = []
         for s in sostanze:
             pittogrammi = getattr(s, "pittogrammi", None) or []
-            pittogrammi_text = ", ".join(pittogrammi) if pittogrammi else "—"
             rows.append([
                 (s.nome_prodotto or "—").upper(),
                 (s.produttore or "—").upper(),
                 (getattr(s, "attivita_uso", None) or "—"),
                 (getattr(s, "destinazione_uso", None) or "—"),
                 (getattr(s, "stato_miscela", None) or "—").upper(),
-                pittogrammi_text,
+                ", ".join(pittogrammi) if pittogrammi else "—",
             ])
         self._add_data_table(doc, headers, rows)
 
-        # Per-sostanza H/P detail block. Every substance in the inventory
-        # gets an entry — those with SDS-extracted H/P phrases render the
-        # full hazard breakdown, those without get an explicit
-        # "SDS non disponibile" line so an inspector sees no apparent gap
-        # between the inventory count (T014) and the detail block.
-        doc.add_paragraph("")
-        p = doc.add_paragraph()
-        run = p.add_run("Dettaglio frasi di pericolo (H) e consigli di prudenza (P)")
-        run.bold = True
-        run.font.size = Pt(10)
-        run.font.color.rgb = _HEADER_BG
+        heading = doc.add_paragraph()
+        heading.paragraph_format.space_before = Pt(12)
+        heading.paragraph_format.keep_with_next = True
+        set_run_font(
+            heading.add_run("Dettaglio frasi di pericolo (H) e consigli di prudenza (P)"),
+            bold=True,
+            color=BRAND_NAVY,
+        )
 
+        size = TYPE_SCALE["table"]
         for s in sostanze:
             frasi_h = getattr(s, "frasi_h", None) or []
             frasi_p = getattr(s, "frasi_p", None) or []
 
-            p = doc.add_paragraph()
-            run = p.add_run((s.nome_prodotto or "—").upper())
-            run.bold = True
-            run.font.size = Pt(9)
-
-            if frasi_h or frasi_p:
-                if frasi_h:
-                    p = doc.add_paragraph()
-                    run = p.add_run("Frasi H: ")
-                    run.bold = True
-                    run.font.size = Pt(9)
-                    run = p.add_run("; ".join(frasi_h))
-                    run.font.size = Pt(9)
-
-                if frasi_p:
-                    p = doc.add_paragraph()
-                    run = p.add_run("Frasi P: ")
-                    run.bold = True
-                    run.font.size = Pt(9)
-                    run = p.add_run("; ".join(frasi_p))
-                    run.font.size = Pt(9)
-            else:
-                p = doc.add_paragraph()
-                run = p.add_run(
-                    "SDS non disponibile — richiedere al fornitore "
-                    "scheda di sicurezza aggiornata ex Reg. CE 1907/2006 "
-                    "(REACH) e Reg. CE 1272/2008 (CLP) prima dell'uso."
+            name = doc.add_paragraph()
+            name.paragraph_format.space_before = Pt(6)
+            name.paragraph_format.keep_with_next = True
+            set_run_font(
+                name.add_run((s.nome_prodotto or "—").upper()),
+                size=size,
+                bold=True,
+                color=BRAND_NAVY,
+            )
+            for label, frasi in (("Frasi H: ", frasi_h), ("Frasi P: ", frasi_p)):
+                if not frasi:
+                    continue
+                line = doc.add_paragraph()
+                set_run_font(line.add_run(label), size=size, bold=True)
+                set_run_font(line.add_run("; ".join(frasi)), size=size)
+            if not frasi_h and not frasi_p:
+                line = doc.add_paragraph()
+                set_run_font(
+                    line.add_run(
+                        "SDS non disponibile — richiedere al fornitore "
+                        "scheda di sicurezza aggiornata ex Reg. CE 1907/2006 "
+                        "(REACH) e Reg. CE 1272/2008 (CLP) prima dell'uso."
+                    ),
+                    size=size,
+                    italic=True,
                 )
-                run.font.size = Pt(9)
-                run.font.italic = True
-
-            doc.add_paragraph("")
 
     def _add_hazard_library_group(
         self, doc: Document, macro_label: str, categorie: list[str]
     ) -> None:
-        """Template Tables 15/16/17 — 2-col static hazard catalog per macro-area."""
+        """Row 14 — Template Tables 15/16/17: the static hazard catalogue of
+        one macro-area, each category name once over its rows, as in N2O's
+        model."""
         rows: list[list[str]] = []
         for categoria in categorie:
-            items = HAZARD_LIBRARY.get(categoria, [])
-            for item in items:
-                rows.append([categoria, item])
+            for item in HAZARD_LIBRARY.get(categoria, []):
+                rows.append([categoria.upper(), item])
 
         if not rows:
             rows = [["—", "—"]]
 
-        self._add_data_table(doc, headers=["Categoria", macro_label], rows=rows)
+        table = self._add_data_table(
+            doc, headers=["Categoria", macro_label], rows=rows, widths=[4.5, 12.0]
+        )
+        _merge_repeated_first_column(table)
 
     # ------------------------------------------------------------------
-    # Part II — Activity description and risk assessment methodology
+    # Parte II — rows 15–18: method
     # ------------------------------------------------------------------
 
-    def _add_part_ii(self, doc: Document, azienda) -> None:
-        """Add Part II: activity description and risk methodology.
+    def _add_part_ii(self, doc: Document) -> None:
+        """Parte II — METODOLOGIA DI VALUTAZIONE (rows 15–18).
 
-        Renders four sub-sections:
-          2.1 Descrizione dell'Attività (from azienda fields, with placeholder
-              fallback when the survey field is empty).
-          2.2 Metodologia di Valutazione dei Rischi (static boilerplate with
-              a color-coded risk-level lookup table).
-          2.3 Scala di Probabilità (P).
-          2.4 Scala del Danno (D).
+        DEFINIZIONI (Template Table 19), the method with its I → level table,
+        the probability and damage scales (Tables 21, 22), each under an
+        in-page title. The activity description that used to open Part II
+        (§2.1) sits under PRESENTAZIONE DELL'AZIENDA since N2O's model, which
+        also renamed the part.
         """
-        part_label = (
-            "PARTE II — DESCRIZIONE DELL'ATTIVITÀ E METODOLOGIA DI VALUTAZIONE"
-        )
-
-        # 2.1 — Activity description
-        self._add_topic_separator(
-            doc,
-            "2.1 Descrizione dell'Attività",
-            part_heading=part_label,
-        )
-
-        # Template Table 18 — Azienda identity block at the top of Parte II
-        self._add_azienda_header_table(doc, azienda)
-        doc.add_paragraph("")
-
-        descrizione = (azienda.descrizione_attivita or "").strip()
-        if descrizione:
-            # Split into multiple paragraphs on blank-line separators or on
-            # sentence-group boundaries so the section reads as the
-            # multi-paragraph narrative the spec expects (audit F-004).
-            paragraphs = self._split_descrizione_paragraphs(descrizione)
-            for body in paragraphs:
-                p = doc.add_paragraph()
-                run = p.add_run(body)
-                run.font.size = Pt(10)
-                p.paragraph_format.space_after = Pt(6)
-        else:
-            p = doc.add_paragraph()
-            run = p.add_run(
-                "[Descrizione dell'attività da compilare durante la revisione]"
-            )
-            run.font.size = Pt(10)
-            run.font.italic = True
-            run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-
-        # Synthesized "ciclo produttivo" paragraph from ATECO + attivita +
-        # zona sismica + orario lavoro — these structured fields exist
-        # on the Azienda but aren't surfaced in the descrizione narrative.
-        ciclo_bits: list[str] = []
-        ateco = getattr(azienda, "codice_ateco", None)
-        attivita = getattr(azienda, "attivita", None)
-        if ateco and attivita:
-            ciclo_bits.append(
-                f"Ciclo produttivo: l'attivita e classificata sotto il "
-                f"codice ATECO {ateco} ({attivita})."
-            )
-        zona = getattr(azienda, "zona_sismica", None)
-        if zona:
-            ciclo_bits.append(
-                f"Zona sismica di appartenenza: {zona} "
-                "(O.P.C.M. 3274/2003 e successive deliberazioni regionali)."
-            )
-        orario = getattr(azienda, "orario_lavoro", None)
-        if orario:
-            ciclo_bits.append(
-                f"Articolazione dell'orario di lavoro: {orario}."
-            )
-        if ciclo_bits:
-            p = doc.add_paragraph()
-            run = p.add_run(" ".join(ciclo_bits))
-            run.font.size = Pt(10)
-            p.paragraph_format.space_after = Pt(6)
-
-        contesto = (getattr(azienda, "contesto_territoriale", None) or "").strip()
-        if contesto:
-            p = doc.add_paragraph()
-            run = p.add_run(f"Contesto territoriale: {contesto}")
-            run.font.size = Pt(10)
-
-        # US-2.2 AC1: inject regione + applicable regional regulations into
-        # Parte II Contesto Territoriale. Driven off sede_legale_citta (falls
-        # back to sede_operativa_citta when absent). Silent no-op for comuni
-        # not in the 158-entry lookup so the generator never fails because of
-        # a missing regulation match — the operator fills it in during review.
-        sede_citta = (
-            getattr(azienda, "sede_legale_citta", None)
-            or getattr(azienda, "sede_operativa_citta", None)
-            or ""
-        )
-        regione, regulations = get_regulations_for_comune(sede_citta.strip())
-        if regione and regulations:
-            p = doc.add_paragraph()
-            run = p.add_run(f"Regione di riferimento: {regione}")
-            run.font.size = Pt(10)
-            run.font.bold = True
-
-            p = doc.add_paragraph()
-            run = p.add_run(
-                "Regolamenti regionali applicabili (in aggiunta al D.Lgs. 81/2008):"
-            )
-            run.font.size = Pt(10)
-            run.font.italic = True
-
-            for reg in regulations:
-                bullet = doc.add_paragraph(style="List Bullet")
-                run = bullet.add_run(f"{reg['titolo']} — ")
-                run.font.size = Pt(10)
-                run.font.bold = True
-                run = bullet.add_run(reg["riferimento"])
-                run.font.size = Pt(10)
-                run = bullet.add_run(f" ({reg['ambito']})")
-                run.font.size = Pt(10)
-                run.font.italic = True
-
-        doc.add_paragraph("")
-
-        # Template Table 19 — Definizioni (glossary)
-        self._add_topic_separator(doc, "2.2 Definizioni", part_label=part_label)
+        add_section_title(doc, "DEFINIZIONI", part_label=_PART_II_LABEL)
         self._add_data_table(
             doc,
             headers=["Termine", "Definizione"],
             rows=[list(r) for r in _DEFINIZIONI_ROWS],
-        )
-        doc.add_paragraph("")
-
-        # 2.3 — Risk assessment methodology
-        self._add_topic_separator(
-            doc,
-            "2.3 Metodologia di Valutazione dei Rischi",
-            part_label=part_label,
+            widths=[4.5, 12.0],
         )
 
-        p = doc.add_paragraph()
-        run = p.add_run(_METODOLOGIA_INTRO_1)
-        run.font.size = Pt(10)
-
-        p = doc.add_paragraph()
-        run = p.add_run(_METODOLOGIA_INTRO_2)
-        run.font.size = Pt(10)
-
-        doc.add_paragraph("")
+        add_section_title(doc, "METODOLOGIA DI VALUTAZIONE DEI RISCHI")
+        add_body_paragraph(doc, _METODOLOGIA_INTRO_1)
+        intro = add_body_paragraph(doc, _METODOLOGIA_INTRO_2)
+        intro.paragraph_format.space_after = Pt(12)
         self._add_risk_level_table(doc)
-        doc.add_paragraph("")
 
-        # Template Table 21 — Scala di Probabilita (P) with full criteria column
-        self._add_topic_separator(
-            doc,
-            "2.4 Scala di Probabilità (P)",
-            part_label=part_label,
-        )
+        add_section_title(doc, "SCALA DI PROBABILITÀ (P)")
         self._add_data_table(
             doc,
             headers=["P", "Livello", "Criteri"],
             rows=[list(row) for row in _PROBABILITA_CRITERI_ROWS],
+            widths=[1.5, 3.5, 11.5],
+            centred_columns=(1,),
         )
-        doc.add_paragraph("")
 
-        # Template Table 22 — Scala del Danno (D) with full criteria column
-        self._add_topic_separator(
-            doc,
-            "2.5 Scala del Danno (D)",
-            part_label=part_label,
-        )
+        add_section_title(doc, "SCALA DEL DANNO (D)")
         self._add_data_table(
             doc,
             headers=["D", "Livello", "Criteri"],
             rows=[list(row) for row in _DANNO_CRITERI_ROWS],
+            widths=[1.5, 3.5, 11.5],
+            centred_columns=(1,),
         )
-        doc.add_paragraph("")
 
     def _add_risk_level_table(self, doc: Document) -> None:
-        """Render the I-range -> Livello/Azione/Tempistica lookup table.
+        """The I range → Livello / Azione / Tempistica lookup table.
 
-        The ``Livello`` column is shaded with the same ``_RISK_COLORS``
-        palette used by Part III so the reader sees a consistent color
-        language across the document.
+        The ``Livello`` cell takes the level's colour (``level_cell``), the
+        same palette as the Part III risk tables and the app's risk chips.
         """
-        headers = ["I", "Livello", "Azione", "Tempistica"]
-        table = doc.add_table(rows=1, cols=len(headers))
-        table.alignment = WD_TABLE_ALIGNMENT.CENTER
-        table.style = "Table Grid"
-
-        # Header row
-        header_row = table.rows[0]
-        for i, text in enumerate(headers):
-            cell = header_row.cells[i]
-            cell.text = ""
-            p = cell.paragraphs[0]
-            run = p.add_run(text)
-            run.bold = True
-            run.font.size = Pt(9)
-            run.font.color.rgb = _HEADER_TEXT
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            self._set_cell_bg(cell, _HEADER_BG)
-
-        # Data rows
-        for i_range, livello, azione, tempistica in _RISK_LEVEL_TABLE_ROWS:
-            row = table.add_row()
-            values = [i_range, livello, azione, tempistica]
-            for col_idx, text in enumerate(values):
-                cell = row.cells[col_idx]
-                cell.text = ""
-                p = cell.paragraphs[0]
-                run = p.add_run(text)
-                run.font.size = Pt(9)
-
-                if col_idx in (0, 3):
-                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-                # Color the Livello cell (white bold text on palette color)
-                if col_idx == 1 and livello in _RISK_COLORS:
-                    self._set_cell_bg(cell, _RISK_COLORS[livello])
-                    run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-                    run.bold = True
-                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        table = self._add_data_table(
+            doc,
+            ["I", "Livello", "Azione", "Tempistica"],
+            [list(row) for row in _RISK_LEVEL_TABLE_ROWS],
+            widths=[2.0, 4.0, 6.5, 4.0],
+        )
+        for row in table.rows[1:]:
+            # The model gives this small reference table generous rows.
+            row.height = Cm(0.8)
+            row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    paragraph.alignment = _CENTER
+            level_cell(row.cells[1], row.cells[1].text)
 
     # ------------------------------------------------------------------
-    # Part III — Risk assessment per environment
+    # Parte III — rows 19–24: risk assessment per environment
     # ------------------------------------------------------------------
 
     def _add_part_iii(
         self,
         doc: Document,
-        azienda,
         persone: list,
         ambienti: list,
         attrezzature: list,
         extras: dict,
     ) -> None:
-        """Add Part III: per-environment risk assessment block + trailing
-        sections (mansioni-rischi-specifici, DPI per mansione, segnaletica,
-        programma di formazione).
+        """Parte III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO.
 
-        Emits the template-shaped env block (tables 23–33 in DVR_TEMPLATE_MAPPING.md):
-          - Table 23 (once): azienda identity header — Ragione Sociale + Sede.
-          - Per environment: identity, addetti, attrezzature present, foto
-            (when AmbienteFoto rows exist), risk-category checklist (SI/NO),
-            and one 5-col risk table per applicable macro-category.
-          - Trailing: 4 sections covering mansioni con rischi specifici,
-            DPI per mansione, segnaletica di sicurezza, programma formazione.
+        Row 19: one divider for the whole part. Row 20, per environment in
+        saved order: its name as an in-page title (identity and addetti
+        tables, Template Tables 24–25), then machines, photos and the
+        risk-category checklist (Table 26), each on a new page, and one page
+        per applicable risk category (Tables 27+). N2O's model shows a single
+        environment; the divider appearing once and the page per sub-block
+        are extrapolated from it (spec §4.2.3).
+
+        Rows 21–24: mansioni with specific risks, DPI, segnaletica and the
+        training programme, each on its own divider.
         """
-        part_label = "PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO"
-        first_tail_part_heading = part_label if not ambienti else None
-        if ambienti:
+        add_divider(doc, _ENVIRONMENTS_TITLE, "div_ambienti", part_label=_PART_III_LABEL)
+        if not ambienti:
+            _italic_body(doc, "Nessun ambiente di lavoro registrato.")
+        else:
             # Phase 8.2 — bucket attrezzature by ambiente_id once so each env
             # section gets its own slice. Anything without an ambiente_id is
             # silently skipped here (it still appears in the global Part I
@@ -2800,9 +2573,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 for slug, _ in (extras.get("allegati_presenti") or [])
             )
             persone_by_id = {getattr(p, "id", None): p for p in persone}
-            for index, ambiente in enumerate(ambienti):
-                env_attrezzature = attrezzature_by_ambiente.get(ambiente.id, [])
-                env_foto = foto_by_ambiente.get(ambiente.id, [])
+            for ambiente in ambienti:
                 # VDT-esposti workers in this ambiente trigger a synthetic row
                 # in the Agenti Fisici risk table referencing art. 174 + the
                 # Allegato VDT (audit F-007).
@@ -2815,49 +2586,40 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                     doc,
                     ambiente,
                     persone_by_id,
-                    env_attrezzature,
-                    env_foto,
+                    attrezzature_by_ambiente.get(ambiente.id, []),
+                    foto_by_ambiente.get(ambiente.id, []),
                     persone,
                     vdt_in_env,
-                    azienda=azienda if index == 0 else None,
-                    part_heading=part_label if index == 0 else None,
-                    part_label=part_label if index > 0 else None,
                     gestanti_allegato_presente=gestanti_presente,
                 )
 
-        # Trailing Part III sections — driven by persone + extras.
-        self._add_mansioni_rischi_specifici_section(
-            doc,
-            persone,
-            extras,
-            part_heading=first_tail_part_heading,
-            azienda=azienda if not ambienti else None,
-            no_environment=not ambienti,
-        )
-        self._add_dpi_per_mansione_section(doc, persone, extras)
+        self._add_mansioni_rischi_specifici_section(doc, persone, extras)
+        self._add_dpi_per_persona_section(doc, persone, extras)
         self._add_segnaletica_section(doc)
         self._add_formazione_programma_section(doc, persone)
 
     def _add_azienda_header_table(self, doc: Document, azienda) -> None:
-        """Template Table 23 — Azienda / Sede identity block (once, at top of Parte III)."""
+        """The light identity strip (Template Tables 3/23): Azienda, Sede
+        Legale and Sede Operativa, each seat on two lines — street, then
+        "CAP Comune (PROV)" — as in N2O's model.
+
+        It prints on rows 4 and 5 only: the model dropped the copies that
+        opened Parts II–IV and every environment.
+        """
         rows = [
             ("Azienda", (azienda.ragione_sociale or "—").upper()),
-            ("Sede Legale", azienda.sede_legale_via or "—"),
-            # CAP + provincia folded into the comune line (audit F-301).
-            ("Sede Legale", self._format_address(
-                None, azienda.sede_legale_citta,
+            ("Sede Legale", self._format_seat_lines(
+                azienda.sede_legale_via, azienda.sede_legale_citta,
                 getattr(azienda, "cap_legale", None),
                 getattr(azienda, "provincia_legale", None),
             )),
         ]
         if azienda.sede_operativa_via or azienda.sede_operativa_citta:
-            rows.append(
-                ("Sede Operativa", self._format_address(
-                    azienda.sede_operativa_via, azienda.sede_operativa_citta,
-                    getattr(azienda, "cap_operativa", None),
-                    getattr(azienda, "provincia_operativa", None),
-                ))
-            )
+            rows.append(("Sede Operativa", self._format_seat_lines(
+                azienda.sede_operativa_via, azienda.sede_operativa_citta,
+                getattr(azienda, "cap_operativa", None),
+                getattr(azienda, "provincia_operativa", None),
+            )))
         # Issue #11 (2026-05-14): when the client has more than one
         # operating address, list the extras as additional rows under the
         # "Altre sedi operative" label. The list is whatever the operator
@@ -2868,7 +2630,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         for sede in extras:
             if not isinstance(sede, dict):
                 continue
-            line = self._format_address(
+            line = self._format_seat_lines(
                 sede.get("via"),
                 sede.get("citta") or sede.get("comune"),
                 sede.get("cap"),
@@ -2876,7 +2638,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             )
             if line and line != "—":
                 rows.append(("Altre sedi operative", line))
-        self._add_key_value_table(doc, rows)
+        self._add_key_value_table(doc, rows, variant="light")
 
     def _add_environment_section(
         self,
@@ -2888,61 +2650,36 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         employee_persons: list,
         vdt_count: int = 0,
         *,
-        azienda=None,
-        part_heading: str | None = None,
-        part_label: str | None = None,
         gestanti_allegato_presente: bool = False,
     ) -> None:
-        """Render the env section for a single environment.
+        """One environment (row 20), in the order of Template Tables 24–33:
 
-        Phase 8.2 — DVR esploso per ambiente: now also lists the
-        attrezzature present in this ambiente (the global Part I inventory
-        stays in place; this is the per-env slice the operator asked for).
-
-        Order mirrors tables 24–33 in the template:
-          1. Identity (Table 24) — ambiente / preposto / descrizione.
-          2. Addetti (Table 25) — nominativo / mansione.
-          3. Attrezzature presenti in questo ambiente (Phase 8.2).
-          4. Foto/planimetrie (when AmbienteFoto rows exist).
-          5. Risk-category checklist (Table 26) — SI/NO per macro-area.
-          6. One 5-col risk table per applicable macro-category.
+          1. its name as the title, then identity (Table 24) and addetti
+             (Table 25);
+          2. new page: the machines, equipment and plant in this ambiente
+             (Phase 8.2, the per-env slice of the Part I inventory);
+          3. new page: photos and plans, when AmbienteFoto rows exist;
+          4. new page: the risk-category checklist (Table 26);
+          5. one page per applicable risk category (Tables 27+).
         """
         nome_ambiente = (ambiente.nome or "—").upper()
-        self._add_topic_separator(
-            doc,
-            f"Identificazione dell'Ambiente di Lavoro e degli Addetti — {nome_ambiente}",
-            part_heading=part_heading,
-            part_label=part_label,
-        )
-
-        if azienda is not None:
-            self._add_azienda_header_table(doc, azienda)
-            doc.add_paragraph("")
-
+        add_section_title(doc, nome_ambiente)
         self._add_env_identity_table(doc, ambiente, persone_by_id)
-        doc.add_paragraph("")
+        _gap(doc, space_pt=14)
         self._add_env_addetti_table(doc, ambiente, employee_persons)
-        doc.add_paragraph("")
 
-        # Phase 8.2 — Attrezzature per ambiente. Reuses the same column
-        # shape as the global Part I inventory so the visual pattern is
-        # consistent. Empty slice → single placeholder row.
-        doc.add_heading(
-            f"Macchine, Attrezzature ed Impianti — {nome_ambiente}",
-            level=3,
+        add_sub_title(
+            doc, f"Macchine, Attrezzature ed Impianti — {nome_ambiente}", new_page=True
         )
         self._add_env_attrezzature_table(doc, attrezzature)
-        doc.add_paragraph("")
 
         if foto:
             self._add_env_foto_block(doc, nome_ambiente, foto)
 
-        doc.add_heading(
-            f"Identificazione dei Fattori di Rischio — {nome_ambiente}",
-            level=3,
+        add_sub_title(
+            doc, f"Identificazione dei Fattori di Rischio — {nome_ambiente}", new_page=True
         )
         self._add_env_risk_checklist(doc, ambiente)
-        doc.add_paragraph("")
 
         self._add_env_risk_tables(
             doc,
@@ -2954,11 +2691,12 @@ class DVRMasterGenerator(BaseDocumentGenerator):
     def _add_env_foto_block(
         self, doc: Document, nome_ambiente: str, foto: list
     ) -> None:
-        """Embed up to ten saved photos, preferring shared database bytes."""
-        doc.add_heading(
-            f"Foto e Planimetrie — {nome_ambiente}", level=3
-        )
-        embedded_count = 0
+        """Up to ten saved photos on a new page, each fitted into 12 × 9 cm
+        and framed, without the "Fig. N — filename" captions N2O removed.
+        Shared database bytes come before the local file; a photo with no
+        readable source prints a filename-specific marker for the reviewer.
+        """
+        add_sub_title(doc, f"Foto e Planimetrie — {nome_ambiente}", new_page=True)
         for photo in foto[:10]:
             safe_name = Path(
                 str(getattr(photo, "filename", None) or photo.id).replace("\\", "/")
@@ -2967,9 +2705,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             warned = False
             for source in _photo_image_sources(photo):
                 paragraph = doc.add_paragraph()
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                paragraph.alignment = _CENTER
+                paragraph.paragraph_format.space_before = Pt(6)
+                paragraph.paragraph_format.space_after = Pt(6)
                 try:
-                    paragraph.add_run().add_picture(source, width=Cm(12))
+                    _add_fitted_picture(paragraph, source, _ENV_PHOTO_BOX_CM)
                 except Exception:
                     paragraph._element.getparent().remove(paragraph._element)
                     warned = True
@@ -2982,23 +2722,16 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                     )
                     continue
                 embedded = True
-                embedded_count += 1
-                caption = doc.add_paragraph()
-                caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                cap_run = caption.add_run(
-                    f"Fig. {embedded_count} — {safe_name}"
-                )
-                cap_run.font.italic = True
-                cap_run.font.size = Pt(9)
-                cap_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
                 break
             if embedded:
                 continue
             marker = doc.add_paragraph()
-            marker_run = marker.add_run(f"[Foto non disponibile: {safe_name}]")
-            marker_run.font.italic = True
-            marker_run.font.size = Pt(9)
-            marker_run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+            set_run_font(
+                marker.add_run(f"[Foto non disponibile: {safe_name}]"),
+                size=TYPE_SCALE["note"],
+                italic=True,
+                color=NOTE_GREY,
+            )
             if not warned:
                 logger.warning(
                     "DVR photo unavailable",
@@ -3007,235 +2740,171 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                         "photo_filename": safe_name,
                     },
                 )
-        doc.add_paragraph("")
 
     # ------------------------------------------------------------------
-    # Part III tail — mansioni rischi specifici, DPI, segnaletica, formazione
+    # Parte III tail — rows 21–24: mansioni, DPI, segnaletica, formazione
     # ------------------------------------------------------------------
 
     def _add_mansioni_rischi_specifici_section(
-        self,
-        doc: Document,
-        persone: list,
-        extras: dict,
-        *,
-        part_heading: str | None = None,
-        azienda=None,
-        no_environment: bool = False,
+        self, doc: Document, persone: list, extras: dict
     ) -> None:
-        """Emit the "Mansioni che espongono i lavoratori a rischi specifici"
-        table required by the template tail (DOCUMENT_STRUCTURE.md §3.N+1).
+        """Row 21 — MANSIONI CHE ESPONGONO I LAVORATORI A RISCHI SPECIFICI
+        (DOCUMENT_STRUCTURE.md §3.N+1), on its own divider.
 
-        Driven by per-persona signals, retaining one row per exposed
-        employee so people with the same mansione do not inherit each
-        other's risks.
-
-        Sources, per persona:
+        One row per exposed employee, so people with the same mansione do
+        not inherit each other's risks; the risks are a bulleted list in the
+        cell, as in N2O's model. Sources, per persona:
           - VDT esposti (>= 20h/week → "Videoterminali" rischio specifico)
           - persona.attrezzature_speciali codes (each maps to a rischio)
           - persona.rischi_specifici_codes ticked in the wizard
         """
-        self._add_topic_separator(
-            doc,
-            "Mansioni che espongono i lavoratori a rischi specifici",
-            part_heading=part_heading,
-            part_label=(
-                None
-                if part_heading
-                else "PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO"
-            ),
+        add_divider(
+            doc, "MANSIONI CHE ESPONGONO I LAVORATORI A RISCHI SPECIFICI", "div_mansioni"
         )
-
-        if azienda is not None:
-            self._add_azienda_header_table(doc, azienda)
-            doc.add_paragraph("")
-        if no_environment:
-            notice = doc.add_paragraph("Nessun ambiente di lavoro registrato.")
-            notice.runs[0].font.italic = True
-
-        headers = ["Nominativo", "Mansione", "Rischio specifico"]
-        rows = []
         vdt_ids = extras.get("vdt_esposti_persona_ids", set())
-        for person in persone:
-            labels = _person_specific_risk_labels(person, vdt_ids)
-            if labels:
-                rows.append([
+        exposed = [
+            (person, labels)
+            for person in persone
+            if (labels := _person_specific_risk_labels(person, vdt_ids))
+        ]
+        if not exposed:
+            add_body_paragraph(
+                doc, "Nessun lavoratore esposto a rischi specifici configurato."
+            )
+            return
+
+        table = self._add_data_table(
+            doc,
+            ["Nominativo", "Mansione", "Rischio specifico"],
+            [
+                [
                     (getattr(person, "nominativo", None) or "—").upper(),
                     (getattr(person, "mansione", None) or "—").upper(),
-                    "; ".join(labels),
-                ])
-        if rows:
-            self._add_data_table(doc, headers, rows)
-        else:
-            doc.add_paragraph(
-                "Nessun lavoratore esposto a rischi specifici configurato."
-            )
-        doc.add_paragraph("")
+                    "",
+                ]
+                for person, _labels in exposed
+            ],
+            widths=[4.8, 4.2, 7.5],
+        )
+        for row, (_person, labels) in zip(table.rows[1:], exposed):
+            _bullet_cell(row.cells[2], labels)
 
-    def _add_dpi_per_mansione_section(
+    def _add_dpi_per_persona_section(
         self, doc: Document, persone: list, extras: dict
     ) -> None:
-        """Emit one DPI grid per mansione, listing the codes the operator
-        has ticked on each persona in the wizard.
+        """Row 22 — DISPOSITIVI DI PROTEZIONE INDIVIDUALE (DPI), on its own
+        divider: one sub-title per employee (the name in capitals, in the
+        index, in saved order) over that person's own DPI — the codes ticked
+        on the persona in the wizard — as in N2O's model (pp. 56–57). Two
+        people with the same mansione keep their own tables.
 
-        Aggregates per-persona ``dpi_codes`` up to mansione (union). When
-        the persone with the same mansione have divergent DPI selections,
-        a "varia per lavoratore" note is appended so the operator and
-        the Medico del Lavoro know to consult the per-persona detail.
-
-        Every mansione listed in T109 gets its own DPI sub-section. For
-        mansioni without explicit DPI selections (typically VDT/office
-        roles), an explicit "Nessun DPI specifico" row is emitted instead
-        of silent omission — required by art. 12 D.Lgs. 151/2001 for
-        gestante workers and preferred by inspectors for traceability.
+        A person with no DPI gets an explicit "Nessun DPI specifico
+        richiesto" row instead of silent omission, so an inspector can tell
+        "no PPE for this worker, and why" from "this worker was forgotten".
+        The row cites the Allegato VDT only for a VDT worker (the survey's
+        VDT assessment, ``vdt_esposti_persona_ids``): nobody else is covered
+        by it. When the person's mansione names a gestante, the row cites the
+        art. 12 D.Lgs. 151/2001 measures, documented even when no PPE is
+        prescribed.
         """
         from app.services.reference_data import DPI_CATALOG
 
-        self._add_topic_separator(
-            doc,
-            "DPI in dotazione per Mansione",
-            part_label="PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO",
-        )
+        vdt_ids = extras.get("vdt_esposti_persona_ids", set())
+        add_divider(doc, "DISPOSITIVI DI PROTEZIONE INDIVIDUALE (DPI)", "div_dpi")
 
-        # Aggregate per-persona DPI codes up to mansione (union). Track
-        # every mansione that appears on a persona — even those without
-        # any DPI flags — so the rendered table mirrors T109.
-        mansione_codes: dict[str, set[str]] = {}
-        mansione_persona_codes: dict[str, list[frozenset[str]]] = {}
-        mansione_is_gestante: dict[str, bool] = {}
-        for p in persone:
-            nome = (p.mansione or "").strip()
-            if not nome:
-                continue
-            codes = list(getattr(p, "dpi_codes", None) or [])
-            mansione_codes.setdefault(nome, set()).update(codes)
-            mansione_persona_codes.setdefault(nome, []).append(frozenset(codes))
-            if getattr(p, "gestante", False) or "GESTANTE" in nome.upper():
-                mansione_is_gestante[nome] = True
-
-        mansioni: dict[str, list[str]] = {
-            nome: sorted(codes) for nome, codes in mansione_codes.items()
-        }
-
-        if not mansioni:
-            p = doc.add_paragraph()
-            run = p.add_run(
-                "Le matrici DPI per mansione sono in fase di compilazione "
-                "tramite la procedura di Sorveglianza Sanitaria. Nel "
-                "frattempo, i DPI sono assegnati in base alla valutazione "
-                "dei rischi descritta in Parte III e secondo quanto "
-                "previsto al §4.8."
+        if not persone:
+            _italic_body(
+                doc,
+                "Le dotazioni DPI per lavoratore sono in fase di compilazione. "
+                "Nel frattempo, i DPI sono assegnati in base alla valutazione "
+                "dei rischi descritta in Parte III e secondo la procedura "
+                "di gestione dei DPI della Parte IV.",
             )
-            run.font.size = Pt(10)
-            run.font.italic = True
-            doc.add_paragraph("")
             return
 
-        for mansione, codes in sorted(mansioni.items()):
-            doc.add_heading(mansione.upper(), level=3)
+        for person in sorted(persone, key=_saved_order_key):
+            add_sub_title(doc, (person.nominativo or "").strip().upper() or "—")
 
-            persona_sets = mansione_persona_codes.get(mansione, [])
-            distinct_nonempty = {s for s in persona_sets if s}
-            varia = len(distinct_nonempty) > 1
-            if varia:
-                p = doc.add_paragraph()
-                run = p.add_run(
-                    "Nota: la dotazione DPI varia tra i lavoratori con "
-                    "questa mansione — la tabella riporta l'unione delle "
-                    "selezioni. Per l'assegnazione individuale fare "
-                    "riferimento alla scheda persona."
-                )
-                run.font.size = Pt(9)
-                run.font.italic = True
-
-            rows = []
             # Group by area so the table mirrors the DPI catalog layout.
             # Spec §3.N+2 requires Descrizione | Marca/Modello | Note;
             # Marca/Modello and Note are operator-completed at first audit
             # so we emit a defensible placeholder rather than blanks.
             by_area: dict[str, list[str]] = {}
-            for code in codes:
+            for code in sorted(set(getattr(person, "dpi_codes", None) or [])):
                 meta = DPI_CATALOG.get(code) or {}
-                area = meta.get("area", "Altro")
-                etichetta = meta.get("etichetta", code)
-                by_area.setdefault(area, []).append(etichetta)
-            for area in sorted(by_area.keys()):
-                rows.append([
-                    f"{area}: {'; '.join(sorted(by_area[area]))}",
+                by_area.setdefault(meta.get("area", "Altro"), []).append(
+                    meta.get("etichetta", code)
+                )
+            rows = [
+                [
+                    f"{area}: {'; '.join(sorted(labels))}",
                     "Da definire al primo audit DPI",
                     "Conforme a Reg. UE 2016/425; verifica annuale",
-                ])
+                ]
+                for area, labels in sorted(by_area.items())
+            ]
             if not rows:
-                # No DPI codes selected for any persona under this mansione
-                # (typically VDT/office roles). Emit an explicit "no DPI"
-                # row rather than dropping the section silently. For gestante
-                # workers art. 12 D.Lgs. 151/2001 requires documented
-                # protective measures even when no PPE is prescribed.
-                is_gestante = mansione_is_gestante.get(mansione, False)
-                descrizione = (
+                gestante = "GESTANTE" in (person.mansione or "").upper()
+                allegato_vdt = (
+                    " (allegato VDT)" if getattr(person, "id", None) in vdt_ids else ""
+                )
+                rows.append([
                     "Nessun DPI specifico richiesto — esposizione "
                     "limitata; tutela attraverso ergonomia della "
-                    "postazione, sorveglianza sanitaria periodica "
-                    "(allegato VDT) e formazione."
-                )
-                note = (
+                    f"postazione, sorveglianza sanitaria periodica{allegato_vdt} "
+                    "e formazione.",
+                    "—",
                     "Misure di tutela art. 12 D.Lgs. 151/2001 — "
                     "rimozione dei rischi ex Allegati A/B/C; "
                     "se non rimovibili, modifica orario o mansione."
-                    if is_gestante
-                    else "Sorveglianza sanitaria e formazione ex art. 36-37 D.Lgs. 81/2008."
-                )
-                rows.append([descrizione, "—", note])
+                    if gestante
+                    else "Sorveglianza sanitaria e formazione ex art. 36-37 D.Lgs. 81/2008.",
+                ])
             dpi_table = self._add_data_table(
                 doc,
                 headers=["Descrizione DPI", "Marca / Modello", "Note"],
                 rows=rows,
+                widths=[7.0, 4.5, 5.0],
+                v_center=False,
             )
             _center_dpi_brand_model_placeholders(dpi_table)
-            doc.add_paragraph("")
 
     def _add_segnaletica_section(self, doc: Document) -> None:
-        """Static reference to the segnaletica di sicurezza obligation
-        (D.Lgs. 81/2008 art. 161-166, Allegato XXIV-XXXII).
-
-        Lists the four canonical sign categories with color/shape mapping.
+        """Row 23 — SEGNALETICA DI SICUREZZA (D.Lgs. 81/2008 art. 161-166,
+        Allegato XXIV-XXXII), on its own divider: the colour code, the sign
+        shapes and the five sign panels N2O added, two per page.
         """
-        self._add_topic_separator(
-            doc,
-            "Segnaletica di Sicurezza",
-            part_label="PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO",
-        )
+        add_divider(doc, "SEGNALETICA DI SICUREZZA", "div_segnaletica")
 
-        p = doc.add_paragraph()
-        run = p.add_run(
+        _italic_body(
+            doc,
             "L'azienda adotta segnaletica di sicurezza conforme al D.Lgs. "
             "81/2008 (artt. 161-166, allegati XXIV-XXXII) per richiamare "
             "l'attenzione su rischi residui, divieti, prescrizioni e "
-            "indicazioni di emergenza."
+            "indicazioni di emergenza.",
         )
-        run.font.size = Pt(10)
 
         # Tabella 105 — Codifica cromatica (Allegato XXV D.Lgs. 81/2008).
         # Mappa colore -> significato e indicazioni d'uso.
-        doc.add_heading("Codifica cromatica della segnaletica", level=3)
+        add_sub_title(doc, "CODIFICA CROMATICA DELLA SEGNALETICA")
         color_rows = [
             ["Rosso", "Divieto", "Atteggiamenti pericolosi", "Stop, dispositivi di interruzione, sgombero"],
             ["Rosso", "Pericolo / allarme", "Identificazione attrezzature antincendio", "Estintori, idranti, punto di raccolta"],
             ["Giallo o giallo-arancio", "Avvertimento", "Attenzione, cautela, verifica", "Pericolo elettrico, infiammabile, biologico"],
             ["Azzurro", "Prescrizione", "Comportamento o azione specifica, obbligo DPI", "Obbligo casco, guanti, occhiali, otoprotettori"],
             ["Verde", "Salvataggio / soccorso", "Porte, uscite, percorsi, materiali, postazioni, locali", "Uscita di emergenza, cassetta primo soccorso, defibrillatore"],
-            ["Verde", "Situazione di sicurezza", "Ritorno alla normalita", "Punto di raccolta evacuazione"],
+            ["Verde", "Situazione di sicurezza", "Ritorno alla normalità", "Punto di raccolta evacuazione"],
         ]
         self._add_data_table(
             doc,
             headers=["Colore", "Significato", "Indicazioni e precisazioni", "Esempi"],
             rows=color_rows,
+            centred_columns=(0,),
         )
-        doc.add_paragraph("")
 
         # Tabella 106 — Forma dei cartelli (Allegato XXIV D.Lgs. 81/2008).
         # Mappa forma + colore -> categoria di cartello.
-        doc.add_heading("Forma e categorie dei cartelli", level=3)
+        add_sub_title(doc, "FORMA E CATEGORIE DEI CARTELLI", new_page=True)
         shape_rows = [
             ["Cartelli di divieto", "Tonda", "Pittogramma nero su fondo bianco; bordo e banda diagonale rossi", "Vietato fumare; vietato l'accesso ai non addetti; vietato spegnere con acqua"],
             ["Cartelli di avvertimento", "Triangolare", "Pittogramma nero su fondo giallo; bordo nero", "Pericolo elettrico; materiale infiammabile; carichi sospesi; rischio biologico"],
@@ -3249,19 +2918,46 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             headers=["Categoria", "Forma", "Colori e caratteristiche", "Esempi"],
             rows=shape_rows,
         )
-        doc.add_paragraph("")
+
+        self._add_sign_panels(doc)
+
+    def _add_sign_panels(self, doc: Document) -> None:
+        """The five sign panels of N2O's model, two per page: a caption (out
+        of the index) over the panel at 15.3 cm. A panel whose own artwork
+        is missing is left out rather than shown with another picture."""
+        placed = 0
+        for key, title in _SIGN_PANELS:
+            # The resolver says which manifest key it used: anything but the
+            # panel's own key is the generic divider standing in for it.
+            resolved = resolve_art(key)
+            if resolved is None or resolved[0] != key:
+                logger.warning("Sign panel %r has no artwork; panel left out", key)
+                continue
+            path = resolved[1]
+            caption = add_sub_title(doc, title, in_toc=False, new_page=placed % 2 == 0)
+            picture = doc.add_paragraph()
+            picture.alignment = _CENTER
+            picture.paragraph_format.line_spacing = 1.0
+            picture.paragraph_format.space_after = Pt(6)
+            try:
+                picture.add_run().add_picture(str(path), width=Cm(_SIGN_PANEL_WIDTH_CM))
+            except Exception:
+                for paragraph in (picture, caption):
+                    paragraph._p.getparent().remove(paragraph._p)
+                logger.warning("Sign panel %r could not be embedded; panel left out", key, exc_info=True)
+                continue
+            placed += 1
 
     def _add_formazione_programma_section(
         self, doc: Document, persone: list
     ) -> None:
-        """Programma di Formazione, Informazione ed Addestramento (template
-        §3.N+4). Driven by mansione/ruolo so the operator gets a starter
-        grid covering the Accordo Stato-Regioni 21/12/2011 obligations.
+        """Row 24 — PROGRAMMA DI INFORMAZIONE, FORMAZIONE E ADDESTRAMENTO
+        (template §3.N+4), on its own divider. Driven by mansione/ruolo so
+        the operator gets a starter grid covering the Accordo Stato-Regioni
+        21/12/2011 obligations.
         """
-        self._add_topic_separator(
-            doc,
-            "Programma di Informazione, Formazione e Addestramento",
-            part_label="PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO",
+        add_divider(
+            doc, "PROGRAMMA DI INFORMAZIONE, FORMAZIONE E ADDESTRAMENTO", "div_formazione"
         )
 
         # Feedback #3 (2026-05-19): surface the current training-completion
@@ -3274,18 +2970,19 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             )
             pending = total - done
             if pending == 0:
-                doc.add_paragraph(
+                status = (
                     f"Stato formazione attuale: tutti i {total} lavoratori "
                     "hanno completato la formazione più recente."
                 )
             else:
                 noun = "lavoratore" if pending == 1 else "lavoratori"
                 verb = "necessita" if pending == 1 else "necessitano"
-                doc.add_paragraph(
+                status = (
                     f"Stato formazione attuale: {done}/{total} lavoratori "
-                    f"hanno completato la formazione piu recente; "
+                    f"hanno completato la formazione più recente; "
                     f"{pending} {noun} {verb} di aggiornamento."
                 )
+            _italic_body(doc, status).paragraph_format.space_after = Pt(8)
 
         rows: list[list[str]] = []
 
@@ -3372,13 +3069,14 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             doc,
             headers=["Destinatari", "Tipologia", "Durata", "Contenuti", "Cadenza"],
             rows=rows,
+            widths=[3.3, 3.0, 2.4, 4.6, 3.2],
         )
-        doc.add_paragraph("")
 
     def _add_env_attrezzature_table(
         self, doc: Document, attrezzature: list
     ) -> None:
-        """Per-ambiente equipment table (Phase 8.2)."""
+        """Row 20a — the machines, equipment and plant of one environment
+        (Phase 8.2)."""
         headers = [
             "Macchine, Attrezzature ed Impianti",
             "Marcata CE",
@@ -3395,12 +3093,16 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 ]
                 for a in attrezzature
             ]
-        self._add_data_table(doc, headers, rows)
+        table = self._add_data_table(doc, headers, rows, widths=[9.5, 3.0, 4.0])
+        for row in table.rows[1:]:
+            for cell in row.cells[1:]:
+                for paragraph in cell.paragraphs:
+                    paragraph.alignment = _CENTER
 
     def _add_env_identity_table(
         self, doc: Document, ambiente, persone_by_id: dict
     ) -> None:
-        """Template Table 24 — DYNAMIC key-value block for the environment.
+        """Template Table 24 — the environment's blue key/value block.
 
         Preposto resolution order:
           1. ``ambiente.preposto_id`` (explicit assignment)
@@ -3440,7 +3142,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             ("Preposto per la sicurezza", preposto_name),
             ("Descrizione Attività", descrizione),
         ])
-        self._add_key_value_table(doc, rows)
+        self._add_key_value_table(doc, rows, variant="blue")
 
     def _add_env_addetti_table(
         self, doc: Document, ambiente, employee_persons: list
@@ -3462,11 +3164,11 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         self._add_data_table(doc, headers=["Nominativo Addetti", "Mansione"], rows=rows)
 
     def _add_env_risk_checklist(self, doc: Document, ambiente) -> None:
-        """Template Table 26 — 14-row SI/NO checklist for the 11 risk categories.
+        """Row 20c — Template Table 26: the SI/NO checklist of the 11 risk
+        categories under their three macro-area rows.
 
-        Row layout: macro-area label row, then its categories with SI/NO
-        derived from whether at least one applicable valutazione_rischio
-        exists with that categoria in this ambiente.
+        A category reads SI when at least one applicable valutazione_rischio
+        of that categoria exists in this ambiente.
         """
         # Normalize short DB names ("Elettrici") to canonical long names
         # ("Impianti Elettrici") so the lookup against _CATEGORY_ORDER keys
@@ -3486,48 +3188,30 @@ class DVRMasterGenerator(BaseDocumentGenerator):
 
         table = doc.add_table(rows=1, cols=2)
         table.style = "Table Grid"
-
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
         header_row = table.rows[0]
-        for i, text in enumerate(["Categoria di Rischio", "Applicabile"]):
-            cell = header_row.cells[i]
-            cell.text = ""
-            p = cell.paragraphs[0]
-            run = p.add_run(text)
-            run.bold = True
-            run.font.size = Pt(9)
-            run.font.color.rgb = _HEADER_TEXT
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            self._set_cell_bg(cell, _HEADER_BG)
+        for cell, text in zip(header_row.cells, ["Categoria di Rischio", "Applicabile"]):
+            write_cell(cell, text)
+        style_header_row(header_row)
 
         current_macro = None
         for macro, categoria in _CATEGORY_ORDER:
             if macro != current_macro:
                 macro_row = table.add_row()
                 merged = macro_row.cells[0].merge(macro_row.cells[1])
-                merged.text = ""
-                p = merged.paragraphs[0]
-                run = p.add_run(macro)
-                run.bold = True
-                run.font.size = Pt(9)
-                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                self._set_cell_bg(merged, _LIGHT_GRAY)
+                write_cell(merged, macro, bold=True, color=BRAND_NAVY)
+                shade_cell(merged, BRAND_SURFACE_HEX)
+                # A short label row: kept whole and with the first category.
+                keep_row_together(macro_row)
+                for paragraph in merged.paragraphs:
+                    paragraph.paragraph_format.keep_with_next = True
                 current_macro = macro
 
             row = table.add_row()
-            cell_label = row.cells[0]
-            cell_label.text = ""
-            p = cell_label.paragraphs[0]
-            run = p.add_run(categoria)
-            run.font.size = Pt(9)
-
-            cell_flag = row.cells[1]
-            cell_flag.text = ""
-            p = cell_flag.paragraphs[0]
+            write_cell(row.cells[0], categoria)
             flag = "SI" if categoria in applicable_categories else "NO"
-            run = p.add_run(flag)
-            run.font.size = Pt(9)
-            run.bold = True
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            write_cell(row.cells[1], flag, align=_CENTER)
+        set_table_borders(table)
 
     def _add_env_risk_tables(
         self,
@@ -3537,8 +3221,9 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         *,
         gestanti_allegato_presente: bool = False,
     ) -> None:
-        """Template Tables 27+ — one 5-col (PERICOLO/CONDIZIONI/RISCHIO/MISURE/I)
-        table per applicable macro-category, emitted in the canonical order.
+        """Row 20d — Template Tables 27+: one 5-col (PERICOLO/CONDIZIONI/
+        RISCHIO/MISURE/I) table per applicable macro-category, in the
+        canonical order, each on a new page under its caption.
 
         ``vdt_count``: when > 0, the Agenti Fisici table is force-emitted
         (even if no other agente fisico is applicable) and a synthetic VDT
@@ -3573,10 +3258,10 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         trailing = [k for k in by_category.keys() if k not in ordered_keys]
 
         if not ordered_keys and not trailing:
-            p = doc.add_paragraph(
-                "Nessun rischio applicabile identificato per questo ambiente."
+            notice = _italic_body(
+                doc, "Nessun rischio applicabile identificato per questo ambiente."
             )
-            p.runs[0].font.italic = True
+            notice.paragraph_format.space_before = Pt(12)
             return
 
         for cat_name in ordered_keys + trailing:
@@ -3589,7 +3274,6 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 vdt_count=vdt_count,
                 gestanti_allegato_presente=gestanti_allegato_presente,
             )
-            doc.add_paragraph("")
 
     def _add_single_category_risk_table(
         self,
@@ -3601,7 +3285,9 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         *,
         gestanti_allegato_presente: bool = False,
     ) -> None:
-        """5-col risk table for a single category (Template Tables 27–33 shape).
+        """5-col risk table for a single category (Template Tables 27–33
+        shape), on a new page under the category caption, which stays out
+        of the index.
 
         When ``inject_vdt`` is True a synthetic videoterminali pericolo row
         is appended at the end. The synthetic row references art. 174
@@ -3609,11 +3295,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         P=2 D=2 I=6 MODESTO by default — operators tune the score in the
         Allegato VDT and the next regeneration picks up the real values.
         """
-        p = doc.add_paragraph()
-        run = p.add_run(categoria.upper())
-        run.bold = True
-        run.font.size = Pt(10)
-        run.font.color.rgb = _HEADER_BG
+        add_sub_title(doc, categoria.upper(), in_toc=False, new_page=True)
 
         headers = [
             "PERICOLO",
@@ -3629,21 +3311,6 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             # the other.
             "I = P + 2*D",
         ]
-        table = doc.add_table(rows=1, cols=len(headers))
-        table.alignment = WD_TABLE_ALIGNMENT.CENTER
-        table.style = "Table Grid"
-
-        header_row = table.rows[0]
-        for i, text in enumerate(headers):
-            cell = header_row.cells[i]
-            cell.text = ""
-            hp = cell.paragraphs[0]
-            hrun = hp.add_run(text)
-            hrun.bold = True
-            hrun.font.size = Pt(8)
-            hrun.font.color.rgb = _HEADER_TEXT
-            hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            self._set_cell_bg(cell, _HEADER_BG)
 
         # ``risks`` already contains the effective child rows (or a legacy
         # childless parent) selected by ``_add_env_risk_tables``.
@@ -3679,6 +3346,8 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                     valutazione_riferimento=None,
                 ))
 
+        rows: list[list[str]] = []
+        levels: list[str | None] = []
         for source in rows_to_emit:
             p_val = source.probabilita_p
             d_val = source.danno_d
@@ -3688,44 +3357,36 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             )
             if p_val is not None and d_val is not None:
                 result = calculate_risk_index(p_val, d_val)
-                indice = result["indice_i"]
                 livello = result["livello_rischio"]
-                indice_text = f"P = {p_val}; D = {d_val}; I = {indice}; {livello}"
+                indice_text = f"P = {p_val}; D = {d_val}; I = {result['indice_i']}; {livello}"
             elif riferimento:
                 livello = None
                 indice_text = riferimento
             else:
                 livello = None
                 indice_text = "—"
-
-            row = table.add_row()
-            values = [
+            rows.append([
                 source.pericolo or "—",
                 source.condizioni_esposizione or "—",
                 source.rischio or "—",
                 source.misure_prevenzione or "—",
                 indice_text,
-            ]
-            for i, text in enumerate(values):
-                cell = row.cells[i]
-                cell.text = ""
-                cp = cell.paragraphs[0]
-                crun = cp.add_run(text)
-                crun.font.size = Pt(8)
-                if i == 4:
-                    cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                    if livello and livello in _RISK_COLORS:
-                        self._set_cell_bg(cell, _RISK_COLORS[livello])
-                        crun.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-                        crun.bold = True
+            ])
+            levels.append(livello)
 
-        widths = [Cm(3.5), Cm(4.0), Cm(3.0), Cm(4.5), Cm(3.5)]
-        for row in table.rows:
-            for i, width in enumerate(widths):
-                row.cells[i].width = width
+        table = self._add_data_table(
+            doc, headers, rows, widths=[3.0, 3.3, 2.9, 4.3, 3.0], v_center=False
+        )
+        for row, livello in zip(table.rows[1:], levels):
+            index_cell = row.cells[4]
+            index_cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+            for paragraph in index_cell.paragraphs:
+                paragraph.alignment = _CENTER
+            if livello:
+                level_cell(index_cell, livello)
 
     # ------------------------------------------------------------------
-    # Part IV — Improvement measures (Template Tables 108, 109, 110)
+    # Parte IV — rows 25–28 (Template Tables 108, 109, 110)
     # ------------------------------------------------------------------
 
     def _add_part_iv(
@@ -3735,63 +3396,44 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         persone: list,
         employee_persons: list,
         extras: dict,
+        generated_at: datetime | None = None,
     ) -> None:
-        """Parte IV — programma di miglioramento, procedure operative §4.2–4.13,
-        cross-references agli allegati applicabili, Dichiarazione del Datore
-        di Lavoro, blocco firme.
+        """Parte IV — PROGRAMMA DI MIGLIORAMENTO, every section on a divider
+        (DVR_TEMPLATE_MAPPING.md §10):
 
-        Structure mirrors the master template (DVR_TEMPLATE_MAPPING.md §10):
-          §4.1  Programma di Miglioramento (Table 108 + Table 109 — real rows)
-          §4.2  Gestione Leggi e Regolamenti
-          §4.3  Gestione Sorveglianza Sanitaria
-          §4.4  Gestione Informazione, Formazione ed Addestramento
-          §4.5  Riunione Periodica
-          §4.6  Gestione degli Infortuni
-          §4.7  Gestione Comportamenti Scorretti
-          §4.8  Gestione DPI
-          §4.9  Gestione Infrastrutture
-          §4.10 Lavoratori particolarmente sensibili al rischio
-          §4.11 Gestione Acquisti
-          §4.12 Gestione delle lavorazioni affidate in appalto
-          (Documenti correlati al presente DVR — list of applicable allegati)
-          §4.13 Dichiarazione del Datore di Lavoro
-          (signature grid Table 110)
+          row 25  PROGRAMMA E PROCEDURE DI ATTUAZIONE DELLE MISURE DI
+                  MIGLIORAMENTO under the part label: intro + Table 109
+          row 26  the 11 GESTIONE procedures (the template's §4.2–4.12);
+                  GESTIONE SORVEGLIANZA SANITARIA adds the per-mansione
+                  protocol and the occupational diseases
+          row 27  DOCUMENTI CORRELATI AL PRESENTE DVR
+          row 28  DICHIARAZIONE DEL DATORE DI LAVORO and the signature grid
+                  (Table 110)
         """
-        part_label = "PARTE IV — PROGRAMMA DI MIGLIORAMENTO"
-
-        self._add_topic_separator(
-            doc,
-            "4.1 Programma e Procedure di attuazione delle Misure di Miglioramento",
-            part_heading=part_label,
+        add_divider(
+            doc, _IMPROVEMENT_TITLE, "div_miglioramento", part_label=_PART_IV_LABEL
         )
-
-        # Template Table 108 — Azienda header
-        self._add_azienda_header_table(doc, azienda)
-        doc.add_paragraph("")
-        p = doc.add_paragraph()
-        run = p.add_run(
+        intro = _italic_body(
+            doc,
             "Il programma di miglioramento è definito sulla base delle "
             "criticità emerse dalla valutazione dei rischi. Le misure sono "
             "ordinate per priorità in funzione del livello di rischio: "
             "rischi GRAVISSIMI (I >= 9) richiedono intervento immediato, "
             "rischi GRAVI (I = 7-8) entro sei mesi, rischi MODESTI o "
-            "ACCETTABILI sono pianificati nel ciclo annuale di revisione."
+            "ACCETTABILI sono pianificati nel ciclo annuale di revisione.",
         )
-        run.font.size = Pt(10)
-        doc.add_paragraph("")
-
-        # Template Table 109 — Misure di miglioramento (7-col grid)
+        intro.paragraph_format.space_after = Pt(10)
         self._add_improvement_program_table(
             doc, extras.get("misure_miglioramento") or []
         )
 
-        # §4.2–4.12 — static procedural sections. After §4.3 we inject a
-        # mansione-level Sorveglianza Sanitaria protocol table aggregated
-        # from per-persona DPI + rischi flags (audit recommendation,
-        # post-fix 2026-04-29; persona-level data 2026-04-30).
+        # Row 26. GESTIONE SORVEGLIANZA SANITARIA carries the mansione-level
+        # protocol table aggregated from per-persona DPI + rischi flags
+        # (audit recommendation, post-fix 2026-04-29; persona-level data
+        # 2026-04-30).
         for spec in _PART_IV_PROCEDURAL_SECTIONS:
             self._add_procedural_section(doc, spec)
-            if spec.heading.startswith("4.3"):
+            if spec.art_key == "div_sorveglianza":
                 self._add_sorveglianza_protocol_table(
                     doc,
                     employee_persons,
@@ -3800,15 +3442,13 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                     else [],
                 )
 
-        # Cross-reference applicable allegati by name (audit F-016).
+        # Row 27 — applicable allegati by name (audit F-016).
         self._add_allegati_cross_references(
             doc, extras.get("allegati_presenti") or []
         )
 
-        # §4.13 — Dichiarazione del Datore di Lavoro (MIXED — names + date)
-        self._add_dichiarazione_ddl(doc, azienda, persone)
-
-        # Template Table 110 — Signature block (2×3)
+        # Row 28 — the binding declaration and the signature grid.
+        self._add_dichiarazione_ddl(doc, azienda, persone, generated_at)
         self._add_signature_table(doc, persone)
 
     def _add_sorveglianza_protocol_table(
@@ -3831,6 +3471,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         role is exposed to: the saved ``malattie_correlate`` when a protocol
         exists, else the reference-table rows matching the mansione's rischi
         codes (D.M. 9/4/2008), explicitly marked "da confermare dal MC".
+        Risks, DPI and diseases are bulleted lists in their cells.
 
         Falls back to a transparent "no data" paragraph when no persona
         carries any DPI/rischi flags and no protocol is saved.
@@ -3841,10 +3482,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             RISCHI_SPECIFICI_CATALOG,
         )
 
-        doc.add_heading(
-            "Protocollo di Sorveglianza Sanitaria per Mansione",
-            level=3,
-        )
+        add_sub_title(doc, "Protocollo di Sorveglianza Sanitaria per Mansione")
 
         # Aggregate per-persona codes up to mansione (union), keyed
         # case-insensitively so "Saldatore" and "saldatore" are one row.
@@ -3885,28 +3523,18 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         )
 
         if not all_keys:
-            p = doc.add_paragraph()
-            run = p.add_run(
+            _italic_body(
+                doc,
                 "Nessuna mansione con sorveglianza sanitaria configurata. "
-                "Il Medico Competente, in fase di nomina, definira il "
+                "Il Medico Competente, in fase di nomina, definirà il "
                 "protocollo specifico per le mansioni esposte ai rischi "
-                "previsti dalla normativa."
+                "previsti dalla normativa.",
             )
-            run.font.size = Pt(10)
-            run.font.italic = True
-            doc.add_paragraph("")
             return
 
-        headers = [
-            "Mansione",
-            "Rischi specifici",
-            "DPI assegnati",
-            "Periodicità' (compilata dal MC)",
-        ]
-
+        lists: list[tuple[list[str], list[str]]] = []
         rows: list[list[str]] = []
         for key in all_keys:
-            nome = display[key]
             rischi_labels = sorted(
                 RISCHI_SPECIFICI_CATALOG.get(c, {}).get("etichetta", c)
                 for c in mansione_rischi.get(key, set())
@@ -3915,30 +3543,35 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 DPI_CATALOG.get(c, {}).get("etichetta", c)
                 for c in mansione_dpi.get(key, set())
             )
+            lists.append((rischi_labels, dpi_labels))
             rows.append([
-                nome.upper(),
-                "; ".join(rischi_labels) if rischi_labels else "—",
-                "; ".join(dpi_labels) if dpi_labels else "—",
+                display[key].upper(),
+                "",
+                "",
                 _format_protocol_periodicita_cell(saved.get(key)),
             ])
 
-        self._add_data_table(doc, headers, rows)
-        # Footnote clarifying authority for the periodicita' column.
-        note = doc.add_paragraph()
-        nrun = note.add_run(
-            "Nota: la periodicità' della sorveglianza sanitaria e i "
+        table = self._add_data_table(
+            doc,
+            ["Mansione", "Rischi specifici", "DPI assegnati", "Periodicità (compilata dal MC)"],
+            rows,
+            widths=[3.4, 4.9, 4.2, 4.0],
+        )
+        for row, (rischi_labels, dpi_labels) in zip(table.rows[1:], lists):
+            _bullet_cell(row.cells[1], rischi_labels)
+            _bullet_cell(row.cells[2], dpi_labels)
+        # Footnote clarifying authority for the periodicità column.
+        _note(
+            doc,
+            "Nota: la periodicità della sorveglianza sanitaria e i "
             "protocolli specifici sono definiti dal Medico Competente in "
             "sede di nomina e di prima visita, ai sensi dell'art. 41 "
-            "D.Lgs. 81/2008."
+            "D.Lgs. 81/2008.",
         )
-        nrun.font.size = Pt(9)
-        nrun.font.italic = True
-        nrun.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-        doc.add_paragraph("")
 
         # --- Malattie professionali correlate per mansione ---------------
-        doc.add_heading("Malattie professionali correlate per mansione", level=3)
-        headers2 = ["Mansione", "Malattie correlate", "Riferimento tabellare"]
+        add_sub_title(doc, "Malattie professionali correlate per mansione")
+        diseases: list[list[str] | str] = []
         rows2: list[list[str]] = []
         for key in all_keys:
             nome = display[key]
@@ -3948,151 +3581,125 @@ class DVRMasterGenerator(BaseDocumentGenerator):
                 if isinstance(m, dict) and (m.get("malattia") or "").strip()
             ] if prot is not None else []
             if saved_malattie:
-                names = [m["malattia"].strip() for m in saved_malattie]
                 refs = _unique_keep_order(
                     (m.get("riferimento") or "").strip() for m in saved_malattie
                 )
-                rows2.append([
-                    nome.upper(),
-                    "; ".join(names),
-                    "; ".join(refs) if refs else "—",
-                ])
+                diseases.append([m["malattia"].strip() for m in saved_malattie])
+                rows2.append([nome.upper(), "", "; ".join(refs) if refs else "—"])
                 continue
             ref_rows = malattie_per_rischi(mansione_rischi.get(key, set()))
             if ref_rows:
-                names = [r["malattia"] for r in ref_rows]
                 refs = _unique_keep_order(r["tabella"] for r in ref_rows)
-                rows2.append([
-                    nome.upper(),
-                    "; ".join(names),
-                    "; ".join(refs) + " — da confermare dal MC",
-                ])
+                diseases.append([r["malattia"] for r in ref_rows])
+                rows2.append([nome.upper(), "", "; ".join(refs) + " — da confermare dal MC"])
             else:
-                rows2.append([
-                    nome.upper(),
-                    "Nessuna malattia tabellata correlata ai rischi specifici censiti",
-                    "da confermare dal MC",
-                ])
-        self._add_data_table(doc, headers2, rows2)
-        note2 = doc.add_paragraph()
-        n2run = note2.add_run(
+                diseases.append(
+                    "Nessuna malattia tabellata correlata ai rischi specifici censiti"
+                )
+                rows2.append([nome.upper(), "", "da confermare dal MC"])
+        table2 = self._add_data_table(
+            doc,
+            ["Mansione", "Malattie correlate", "Riferimento tabellare"],
+            rows2,
+            widths=[3.4, 8.6, 4.5],
+        )
+        for row, entry in zip(table2.rows[1:], diseases):
+            if isinstance(entry, list):
+                _bullet_cell(row.cells[1], entry)
+            else:
+                write_cell(row.cells[1], entry)
+        _note(
+            doc,
             "Fonte: D.M. 9 aprile 2008 (tabelle delle malattie professionali "
             "nell'industria e nell'agricoltura) e D.M. 10 giugno 2014 (elenco "
             "delle malattie con obbligo di denuncia ex art. 139 DPR 1124/1965). "
             "Le voci contrassegnate \"da confermare dal MC\" derivano dai rischi "
-            "specifici censiti per la mansione e non da un giudizio medico."
+            "specifici censiti per la mansione e non da un giudizio medico.",
         )
-        n2run.font.size = Pt(9)
-        n2run.font.italic = True
-        n2run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-        doc.add_paragraph("")
 
     def _add_allegati_cross_references(
         self, doc: Document, allegati: list[tuple[str, str]]
     ) -> None:
-        """Emit a "Documenti correlati al presente DVR" section that names
-        each applicable allegato verbatim — fixes audit F-016 / H16.
+        """Row 27 — DOCUMENTI CORRELATI AL PRESENTE DVR, on its own divider:
+        each applicable allegato named verbatim in a navy bold bulleted list
+        (audit F-016 / H16).
 
         The allegati list is computed in ``_load_dvr_extras`` from the actual
         assessment rows on this azienda, so the section only references
         documents that genuinely exist for this client.
         """
-        self._add_topic_separator(
-            doc,
-            "Documenti correlati al presente DVR",
-            part_label="PARTE IV — PROGRAMMA DI MIGLIORAMENTO",
-        )
+        add_divider(doc, "DOCUMENTI CORRELATI AL PRESENTE DVR", "div_ambienti")
 
         if not allegati:
-            p = doc.add_paragraph()
-            run = p.add_run(
+            _italic_body(
+                doc,
                 "Nessun allegato di approfondimento applicabile sulla base "
                 "delle valutazioni effettuate. La presente valutazione "
-                "generale copre la totalita dei rischi rilevati."
+                "generale copre la totalità dei rischi rilevati.",
             )
-            run.font.size = Pt(10)
-            run.font.italic = True
-            doc.add_paragraph("")
             return
 
-        p = doc.add_paragraph()
-        run = p.add_run(
+        add_body_paragraph(
+            doc,
             "Costituiscono parte integrante del presente DVR i seguenti "
             "allegati di approfondimento, redatti secondo le metodologie "
-            "previste dalla normativa di riferimento:"
+            "previste dalla normativa di riferimento:",
         )
-        run.font.size = Pt(10)
-
-        for _slug, label in allegati:
-            bullet = doc.add_paragraph(style="List Bullet")
-            run = bullet.add_run(label)
-            run.font.size = Pt(10)
-            run.bold = True
-        doc.add_paragraph("")
+        for bullet in add_bullets(doc, [label for _slug, label in allegati]):
+            for run in bullet.runs:
+                set_run_font(run, bold=True, color=BRAND_NAVY)
 
     def _add_procedural_section(
         self, doc: Document, spec: "_ProceduralSection"
     ) -> None:
-        """Emit one §4.x procedural section: heading, intro paragraph(s),
-        optional bullet list, optional documentazione collegata footer.
+        """Row 26 — one GESTIONE procedure: its divider, the intro
+        paragraph(s), an optional bulleted list and the "Documentazione
+        collegata" line.
         """
-        self._add_topic_separator(
-            doc,
-            spec.heading,
-            part_label="PARTE IV — PROGRAMMA DI MIGLIORAMENTO",
-        )
+        add_divider(doc, spec.heading, spec.art_key)
         for para in spec.body:
-            p = doc.add_paragraph()
-            run = p.add_run(para)
-            run.font.size = Pt(10)
-            p.paragraph_format.space_after = Pt(4)
+            add_body_paragraph(doc, para)
         if spec.bullets:
-            for bullet in spec.bullets:
-                p = doc.add_paragraph(style="List Bullet")
-                run = p.add_run(bullet)
-                run.font.size = Pt(10)
+            add_bullets(doc, list(spec.bullets))
         if spec.docs:
-            p = doc.add_paragraph()
-            run = p.add_run("Documentazione collegata: ")
-            run.bold = True
-            run.font.size = Pt(9)
-            run.font.italic = True
-            run2 = p.add_run("; ".join(spec.docs) + ".")
-            run2.font.size = Pt(9)
-            run2.font.italic = True
-        doc.add_paragraph("")
+            line = doc.add_paragraph()
+            line.paragraph_format.space_before = Pt(6)
+            set_run_font(line.add_run("Documentazione collegata: "), bold=True, italic=True)
+            set_run_font(line.add_run("; ".join(spec.docs) + "."), italic=True)
 
     def _add_dichiarazione_ddl(
-        self, doc: Document, azienda, persone: list
+        self,
+        doc: Document,
+        azienda,
+        persone: list,
+        generated_at: datetime | None = None,
     ) -> None:
-        """§4.13 — Binding declaration signed by the Datore di Lavoro.
+        """Row 28 — the binding declaration signed by the Datore di Lavoro,
+        on its own divider.
 
         Names the actual DdL and ragione sociale and stamps luogo + data
-        of redazione, mirroring the template's #2429 paragraph block.
+        of redazione, mirroring the template's #2429 paragraph block, with
+        "DICHIARA" and "‹COMUNE›, lì ‹data›" in bold navy as in N2O's model.
         """
-        self._add_topic_separator(
-            doc,
-            "4.13 Dichiarazione del Datore di Lavoro",
-            part_label="PARTE IV — PROGRAMMA DI MIGLIORAMENTO",
-        )
+        add_divider(doc, "DICHIARAZIONE DEL DATORE DI LAVORO", "div_dichiarazione")
 
         ddl = next((p for p in persone if p.ruolo_datore_lavoro), None)
         ddl_name = (ddl.nominativo if ddl and ddl.nominativo else "________________________").upper()
         rs = (azienda.ragione_sociale or "________________________").upper()
 
-        p = doc.add_paragraph()
-        run = p.add_run(
-            f"Il/la sottoscritto/a, {ddl_name}, in qualita di Datore di "
+        add_body_paragraph(
+            doc,
+            f"Il/la sottoscritto/a, {ddl_name}, in qualità di Datore di "
             f"Lavoro della {rs}, ai sensi e per gli effetti dell'art. 28 "
-            "del D.Lgs. 81/2008 e s.m.i.,"
+            "del D.Lgs. 81/2008 e s.m.i.,",
         )
-        run.font.size = Pt(10)
 
-        sub = doc.add_paragraph()
-        sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        srun = sub.add_run("DICHIARA")
-        srun.bold = True
-        srun.font.size = Pt(11)
+        dichiara = doc.add_paragraph()
+        dichiara.alignment = _CENTER
+        dichiara.paragraph_format.space_before = Pt(18)
+        dichiara.paragraph_format.space_after = Pt(18)
+        dichiara.paragraph_format.keep_with_next = True
+        set_run_font(dichiara.add_run("DICHIARA"), bold=True, color=BRAND_NAVY)
 
         last_clause = None
         for clause in (
@@ -4104,173 +3711,99 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             "documentati nel presente DVR, conservato presso l'unità "
             "produttiva e reso disponibile per la consultazione ai "
             "soggetti previsti dalla legge;",
+            # The programme is named by its part: the sections are
+            # unnumbered since N2O's model.
             "di aver individuato e descritto le misure di prevenzione e "
             "protezione attuate e di aver definito il programma delle "
-            "misure di miglioramento di cui al §4.1;",
+            "misure di miglioramento riportato nella Parte IV;",
             "di impegnarsi a rielaborare la valutazione nei casi previsti "
             "dall'art. 29, comma 3 del D.Lgs. 81/2008 e s.m.i. "
             "(modifiche significative del processo produttivo, "
             "infortuni, evoluzione normativa, esiti della sorveglianza "
             "sanitaria).",
         ):
-            cp = doc.add_paragraph()
-            run = cp.add_run(clause)
-            run.font.size = Pt(10)
-            cp.paragraph_format.space_after = Pt(4)
-            last_clause = cp
+            last_clause = add_body_paragraph(doc, clause)
 
         if last_clause is not None:
             last_clause.paragraph_format.keep_with_next = True
 
-        # Luogo, data — derived from sede operativa (or legale) + today
+        # Luogo, data — derived from sede operativa (or legale) and the
+        # document's date, the one the footer's "Rev. NN del …" prints.
         citta = (
             azienda.sede_operativa_citta
             or azienda.sede_legale_citta
             or "_____________"
         )
-        oggi = datetime.now(timezone.utc).strftime("%d/%m/%Y")
+        oggi = (generated_at or datetime.now(timezone.utc)).strftime("%d/%m/%Y")
         luogo_data = doc.add_paragraph()
-        luogo_data.paragraph_format.space_before = Pt(12)
+        luogo_data.paragraph_format.space_before = Pt(18)
+        luogo_data.paragraph_format.space_after = Pt(14)
         luogo_data.paragraph_format.keep_with_next = True
-        run = luogo_data.add_run(f"{citta}, li {oggi}")
-        run.font.size = Pt(10)
-        run.bold = True
+        set_run_font(luogo_data.add_run(f"{citta}, lì {oggi}"), bold=True, color=BRAND_NAVY)
 
     def _add_improvement_program_table(
         self, doc: Document, misure: list
     ) -> None:
-        """Template Table 109 — 7-col measures grid populated from the
-        ``misure_miglioramento`` table.
+        """Row 25 — Template Table 109 in N2O's four columns, portrait:
+        Misura di Miglioramento | Risorse | Responsabile | Priorità, the
+        priority coloured like a risk level.
+
+        Rischio, Attività / Procedura and Scadenza left the printed table;
+        their data stays in the database and the app (spec §4.2.2: the
+        intro maps priority to timing for art. 28 c.2 lett. c, Responsabile
+        and the GESTIONE procedures cover lett. d). A row whose concrete
+        measure is still empty prints its activity instead — an auto-seeded
+        row keeps its drafted "[DA COMPILARE — RSPP]" actions there — then
+        its risk text (``misura``, the app's "Rischio"), then a dash.
 
         When ``misure`` is empty the operator has actively cleared all
-        rows — we still emit a single italic placeholder row so the table
-        renders, but flag it as not legally complete.
+        rows — a single italic placeholder row keeps the table and flags it
+        as not legally complete.
         """
-        _start_landscape_section(doc)
-        headers = [
-            "Priorità",
-            "Rischio",
-            "Misura di Miglioramento",
-            "Attività / Procedura",
-            "Risorse",
-            "Responsabile",
-            "Scadenza",
-        ]
-        widths = [Cm(2.0), Cm(3.5), Cm(5.2), Cm(5.2), Cm(3.0), Cm(3.2), Cm(2.8)]
-        table = doc.add_table(rows=1, cols=len(headers))
-        table.alignment = WD_TABLE_ALIGNMENT.CENTER
-        table.style = "Table Grid"
-
-        header_row = table.rows[0]
-        header_properties = header_row._tr.get_or_add_trPr()
-        repeat = OxmlElement("w:tblHeader")
-        repeat.set(qn("w:val"), "true")
-        header_properties.append(repeat)
-        for i, text in enumerate(headers):
-            cell = header_row.cells[i]
-            cell.text = ""
-            hp = cell.paragraphs[0]
-            hrun = hp.add_run(text)
-            hrun.bold = True
-            hrun.font.size = Pt(9)
-            hrun.font.color.rgb = _HEADER_TEXT
-            hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            self._set_cell_bg(cell, _HEADER_BG)
-
+        headers = ["Misura di Miglioramento", "Risorse", "Responsabile", "Priorità"]
+        widths = [7.3, 3.4, 3.3, 2.5]
         if not misure:
-            row = table.add_row()
-            for i, text in enumerate([
-                "—",
-                "—",
-                "[Nessuna misura inserita]",
-                "—",
-                "—",
-                "—",
-                "—",
-            ]):
-                c = row.cells[i]
-                c.text = ""
-                cp = c.paragraphs[0]
-                crun = cp.add_run(text)
-                crun.font.size = Pt(9)
-                crun.font.italic = True
-                crun.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-        else:
-            for m in sorted(misure, key=_saved_order_key):
-                row = table.add_row()
-                values = [
-                    m.priorita or "—",
-                    m.misura or "—",
-                    m.misura_miglioramento or "—",
-                    m.procedura or "—",
-                    m.risorse or "—",
-                    m.responsabile or "—",
-                    m.scadenza or "—",
-                ]
-                priorita = (m.priorita or "").upper()
-                for i, text in enumerate(values):
-                    c = row.cells[i]
-                    c.text = ""
-                    cp = c.paragraphs[0]
-                    crun = cp.add_run(str(text))
-                    crun.font.size = Pt(9)
-                    if i == 0 and priorita in _RISK_COLORS:
-                        self._set_cell_bg(c, _RISK_COLORS[priorita])
-                        crun.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-                        crun.bold = True
+            table = self._add_data_table(
+                doc, headers, [["[Nessuna misura inserita]", "—", "—", "—"]], widths=widths
+            )
+            for run in table.rows[1].cells[0].paragraphs[0].runs:
+                set_run_font(run, italic=True, color=NOTE_GREY)
+            return
 
-        for row in table.rows:
-            for column, width in enumerate(widths):
-                row.cells[column].width = width
-        _restore_portrait_section(doc)
+        rows = [
+            [
+                (m.misura_miglioramento or "").strip()
+                or (m.procedura or "").strip()
+                or (m.misura or "").strip()
+                or "—",
+                m.risorse or "—",
+                m.responsabile or "—",
+                m.priorita or "—",
+            ]
+            for m in sorted(misure, key=_saved_order_key)
+        ]
+        table = self._add_data_table(doc, headers, rows, widths=widths)
+        for row in table.rows[1:]:
+            cell = row.cells[3]
+            priorita = cell.text.strip().upper()
+            level_cell(cell, _PRIORITY_LEVELS.get(priorita, priorita))
 
     def _add_signature_table(self, doc: Document, persone: list) -> None:
-        """Template Table 110 — 2×3 signature grid with DL / RSPP / Medico
-        (row 1) and RLS (row 2, merged center cell)."""
+        """Template Table 110 — the 2×2 signature grid of N2O's model:
+        Datore di Lavoro and Responsabile del S.P.P. over Medico Competente
+        and RLS, each role in white on navy over the holder's name ("—"
+        when vacant: the grid never shrinks) and a 2.5 cm row to sign in.
+        """
         def _first(pred) -> str:
             match = next((p for p in persone if pred(p)), None)
-            return (match.nominativo if match else "").upper()
+            return ((match.nominativo or "") if match else "").upper()
 
-        dl = _first(lambda p: p.ruolo_datore_lavoro) or "—"
-        rspp = _first(lambda p: p.ruolo_rspp) or "—"
-        medico = _first(lambda p: getattr(p, "ruolo_medico_competente", False)) or "—"
-        rls = _first(lambda p: p.ruolo_rls) or "—"
-
-        table = doc.add_table(rows=2, cols=3)
-        table.alignment = WD_TABLE_ALIGNMENT.CENTER
-        table.style = "Table Grid"
-
-        def _fill(cell, title_line: str, name_line: str) -> None:
-            cell.text = ""
-            p = cell.paragraphs[0]
-            run = p.add_run(title_line)
-            run.bold = True
-            run.font.size = Pt(9)
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p2 = cell.add_paragraph()
-            p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run2 = p2.add_run(name_line)
-            run2.font.size = Pt(9)
-            p3 = cell.add_paragraph()
-            p3.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run3 = p3.add_run("___________________________")
-            run3.font.size = Pt(9)
-
-        _fill(table.rows[0].cells[0], "Il Datore di Lavoro", f"({dl})")
-        _fill(table.rows[0].cells[1], "", "")
-        _fill(table.rows[0].cells[2], "Il Responsabile del S.P.P.", f"({rspp})")
-
-        _fill(table.rows[1].cells[0], "Il Medico Competente", f"({medico})")
-        _fill(table.rows[1].cells[1], "", "")
-        _fill(
-            table.rows[1].cells[2],
-            "Per consultazione\nIl Rappresentante dei Lavoratori",
-            f"({rls})",
-        )
-        for row in table.rows:
-            row.height = Cm(3)
-            row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
-            self._set_row_cant_split(row)
+        add_signature_grid(doc, [
+            ("Datore di Lavoro", _first(lambda p: p.ruolo_datore_lavoro)),
+            ("Responsabile del S.P.P.", _first(lambda p: p.ruolo_rspp)),
+            ("Medico Competente", _first(lambda p: getattr(p, "ruolo_medico_competente", False))),
+            ("RLS", _first(lambda p: p.ruolo_rls)),
+        ])
 
     # ------------------------------------------------------------------
     # Helper methods
@@ -4333,139 +3866,63 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         parts = [p for p in [(via or "").strip(), citta_seg] if p]
         return ", ".join(parts) if parts else "—"
 
+    def _format_seat_lines(
+        self,
+        via: str | None,
+        citta: str | None,
+        cap: str | None = None,
+        provincia: str | None = None,
+    ) -> str:
+        """A seat on two lines — the street, then "CAP Comune (PROV)" — the
+        way the identity strips of N2O's model print it; "—" when empty."""
+        comune = self._format_address(None, citta, cap, provincia)
+        lines = [
+            line
+            for line in ((via or "").strip(), comune if comune != "—" else "")
+            if line
+        ]
+        return "\n".join(lines) if lines else "—"
+
     def _add_key_value_table(
-        self, doc: Document, rows: list[tuple[str, str]]
-    ) -> None:
-        """Add a simple two-column key-value table.
-
-        Each row gets `cantSplit` so a key/value pair never breaks across
-        a page boundary — readability win for anagrafica / identity
-        blocks where the label dangling alone on the previous page was
-        the most jarring case in operator feedback (2026-05-12).
-        """
-        table = doc.add_table(rows=len(rows), cols=2)
-        table.style = "Table Grid"
-
-        for i, (key, value) in enumerate(rows):
-            # Key cell
-            cell_key = table.rows[i].cells[0]
-            cell_key.text = ""
-            p = cell_key.paragraphs[0]
-            run = p.add_run(key)
-            run.bold = True
-            run.font.size = Pt(9)
-            cell_key.width = Cm(5)
-
-            # Value cell
-            cell_val = table.rows[i].cells[1]
-            cell_val.text = ""
-            p = cell_val.paragraphs[0]
-            run = p.add_run(value)
-            run.font.size = Pt(9)
-            cell_val.width = Cm(12)
-
-            # Alternating row colors
-            if i % 2 == 0:
-                self._set_cell_bg(cell_key, _LIGHT_GRAY)
-                self._set_cell_bg(cell_val, _LIGHT_GRAY)
-
-            # Don't split this row across pages.
-            self._set_row_cant_split(table.rows[i])
-
-    def _add_data_table(
-        self, doc: Document, headers: list[str], rows: list[list[str]]
+        self, doc: Document, rows: list[tuple[str, str]], *, variant: str = "blue"
     ) -> Table:
-        """Add a multi-column data table with styled header.
-
-        Pagination behaviour:
-          - The header row carries `tblHeader` (so Word repeats it on
-            every page when the table breaks) plus `cantSplit` so the
-            header itself never dangles split.
-          - Data rows get `cantSplit` so a single row never breaks
-            across pages. Whole tables are still allowed to span pages —
-            blanket-locking them would push huge attrezzatura/pericoli
-            tables onto a fresh page and waste vertical space.
-        """
-        table = doc.add_table(rows=1, cols=len(headers))
-        table.style = "Table Grid"
-
-        # Header row
-        header_row = table.rows[0]
-        for i, text in enumerate(headers):
-            cell = header_row.cells[i]
-            cell.text = ""
-            p = cell.paragraphs[0]
-            run = p.add_run(text)
-            run.bold = True
-            run.font.size = Pt(9)
-            run.font.color.rgb = _HEADER_TEXT
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            self._set_cell_bg(cell, _HEADER_BG)
-
-        self._set_row_repeat_as_header(header_row)
-        self._set_row_cant_split(header_row)
-
-        # Data rows
-        for row_idx, row_data in enumerate(rows):
-            row = table.add_row()
-            for i, text in enumerate(row_data):
-                cell = row.cells[i]
-                cell.text = ""
-                p = cell.paragraphs[0]
-                run = p.add_run(text)
-                run.font.size = Pt(9)
-
-                # Center-align the first column (row number)
-                if i == 0:
-                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-            # Alternating row colors
-            if row_idx % 2 == 0:
-                for cell in row.cells:
-                    self._set_cell_bg(cell, _LIGHT_GRAY)
-
-            self._set_row_cant_split(row)
-
+        """A two-column key/value table, built by the kit's ``add_kv_table``:
+        ``"blue"`` labels (white on the table blue) for the Anagrafica and
+        the environment identity, ``"light"`` (navy on the light surface)
+        for the identity strips. Label and value are centred vertically, so
+        a label faces a two-line seat the way it does in N2O's model. A
+        short pair never splits across a page break — the label dangling
+        alone was the most jarring case in operator feedback (2026-05-12)."""
+        table = add_kv_table(doc, rows, variant=variant)
+        _center_vertically(table.rows)
         return table
 
-    @staticmethod
-    def _set_cell_bg(cell, color: RGBColor) -> None:
-        """Set a table cell's background (shading) color.
+    def _add_data_table(
+        self,
+        doc: Document,
+        headers: list[str],
+        rows: list[list[str]],
+        *,
+        widths: list[float] | None = None,
+        v_center: bool = True,
+        centred_columns: tuple[int, ...] = (),
+    ) -> Table:
+        """A data table, built by the kit's ``add_data_table``: the blue
+        header row repeats on every page and never splits, zebra rows, 10 pt
+        text with numbers and dashes centred. Data rows may split: a
+        keep-together row taller than a page makes LibreOffice loop forever
+        (commit e0875fa). ``widths`` are column widths in cm.
 
-        Uses the low-level XML API since python-docx does not expose
-        cell shading directly.
+        ``centred_columns`` centres whole columns that N2O's model centres,
+        such as the uncoloured level and colour-name columns.
+
+        ``v_center`` centres the data cells vertically, as N2O's model does
+        next to bulleted lists and multi-line cells; the risk tables keep
+        their text at the top, like the model's.
         """
-        shading_elm = cell._element.get_or_add_tcPr()
-        shading = shading_elm.find(qn("w:shd"))
-        if shading is None:
-            shading = shading_elm.makeelement(qn("w:shd"), {})
-            shading_elm.append(shading)
-        shading.set(qn("w:fill"), f"{color}")
-        shading.set(qn("w:val"), "clear")
-
-    @staticmethod
-    def _set_row_cant_split(row) -> None:
-        """Mark a table row so Word never splits it across pages.
-
-        Emits `<w:trPr><w:cantSplit/></w:trPr>` on the row's <w:tr>.
-        Idempotent — re-applying just leaves the existing flag in place.
-        """
-        from docx.oxml import OxmlElement
-
-        trPr = row._tr.get_or_add_trPr()
-        if trPr.find(qn("w:cantSplit")) is None:
-            trPr.append(OxmlElement("w:cantSplit"))
-
-    @staticmethod
-    def _set_row_repeat_as_header(row) -> None:
-        """Mark a row as a repeating table header.
-
-        When Word reflows the table across pages it re-emits this row at
-        the top of each subsequent page. Combined with `cantSplit` it's
-        the standard pattern for long data tables.
-        """
-        from docx.oxml import OxmlElement
-
-        trPr = row._tr.get_or_add_trPr()
-        if trPr.find(qn("w:tblHeader")) is None:
-            trPr.append(OxmlElement("w:tblHeader"))
+        table = add_data_table(
+            doc, headers, rows, column_widths_cm=widths, centred_columns=centred_columns
+        )
+        if v_center:
+            _center_vertically(table.rows[1:])
+        return table

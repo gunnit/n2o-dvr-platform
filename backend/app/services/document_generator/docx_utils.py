@@ -7,6 +7,7 @@ heading styling, color palettes, etc.).
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import uuid
@@ -15,38 +16,68 @@ from pathlib import Path
 from typing import Iterable
 
 from docx import Document
-from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_ROW_HEIGHT_RULE, WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import nsmap, qn
-from docx.shared import Cm, Pt, RGBColor
+from docx.shared import Cm, Pt, RGBColor, Twips
+from docx.text.paragraph import Paragraph
 
 
 # ---------------------------------------------------------------------------
-# Design tokens — one palette for all 17 documents, mirroring the web app
-# (frontend/src/app/globals.css) so product and paperwork read as one family.
-# Document audit 2026-09-03: generators had drifted to Material indigo #1A237E
-# for headers and stock Word blue for headings; the app is N2O navy #003d74.
-# Print wants firmer rules than the screen border token, hence BRAND_RULE.
+# Design tokens — one look for all 17 documents: N2O's DVR model of
+# 2026-10-20 (docs/superpowers/specs/2026-11-10-document-layout-redesign-design.md
+# §4.1.1). The navy is the web app's --color-primary, so product and paperwork
+# still read as one family; the table blue and the black grid come from the
+# model.
 # ---------------------------------------------------------------------------
 
-BRAND_NAVY = RGBColor(0x00, 0x3D, 0x74)      # --color-primary: headings, table headers
+BRAND_NAVY = RGBColor(0x00, 0x3D, 0x74)      # titles, labels, header text
 BRAND_NAVY_HEX = "003D74"
-BRAND_DEEP = RGBColor(0x06, 0x1B, 0x31)      # --color-heading: body ink
-BRAND_SLATE = RGBColor(0x64, 0x74, 0x8D)     # --color-body: captions, secondary lines
-BRAND_SURFACE_HEX = "F6F9FC"                 # --color-surface-low: zebra rows, label cells
-BRAND_RULE_HEX = "C9D3DF"                    # hairlines and table borders (print-firm)
-FONT_FAMILY = "Calibri"                      # universal in Word; Carlito on LibreOffice
+BRAND_TABLE_HEADER = RGBColor(0x4F, 0x81, 0xBD)  # table header rows, white text
+BRAND_TABLE_HEADER_HEX = "4F81BD"
+BRAND_DEEP = RGBColor(0x06, 0x1B, 0x31)      # body ink
+BRAND_SLATE = RGBColor(0x64, 0x74, 0x8D)     # footer text, captions, secondary lines
+BRAND_SURFACE_HEX = "F6F9FC"                 # zebra rows, light label cells
+BRAND_RULE_HEX = "C9D3DF"                    # header and footer hairlines only
+NOTE_GREY = RGBColor(0x66, 0x66, 0x66)       # italic notes under tables
+TABLE_BORDER_HEX = "auto"                    # tables: thin black grid, as in Word's Table Grid
+TABLE_BORDER_SIZE = 4                        # eighths of a point: ½ pt
 
-# Type scale in points. Body 10.5 keeps ~13 words per line on A4 text width.
+# Arial in every slot. N2O asked for a document that does not change between
+# Windows and Mac (2026-07-27); the model's Avenir Next LT Pro is a Microsoft
+# 365 cloud font that LibreOffice, Google Docs and Word without 365 replace.
+# Liberation Sans carries Arial's metrics where Arial itself is missing.
+FONT_FAMILY = "Arial"
+FONT_SLOTS = ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs")
+# A theme attribute wins over the explicit name in Word, so a slot left on
+# "minorHAnsi" would print in the theme's Calibri whatever w:ascii says.
+THEME_FONT_ATTRS = ("w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme", "w:cstheme")
+# Fonts whose characters are pictures (lower case): Symbol and the dingbat
+# faces map their glyphs to code points of their own, so a bullet or a check
+# box set in one of them prints as a different character in any other font.
+SYMBOL_FONTS = frozenset({"symbol", "wingdings", "wingdings 2", "wingdings 3", "webdings"})
+
+# Type scale in points. Roles first (the model's hierarchy, with 10 pt tables:
+# at 12 pt the five-column risk tables break words mid-word), then the legacy
+# keys generators still read until they move to roles.
 TYPE_SCALE = {
+    "body": 12,
+    "table": 10,
+    "table_header": 10,
+    "section_title": 25,
+    "sub_title": 12,
+    "part_label": 9,
+    "front_heading": 14,
     "cover_title": 26,
-    "cover_subtitle": 12,
-    "cover_client": 18,
+    "header": 9,
+    "footer": 8.5,
+    "note": 10,
+    # Legacy keys.
     "h1": 16,
     "h2": 13,
-    "h3": 11,
-    "body": 10.5,
-    "table": 9.5,
+    "h3": 12,
+    "cover_subtitle": 12,
+    "cover_client": 16,
     "small": 8.5,
 }
 
@@ -106,8 +137,9 @@ def format_sede(azienda, which: str = "legale") -> str:
     parts = [p for p in [via, seg if seg != "—" else ""] if p]
     return ", ".join(parts) if parts else "—"
 
-# Legacy names kept for the generators that import them; they now resolve to
-# the brand tokens above so no call site has to change to pick up the palette.
+# Legacy names kept for the generators that import them. HEADER_BG stays navy:
+# the DVR also colours its headings with it. Kit tables use
+# BRAND_TABLE_HEADER_HEX through style_header_row.
 HEADER_BG = BRAND_NAVY
 HEADER_BG_HEX = BRAND_NAVY_HEX
 HEADER_TEXT = RGBColor(0xFF, 0xFF, 0xFF)
@@ -133,7 +165,12 @@ def _resolve_templates_dir() -> Path:
 
 
 TEMPLATES_DIR = _resolve_templates_dir()
-LOGO_PATH = BACKEND_ROOT / "assets" / "logo.png"
+# Artwork extracted from N2O's DVR model (scripts/extract_document_art.py);
+# design.ART maps keys to the files.
+DOCUMENT_ART_DIR = BACKEND_ROOT / "assets" / "document_art"
+# The default document logo when an organization has not uploaded its own:
+# the VERA ITALIA mark of the model's footer. assets/logo.png is retired.
+LOGO_PATH = DOCUMENT_ART_DIR / "vera_italia_mark.png"
 
 
 def slugify(text: str, max_length: int = 40) -> str:
@@ -182,21 +219,61 @@ def shade_cell(cell, color_hex: str) -> None:
     insert_in_order(tc_pr, shd, ("noWrap", "tcMar", "textDirection", "tcFitText", "vAlign", "hideMark", "headers", "cellIns", "cellDel", "cellMerge", "tcPrChange"))
 
 
-def style_header_row(row, bg_hex: str = BRAND_NAVY_HEX, text_color: RGBColor = HEADER_TEXT) -> None:
-    """Bold white text on the brand-navy header background; repeats on every
-    page the table spans, so a long table never prints headless."""
+def set_font_slots(rfonts, name: str = FONT_FAMILY) -> None:
+    """Point every slot of a ``w:rFonts`` element at ``name``.
+
+    Theme attributes are removed first: Word reads ``w:asciiTheme`` before
+    ``w:ascii``, so a heading style that keeps "majorHAnsi" prints in the
+    theme font whatever name it also carries.
+    """
+    for attr in THEME_FONT_ATTRS:
+        rfonts.attrib.pop(qn(attr), None)
+    for attr in FONT_SLOTS:
+        rfonts.set(qn(attr), name)
+
+
+def set_run_font(
+    run,
+    *,
+    size: float | None = None,
+    bold: bool | None = None,
+    italic: bool | None = None,
+    color: RGBColor | None = None,
+    caps: bool | None = None,
+):
+    """Arial on all four slots of ``run``, plus whichever of size, weight,
+    slant, colour and capitals are given. Every run the kit writes goes
+    through here, so a kit table keeps its look inside a donor template whose
+    own styles still name another font."""
+    set_font_slots(run._r.get_or_add_rPr().get_or_add_rFonts())
+    if size is not None:
+        run.font.size = Pt(size)
+    if bold is not None:
+        run.font.bold = bold
+    if italic is not None:
+        run.font.italic = italic
+    if color is not None:
+        run.font.color.rgb = color
+    if caps is not None:
+        run.font.all_caps = caps
+    return run
+
+
+def style_header_row(row, bg_hex: str = BRAND_TABLE_HEADER_HEX, text_color: RGBColor = HEADER_TEXT) -> None:
+    """Bold white text on the table-header blue. The row repeats on every page
+    the table spans, so a long table never prints headless, and never splits."""
     from docx.oxml import OxmlElement
     tr_pr = row._tr.get_or_add_trPr()
     if tr_pr.find(qn("w:tblHeader")) is None:
         insert_in_order(tr_pr, OxmlElement("w:tblHeader"), ("tblCellSpacing", "jc", "hidden", "ins", "del", "trPrChange"))
+    keep_row_together(row)
     for cell in row.cells:
         shade_cell(cell, bg_hex)
+        cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
         for paragraph in cell.paragraphs:
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
             for run in paragraph.runs:
-                run.font.bold = True
-                run.font.color.rgb = text_color
-                run.font.size = Pt(TYPE_SCALE["table"])
+                set_run_font(run, size=TYPE_SCALE["table_header"], bold=True, color=text_color)
 
 
 # ---------------------------------------------------------------------------
@@ -350,16 +427,25 @@ def scrub_n2o_legacy_donor(
 # Simple heading/paragraph helpers
 # ---------------------------------------------------------------------------
 
-def add_heading(doc: Document, text: str, level: int = 1) -> None:
-    """Add a heading; fall back to Normal style if custom heading missing."""
+def add_heading(doc: Document, text: str, level: int = 1) -> Paragraph:
+    """One heading paragraph in the ``Heading N`` style (``Title`` for level
+    0), whether or not the document defines that style.
+
+    Donor templates lack some levels (Gestanti and PEE azienda have no
+    Heading 2). Without the style the paragraph stays Normal with bold
+    text, 14 pt at level 1 and 12 pt below. python-docx's ``add_heading``
+    appends the paragraph and its text *before* it looks the style up, so
+    falling back after it raised printed every such heading twice.
+    """
+    paragraph = doc.add_paragraph(text)
     try:
-        h = doc.add_heading(text, level=level)
-    except Exception:
-        h = doc.add_paragraph(text)
-        for r in h.runs:
-            r.bold = True
-            r.font.size = Pt(14 if level == 1 else 12)
-    return h
+        paragraph.style = "Title" if level == 0 else f"Heading {level}"
+    except (KeyError, ValueError):
+        # KeyError: no such style; ValueError: the name is not a paragraph style.
+        for run in paragraph.runs:
+            run.bold = True
+            run.font.size = Pt(14 if level == 1 else 12)
+    return paragraph
 
 
 def add_paragraph(doc: Document, text: str, *, bold: bool = False, italic: bool = False, size: int = 11) -> None:
@@ -431,20 +517,23 @@ def _apply_cell_borders_all(table) -> None:
             tc_borders = tc_pr.find(qn("w:tcBorders"))
             if tc_borders is None:
                 tc_borders = OxmlElement("w:tcBorders")
-                tc_pr.append(tc_borders)
+                # Before any shading or alignment the cell already carries:
+                # tcBorders precedes shd and vAlign in CT_TcPr.
+                insert_in_order(tc_pr, tc_borders, ("shd", "noWrap", "tcMar", "textDirection", "tcFitText", "vAlign", "hideMark", "headers", "cellIns", "cellDel", "cellMerge", "tcPrChange"))
             for edge in ("top", "left", "bottom", "right"):
                 b = OxmlElement(f"w:{edge}")
                 b.set(qn("w:val"), "single")
-                b.set(qn("w:sz"), "4")
-                b.set(qn("w:color"), "808080")
+                b.set(qn("w:sz"), str(TABLE_BORDER_SIZE))
+                b.set(qn("w:color"), TABLE_BORDER_HEX)
                 tc_borders.append(b)
 
 
-def set_table_borders(table, color_hex: str = BRAND_RULE_HEX, size: int = 4) -> None:
-    """Thin borders in the brand rule colour on every edge, inside and out.
+def set_table_borders(table, color_hex: str = TABLE_BORDER_HEX, size: int = TABLE_BORDER_SIZE) -> None:
+    """Single borders on every edge, inside and out: ½ pt black by default,
+    the Table Grid look of N2O's model. ``size`` is in eighths of a point.
 
-    Overrides the black ``Table Grid`` borders so tables sit quietly on the
-    page instead of shouting; ``size`` is in eighths of a point.
+    Written on the table itself so the grid survives a document whose
+    template defines Table Grid differently (or not at all).
     """
     from docx.oxml import OxmlElement
     tbl_pr = table._tbl.tblPr
@@ -476,29 +565,247 @@ def keep_row_together(row) -> None:
         insert_in_order(tr_pr, OxmlElement("w:cantSplit"), ("trHeight", "tblHeader", "tblCellSpacing", "jc", "hidden", "ins", "del", "trPrChange"))
 
 
-def add_kv_table(doc: Document, rows: Iterable[tuple[str, str]], *, width_label_cm: float = 5.0, width_value_cm: float = 11.0) -> None:
-    """2-column key/value table: bold label on a tinted cell, plain value."""
+# Label column of a key/value table: (fill, label text colour).
+_KV_VARIANTS = {
+    "blue": (BRAND_TABLE_HEADER_HEX, HEADER_TEXT),   # Anagrafica, environment identity
+    "light": (BRAND_SURFACE_HEX, BRAND_NAVY),        # identity strips
+}
+
+# A row is kept on one page only while it is short. A keep-together row
+# taller than a page makes LibreOffice loop forever (commit e0875fa).
+_KEEP_TOGETHER_MAX_CHARS = 400
+_KEEP_TOGETHER_MAX_LINES = 8
+
+# Cells whose whole text is a number or a dash are centred (spec §4.1.3).
+_NUMBER_RE = re.compile(r"^[+-]?\d+(?:[.,]\d+)*\s?%?$")
+_DASHES = {"—", "–", "-"}
+
+
+def write_cell(
+    cell,
+    text: str,
+    *,
+    size: float | None = None,
+    bold: bool | None = None,
+    color: RGBColor | None = None,
+    align=None,
+) -> None:
+    """Replace a cell's content with ``text`` in the kit's table type.
+
+    Line breaks in ``text`` become ``w:br`` inside the one run. Cell
+    paragraphs carry no spacing of their own, so rows stay as compact as the
+    model's whatever the Normal style says.
+    """
+    cell.text = text
+    for paragraph in cell.paragraphs:
+        paragraph.paragraph_format.space_before = Pt(0)
+        paragraph.paragraph_format.space_after = Pt(0)
+        if align is not None:
+            paragraph.alignment = align
+        for run in paragraph.runs:
+            set_run_font(run, size=TYPE_SCALE["table"] if size is None else size, bold=bold, color=color)
+
+
+def _is_centred_value(text: str) -> bool:
+    """A number or a dash. Never a word: "Rosso" spells a RISK_COLORS key
+    and is a colour name in the signage table. Level cells are centred by
+    ``level_cell``, level columns without colours by ``centred_columns``."""
+    value = (text or "").strip()
+    return bool(value) and (value in _DASHES or bool(_NUMBER_RE.match(value)))
+
+
+def _is_short(*texts: str) -> bool:
+    joined = "\n".join(t or "" for t in texts)
+    return len(joined) <= _KEEP_TOGETHER_MAX_CHARS and joined.count("\n") < _KEEP_TOGETHER_MAX_LINES
+
+
+def _keep_with_next_in(row) -> None:
+    for cell in row.cells:
+        for paragraph in cell.paragraphs:
+            paragraph.paragraph_format.keep_with_next = True
+
+
+def add_kv_table(
+    doc: Document,
+    rows: Iterable[tuple[str, str]],
+    *,
+    variant: str = "blue",
+    width_label_cm: float = 5.0,
+    width_value_cm: float = 11.5,
+):
+    """Two-column key/value table: a coloured label column and plain values.
+
+    ``variant="blue"``: white bold labels on the table-header blue (Anagrafica,
+    environment identity). ``variant="light"``: navy bold labels on the light
+    surface (the identity strips of the DVR's opening pages).
+    """
+    if variant not in _KV_VARIANTS:
+        raise ValueError(f"unknown key/value table variant {variant!r}; use one of {sorted(_KV_VARIANTS)}")
+    label_fill, label_colour = _KV_VARIANTS[variant]
     table = doc.add_table(rows=0, cols=2)
     style_applied = _try_set_table_style(table)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
-    for k, v in rows:
+    table.autofit = False
+    for column, width_cm in zip(table.columns, (width_label_cm, width_value_cm)):
+        column.width = Cm(width_cm)
+    for key, value in rows:
+        label_text = str(key)
+        value_text = "" if value is None else str(value)
         row = table.add_row()
-        cells = row.cells
-        cells[0].text = str(k)
-        cells[1].text = str(v) if v is not None else ""
-        for p in cells[0].paragraphs:
-            for r in p.runs:
-                r.font.bold = True
-                r.font.size = Pt(TYPE_SCALE["table"])
-                r.font.color.rgb = BRAND_DEEP
-        for p in cells[1].paragraphs:
-            for r in p.runs:
-                r.font.size = Pt(TYPE_SCALE["table"])
-        shade_cell(cells[0], BRAND_SURFACE_HEX)
+        label, cell = row.cells
+        write_cell(label, label_text, bold=True, color=label_colour)
+        write_cell(cell, value_text)
+        shade_cell(label, label_fill)
+        if _is_short(label_text, value_text):
+            keep_row_together(row)
     if not style_applied:
         _apply_cell_borders_all(table)
     set_table_borders(table)
     return table
+
+
+def add_role_band(doc: Document, title: str, value: str):
+    """A full-width band in the table-header blue naming a role, over a
+    centred row with who holds it ("—" when nobody does). The DVR's
+    Organizzazione aziendale della sicurezza is a stack of these."""
+    table = doc.add_table(rows=2, cols=1)
+    style_applied = _try_set_table_style(table)
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    band = table.rows[0].cells[0]
+    write_cell(band, str(title or ""), bold=True, color=HEADER_TEXT, align=WD_ALIGN_PARAGRAPH.CENTER)
+    shade_cell(band, BRAND_TABLE_HEADER_HEX)
+    band.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+    holder = (value or "").strip() or "—"
+    write_cell(table.rows[1].cells[0], holder, align=WD_ALIGN_PARAGRAPH.CENTER)
+    _keep_with_next_in(table.rows[0])
+    if _is_short(title, holder):
+        for row in table.rows:
+            keep_row_together(row)
+    if not style_applied:
+        _apply_cell_borders_all(table)
+    set_table_borders(table)
+    return table
+
+
+def add_signature_grid(doc: Document, cells: list[tuple[str, str]], *, sign_height_cm: float = 2.5):
+    """Signature grid, two signatories per grid row.
+
+    Each grid row is three table rows: the roles on navy, the names ("—" when
+    a role is vacant, so the grid never shrinks), and a blank row of at least
+    ``sign_height_cm`` to sign in. With an odd count the last grid row's free
+    half keeps the navy band and blank cells, never an unshaded half row.
+    Every row is kept on one page and the first two stay with the signing
+    row, so nobody signs under a page break.
+    """
+    pairs = list(cells)
+    if not pairs:
+        raise ValueError("add_signature_grid needs at least one (role, name) pair")
+    table = doc.add_table(rows=0, cols=2)
+    style_applied = _try_set_table_style(table)
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    for start in range(0, len(pairs), 2):
+        chunk = pairs[start : start + 2]
+        roles, names, signs = table.add_row(), table.add_row(), table.add_row()
+        for index in range(2):
+            if index < len(chunk):
+                role, name = chunk[index]
+                role_text, holder = str(role or ""), (name or "").strip() or "—"
+            else:
+                role_text, holder = "", ""
+            role_cell = roles.cells[index]
+            write_cell(role_cell, role_text, bold=True, color=HEADER_TEXT, align=WD_ALIGN_PARAGRAPH.CENTER)
+            shade_cell(role_cell, BRAND_NAVY_HEX)
+            role_cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+            write_cell(names.cells[index], holder, align=WD_ALIGN_PARAGRAPH.CENTER)
+        # Rounded up to whole twips, the unit Word stores: 2.5 cm would
+        # otherwise come back as 2.4998 cm.
+        signs.height = Twips(math.ceil(Cm(sign_height_cm) / Twips(1)))
+        signs.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
+        for row in (roles, names, signs):
+            keep_row_together(row)
+        _keep_with_next_in(roles)
+        _keep_with_next_in(names)
+    if not style_applied:
+        _apply_cell_borders_all(table)
+    set_table_borders(table)
+    return table
+
+
+def level_cell(cell, level: str) -> None:
+    """Colour a risk-index or priority cell by its level (ACCETTABILE, MODESTO,
+    GRAVE, GRAVISSIMO and the other ``RISK_COLORS`` keys): the level's fill
+    with white bold centred text. An unknown level leaves the colours alone."""
+    for paragraph in cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    colour = RISK_COLORS.get((level or "").strip().upper())
+    if colour is None:
+        return
+    shade_cell(cell, str(colour))
+    for paragraph in cell.paragraphs:
+        for run in paragraph.runs:
+            set_run_font(run, bold=True, color=HEADER_TEXT)
+
+
+def add_body_paragraph(doc: Document, text: str):
+    """A justified body paragraph. Justification lives here, not on the
+    Normal style, so table cells (which inherit Normal) stay left-aligned."""
+    paragraph = doc.add_paragraph()
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    set_run_font(paragraph.add_run(text or ""))
+    return paragraph
+
+
+_BULLET_STYLE = "List Bullet"
+
+
+def _is_blank_paragraph(paragraph) -> bool:
+    return not paragraph.text.strip() and not paragraph._p.xpath(
+        ".//w:drawing | .//w:pict | .//w:object"
+    )
+
+
+def add_bullets(container, items: list[str], *, size_pt: float | None = None) -> list:
+    """A bulleted list with real list numbering, in a document or a table cell.
+
+    Each item is a ``List Bullet`` paragraph: the bullet comes from the
+    style's numbering (python-docx's default template defines it), so Word,
+    LibreOffice and the preview parser all see a list, never a typed "•".
+    In a cell the empty paragraph every cell starts with becomes the first
+    item instead of staying above the list, and cell bullets carry no
+    paragraph spacing, like the rest of the kit's table text. Blank items are
+    skipped; with nothing left, nothing is added. ``size_pt`` sets the item
+    size (``TYPE_SCALE["table"]`` in a cell); ``None`` keeps the style's.
+
+    A document without the style (a donor template) gets plain paragraphs
+    with a typed bullet rather than an error. Returns the item paragraphs.
+    """
+    texts = [str(item).strip() for item in items if item is not None and str(item).strip()]
+    in_cell = hasattr(container, "_tc")
+    reuse = None
+    if (
+        texts
+        and in_cell
+        and len(container.paragraphs) == 1
+        and _is_blank_paragraph(container.paragraphs[0])
+    ):
+        reuse = container.paragraphs[0]
+        # Its empty runs (a table builder's blank cell text) go too.
+        for run in list(reuse._p.r_lst):
+            reuse._p.remove(run)
+    paragraphs = []
+    for index, text in enumerate(texts):
+        paragraph = reuse if index == 0 and reuse is not None else container.add_paragraph()
+        try:
+            paragraph.style = _BULLET_STYLE
+            label = text
+        except KeyError:
+            label = f"• {text}"
+        set_run_font(paragraph.add_run(label), size=size_pt)
+        if in_cell:
+            paragraph.paragraph_format.space_before = Pt(0)
+            paragraph.paragraph_format.space_after = Pt(0)
+        paragraphs.append(paragraph)
+    return paragraphs
 
 
 def _try_set_table_style(table) -> bool:
@@ -516,8 +823,16 @@ def add_data_table(
     data_rows: list[list[str]],
     *,
     column_widths_cm: list[float] | None = None,
+    centred_columns: Iterable[int] = (),
 ):
-    """Table with styled header + rows."""
+    """Table with a repeating blue header row and zebra data rows.
+
+    10 pt text, left-aligned; numbers and "—" are centred, and so is every
+    cell of ``centred_columns`` (the indexes of level columns that take no
+    level colour). The table spans the text width unless
+    ``column_widths_cm`` says otherwise.
+    """
+    centred_columns = frozenset(centred_columns)
     if column_widths_cm is not None and len(column_widths_cm) != len(headers):
         raise ValueError("column_widths_cm must contain one width per header")
 
@@ -527,7 +842,7 @@ def add_data_table(
 
     hdr = table.rows[0]
     for i, h in enumerate(headers):
-        hdr.cells[i].text = h
+        write_cell(hdr.cells[i], "" if h is None else str(h))
     style_header_row(hdr)
 
     # No cantSplit on data rows: a keep-together row taller than a page makes
@@ -537,10 +852,9 @@ def add_data_table(
         row = table.add_row()
         zebra = n % 2 == 1
         for i, cell_val in enumerate(row_data):
-            row.cells[i].text = "" if cell_val is None else str(cell_val)
-            for p in row.cells[i].paragraphs:
-                for r in p.runs:
-                    r.font.size = Pt(TYPE_SCALE["table"])
+            text = "" if cell_val is None else str(cell_val)
+            centred = WD_ALIGN_PARAGRAPH.CENTER if i in centred_columns or _is_centred_value(text) else None
+            write_cell(row.cells[i], text, align=centred)
             if zebra:
                 shade_cell(row.cells[i], BRAND_SURFACE_HEX)
 

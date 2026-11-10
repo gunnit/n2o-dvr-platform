@@ -24,8 +24,8 @@ def _generate(tmp_path, mutate=None) -> Document:
     fixture = module.build_fixture()
     if mutate:
         mutate(fixture)
-    module.patch_generators(fixture, str(tmp_path))
-    ok, path, message = asyncio.run(module.run_one("DUVRI", fixture["azienda"].id))
+    with module.patched_generators(fixture, str(tmp_path)):
+        ok, path, message = asyncio.run(module.run_one("DUVRI", fixture["azienda"].id))
     assert ok, message
     return Document(path)
 

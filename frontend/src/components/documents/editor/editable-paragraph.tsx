@@ -6,57 +6,25 @@ import {
   useEffect,
   useRef,
   useState,
-  type CSSProperties,
   type ClipboardEvent,
   type KeyboardEvent,
   type ReactNode,
 } from "react";
 import { RotateCcw } from "lucide-react";
 
+import {
+  effectiveRunStyle,
+  replacementRunStyle,
+  type ParagraphLook,
+} from "@/components/documents/editor/doc-typography";
 import { cn } from "@/lib/utils";
 import type { PreviewParagraph, PreviewRun } from "@/types";
 
-/** pt -> px at 96dpi (1pt = 4/3 px). */
-function ptToPx(pt: number): number {
-  return Math.round(pt * (4 / 3) * 100) / 100;
-}
-
-const ALIGNMENT_CLASS: Record<string, string> = {
-  left: "text-left",
-  center: "text-center",
-  right: "text-right",
-  justify: "text-justify",
-};
-
-// Word "Heading N" styles mapped onto the sheet's type scale. Sizes
-// approximate the DVR templates' hierarchy — faithful enough for a preview
-// whose ground truth stays the .docx itself. Margins live here so body
-// paragraphs can keep their own tighter rhythm.
-const HEADING_CLASS: Record<number, string> = {
-  1: "mt-6 mb-3 text-[23px] font-bold leading-[1.25]",
-  2: "mt-5 mb-2.5 text-[19px] font-bold leading-[1.25]",
-  3: "mt-4 mb-2 text-[16px] font-semibold leading-[1.3]",
-  4: "mt-3 mb-1.5 text-[14.5px] font-semibold leading-[1.3]",
-};
-
-// Run colors/sizes come straight from the .docx and are exempt from the
-// DESIGN.md chrome palette — they reproduce the document.
-function RunSpan({ run }: { run: PreviewRun }) {
-  const style: CSSProperties = {};
-  if (run.color) style.color = `#${run.color}`;
-  if (run.size !== null) style.fontSize = `${ptToPx(run.size)}px`;
-  return (
-    <span
-      className={cn(
-        run.bold && "font-bold",
-        run.italic && "italic",
-        run.underline && "underline",
-      )}
-      style={run.color || run.size !== null ? style : undefined}
-    >
-      {run.text}
-    </span>
-  );
+// Run colours, sizes and weights come straight from the .docx and are
+// exempt from the DESIGN.md chrome palette — they reproduce the document.
+// The paragraph box (DocParagraph) carries the paragraph's own look.
+function RunSpan({ run, look }: { run: PreviewRun; look: ParagraphLook }) {
+  return <span style={effectiveRunStyle(run, look)}>{run.text}</span>;
 }
 
 interface EditSession {
@@ -67,6 +35,12 @@ interface EditSession {
 
 export interface EditableParagraphProps {
   paragraph: PreviewParagraph;
+  /**
+   * The paragraph's resolved look (doc-typography). Its box — size,
+   * colour, alignment, spacing — is drawn by the caller; runs, overrides
+   * and the live edit add their own formatting on top.
+   */
+  look: ParagraphLook;
   /** Saved/pending override for this paragraph, if any. */
   override: string | undefined;
   /**
@@ -74,8 +48,6 @@ export interface EditableParagraphProps {
    * passes null, Escape-revert passes the pre-edit override (or null).
    */
   onOverrideChange: (addr: string, value: string | null) => void;
-  /** Rendered inside a table cell: tighter type and spacing. */
-  inCell?: boolean;
   /**
    * Extra static content (inline images). Paragraphs carrying images are
    * always editable=false per the API contract, so this never coexists
@@ -86,9 +58,9 @@ export interface EditableParagraphProps {
 
 export const EditableParagraph = memo(function EditableParagraph({
   paragraph,
+  look,
   override,
   onOverrideChange,
-  inCell = false,
   trailing,
 }: EditableParagraphProps) {
   const [editing, setEditing] = useState(false);
@@ -262,24 +234,21 @@ export const EditableParagraph = memo(function EditableParagraph({
     [startEditing],
   );
 
-  const baseClassName = cn(
-    "min-h-[1.45em] break-words whitespace-pre-wrap",
-    inCell ? "my-0.5 text-[12.5px] leading-[1.4]" : "text-[14px] leading-[1.55]",
-    !inCell &&
-      (paragraph.heading_level !== null
-        ? HEADING_CLASS[paragraph.heading_level]
-        : "my-1"),
-    ALIGNMENT_CLASS[paragraph.alignment ?? "left"],
-  );
+  // One line high even when empty: an empty paragraph keeps its height,
+  // as on paper.
+  const baseClassName = "min-h-[1lh] break-words whitespace-pre-wrap";
 
-  // An override replaces the runs with plain text in the paragraph's base
-  // style — mirroring what the backend does to the .docx (one run, first
-  // run's formatting, "\n" = line break).
+  // An override replaces the runs with plain text in the first run's
+  // formatting — mirroring what the backend does to the .docx (one run,
+  // first run's formatting, "\n" = line break).
+  const replacementStyle = replacementRunStyle(paragraph, look);
   const staticContent = (
     <>
-      {hasOverride
-        ? override
-        : paragraph.runs.map((run, i) => <RunSpan key={i} run={run} />)}
+      {hasOverride ? (
+        <span style={replacementStyle}>{override}</span>
+      ) : (
+        paragraph.runs.map((run, i) => <RunSpan key={i} run={run} look={look} />)
+      )}
       {trailing}
     </>
   );
@@ -296,7 +265,8 @@ export const EditableParagraph = memo(function EditableParagraph({
       )}
     >
       {hasOverride && !editing && (
-        <div className="invisible absolute -top-3 right-0 z-10 flex items-center gap-1 group-focus-within:visible group-hover:visible">
+        // App chrome inside the sheet: back to the app's own type.
+        <div className="invisible absolute -top-3 right-0 z-10 flex items-center gap-1 font-body leading-normal not-italic group-focus-within:visible group-hover:visible">
           <span className="rounded-sm border border-[rgba(0,61,116,0.2)] bg-white px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.04em] text-primary uppercase shadow-stripe-ambient">
             Modificato
           </span>
@@ -308,7 +278,7 @@ export const EditableParagraph = memo(function EditableParagraph({
             }}
             title="Ripristina il testo originale"
             aria-label="Ripristina il testo originale"
-            className="inline-flex items-center gap-1 rounded-sm border border-[#e5edf5] bg-white px-1.5 py-0.5 text-[10px] font-medium text-[#273951] shadow-stripe-ambient transition-colors hover:bg-[#f6f9fc]"
+            className="inline-flex items-center gap-1 rounded-sm border border-[#e5edf5] bg-white px-1.5 py-0.5 text-[10px] font-medium text-[#273951] normal-case shadow-stripe-ambient transition-colors hover:bg-[#f6f9fc]"
           >
             <RotateCcw className="h-2.5 w-2.5" strokeWidth={2} />
             Ripristina
@@ -331,10 +301,11 @@ export const EditableParagraph = memo(function EditableParagraph({
           onPaste={handlePaste}
           onCompositionStart={handleCompositionStart}
           onCompositionEnd={handleCompositionEnd}
-          className={cn(
-            baseClassName,
-            "rounded-sm bg-white ring-2 ring-primary outline-none",
-          )}
+          // The text is typed in the look it will print with (the first
+          // run's), over the cell fill or art. Never in display capitals:
+          // innerText would hand them back as the typed text.
+          style={{ ...replacementStyle, textTransform: "none" }}
+          className={cn(baseClassName, "rounded-sm ring-2 ring-primary outline-none")}
         />
       ) : (
         <div

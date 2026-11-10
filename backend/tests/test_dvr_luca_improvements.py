@@ -1,10 +1,11 @@
-"""Regression coverage for Luca's DVR cover corrections."""
+"""Regression coverage for Luca's DVR corrections and for the DVR rebuilt
+on N2O's model of 2026-10-20 (spec §4.2: page map, art pages, tables)."""
 
 import asyncio
-import collections
 import importlib.util
 import inspect as pyinspect
 import logging
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -13,21 +14,18 @@ from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 import uuid
-from zipfile import ZipFile
 
 import pytest
 from docx import Document
-from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_ROW_HEIGHT_RULE
-from docx.enum.text import WD_BREAK
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
 from docx.shared import Cm, Pt
 from PIL import Image
 
 from app.services.document_generator.branding import Branding
-from app.services.document_generator import dvr_master
+from app.services.document_generator import design, docx_utils, dvr_master
 from app.services.document_generator.dvr_master import (
     DVRMasterGenerator,
-    _PART_IV_PROCEDURAL_SECTIONS,
     _employee_persons,
     _global_equipment_rows,
     _saved_order_key,
@@ -91,21 +89,18 @@ def _document_xml_has_adjacent_page_breaks(doc: Document) -> bool:
     return any(left and right for left, right in zip(flags, flags[1:]))
 
 
-def test_table_ending_topic_uses_page_break_before_boundary_to_avoid_a_blank_page():
-    doc = Document()
-    doc.add_table(rows=1, cols=1)
-    generator = _new_generator()
-
-    generator._ensure_page_boundary(doc)
-
-    boundary = generator._last_content_element(doc)
-    assert boundary.xpath("./w:pPr/w:pageBreakBefore")
-    assert not boundary.xpath('.//w:br[@w:type="page"]')
-    body_length = len(doc._element.body)
-
-    generator._ensure_page_boundary(doc)
-
-    assert len(doc._element.body) == body_length
+def test_title_after_a_table_breaks_before_instead_of_leaving_a_blank_page(full_dvr_doc):
+    """A title that follows a table opens its page with page-break-before,
+    never with a break paragraph that a full page would push onto an empty
+    page of its own."""
+    doc, _fixture = full_dvr_doc
+    title = next(
+        paragraph for paragraph in doc.paragraphs
+        if paragraph.style.name == "Heading 2" and paragraph.text == "AMBIENTI DI LAVORO"
+    )
+    assert title._p.getprevious().tag.endswith("}tbl")
+    assert title._p.xpath("./w:pPr/w:pageBreakBefore")
+    assert luca_fixture_verifier._audit_page_boundaries(doc)
 
 
 def _new_generator() -> DVRMasterGenerator:
@@ -136,86 +131,115 @@ def _jpeg_bytes(color: str = "blue") -> bytes:
     return output.getvalue()
 
 
-def _png_chunk_types(content: bytes) -> list[str]:
-    assert content.startswith(b"\x89PNG\r\n\x1a\n")
-    chunk_types = []
-    offset = 8
-    while offset < len(content):
-        chunk_size = int.from_bytes(content[offset : offset + 4], "big")
-        chunk_type = content[offset + 4 : offset + 8].decode("ascii")
-        chunk_types.append(chunk_type)
-        offset += 12 + chunk_size
-    assert offset == len(content)
-    return chunk_types
+COVER_ART =BACKEND_ROOT / "assets" / "document_art" / "cover_dvr.jpg"
+VERA_MARK = BACKEND_ROOT / "assets" / "document_art" / "vera_italia_mark.png"
 
 
-def test_vera_asset_has_fixed_pixels_dimensions_and_no_metadata():
-    content = (BACKEND_ROOT / "assets" / "n2o_vera_dvr.png").read_bytes()
+def _png_bytes(colour: str, size=(64, 24)) -> bytes:
+    output = BytesIO()
+    Image.new("RGB", size, colour).save(output, "PNG")
+    return output.getvalue()
 
-    assert sha256(content).hexdigest() == (
-        "d69929b5cb8981836db8e0d0610e3ff62e91702581392567ffe0247aa616fe15"
-    )
+
+def _footer_logos(doc: Document) -> set[bytes]:
+    logos = set()
+    for section in doc.sections:
+        footer = section.footer
+        for blip in footer._element.xpath(".//a:blip/@r:embed"):
+            logos.add(footer.part.related_parts[blip].blob)
+    return logos
+
+
+def test_dvr_cover_art_has_fixed_pixels_dimensions_and_no_metadata():
+    """The DVR cover is the VERA artwork of N2O's model, pinned by hash and
+    size, and it carries no metadata (author, tool or account names)."""
+    content = COVER_ART.read_bytes()
+
+    assert sha256(content).hexdigest() == luca_fixture_verifier._VERA_COVER_SHA256
     with Image.open(BytesIO(content)) as image:
         image.load()
-        assert image.size == (640, 358)
+        assert image.size == (1054, 1491)
         assert image.mode == "RGB"
-        assert sha256(image.tobytes()).hexdigest() == (
-            "c7c3318b2ac7fc514215a5e73c9bfad92d9f26a7aba17c60f3a502acede37f9b"
-        )
-        assert image.info == {}
-
-    chunks = _png_chunk_types(content)
-    assert set(chunks) <= {"IHDR", "IDAT", "IEND"}
-    assert not {"tEXt", "zTXt", "iTXt", "eXIf"}.intersection(chunks)
+        assert not image.getexif()
+        assert set(image.info) <= {
+            "jfif", "jfif_version", "jfif_unit", "jfif_density",
+            "progressive", "progression",
+        }
     lowered = content.lower()
     assert all(
         marker not in lowered
-        for marker in (b"canva", b"artist", b"user=", b"brand=")
+        for marker in (b"exif", b"xmp", b"canva", b"adobe", b"artist")
     )
 
 
-def test_dvr_cover_embeds_vera_asset_and_omits_consultancy(tmp_path):
-    """Configured organization branding must not leak into DVR covers."""
-    gen = _new_generator()
-    gen.branding = Branding(
-        firm_name="CONSULTANCY SENTINEL",
-        indirizzo="SENTINEL ADDRESS",
-        logo_bytes=(BACKEND_ROOT / "assets" / "logo.png").read_bytes(),
-        logo_content_type="image/png",
-    )
-    doc = Document()
-    gen._add_cover_page(doc, _cover_azienda(), datetime(2026, 8, 3), 1)
-    target = tmp_path / "cover.docx"
-    doc.save(target)
+def test_dvr_cover_is_the_vera_art_and_the_footer_shows_the_org_logo(tmp_path):
+    """The cover is the VERA picture alone, whatever the organization's
+    branding; the organization's own logo appears in the running footer
+    (spec decision 3), and its name never reaches the cover."""
+    from app.services.document_generator.dispatcher import get_generator_for
 
-    with ZipFile(target) as archive:
-        media = [archive.read(name) for name in archive.namelist() if name.startswith("word/media/")]
-    expected = (BACKEND_ROOT / "assets" / "n2o_vera_dvr.png").read_bytes()
-    assert expected in media
-    assert (BACKEND_ROOT / "assets" / "logo.png").read_bytes() not in media
+    module = _load_verify()
+    fixture = module.build_fixture()
+    org_logo = _png_bytes("purple")
+    with luca_fixture_verifier._patched_generator_fixture(fixture, tmp_path):
+        generator = get_generator_for("DVR_MASTER", fixture["azienda"].id, db=None)
+        generator.branding = Branding(
+            firm_name="CONSULTANCY SENTINEL",
+            indirizzo="SENTINEL ADDRESS",
+            logo_bytes=org_logo,
+            logo_content_type="image/png",
+        )
+        doc = Document(asyncio.run(generator.generate()))
+
+    cover = design.section_first_blocks(doc)[0]
+    assert design.art_marker(cover) == "vera-art:cover:cover_dvr"
+    blips = cover.xpath(".//a:blip/@r:embed")
+    assert [doc.part.related_parts[rid].blob for rid in blips] == [COVER_ART.read_bytes()]
     text = _all_text(doc)
-    assert "DOCUMENTO DI VALUTAZIONE DEI RISCHI" in text
-    assert "Documento elaborato da" not in text
-    assert "CONSULTANCY SENTINEL" not in text
+    for leak in ("CONSULTANCY SENTINEL", "SENTINEL ADDRESS", "Documento elaborato da"):
+        assert leak not in text
+    assert _footer_logos(doc) == {org_logo}
+
+
+def test_dvr_footer_falls_back_to_the_vera_mark(full_dvr_doc):
+    doc, _fixture = full_dvr_doc
+    assert _footer_logos(doc) == {VERA_MARK.read_bytes()}
 
 
 def test_vera_cover_audit_rejects_asset_and_embedding_changed_together(
     tmp_path, monkeypatch
 ):
+    """Swapping the cover file and what the DVR embeds, together, still
+    fails the audit: the cover is pinned by hash, not only compared with the
+    file on disk."""
     fake_backend = tmp_path / "fake-backend"
-    fake_assets = fake_backend / "assets"
-    fake_assets.mkdir(parents=True)
-    fake_vera = fake_assets / "n2o_vera_dvr.png"
-    fake_logo = fake_assets / "logo.png"
-    Image.new("RGB", (640, 358), "red").save(fake_vera, "PNG")
-    Image.new("RGB", (8, 8), "blue").save(fake_logo, "PNG")
+    fake_art = fake_backend / "assets" / "document_art"
+    fake_art.mkdir(parents=True)
+    Image.new("RGB", (1054, 1491), "red").save(fake_art / "cover_dvr.jpg", "JPEG")
+    (fake_art / "vera_italia_mark.png").write_bytes(VERA_MARK.read_bytes())
+    monkeypatch.setattr(design, "ART_DIR", fake_art)
     doc = Document()
-    doc.add_picture(str(fake_vera))
+    design.setup_document(doc, profile="dvr")
+    design.add_art_cover(doc, "cover_dvr")
+    doc.add_paragraph("Indice")
+    design.finish_document(
+        doc,
+        title="Documento di Valutazione dei Rischi",
+        azienda=_cover_azienda(),
+        branding=Branding.default(),
+        version=1,
+        generated_at=datetime(2026, 8, 3),
+    )
     target = tmp_path / "fake-cover.docx"
     doc.save(target)
     monkeypatch.setattr(luca_fixture_verifier, "BACKEND_ROOT", fake_backend)
 
-    assert not luca_fixture_verifier._audit_vera_cover(target, doc)
+    reopened = Document(target)
+    # The embedding matches the swapped file on disk...
+    cover = design.section_first_blocks(reopened)[0]
+    assert design.art_marker(cover) == "vera-art:cover:cover_dvr"
+    # ...and the pinned hash still rejects it.
+    assert not luca_fixture_verifier._audit_vera_cover(target, reopened)
 
 
 def test_saved_order_places_null_after_explicit_order_and_uses_stable_ties():
@@ -268,10 +292,155 @@ def test_employee_tables_keep_saved_order_and_external_consultants_keep_roles():
     )
     employees = _employee_persons([internal, external])
     doc = Document()
-    gen._add_dati_occupazionali_table(doc, employees)
+    gen._add_dati_anagrafici_table(doc, employees)
+    gen._add_dati_occupazionali_ambienti_table(doc, employees)
     gen._add_single_role_title_table(doc, "Responsabile del Servizio di Prevenzione e Protezione", [external])
-    assert [row.cells[0].text for row in doc.tables[0].rows[1:]] == ["ZULU INTERNO"]
-    assert "ALPHA RSPP (ESTERNO)" in doc.tables[1].cell(1, 0).text
+    anagrafici, occupazionali, band = doc.tables
+    assert [cell.text for cell in anagrafici.rows[0].cells] == [
+        "Nominativo", "Codice Fiscale", "Tipologia contrattuale",
+    ]
+    assert [cell.text for cell in occupazionali.rows[0].cells] == [
+        "Nominativo", "Mansione", "Ambiente di Lavoro",
+    ]
+    assert [row.cells[0].text for row in anagrafici.rows[1:]] == ["ZULU INTERNO"]
+    assert [[cell.text for cell in row.cells] for row in occupazionali.rows[1:]] == [
+        ["ZULU INTERNO", "OPERAIO", "TUTTA L'AZIENDA (RUOLO TRASVERSALE)"],
+    ]
+    assert band.cell(1, 0).text == "ALPHA RSPP (ESTERNO)"
+
+
+def test_dati_occupazionali_lists_environments_as_real_bullets():
+    """One List Bullet paragraph per environment, numbered through the
+    style; the cell's own empty paragraph becomes the first bullet."""
+    gen = _new_generator()
+    person = SimpleNamespace(
+        nominativo="Anna", mansione="Impiegata", ruolo_datore_lavoro=False,
+        ruolo_rspp=False, ruolo_rls=False, ruolo_medico_competente=False,
+        ambienti=[SimpleNamespace(nome="Ufficio"), SimpleNamespace(nome="Magazzino")],
+    )
+    doc = Document()
+    gen._add_dati_occupazionali_ambienti_table(doc, [person])
+    cell = doc.tables[0].rows[1].cells[2]
+    assert [p.text for p in cell.paragraphs] == ["UFFICIO", "MAGAZZINO"]
+    # No leftover empty run from the table builder's blank cell.
+    assert [len(p.runs) for p in cell.paragraphs] == [1, 1]
+    assert all(p.style.name == "List Bullet" for p in cell.paragraphs)
+    assert doc.styles["List Bullet"].element.xpath("./w:pPr/w:numPr/w:numId")
+    assert all(run.font.size == Pt(10) for p in cell.paragraphs for run in p.runs)
+
+
+def test_add_bullets_in_a_document_skips_blanks_and_falls_back_without_the_style():
+    doc = Document()
+    bullets = docx_utils.add_bullets(doc, ["Uno", "", None, "  ", "Due"])
+    assert [p.text for p in bullets] == ["Uno", "Due"]
+    assert all(p.style.name == "List Bullet" for p in bullets)
+    assert docx_utils.add_bullets(doc, []) == []
+
+    bare = Document()
+    style = bare.styles["List Bullet"].element
+    style.getparent().remove(style)
+    typed = docx_utils.add_bullets(bare, ["Tre"])
+    assert [p.text for p in typed] == ["• Tre"]
+
+
+def test_company_photo_is_fitted_framed_and_skipped_when_unreadable(caplog):
+    gen = _new_generator()
+    doc = Document()
+    output = BytesIO()
+    Image.new("RGB", (400, 300), "teal").save(output, "JPEG")
+    gen._add_company_photo(doc, (output.getvalue(), "image/jpeg"))
+    (shape,) = doc.inline_shapes
+    # 4:3 into 16.5 × 11 cm: the height binds.
+    assert abs(shape.height - Cm(11)) < Cm(0.01)
+    assert abs(shape.width / shape.height - 4 / 3) < 0.01
+    assert shape._inline.xpath(".//pic:spPr/a:ln")
+
+    with caplog.at_level(logging.WARNING):
+        gen._add_company_photo(doc, (b"not an image", "image/jpeg"))
+        gen._add_company_photo(doc, None)
+    assert len(doc.inline_shapes) == 1
+    assert "could not be embedded" in caplog.text
+
+
+def test_sign_panels_without_artwork_are_left_out(tmp_path, monkeypatch):
+    empty = tmp_path / "no-art"
+    empty.mkdir()
+    monkeypatch.setattr(design, "ART_DIR", empty)
+    doc = Document()
+    _new_generator()._add_sign_panels(doc)
+    assert len(doc.inline_shapes) == 0
+    assert "CARTELLI DI DIVIETO" not in _all_text(doc)
+
+
+def test_dvr_writes_table_cells_with_the_kit_helper():
+    """The DVR kept a copy of the kit's cell writer (same body, plus an
+    ``italic`` flag no caller passed); it uses the kit's own now."""
+    assert dvr_master.write_cell is docx_utils.write_cell
+
+
+def _column_alignments(table):
+    return [
+        {cell.paragraphs[0].alignment for cell in column.cells[1:]}
+        for column in table.columns
+    ]
+
+
+def test_signage_colour_table_centres_the_colour_column_like_the_model():
+    """Final review M-3 made each column of CODIFICA CROMATICA DELLA
+    SEGNALETICA take one alignment ("Rosso" and "Verde" used to be centred
+    for spelling RISK_COLORS keys, "Azzurro" was not). N2O's model (p. 59)
+    centres the whole Colore column and leaves the text columns left."""
+    doc = Document()
+    _new_generator()._add_segnaletica_section(doc)
+    table = next(t for t in doc.tables if t.rows[0].cells[0].text == "Colore")
+    colours = [row.cells[0].text for row in table.rows[1:]]
+    assert {"Rosso", "Verde", "Azzurro", "Giallo o giallo-arancio"} <= set(colours)
+    assert _column_alignments(table) == [
+        {WD_ALIGN_PARAGRAPH.CENTER},
+        {None},
+        {None},
+        {None},
+    ]
+
+
+def test_probability_and_damage_scales_centre_the_level_column_like_the_model():
+    """N2O's model centres "Livello" in SCALA DI PROBABILITÀ (p. 30:
+    ELEVATA … BASSA) and SCALA DEL DANNO (p. 31: INGENTE … TRASCURABILE);
+    the numbers column is centred and the criteria stay left."""
+    doc = Document()
+    _new_generator()._add_part_ii(doc)
+    for first_header in ("P", "D"):
+        table = next(t for t in doc.tables if t.rows[0].cells[0].text == first_header)
+        assert [c.text for c in table.rows[0].cells] == [first_header, "Livello", "Criteri"]
+        assert _column_alignments(table) == [
+            {WD_ALIGN_PARAGRAPH.CENTER},
+            {WD_ALIGN_PARAGRAPH.CENTER},
+            {None},
+        ], first_header
+
+
+def test_sign_panels_are_judged_by_manifest_key_not_file_name(tmp_path, monkeypatch):
+    """A panel prints when the art resolver used the panel's own manifest
+    key, whatever its file is called (here, kept in a sub-folder), and a
+    missing panel never borrows the generic divider that stands in for it."""
+    art = tmp_path / "art"
+    (art / "signs").mkdir(parents=True)
+    for key, _title in dvr_master._SIGN_PANELS:
+        monkeypatch.setitem(design.ART, key, f"signs/{key}.jpg")
+        Image.new("RGB", (40, 30), "red").save(art / "signs" / f"{key}.jpg", "JPEG")
+    Image.new("RGB", (40, 56), "blue").save(
+        art / design.ART[design._FALLBACK_ART_KEY], "JPEG"
+    )
+    (art / "signs" / "sign_obbligo.jpg").unlink()
+    monkeypatch.setattr(design, "ART_DIR", art)
+
+    doc = Document()
+    _new_generator()._add_sign_panels(doc)
+
+    text = _all_text(doc)
+    assert len(doc.inline_shapes) == 4
+    assert "CARTELLI DI DIVIETO" in text
+    assert "CARTELLI DI OBBLIGO" not in text
 
 
 def test_photo_image_sources_put_database_bytes_before_local_path(tmp_path):
@@ -304,7 +473,10 @@ def test_dvr_embeds_all_ten_database_photos():
     _new_generator()._add_env_foto_block(doc, "REPARTO", photos)
 
     assert len(doc.inline_shapes) == 10
-    assert "Fig. 10 — foto-9.jpg" in _all_text(doc)
+    # N2O's model dropped the "Fig. N — filename" captions.
+    assert "Fig." not in _all_text(doc)
+    for shape in doc.inline_shapes:
+        assert shape.width <= Cm(12) and shape.height <= Cm(9)
 
 
 def test_dvr_embeds_normalized_heic_photo_derivative():
@@ -324,7 +496,7 @@ def test_dvr_embeds_normalized_heic_photo_derivative():
     _new_generator()._add_env_foto_block(doc, "REPARTO", [photo])
 
     assert len(doc.inline_shapes) == 1
-    assert "Fig. 1 — sopralluogo.heic" in _all_text(doc)
+    assert "sopralluogo.heic" not in _all_text(doc)
 
 
 def test_dvr_renders_one_filename_specific_marker_per_unavailable_photo(caplog):
@@ -446,168 +618,285 @@ def test_parent_false_applicable_children_render_once_and_mark_checklist_yes():
     )
 
 
-def test_every_level_two_heading_is_a_single_separator_without_adjacent_page_breaks(full_dvr_doc):
+def test_level_two_headings_follow_the_page_map_with_clean_page_boundaries(full_dvr_doc):
+    """Heading 2 is the page map of N2O's model: in-page titles (rows 4–10,
+    15–18), the 23 divider titles, one title per environment in saved order;
+    unnumbered and in capitals. Every one opens its page without leaving an
+    empty page behind."""
     doc, fixture = full_dvr_doc
-    headings = [p for p in doc.paragraphs if p.style.name == "Heading 2"]
-    expected = {
-        "1. Presentazione dell'Azienda", "2. Anagrafica Aziendale",
-        "3. Dati Occupazionali", "4. Organizzazione Aziendale della Sicurezza",
-        "5. Ambienti di Lavoro", "6. Servizi Igienico-Assistenziali",
-        "7. Macchine, Attrezzature ed Impianti", "8. Sostanze, Prodotti e Preparati Chimici",
-        "9. Elenco Fattori di Pericolo (Riferimento)", "2.1 Descrizione dell'Attività",
-        "2.2 Definizioni", "2.3 Metodologia di Valutazione dei Rischi",
-        "2.4 Scala di Probabilità (P)", "2.5 Scala del Danno (D)",
-        "Mansioni che espongono i lavoratori a rischi specifici",
-        "DPI in dotazione per Mansione", "Segnaletica di Sicurezza",
-        "Programma di Informazione, Formazione e Addestramento",
-        "4.1 Programma e Procedure di attuazione delle Misure di Miglioramento",
-        "Documenti correlati al presente DVR", "4.13 Dichiarazione del Datore di Lavoro",
-    }
-    expected.update(spec.heading for spec in _PART_IV_PROCEDURAL_SECTIONS)
-    expected.update(
-        f"Identificazione dell'Ambiente di Lavoro e degli Addetti — {(ambiente.nome or '—').upper()}"
-        for ambiente in fixture["ambienti"]
-    )
-    assert collections.Counter(paragraph.text for paragraph in headings) == collections.Counter(expected)
-    for heading in headings:
-        assert _next_paragraph_has_page_break(heading)
+    headings = [p.text for p in doc.paragraphs if p.style.name == "Heading 2"]
+    assert headings == luca_fixture_verifier._expected_heading2(fixture)
+    assert not any(re.match(r"^\s*\d+(\.\d+)*\.?\s", text) for text in headings)
+    assert luca_fixture_verifier._audit_page_boundaries(doc)
     assert not _document_xml_has_adjacent_page_breaks(doc)
 
 
-@pytest.mark.parametrize("intruder_has_page_break_before", [False, True])
-def test_separator_audit_rejects_heading_after_mid_content_despite_breaks(
-    full_dvr_doc, intruder_has_page_break_before
-):
-    doc, fixture = full_dvr_doc
-    heading = next(
-        paragraph
-        for paragraph in doc.paragraphs
-        if paragraph.style.name == "Heading 2"
-        and paragraph.text == "2.2 Definizioni"
+def _drop_page_break_before(doc, title_text):
+    title = next(
+        p for p in doc.paragraphs
+        if p.style.name == "Heading 2" and p.text == title_text
     )
-    intruding_content = doc.add_paragraph("MID-CONTENT SENTINEL")
-    intruding_content.paragraph_format.page_break_before = (
-        intruder_has_page_break_before
-    )
-    heading._p.addprevious(intruding_content._p)
+    title.paragraph_format.page_break_before = False
 
-    assert _next_paragraph_has_page_break(heading)
+
+def _insert_blank_page_before(doc, title_text):
+    title = next(
+        p for p in doc.paragraphs
+        if p.style.name == "Heading 2" and p.text == title_text
+    )
+    breaker = doc.add_paragraph()
+    breaker.add_run().add_break(WD_BREAK.PAGE)
+    title._p.addprevious(breaker._p)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [_drop_page_break_before, _insert_blank_page_before],
+    ids=["title-without-break", "blank-page-before-title"],
+)
+def test_page_boundary_audit_rejects_a_broken_title_start(full_dvr_doc, mutate):
+    doc, fixture = full_dvr_doc
+    assert luca_fixture_verifier._audit_topic_separators(doc, fixture)
+
+    mutate(doc, "AMBIENTI DI LAVORO")
+
     assert not luca_fixture_verifier._audit_topic_separators(doc, fixture)
 
 
-def test_each_part_h1_occurs_once_and_shares_its_first_topic_separator(full_dvr_doc):
-    doc, fixture = full_dvr_doc
+def test_each_part_label_occurs_once_over_the_first_title_of_its_part(full_dvr_doc):
+    doc, _fixture = full_dvr_doc
     paragraphs = doc.paragraphs
     h1 = [p for p in paragraphs if p.style.name == "Heading 1"]
-    h1_text = [p.text for p in h1]
-    assert h1_text.count("PARTE I — DATI GENERALI DELL'AZIENDA") == 1
-    assert h1_text.count("PARTE II — DESCRIZIONE DELL'ATTIVITÀ E METODOLOGIA DI VALUTAZIONE") == 1
-    assert h1_text.count("PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO") == 1
-    assert h1_text.count("PARTE IV — PROGRAMMA DI MIGLIORAMENTO") == 1
-    assert all(paragraph.runs[0].font.size == Pt(11) for paragraph in h1 if paragraph.text.startswith("PARTE "))
-    first_environment = min(fixture["ambienti"], key=_saved_order_key)
-    first_topics = {
-        "PARTE I — DATI GENERALI DELL'AZIENDA": "1. Presentazione dell'Azienda",
-        "PARTE II — DESCRIZIONE DELL'ATTIVITÀ E METODOLOGIA DI VALUTAZIONE": "2.1 Descrizione dell'Attività",
-        "PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO": f"Identificazione dell'Ambiente di Lavoro e degli Addetti — {(first_environment.nome or '—').upper()}",
-        "PARTE IV — PROGRAMMA DI MIGLIORAMENTO": "4.1 Programma e Procedure di attuazione delle Misure di Miglioramento",
+    first_titles = {
+        "PARTE I — DATI GENERALI DELL'AZIENDA": "PRESENTAZIONE DELL'AZIENDA",
+        "PARTE II — METODOLOGIA DI VALUTAZIONE": "DEFINIZIONI",
+        "PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO":
+            "IDENTIFICAZIONE DELL'AMBIENTE DI LAVORO E DEGLI ADDETTI",
+        "PARTE IV — PROGRAMMA DI MIGLIORAMENTO":
+            "PROGRAMMA E PROCEDURE DI ATTUAZIONE DELLE MISURE DI MIGLIORAMENTO",
     }
-    for part_heading, first_topic in first_topics.items():
-        part = next(paragraph for paragraph in h1 if paragraph.text == part_heading)
-        following = paragraphs[paragraphs.index(part) + 1]
+    assert [p.text for p in h1 if p.text.startswith("PARTE ")] == list(first_titles)
+    for label_text, first_title in first_titles.items():
+        label = next(p for p in h1 if p.text == label_text)
+        assert all(run.font.size == Pt(9) for run in label.runs)
+        following = paragraphs[paragraphs.index(label) + 1]
         assert following.style.name == "Heading 2"
-        assert following.text == first_topic
+        assert following.text == first_title
+    # Parts I and II open on in-page titles, Parts III and IV on dividers.
+    for label_text in list(first_titles)[:2]:
+        label = next(p for p in h1 if p.text == label_text)
+        assert label._p.xpath("./w:pPr/w:pageBreakBefore")
+    for label_text in list(first_titles)[2:]:
+        label = next(p for p in h1 if p.text == label_text)
+        assert design.art_marker(label._p.getprevious()).startswith("vera-art:divider:")
 
 
-def test_empty_environment_part_keeps_its_h1_with_all_inline_tail_topics(empty_environment_dvr_doc):
+def test_empty_environment_part_keeps_its_divider_and_says_so(empty_environment_dvr_doc):
     doc = empty_environment_dvr_doc
-    paragraphs = doc.paragraphs
-    part = next(
-        paragraph for paragraph in paragraphs
-        if paragraph.style.name == "Heading 1"
-        and paragraph.text == "PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO"
+    headings = [p.text for p in doc.paragraphs if p.style.name == "Heading 2"]
+    start = headings.index("IDENTIFICAZIONE DELL'AMBIENTE DI LAVORO E DEGLI ADDETTI")
+    # No environment titles: the next title is the MANSIONI divider.
+    assert headings[start + 1] == "MANSIONI CHE ESPONGONO I LAVORATORI A RISCHI SPECIFICI"
+    dividers = [title for _key, title in luca_fixture_verifier._divider_entries(doc)]
+    assert dividers == list(luca_fixture_verifier._DIVIDER_TITLES)
+    notice = next(
+        p for p in doc.paragraphs if p.text == "Nessun ambiente di lavoro registrato."
     )
-    part_index = paragraphs.index(part)
-    assert paragraphs[part_index + 1].style.name == "Heading 2"
-    assert paragraphs[part_index + 1].text == "Mansioni che espongono i lavoratori a rischi specifici"
-    expected_tail = {
-        "Mansioni che espongono i lavoratori a rischi specifici",
-        "DPI in dotazione per Mansione",
-        "Segnaletica di Sicurezza",
-        "Programma di Informazione, Formazione e Addestramento",
-    }
-    tail = [
-        paragraph for paragraph in paragraphs
-        if paragraph.style.name == "Heading 2" and paragraph.text in expected_tail
-    ]
-    assert collections.Counter(paragraph.text for paragraph in tail) == collections.Counter(expected_tail)
-    assert all(paragraph.style.name == "Heading 2" for paragraph in tail)
-    assert all(_next_paragraph_has_page_break(paragraph) for paragraph in tail)
-    assert any(paragraph.text == "Nessun ambiente di lavoro registrato." for paragraph in paragraphs)
+    title = next(
+        p for p in doc.paragraphs
+        if p.text == "IDENTIFICAZIONE DELL'AMBIENTE DI LAVORO E DEGLI ADDETTI"
+    )
+    # The notice is the content of the divider's next page.
+    assert title._p.getnext().getnext() is notice._p
 
 
-def test_improvement_table_prints_all_saved_fields_in_order_and_restores_portrait():
+def _measure(ordine, priorita, misura, misura_miglioramento, letter):
+    return SimpleNamespace(
+        id=uuid.UUID(int=ordine), created_at=datetime(2026, 1, ordine), ordine=ordine,
+        priorita=priorita, misura=misura, misura_miglioramento=misura_miglioramento,
+        procedura=f"P{letter}", risorse=f"S{letter}", responsabile=f"A{letter}",
+        scadenza=f"D{letter}",
+    )
+
+
+def test_improvement_table_has_four_portrait_columns_in_saved_order():
     rows = [
-        SimpleNamespace(id=uuid.UUID(int=2), created_at=datetime(2026, 1, 2), ordine=2, priorita="MODESTO", misura="R2", misura_miglioramento="M2", procedura="P2", risorse="S2", responsabile="A2", scadenza="D2"),
-        SimpleNamespace(id=uuid.UUID(int=1), created_at=datetime(2026, 1, 1), ordine=1, priorita="GRAVE", misura="R1", misura_miglioramento="M1", procedura="P1", risorse="S1", responsabile="A1", scadenza="D1"),
+        _measure(2, "MODESTO", "R2", "M2", "2"),
+        _measure(1, "GRAVE", "R1", "M1", "1"),
+        _measure(3, "MEDIA", "Riduzione del rischio — Macchine", None, "3"),
     ]
     doc = Document()
     _new_generator()._add_improvement_program_table(doc, rows)
     table = doc.tables[-1]
     assert [c.text for c in table.rows[0].cells] == [
-        "Priorità", "Rischio", "Misura di Miglioramento", "Attività / Procedura", "Risorse", "Responsabile", "Scadenza"
+        "Misura di Miglioramento", "Risorse", "Responsabile", "Priorità",
     ]
-    assert [c.text for c in table.rows[1].cells] == ["GRAVE", "R1", "M1", "P1", "S1", "A1", "D1"]
-    assert doc.sections[-2].orientation == WD_ORIENT.LANDSCAPE
-    assert doc.sections[-1].orientation == WD_ORIENT.PORTRAIT
+    assert [[c.text for c in row.cells] for row in table.rows[1:]] == [
+        ["M1", "S1", "A1", "GRAVE"],
+        ["M2", "S2", "A2", "MODESTO"],
+        # No concrete measure yet: its drafted activity, never the risk text
+        # (``misura`` is the "Rischio" column of the app's grid).
+        ["P3", "S3", "A3", "MEDIA"],
+    ]
+    fills = [row.cells[3]._tc.xpath("./w:tcPr/w:shd/@w:fill") for row in table.rows[1:]]
+    assert fills == [["F97316"], ["F59E0B"], ["F59E0B"]]
+    # Portrait: no landscape section is opened for the table.
+    assert len(doc.sections) == 1
 
 
-def test_declaration_has_fresh_content_page_and_signature_rows_are_signable(full_dvr_doc):
-    doc, _fixture = full_dvr_doc
+def test_improvement_measure_falls_back_to_activity_then_risk_then_dash():
+    rows = [
+        _measure(1, "ALTA", "R1", None, "1"),
+        _measure(2, "ALTA", "R2", "  ", "2"),
+        _measure(3, "ALTA", "R3", None, "3"),
+        _measure(4, "ALTA", "  ", None, "4"),
+    ]
+    rows[1].procedura = None
+    rows[2].procedura = "   "
+    rows[3].procedura = ""
+    doc = Document()
+    _new_generator()._add_improvement_program_table(doc, rows)
+    table = doc.tables[-1]
+    assert [row.cells[0].text for row in table.rows[1:]] == ["P1", "R2", "R3", "—"]
+
+
+def test_auto_seeded_measure_prints_its_drafted_actions_not_the_risk():
+    """A seeded row keeps the risk summary in ``misura`` and the drafted
+    actions, flagged for the RSPP, in ``procedura``; the printed Misura
+    column carries the actions (final review I-2)."""
+    from unittest.mock import AsyncMock, Mock
+
+    machine_risk = SimpleNamespace(
+        id=uuid.uuid4(), pericolo="Contatto con organi in movimento",
+        indice_i=7, applicabile=True, livello_rischio="GRAVE",
+    )
+    officina = SimpleNamespace(
+        nome="Officina", preposto_id=None, persone=[],
+        valutazioni_rischio=[
+            SimpleNamespace(categoria_rischio="Macchine", pericoli=[machine_risk]),
+        ],
+    )
+    generator = _new_generator()
+    generator.azienda_id = uuid.uuid4()
+    generator.db = AsyncMock()
+    generator.db.add = Mock()
+
+    seeded = asyncio.run(
+        generator._auto_seed_misure({"ambienti": [officina], "persone": []})
+    )
+    (measure,) = seeded
+    assert measure.misura.startswith("Riduzione del rischio — Macchine")
+    assert not measure.misura_miglioramento
+
+    doc = Document()
+    generator._add_improvement_program_table(doc, seeded)
+    printed = doc.tables[-1].rows[1].cells[0].text
+    assert printed == measure.procedura
+    assert printed.startswith("[DA COMPILARE — RSPP] Verifica della marcatura CE")
+    assert "Riduzione del rischio" not in printed
+
+
+def test_declaration_page_and_signature_grid(full_dvr_doc):
+    doc, fixture = full_dvr_doc
     declaration = next(
         paragraph for paragraph in doc.paragraphs
-        if paragraph.text == "4.13 Dichiarazione del Datore di Lavoro"
+        if paragraph.text == "DICHIARAZIONE DEL DATORE DI LAVORO"
         and paragraph.style.name == "Heading 2"
     )
     assert _next_paragraph_has_page_break(declaration)
-    signature = next(
-        table for table in doc.tables
-        if len(table.rows) == 2
-        and len(table.rows[0].cells) == 3
-        and "Il Datore di Lavoro" in " ".join(cell.text for cell in table.rows[0].cells)
-    )
-    signature_text = " ".join(cell.text for row in signature.rows for cell in row.cells)
-    for expected in ("MARIO ROSSI", "LUCA BIANCHI", "DOTT.SSA TEST MEDICO", "GIULIA VERDI"):
-        assert expected in signature_text
-    for row in signature.rows:
-        assert row.height >= Cm(3)
+    grid = luca_fixture_verifier._signature_grid(doc)
+    assert [[cell.text for cell in row.cells] for row in grid.rows] == [
+        ["Datore di Lavoro", "Responsabile del S.P.P."],
+        ["MARIO ROSSI", "LUCA BIANCHI"],
+        ["", ""],
+        ["Medico Competente", "RLS"],
+        ["DOTT.SSA TEST MEDICO", "GIULIA VERDI"],
+        ["", ""],
+    ]
+    for row in (grid.rows[2], grid.rows[5]):
+        assert row.height >= Cm(2.5)
         assert row.height_rule == WD_ROW_HEIGHT_RULE.AT_LEAST
+    for row in grid.rows:
         assert row._tr.xpath("./w:trPr/w:cantSplit")
     final_clause = next(paragraph for paragraph in doc.paragraphs if paragraph.text.startswith("di impegnarsi a rielaborare"))
-    place_date = next(paragraph for paragraph in doc.paragraphs if ", li " in paragraph.text)
+    place_date = next(paragraph for paragraph in doc.paragraphs if ", lì " in paragraph.text)
+    # The place line is dated like the footer's revision.
+    assert place_date.text.endswith(fixture["generated_at"].strftime("%d/%m/%Y"))
     assert final_clause._p.xpath("./w:pPr/w:keepNext")
     assert place_date._p.xpath("./w:pPr/w:keepNext")
     assert final_clause._p.getnext() is place_date._p
-    assert place_date._p.getnext() is signature._tbl
+    assert place_date._p.getnext() is grid._tbl
 
 
 def test_luca_fixture_auditor_reports_all_acceptance_checks(tmp_path):
     report = build_and_audit(tmp_path)
-    assert report == {
-        "acme_regression": True,
-        "vera_cover": True,
-        "saved_people_order": True,
-        "saved_environment_order": True,
-        "external_roles": True,
-        "grouped_equipment": True,
-        "all_ten_photos": True,
-        "effective_risks": True,
-        "person_specific_risks": True,
-        "dpi_dash_alignment": True,
-        "topic_separators": True,
-        "complete_improvements": True,
-        "declaration_signatures": True,
-    }
+    assert report == {key: True for key in luca_fixture_verifier._REPORT_KEYS}
+    assert len(report) == 25
+
+
+def _all_paragraph_texts(doc: Document) -> list[str]:
+    """Every paragraph's text: body, table cells, headers and footers."""
+    texts = [paragraph.text for paragraph in doc.paragraphs]
+    texts += [
+        paragraph.text
+        for table in doc.tables
+        for row in table.rows
+        for cell in row.cells
+        for paragraph in cell.paragraphs
+    ]
+    for section in doc.sections:
+        for part in (
+            section.header, section.footer,
+            section.first_page_header, section.first_page_footer,
+        ):
+            texts += [paragraph.text for paragraph in part.paragraphs]
+    return texts
+
+
+def test_dvr_sparse_azienda_generates(tmp_path):
+    """Review Focus 2: no environments, people, photos, allegati or misure.
+
+    The document still opens on the VERA cover and closes on the back cover,
+    the signature grid keeps its four roles with "—" for nobody, and no
+    missing value leaks into the text as ``None``.
+    """
+    module = _load_verify()
+    fixture = module.build_fixture()
+    for key in ("ambienti", "persone", "attrezzature", "sostanze_chimiche"):
+        fixture[key] = []
+
+    async def no_extras(self, data):
+        return {
+            "foto_by_ambiente": {},
+            "vdt_esposti_persona_ids": set(),
+            "allegati_presenti": [],
+            "misure_miglioramento": [],
+            "protocolli_sanitari": [],
+            "foto_presentazione": None,
+        }
+
+    with luca_fixture_verifier._patched_generator_fixture(fixture, tmp_path):
+        DVRMasterGenerator._load_dvr_extras = no_extras
+        ok, path, message = asyncio.run(
+            module.run_one("DVR_MASTER", fixture["azienda"].id)
+        )
+    assert ok, message
+    doc = Document(path)
+
+    firsts = design.section_first_blocks(doc)
+    assert design.art_marker(firsts[0]) == "vera-art:cover:cover_dvr"
+    assert design.art_marker(firsts[-1]) == "vera-art:back_cover:back_vera"
+
+    grid = luca_fixture_verifier._signature_grid(doc)
+    assert grid is not None
+    assert [cell.text for cell in grid.rows[0].cells + grid.rows[3].cells] == [
+        "Datore di Lavoro", "Responsabile del S.P.P.", "Medico Competente", "RLS",
+    ]
+    assert [cell.text for cell in grid.rows[1].cells + grid.rows[4].cells] == [
+        "—", "—", "—", "—",
+    ]
+    leaks = [text for text in _all_paragraph_texts(doc) if "None" in text]
+    assert leaks == []
 
 
 def test_luca_fixture_cli_is_directly_runnable_outside_backend(tmp_path):
@@ -760,28 +1049,10 @@ def test_document_fixtures_restore_complete_generator_patch_surface(
 
 def _ordered_acme_doc_content(path: Path):
     doc = Document(path)
-    roster = next(
-        table
-        for table in doc.tables
-        if table.rows
-        and [cell.text.strip() for cell in table.rows[0].cells]
-        == [
-            "Nominativo",
-            "Mansione",
-            "Ambiente di Lavoro",
-            "Codice Fiscale",
-            "Tipologia contrattuale",
-        ]
-    )
-    prefix = "Identificazione dell'Ambiente di Lavoro e degli Addetti — "
+    roster = luca_fixture_verifier._people_table(doc, "DATI OCCUPAZIONALI")
     return (
         [row.cells[0].text.strip() for row in roster.rows[1:]],
-        [
-            paragraph.text.removeprefix(prefix)
-            for paragraph in doc.paragraphs
-            if paragraph.style.name == "Heading 2"
-            and paragraph.text.startswith(prefix)
-        ],
+        luca_fixture_verifier._environment_titles(doc),
     )
 
 
@@ -836,15 +1107,28 @@ def test_build_and_audit_restores_every_generator_patch_on_exception(
     _assert_patch_surface_restored(before)
 
 
-def test_photo_audit_rejects_captions_without_adjacent_drawings():
+def _photo_block_doc(*, captions: bool) -> tuple[Document, list[bytes]]:
     doc = Document()
-    expected = [f"Fig. {index} — foto-{index - 1}.jpg" for index in range(1, 11)]
-    for caption in expected:
-        doc.add_paragraph(caption)
+    doc.add_heading("Foto e Planimetrie — ZULU REPARTO", level=3)
+    blobs = []
+    for index in range(10):
+        content = _jpeg_bytes(f"#{index * 20:02x}5080")
+        blobs.append(content)
+        doc.add_paragraph().add_run().add_picture(BytesIO(content), width=Cm(6))
+        if captions:
+            doc.add_paragraph(f"Fig. {index + 1} — foto-{index}.jpg")
+    return doc, blobs
 
+
+def test_photo_audit_accepts_ten_pictures_and_rejects_captions():
+    doc, blobs = _photo_block_doc(captions=False)
+    assert luca_fixture_verifier._audit_all_ten_photos(doc, {"expected_photo_blobs": blobs})
+
+    captioned, blobs = _photo_block_doc(captions=True)
     assert not luca_fixture_verifier._audit_all_ten_photos(
-        doc, {"expected_photo_captions": expected}
+        captioned, {"expected_photo_blobs": blobs}
     )
+    assert not luca_fixture_verifier._audit_no_photo_captions(captioned)
 
 
 def test_effective_risk_audit_rejects_sentinel_text_without_risk_tables():
@@ -876,19 +1160,20 @@ def test_acme_audit_rejects_wrong_roster_order(tmp_path):
 
 def test_declaration_audit_rejects_swapped_rspp_and_medico_cells():
     fixture = luca_fixture_verifier.build_luca_fixture()
+    persone = sorted(fixture["persone"], key=_saved_order_key)
     doc = Document()
-    doc.add_heading("4.13 Dichiarazione del Datore di Lavoro", level=2)
-    doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
-    doc.add_paragraph(
-        "DATORE FIXTURE, in qualita di Datore di Lavoro della "
-        "LUCA FIXTURE INDUSTRIA SRL"
-    )
-    _new_generator()._add_signature_table(doc, fixture["persone"])
-    signature = doc.tables[-1]
-    rspp = signature.cell(0, 2).text
-    medico = signature.cell(1, 0).text
-    signature.cell(0, 2).text = medico
-    signature.cell(1, 0).text = rspp
+    design.setup_document(doc, profile="dvr")
+    doc.add_paragraph("Contenuto precedente")
+    gen = _new_generator()
+    gen._add_dichiarazione_ddl(doc, fixture["azienda"], persone, fixture["generated_at"])
+    gen._add_signature_table(doc, persone)
+    assert luca_fixture_verifier._audit_declaration_signatures(doc, fixture)
+
+    grid = luca_fixture_verifier._signature_grid(doc)
+    rspp = grid.cell(1, 1).text
+    medico = grid.cell(4, 0).text
+    grid.cell(1, 1).text = medico
+    grid.cell(4, 0).text = rspp
 
     assert not luca_fixture_verifier._audit_declaration_signatures(
         doc, fixture

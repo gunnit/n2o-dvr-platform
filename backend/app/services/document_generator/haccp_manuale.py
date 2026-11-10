@@ -17,7 +17,11 @@ from app.data.haccp_activity_types import ccp_process_key, is_prerequisite, proc
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_haccp
-from app.services.document_generator.design import finish_document
+from app.services.document_generator.design import (
+    add_back_cover,
+    finish_document,
+    setup_document,
+)
 from app.services.document_generator.docx_utils import (
     _set_cell_text_keep_format,
     _set_paragraph_text_keep_format,
@@ -32,9 +36,23 @@ from app.services.document_generator.docx_utils import (
     replace_placeholders,
     slugify,
 )
+from app.services.document_generator.donor_cover import (
+    insert_kit_cover_at_top,
+    normalize_fonts,
+    strip_donor_cover,
+)
 
 TEMPLATE = TEMPLATES_DIR / "HACCP.docx"
 TIPO_DOC = "haccp"
+DOC_TITLE = "Manuale di Autocontrollo HACCP"
+
+# The kit cover carries what the donor's own cover said (wording from
+# draft PR #82).
+COVER = {
+    "title": "Manuale di autocontrollo per l'igiene degli alimenti",
+    "eyebrow": "Sistema di autocontrollo HACCP",
+    "legal_basis": "ai sensi del Reg. (CE) 852/2004 e del D.Lgs. 193/2007",
+}
 
 # The procedures the template body actually documents, with its own codes,
 # so the index and the body cross-reference each other. The previous index
@@ -113,11 +131,15 @@ class HaccpManualeGenerator(BaseDocumentGenerator):
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
+            # The donor's cover (white type on a black full-page shape) runs
+            # up to the Definizioni chapter, in the same section; the kit
+            # cover takes its place once the body is complete (spec
+            # 2026-11-10 §4.4).
+            strip_donor_cover(doc, stop_text="Definizioni")
             replace_placeholders(doc, {"RAGIONE SOCIALE": azienda.ragione_sociale or "", "[AZIENDA]": azienda.ragione_sociale or ""})
             # Audit 2026-09-03: the template is a third-party restaurant's
             # manual. Swap its identity for the client's wherever it is
-            # named. (The cover is white type on a black full-page shape;
-            # that is legible as it is, so the runs are left white.)
+            # named.
             _via = (getattr(azienda, 'sede_legale_via', None) or '').strip()
             _citta = (getattr(azienda, 'sede_legale_citta', None) or '').strip()
             scrub_body(doc, {
@@ -130,6 +152,7 @@ class HaccpManualeGenerator(BaseDocumentGenerator):
             _customize_donor_body(doc, azienda, config, data.get("ambienti") or [])
         else:
             doc = Document()
+            setup_document(doc, profile="attachment")
 
         page_break(doc)
         add_heading(doc, f"MANUALE HACCP - {azienda.ragione_sociale}", level=1)
@@ -263,12 +286,24 @@ class HaccpManualeGenerator(BaseDocumentGenerator):
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")
+        # The kit's look on the donor (spec 2026-11-10 §4.4): its cover,
+        # Arial at the donor's own sizes, the back cover.
+        insert_kit_cover_at_top(
+            doc,
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=generated_at,
+            **COVER,
+        )
+        normalize_fonts(doc)
+        add_back_cover(doc)
         # Audit 2026-09-03: the donor template's header/footer carried the
         # legacy N2O letterhead and literal placeholders; rewrite them from
         # the organization's branding and set honest file properties.
         finish_document(
             doc,
-            title='Manuale di Autocontrollo HACCP',
+            title=DOC_TITLE,
             azienda=azienda,
             branding=self.branding,
             version=version,

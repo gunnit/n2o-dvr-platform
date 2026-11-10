@@ -70,8 +70,8 @@ def test_manual_prints_flow_full_ccp_table_and_no_donor_specifics(tmp_path):
     fixture = module.build_fixture()
     fixture["haccp_config"].tipologia_attivita = "mensa_aziendale"
     fixture["haccp_config"].ccps = get_default_ccps("mensa_aziendale")
-    module.patch_generators(fixture, str(tmp_path))
-    ok, path, message = asyncio.run(module.run_one("HACCP", fixture["azienda"].id))
+    with module.patched_generators(fixture, str(tmp_path)):
+        ok, path, message = asyncio.run(module.run_one("HACCP", fixture["azienda"].id))
     assert ok, message
 
     doc = Document(path)

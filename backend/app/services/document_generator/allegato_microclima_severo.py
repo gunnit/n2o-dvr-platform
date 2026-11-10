@@ -16,17 +16,21 @@ from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_microclima
 from app.services.document_generator.design import (
+    add_back_cover,
     add_cover,
     add_revision_table,
     finish_document,
     setup_document,
 )
 from app.services.document_generator.docx_utils import (
+    NOTE_GREY,
+    TYPE_SCALE,
+    add_body_paragraph,
     add_data_table,
     add_heading,
     add_kv_table,
-    add_paragraph,
     format_sede,
+    set_run_font,
     slugify,
 )
 from app.services.microclima_calculator import calculate_phs
@@ -38,6 +42,13 @@ DOC_TITLE = "Allegato Rischio Microclima Severo"
 def _it(value: float, digits: int) -> str:
     """Italian decimal notation (comma), e.g. 28,0."""
     return f"{value:.{digits}f}".replace(".", ",")
+
+
+def _note(doc, text: str):
+    """The kit's note: 10 pt italic grey."""
+    paragraph = doc.add_paragraph()
+    set_run_font(paragraph.add_run(text), size=TYPE_SCALE["note"], italic=True, color=NOTE_GREY)
+    return paragraph
 
 
 def _compute_phs(t_air, t_rad, v_air, rh, met, clo) -> tuple[float | None, float | None, float | None]:
@@ -134,10 +145,11 @@ class AllegatoMicroclimaSeveroGenerator(BaseDocumentGenerator):
         cold_rows = [m for m in micro if (m.tipo_ambiente or "") == "severo_freddo"]
 
         doc = Document()
-        setup_document(doc)
+        setup_document(doc, profile="attachment")
         # Audit 2026-09-03: shipped as two US-Letter pages with no cover,
-        # header, footer or logo. Shared furniture now; Parte I/II become
-        # Heading 1 so the running structure reads on the page.
+        # header, footer or logo. Shared furniture now (the kit's art cover
+        # and back cover, spec 2026-11-10 §4.4); Parte I/II become Heading 1
+        # so the running structure reads on the page.
         add_cover(
             doc,
             title=DOC_TITLE,
@@ -161,7 +173,7 @@ class AllegatoMicroclimaSeveroGenerator(BaseDocumentGenerator):
 
         add_heading(doc, "PARTE I - STRESS DA CALDO (PHS)", level=1)
         add_heading(doc, "Metodologia", level=2)
-        add_paragraph(doc, "L'indice PHS (Predicted Heat Strain) stima la perdita totale di sudore (in g), la temperatura rettale prevista (t_re) e il limite di esposizione più restrittivo tra temperatura rettale e perdita idrica (d_lim in minuti).")
+        add_body_paragraph(doc, "L'indice PHS (Predicted Heat Strain) stima la perdita totale di sudore (in g), la temperatura rettale prevista (t_re) e il limite di esposizione più restrittivo tra temperatura rettale e perdita idrica (d_lim in minuti).")
 
         add_heading(doc, "Soglie di azione", level=2)
         add_data_table(doc, ["d_lim", "Classificazione"], [
@@ -172,7 +184,7 @@ class AllegatoMicroclimaSeveroGenerator(BaseDocumentGenerator):
 
         add_heading(doc, "Valutazione per ambiente severo", level=2)
         if not severe_rows:
-            add_paragraph(doc, "Nessun ambiente a rischio da caldo severo registrato.", italic=True)
+            _note(doc, "Nessun ambiente a rischio da caldo severo registrato.")
         else:
             rows = []
             for m in severe_rows:
@@ -199,7 +211,7 @@ class AllegatoMicroclimaSeveroGenerator(BaseDocumentGenerator):
             )
 
         add_heading(doc, "Misure organizzative e di protezione", level=2)
-        add_paragraph(doc, "Per ambienti con stress termico severo: idratazione frequente (>= 250 ml/h), pause in zona rinfrescata ogni 45 minuti, rotazione personale, monitoraggio sintomi, formazione sul riconoscimento del colpo di calore, sorveglianza sanitaria specifica.")
+        add_body_paragraph(doc, "Per ambienti con stress termico severo: idratazione frequente (>= 250 ml/h), pause in zona rinfrescata ogni 45 minuti, rotazione personale, monitoraggio sintomi, formazione sul riconoscimento del colpo di calore, sorveglianza sanitaria specifica.")
 
         # ------------------------------------------------------------------
         # Parte II — severe cold (IREQ, UNI EN ISO 11079)
@@ -207,7 +219,7 @@ class AllegatoMicroclimaSeveroGenerator(BaseDocumentGenerator):
         add_heading(doc, "PARTE II - STRESS DA FREDDO (IREQ)", level=1)
 
         add_heading(doc, "Metodologia", level=2)
-        add_paragraph(doc, "La norma UNI EN ISO 11079 valuta il raffreddamento generale del corpo mediante l'indice IREQ (Insulation REQuired): l'isolamento termico del vestiario necessario a mantenere l'equilibrio termico nelle condizioni ambientali e metaboliche rilevate. IREQ neutro corrisponde all'equilibrio in condizioni di neutralità termica; IREQ minimo al massimo raffreddamento corporeo accettabile. Se l'isolamento del vestiario indossato (Icl) è inferiore a IREQ minimo, l'esposizione deve essere limitata nel tempo (DLE - Durata Limite di Esposizione, calcolata con debito termico ammesso di 40 Wh/m²). Il raffreddamento localizzato viene valutato mediante la temperatura wind chill (t_wc, Appendice D della norma).")
+        add_body_paragraph(doc, "La norma UNI EN ISO 11079 valuta il raffreddamento generale del corpo mediante l'indice IREQ (Insulation REQuired): l'isolamento termico del vestiario necessario a mantenere l'equilibrio termico nelle condizioni ambientali e metaboliche rilevate. IREQ neutro corrisponde all'equilibrio in condizioni di neutralità termica; IREQ minimo al massimo raffreddamento corporeo accettabile. Se l'isolamento del vestiario indossato (Icl) è inferiore a IREQ minimo, l'esposizione deve essere limitata nel tempo (DLE - Durata Limite di Esposizione, calcolata con debito termico ammesso di 40 Wh/m²). Il raffreddamento localizzato viene valutato mediante la temperatura wind chill (t_wc, Appendice D della norma).")
 
         add_heading(doc, "Soglie di classificazione", level=2)
         add_data_table(doc, ["Condizione", "Classificazione"], [
@@ -224,7 +236,7 @@ class AllegatoMicroclimaSeveroGenerator(BaseDocumentGenerator):
 
         add_heading(doc, "Valutazione per ambiente a freddo severo", level=2)
         if not cold_rows:
-            add_paragraph(doc, "Nessun ambiente a rischio da freddo severo registrato.", italic=True)
+            _note(doc, "Nessun ambiente a rischio da freddo severo registrato.")
         else:
             rows = []
             for m in cold_rows:
@@ -251,11 +263,12 @@ class AllegatoMicroclimaSeveroGenerator(BaseDocumentGenerator):
             for m in cold_rows:
                 r = _compute_ireq(m.temperatura_aria, m.temperatura_radiante, m.velocita_aria, m.umidita_relativa, m.metabolismo, m.isolamento_vestiario)
                 amb_name = ambienti_map[m.ambiente_id].nome if m.ambiente_id in ambienti_map else (m.nome_area or "—")
-                add_paragraph(doc, f"{amb_name}: {_severity_freddo(r.get('livello'))}." + (f" Isolamento supplementare consigliato: +{_it(float(r['delta_clo']), 2)} clo." if r.get("delta_clo") else ""))
+                add_body_paragraph(doc, f"{amb_name}: {_severity_freddo(r.get('livello'))}." + (f" Isolamento supplementare consigliato: +{_it(float(r['delta_clo']), 2)} clo." if r.get("delta_clo") else ""))
 
         add_heading(doc, "Misure organizzative e di protezione contro il freddo", level=2)
-        add_paragraph(doc, "Per ambienti con stress da freddo severo: indumenti di protezione contro il freddo con isolamento adeguato all'IREQ calcolato (abbigliamento multistrato, antivento), protezione di mani, piedi e capo, pause di riscaldamento in locale temperato con bevande calde, limitazione dell'esposizione alla DLE in caso di isolamento insufficiente, rotazione del personale, protezione della cute esposta quando la temperatura wind chill scende sotto -25 °C, formazione sul riconoscimento di ipotermia e congelamento, sorveglianza sanitaria specifica (art. 181 D.Lgs. 81/2008).")
+        add_body_paragraph(doc, "Per ambienti con stress da freddo severo: indumenti di protezione contro il freddo con isolamento adeguato all'IREQ calcolato (abbigliamento multistrato, antivento), protezione di mani, piedi e capo, pause di riscaldamento in locale temperato con bevande calde, limitazione dell'esposizione alla DLE in caso di isolamento insufficiente, rotazione del personale, protezione della cute esposta quando la temperatura wind chill scende sotto -25 °C, formazione sul riconoscimento di ipotermia e congelamento, sorveglianza sanitaria specifica (art. 181 D.Lgs. 81/2008).")
 
+        add_back_cover(doc)
         finish_document(
             doc,
             title=DOC_TITLE,

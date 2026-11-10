@@ -11,6 +11,58 @@ Programmatic structural analysis of `DVR RISCHIO MASTER.docx` (the ~187-page mas
 
 **Source file**: `templates/DVR RISCHIO MASTER.docx` (4.8 MB)
 
+## Page map — N2O model of 20 Oct 2026 (current layout)
+
+The DVR the generator builds today (`dvr_master.py`), page type by page type, from N2O's model of 2026-10-20. Visual ground truth: `templates/dvr_modello_luca_2026-10-20/DVR_RISCHIO MASTER.pdf`. Design: `docs/superpowers/specs/2026-11-10-document-layout-redesign-design.md` §4.2. **Sections 1–10 below describe the pre-2026-11 document (the old donor `DVR RISCHIO MASTER.docx`) and are kept for data mapping only.**
+
+Page types (kit functions in `design.py`): **art** = full-page picture, no header or footer (`add_art_cover`, `add_back_cover`); **D** = divider, a new section opening on a full-page photo with the title as Heading 2 mid-page and no header or footer on that page (`add_divider`); **T** = in-page 25 pt title, Heading 2 on a new page (`add_section_title`); **S** = sub-title, Heading 3 (`add_sub_title`); **FH** = front heading, Heading 1. *Italic* = the part label (Heading 1 with direct formatting) above the title. Titles print in capitals, unnumbered.
+
+| # | Type | Title | Art key | Content |
+|---|---|---|---|---|
+| 1 | art | — (in the art) | `cover_dvr` | Cover; no client identity |
+| 2 | FH | INDICE | — | TOC field `\o "1-3"`, cached entries from Heading 1–3 |
+| 3 | FH | Premessa | — | Legal preamble |
+| 4 | T | DOCUMENTO ELABORATO SUGLI ESITI DELLA VALUTAZIONE DEI RISCHI | — | Light identity strip, revision history, Timbro e Firma |
+| 5 | T | *PARTE I — DATI GENERALI DELL'AZIENDA* · PRESENTAZIONE DELL'AZIENDA | — | Identity strip, company photo (if uploaded), activity description, ATECO, regional references |
+| 6 | T | ANAGRAFICA AZIENDALE | — | Blue key/value table |
+| 7 | T | DATI ANAGRAFICI | — | Nominativo, Codice Fiscale, Tipologia contrattuale |
+| 8 | T | DATI OCCUPAZIONALI | — | Nominativo, Mansione, Ambiente di lavoro (bulleted) |
+| 9 | T | ORGANIZZAZIONE AZIENDALE DELLA SICUREZZA | — | Role bands (DdL, RSPP, RLS, Medico Competente); Addetti Primo Soccorso and Antincendio |
+| 10 | T | AMBIENTI DI LAVORO | — | Table and italic note |
+| 11 | D | SERVIZI IGIENICO-ASSISTENZIALI | `div_servizi_igienici` | Text |
+| 12 | D | MACCHINE, ATTREZZATURE ED IMPIANTI | `div_macchine` | One row per equipment, environments listed in the cell |
+| 13 | D | SOSTANZE, PRODOTTI E PREPARATI CHIMICI | `div_sostanze` | Table and hazard notes |
+| 14 | D | ELENCO FATTORI DI PERICOLO (Riferimento) | `div_fattori_pericolo` | Reference tables |
+| 15 | T | *PARTE II — METODOLOGIA DI VALUTAZIONE* · DEFINIZIONI | — | Definitions table |
+| 16 | T | METODOLOGIA DI VALUTAZIONE DEI RISCHI | — | Method; I → Livello, Azione, Tempistica (I = 2·D + P) |
+| 17 | T | SCALA DI PROBABILITÀ (P) | — | Scale table |
+| 18 | T | SCALA DEL DANNO (D) | — | Scale table |
+| 19 | D | *PARTE III — VALUTAZIONE DEI RISCHI PER AMBIENTE DI LAVORO* · IDENTIFICAZIONE DELL'AMBIENTE DI LAVORO E DEGLI ADDETTI | `div_ambienti` | Once for the whole part |
+| 20 | T | ‹NOME AMBIENTE›, per environment in saved order | — | Blue identity table, addetti table |
+| 20a | S, new page | Macchine, Attrezzature ed Impianti — ‹ENV› | — | The environment's equipment |
+| 20b | S, new page | Foto e Planimetrie — ‹ENV› | — | Only with photos: 12 × 9 cm, no filename captions |
+| 20c | S, new page | Identificazione dei Fattori di Rischio — ‹ENV› | — | Risk-category checklist |
+| 20d | caption, new page each | STRUTTURE, MACCHINE, … | — | Not in the index; the five-column risk table of each applicable category |
+| 21 | D | MANSIONI CHE ESPONGONO I LAVORATORI A RISCHI SPECIFICI | `div_mansioni` | Table |
+| 22 | D | DISPOSITIVI DI PROTEZIONE INDIVIDUALE (DPI) | `div_dpi` | Per person: a Heading 3 sub-title per person, with that person's DPI table |
+| 23 | D | SEGNALETICA DI SICUREZZA | `div_segnaletica` | Text; S CODIFICA CROMATICA DELLA SEGNALETICA; S FORMA E CATEGORIE DEI CARTELLI (new page); 5 sign panels two per page, captions out of the index (`sign_divieto`, `sign_avvertimento`, `sign_obbligo`, `sign_emergenza`, `sign_antincendio`) |
+| 24 | D | PROGRAMMA DI INFORMAZIONE, FORMAZIONE E ADDESTRAMENTO | `div_formazione` | Status note and table |
+| 25 | D | *PARTE IV — PROGRAMMA DI MIGLIORAMENTO* · PROGRAMMA E PROCEDURE DI ATTUAZIONE DELLE MISURE DI MIGLIORAMENTO | `div_miglioramento` | Intro and the 4-column table in portrait, Priorità coloured |
+| 26a | D | GESTIONE LEGGI E REGOLAMENTI | `div_leggi` | Procedure |
+| 26b | D | GESTIONE SORVEGLIANZA SANITARIA | `div_sorveglianza` | Procedure; S Protocollo di Sorveglianza Sanitaria per Mansione (a note instead of the table when no mansione has risks, DPI or a saved protocol); S Malattie professionali correlate per mansione (only with that table) |
+| 26c | D | GESTIONE INFORMAZIONE, FORMAZIONE ED ADDESTRAMENTO | `div_formazione` | Procedure |
+| 26d | D | RIUNIONE PERIODICA | `div_riunione` | Procedure |
+| 26e | D | GESTIONE DEGLI INFORTUNI | `div_infortuni` | Procedure |
+| 26f | D | GESTIONE COMPORTAMENTI SCORRETTI DEI LAVORATORI | `div_comportamenti` | Procedure |
+| 26g | D | GESTIONE DPI | `div_gestione_dpi` | Procedure |
+| 26h | D | GESTIONE INFRASTRUTTURE | `div_infrastrutture` | Procedure |
+| 26i | D | GESTIONE DEI LAVORATORI PARTICOLARMENTE SENSIBILI AL RISCHIO | `div_sensibili` | Procedure |
+| 26j | D | GESTIONE ACQUISTI | `div_acquisti` | Procedure |
+| 26k | D | GESTIONE DELLE LAVORAZIONI AFFIDATE IN APPALTO | `div_appalti` | Procedure |
+| 27 | D | DOCUMENTI CORRELATI AL PRESENTE DVR | `div_ambienti` | Navy bold bullet list of the attachments |
+| 28 | D | DICHIARAZIONE DEL DATORE DI LAVORO | `div_dichiarazione` | Declaration, "DICHIARA", numbered statements, "‹COMUNE›, lì ‹data›", 2×2 signature grid |
+| 29 | art | — | `back_vera` | Back cover |
+
 ## 1. Summary Statistics
 
 | Metric | Value |

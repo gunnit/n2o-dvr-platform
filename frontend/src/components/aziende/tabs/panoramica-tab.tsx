@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import { DescriptionEditor } from "@/components/ai/description-editor";
+import { FotoPresentazioneCard } from "@/components/aziende/foto-presentazione-card";
 import {
   EmptyState,
   Eyebrow,
@@ -585,6 +586,11 @@ export default function PanoramicaTab({
           )}
         </div>
       </Panel>
+
+      {/* Foto di presentazione (DVR) */}
+      <div className="md:col-span-2">
+        <FotoPresentazioneCard aziendaId={azienda.id} />
+      </div>
 
       {/* Descrizione */}
       <div id="descrizione-attivita" className="scroll-mt-24 md:col-span-2">

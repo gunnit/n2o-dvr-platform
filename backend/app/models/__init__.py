@@ -4,6 +4,7 @@ from app.models.azienda import Azienda
 from app.models.persona import Persona
 from app.models.ambiente import Ambiente
 from app.models.ambiente_foto import AmbienteFoto
+from app.models.azienda_foto_presentazione import AziendaFotoPresentazione
 from app.models.persone_ambienti import persone_ambienti
 from app.models.attrezzatura import Attrezzatura
 from app.models.sostanza_chimica import SostanzaChimica
@@ -59,6 +60,7 @@ __all__ = [
     "Persona",
     "Ambiente",
     "AmbienteFoto",
+    "AziendaFotoPresentazione",
     "persone_ambienti",
     "Attrezzatura",
     "SostanzaChimica",

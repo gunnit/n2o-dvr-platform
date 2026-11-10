@@ -269,10 +269,15 @@ export interface DocumentoGenerato {
 // PATCH /documenti/{id}/overrides). Block addresses: top-level blocks use
 // the filtered body index ("12"); cell paragraphs use
 // "{table}:{row}:{cell}:{para}".
+//
+// Fields marked "layout redesign" (spec 2026-11-10 §4.3.1) are optional:
+// a payload served before that change has none of them, and the editor
+// falls back to its own defaults (A4 sheets, no bands, a plain type scale).
 // ---------------------------------------------------------------------------
 
 export interface PreviewRun {
   text: string;
+  /** True when the run sets bold; false when it is unset OR off. */
   bold: boolean;
   italic: boolean;
   underline: boolean;
@@ -280,6 +285,12 @@ export interface PreviewRun {
   color: string | null;
   /** Font size in points; null when inherited. */
   size: number | null;
+  /**
+   * Layout redesign: the run's own capitals (w:caps). true: on. false:
+   * explicitly off, the text prints as typed even in a capitalised heading.
+   * null, or absent (payloads from before the redesign): the paragraph's.
+   */
+  caps?: boolean | null;
 }
 
 export interface PreviewInlineImage {
@@ -291,6 +302,38 @@ export interface PreviewInlineImage {
 
 export type PreviewAlignment = "left" | "center" | "right" | "justify";
 
+/**
+ * Layout redesign: a paragraph look in points and "RRGGBB". In
+ * `style_props` every key is present and resolved through the style chain
+ * (bold/italic/caps always true or false, anything nothing sets null).
+ * As a paragraph's `direct` it is sparse — see PreviewParagraph.direct.
+ */
+export interface PreviewStyleProps {
+  font_size_pt: number | null;
+  bold: boolean | null;
+  italic: boolean | null;
+  caps: boolean | null;
+  /** "RRGGBB"; null for "auto" or not set. */
+  color: string | null;
+  alignment: PreviewAlignment | null;
+  space_before_pt: number | null;
+  space_after_pt: number | null;
+  indent_left_pt: number | null;
+  /** 1-9; null for body text. */
+  outline_level: number | null;
+}
+
+/** Layout redesign: list membership from numPr and numbering.xml. */
+export interface PreviewList {
+  /** w:ilvl, 0-based. */
+  level: number;
+  /** A bullet's glyph as drawn ("•", "▪", "➢"); a numbered format's lvlText pattern ("%1."). */
+  glyph: string;
+}
+
+/** Layout redesign: the full-page art a paragraph opens. */
+export type PreviewPageRole = "cover" | "divider" | "back_cover";
+
 // Shared paragraph shape. Top-level paragraph blocks extend it with
 // kind + page_break_before; table-cell paragraphs use it as-is.
 export interface PreviewParagraph {
@@ -298,6 +341,7 @@ export interface PreviewParagraph {
   style: string | null;
   /** 1-4 when the style is "Heading N", else null. */
   heading_level: number | null;
+  /** Direct alignment (w:jc) only; the style's comes with style_props. */
   alignment: PreviewAlignment | null;
   /**
    * False for paragraphs the backend refuses to override: runs with
@@ -306,6 +350,27 @@ export interface PreviewParagraph {
   editable: boolean;
   runs: PreviewRun[];
   images: PreviewInlineImage[];
+  /** Layout redesign: effective outline level 1-9 (direct, else the style's); null for body text. */
+  outline_level?: number | null;
+  /**
+   * Layout redesign: the paragraph's own formatting, sparse — a missing key
+   * is not set. Paragraph-level keys (alignment, spacing, indent, outline)
+   * apply as usual; the run-level keys (size, bold, italic, caps, colour)
+   * describe the paragraph mark and only give an EMPTY paragraph its height.
+   */
+  direct?: Partial<PreviewStyleProps> | null;
+  /** Layout redesign: list level and glyph, or null. */
+  list?: PreviewList | null;
+  /** Layout redesign: this paragraph carries a full-page art picture. */
+  page_role?: PreviewPageRole | null;
+  /** Layout redesign: that art picture, for /preview/images/{image_id}. */
+  background_image_id?: string | null;
+  /**
+   * Layout redesign: the paragraph ends a section and the next one starts on
+   * a new page, so what follows starts a new sheet. False at a continuous
+   * section break, which keeps the page.
+   */
+  section_break_after?: boolean;
 }
 
 export interface PreviewParagraphBlock extends PreviewParagraph {
@@ -322,15 +387,39 @@ export interface PreviewTableCell {
   /** gridSpan, default 1. */
   col_span: number;
   v_merge: "restart" | "continue" | null;
+  /** Layout redesign: tcPr/vAlign; null when unset (top). */
+  v_align?: "top" | "center" | "bottom" | null;
 }
 
 export interface PreviewTableBlock {
   kind: "table";
   addr: string;
   rows: PreviewTableCell[][];
+  /** Layout redesign: tblGrid column widths as % of the table (sum ≈ 100). */
+  col_widths_pct?: number[] | null;
 }
 
 export type PreviewBlock = PreviewParagraphBlock | PreviewTableBlock;
+
+/** Layout redesign: running header and footer of the final section. */
+export interface PreviewFurniture {
+  header_left: string | null;
+  header_right: string | null;
+  /** The revision line, without the page number. */
+  footer_text: string | null;
+  /** Part-scoped id ("ftr:footerN.xml:rIdM") for /preview/images/{image_id}. */
+  footer_logo_image_id: string | null;
+}
+
+/** Layout redesign: page size and margins of the final section, in points. */
+export interface PreviewPageSetup {
+  width_pt: number | null;
+  height_pt: number | null;
+  margin_top_pt: number | null;
+  margin_bottom_pt: number | null;
+  margin_left_pt: number | null;
+  margin_right_pt: number | null;
+}
 
 export interface DocumentPreviewResponse {
   id: string;
@@ -345,6 +434,12 @@ export interface DocumentPreviewResponse {
   blocks: PreviewBlock[];
   /** Currently saved overrides, keyed by block address. {} when none. */
   overrides: Record<string, string>;
+  /** Layout redesign: null when the final section has no header or footer. */
+  furniture?: PreviewFurniture | null;
+  /** Layout redesign: null when the body has no final section properties. */
+  page_setup?: PreviewPageSetup | null;
+  /** Layout redesign: each paragraph style the blocks use, resolved, by name. */
+  style_props?: Record<string, PreviewStyleProps>;
 }
 
 /** Response of PATCH /documenti/{id}/overrides — the full current map. */

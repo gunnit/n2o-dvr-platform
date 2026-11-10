@@ -1,12 +1,26 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
+import {
+  createContext,
+  memo,
+  useContext,
+  useMemo,
+  type CSSProperties,
+} from "react";
 import { ImageOff } from "lucide-react";
 
+import { isPageBreakLine } from "@/components/documents/editor/doc-sheets";
+import {
+  DOC_CELL_PADDING,
+  DOC_TABLE_BORDER,
+  listMarkerStyle,
+  paragraphStyle,
+  resolveParagraph,
+  type StylePropsTable,
+} from "@/components/documents/editor/doc-typography";
 import { EditableParagraph } from "@/components/documents/editor/editable-paragraph";
-import { fetchImageBlobUrl } from "@/lib/api-client";
+import { useDocumentImage } from "@/components/documents/editor/use-document-image";
 import type {
-  PreviewBlock,
   PreviewInlineImage,
   PreviewParagraph,
   PreviewParagraphBlock,
@@ -14,28 +28,22 @@ import type {
   PreviewTableCell,
 } from "@/types";
 
-/**
- * Split the block stream into A4-like "sheets": a paragraph flagged with
- * page_break_before starts a new sheet (unless it would be the very first
- * block, which already sits at the top of sheet 1).
- */
-export function groupIntoSheets(blocks: PreviewBlock[]): PreviewBlock[][] {
-  const sheets: PreviewBlock[][] = [];
-  let current: PreviewBlock[] = [];
-  for (const block of blocks) {
-    if (
-      block.kind === "paragraph" &&
-      block.page_break_before &&
-      current.length > 0
-    ) {
-      sheets.push(current);
-      current = [];
-    }
-    current.push(block);
-  }
-  if (current.length > 0) sheets.push(current);
-  return sheets;
+// ---------------------------------------------------------------------------
+// Document look: what every paragraph needs to draw itself
+// ---------------------------------------------------------------------------
+
+export interface DocumentLook {
+  /** The payload's style_props; undefined on payloads from before the layout redesign. */
+  styleProps: StylePropsTable | undefined;
+  /** computeListMarkers() of the payload, by paragraph address. */
+  listMarkers: ReadonlyMap<string, string>;
 }
+
+/** Provided once per preview, so memoized blocks never re-render for it. */
+export const DocumentLookContext = createContext<DocumentLook>({
+  styleProps: undefined,
+  listMarkers: new Map(),
+});
 
 // ---------------------------------------------------------------------------
 // Inline images
@@ -48,45 +56,13 @@ function InlineDocImage({
   documentId: string;
   image: PreviewInlineImage;
 }) {
-  // No reset-on-prop-change needed: the component is keyed by image_id in
-  // paragraphImages(), so a different image remounts with fresh state.
-  const [src, setSrc] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let objectUrl: string | null = null;
-    let cancelled = false;
-    fetchImageBlobUrl(
-      `/api/v1/documenti/${documentId}/preview/images/${image.image_id}`,
-    )
-      .then((url) => {
-        if (cancelled) {
-          if (url) URL.revokeObjectURL(url);
-          return;
-        }
-        if (url) {
-          objectUrl = url;
-          setSrc(url);
-        } else {
-          setFailed(true);
-        }
-      })
-      .catch(() => {
-        // Network/auth failure — settle into the placeholder instead of
-        // pulsing forever (and leaking an unhandled promise rejection).
-        if (!cancelled) setFailed(true);
-      });
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [documentId, image.image_id]);
+  const { src, failed } = useDocumentImage(documentId, image.image_id);
 
   if (failed) {
     return (
       <span
         title="Immagine non disponibile"
-        className="my-1 inline-flex max-w-full items-center justify-center gap-1.5 overflow-hidden rounded-sm border border-[#e5edf5] bg-[#f6f9fc] px-2 py-1 text-[11px] text-[#64748d]"
+        className="my-1 inline-flex max-w-full items-center justify-center gap-1.5 overflow-hidden rounded-sm border border-[#e5edf5] bg-[#f6f9fc] px-2 py-1 font-body text-[11px] font-normal text-[#64748d] not-italic normal-case"
         style={{
           width: image.width_px ?? undefined,
           height: image.height_px ?? undefined,
@@ -130,8 +106,50 @@ function paragraphImages(documentId: string, paragraph: PreviewParagraph) {
 }
 
 // ---------------------------------------------------------------------------
-// Paragraph block
+// Paragraph: the box (look, spacing, indent, list marker) around the text
 // ---------------------------------------------------------------------------
+
+interface DocParagraphProps {
+  paragraph: PreviewParagraph;
+  documentId: string;
+  override: string | undefined;
+  onOverrideChange: (addr: string, value: string | null) => void;
+  id?: string;
+  className?: string;
+}
+
+function DocParagraph({
+  paragraph,
+  documentId,
+  override,
+  onOverrideChange,
+  id,
+  className,
+}: DocParagraphProps) {
+  const { styleProps, listMarkers } = useContext(DocumentLookContext);
+  const look = useMemo(
+    () => resolveParagraph(paragraph, styleProps),
+    [paragraph, styleProps],
+  );
+  const marker = paragraph.list ? (listMarkers.get(paragraph.addr) ?? "") : null;
+
+  return (
+    <div id={id} className={className} style={paragraphStyle(look)}>
+      {marker !== null && (
+        <span aria-hidden style={listMarkerStyle()}>
+          {marker}
+        </span>
+      )}
+      <EditableParagraph
+        paragraph={paragraph}
+        look={look}
+        override={override}
+        onOverrideChange={onOverrideChange}
+        trailing={paragraphImages(documentId, paragraph)}
+      />
+    </div>
+  );
+}
 
 export interface ParagraphBlockViewProps {
   block: PreviewParagraphBlock;
@@ -146,15 +164,16 @@ export const ParagraphBlockView = memo(function ParagraphBlockView({
   override,
   onOverrideChange,
 }: ParagraphBlockViewProps) {
+  if (isPageBreakLine(block)) return null;
   return (
-    <div id={`block-${block.addr}`} className="scroll-mt-28">
-      <EditableParagraph
-        paragraph={block}
-        override={override}
-        onOverrideChange={onOverrideChange}
-        trailing={paragraphImages(documentId, block)}
-      />
-    </div>
+    <DocParagraph
+      id={`block-${block.addr}`}
+      className="scroll-mt-28"
+      paragraph={block}
+      documentId={documentId}
+      override={override}
+      onOverrideChange={onOverrideChange}
+    />
   );
 });
 
@@ -210,6 +229,23 @@ function recordsShallowEqual(
   return true;
 }
 
+const CELL_V_ALIGN = {
+  top: "top",
+  center: "middle",
+  bottom: "bottom",
+} as const;
+
+// Cell look reproduces the .docx (content, not chrome): Table Grid's black
+// ½ pt borders, Word's cell margins, the cell's fill and vertical alignment.
+function cellStyle(cell: PreviewTableCell): CSSProperties {
+  return {
+    border: DOC_TABLE_BORDER,
+    padding: DOC_CELL_PADDING,
+    verticalAlign: CELL_V_ALIGN[cell.v_align ?? "top"],
+    backgroundColor: cell.shading ? `#${cell.shading}` : undefined,
+  };
+}
+
 export interface TableBlockViewProps {
   block: PreviewTableBlock;
   documentId: string;
@@ -225,13 +261,26 @@ export const TableBlockView = memo(
     overrides,
     onOverrideChange,
   }: TableBlockViewProps) {
+    const widths = block.col_widths_pct?.length ? block.col_widths_pct : null;
     return (
       <div
         id={`block-${block.addr}`}
-        className="my-3 scroll-mt-28 overflow-x-auto"
+        className="scroll-mt-28 overflow-x-auto"
         style={{ contentVisibility: "auto", containIntrinsicSize: "auto 160px" }}
       >
-        <table className="w-full border-collapse">
+        <table
+          className="w-full border-collapse"
+          // The grid's own column widths; without them the browser sizes
+          // the columns from their content.
+          style={{ tableLayout: widths ? "fixed" : "auto" }}
+        >
+          {widths && (
+            <colgroup>
+              {widths.map((width, idx) => (
+                <col key={idx} style={{ width: `${width}%` }} />
+              ))}
+            </colgroup>
+          )}
           <tbody>
             {block.rows.map((row, rowIdx) => (
               <tr key={rowIdx}>
@@ -247,24 +296,20 @@ export const TableBlockView = memo(
                       key={cell.addr}
                       colSpan={cell.col_span > 1 ? cell.col_span : undefined}
                       rowSpan={rowSpan > 1 ? rowSpan : undefined}
-                      // Cell shading reproduces the .docx (content, not chrome).
-                      style={
-                        cell.shading
-                          ? { backgroundColor: `#${cell.shading}` }
-                          : undefined
-                      }
-                      className="border border-neutral-300 px-2 py-1 align-top"
+                      style={cellStyle(cell)}
                     >
-                      {cell.paragraphs.map((paragraph) => (
-                        <EditableParagraph
-                          key={paragraph.addr}
-                          paragraph={paragraph}
-                          override={overrides[paragraph.addr]}
-                          onOverrideChange={onOverrideChange}
-                          inCell
-                          trailing={paragraphImages(documentId, paragraph)}
-                        />
-                      ))}
+                      {/* Flex column: paragraph spacing adds up as in Word. */}
+                      <div className="flex flex-col">
+                        {cell.paragraphs.map((paragraph) => (
+                          <DocParagraph
+                            key={paragraph.addr}
+                            paragraph={paragraph}
+                            documentId={documentId}
+                            override={overrides[paragraph.addr]}
+                            onOverrideChange={onOverrideChange}
+                          />
+                        ))}
+                      </div>
                     </td>
                   );
                 })}

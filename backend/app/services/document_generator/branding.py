@@ -15,7 +15,9 @@ from __future__ import annotations
 import io
 from dataclasses import dataclass
 
-# Single source of truth for the committed fallback logo (review finding #9).
+# Single source of truth for the committed fallback logo (review finding #9):
+# the VERA ITALIA mark of N2O's DVR model (assets/document_art/), which
+# replaced the old navy assets/logo.png in the 2026-11 layout redesign.
 from app.services.document_generator.docx_utils import LOGO_PATH as DEFAULT_LOGO_PATH
 
 # Fallback firm name (N2O is the consultancy that owns this install today).
@@ -142,7 +144,8 @@ class Branding:
 def resolve_logo_source(branding: Branding):
     """Return something ``python-docx`` ``add_picture`` can embed: the org's
     uploaded logo bytes (as a fresh ``BytesIO``) if present, else the committed
-    default logo path, else ``None`` when even the default is missing."""
+    default logo path (the VERA ITALIA mark), else ``None`` when even the
+    default is missing. The running footer of every document prints it."""
     if branding.logo_bytes:
         return io.BytesIO(branding.logo_bytes)
     if DEFAULT_LOGO_PATH.exists():

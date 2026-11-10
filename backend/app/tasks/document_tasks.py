@@ -11,6 +11,8 @@ import logging
 import os
 import traceback
 import uuid
+import zipfile
+import zlib
 from datetime import datetime, timezone
 
 from celery.exceptions import SoftTimeLimitExceeded
@@ -50,6 +52,65 @@ def _friendly_error_for(exc: Exception) -> str:
     # Generic fallback: expose just the exception class — never the message,
     # which can leak stack traces or SQL fragments.
     return f"Generazione non riuscita ({name}). Riprova o contatta l'amministratore."
+
+
+def _file_crc32(path: str) -> int:
+    crc = 0
+    with open(path, "rb") as stream:
+        for chunk in iter(lambda: stream.read(1 << 16), b""):
+            crc = zlib.crc32(chunk, crc)
+    return crc
+
+
+def _packed_beside(bundle_path: str) -> list[str]:
+    """The files a bundle's generator wrote beside its zip and packed into it.
+
+    The HACCP forms generator writes each record form as a .docx next to the
+    zip, packs it under its own name, and returns only the zip. That
+    directory holds every document of the azienda, so a member's name proves
+    nothing on its own: a file counts as this run's only while it is exactly
+    what the zip holds (same size and CRC-32).
+    """
+    directory = os.path.dirname(bundle_path)
+    packed: list[str] = []
+    with zipfile.ZipFile(bundle_path) as bundle:
+        for member in bundle.infolist():
+            name = member.filename
+            if member.is_dir() or name != os.path.basename(name):
+                continue
+            candidate = os.path.join(directory, name)
+            if (
+                candidate != bundle_path
+                and not os.path.islink(candidate)
+                and os.path.isfile(candidate)
+                and os.path.getsize(candidate) == member.file_size
+                and _file_crc32(candidate) == member.CRC
+            ):
+                packed.append(candidate)
+    return packed
+
+
+def _remove_run_files(output_path: str) -> None:
+    """Delete what one generation wrote to the worker disk: the document it
+    returned and, for a zip, the files packed into it from beside it.
+
+    Best effort: a file that cannot be removed is logged and left; nothing
+    here ever fails the task.
+    """
+    paths: list[str] = []
+    if output_path.lower().endswith(".zip"):
+        try:
+            paths.extend(_packed_beside(output_path))
+        except (OSError, zipfile.BadZipFile) as exc:
+            logger.warning("Could not list the files packed in %s: %s", output_path, exc)
+    paths.append(output_path)
+    for path in paths:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            logger.warning("Could not remove generated file %s: %s", path, exc)
 
 
 async def _run_generation(document_id: uuid.UUID) -> None:
@@ -121,14 +182,19 @@ async def _run_generation(document_id: uuid.UUID) -> None:
             output_path = await generator.generate()
 
             doc.status = "completed"
+            # file_path stays set after the file is deleted below: the
+            # version history offers compare and restore only for rows that
+            # have one (downloads serve file_content).
             doc.file_path = output_path
             doc.file_name = os.path.basename(output_path)
             # Store bytes in Postgres so the API service can serve downloads
             # without needing access to the worker's filesystem (on Render
             # they run on separate disks).
+            bytes_stored = False
             try:
                 with open(output_path, "rb") as f:
                     doc.file_content = f.read()
+                bytes_stored = bool(doc.file_content)
             except OSError as read_err:
                 logger.warning("Could not read generated file into DB: %s", read_err)
             doc.generation_completed_at = datetime.utcnow()
@@ -168,19 +234,32 @@ async def _run_generation(document_id: uuid.UUID) -> None:
             except Exception as drive_err:
                 logger.warning("Google Drive upload failed (non-fatal): %s", drive_err)
 
+            # The bytes are in Postgres and the Drive attempt is over: nothing
+            # reads the run's files any more (the API, on its own disk, serves
+            # file_content). Without this the worker's 1 GB disk keeps every
+            # version ever generated. A file whose bytes were not stored is
+            # the only copy and stays.
+            if bytes_stored:
+                try:
+                    _remove_run_files(output_path)
+                except Exception as cleanup_err:  # pragma: no cover — defensive
+                    logger.warning(
+                        "Cleanup of %s failed (non-fatal): %s", output_path, cleanup_err
+                    )
+
         except Exception as e:
             # US-2.8 AC3: discard the partial file, roll status back to
             # "bozza", and log a user-friendly error message. The full
             # traceback stays in the worker log only.
             logger.error("Generation failed for %s: %s\n%s", document_id, e, traceback.format_exc())
 
-            # Best-effort: remove a partially-written file if the generator
-            # managed to open one before throwing. Swallow OSErrors because
-            # the exact path may never have been created.
-            if output_path and os.path.exists(output_path):
+            # Best-effort: remove what the run wrote (the document and the
+            # files packed into a bundle) when the failure came after the
+            # generator returned. Never raises.
+            if output_path:
                 try:
-                    os.remove(output_path)
-                except OSError as rm_err:
+                    _remove_run_files(output_path)
+                except Exception as rm_err:  # pragma: no cover — defensive
                     logger.warning("Failed to remove partial %s: %s", output_path, rm_err)
 
             friendly = _friendly_error_for(e)

@@ -39,8 +39,8 @@ def _load_verify():
 def _generate(tmp_path, name: str) -> Document:
     module = _load_verify()
     fixture = module.build_fixture()
-    module.patch_generators(fixture, str(tmp_path))
-    ok, path, msg = asyncio.run(module.run_one(name, fixture["azienda"].id))
+    with module.patched_generators(fixture, str(tmp_path)):
+        ok, path, msg = asyncio.run(module.run_one(name, fixture["azienda"].id))
     assert ok, msg
     return Document(path)
 

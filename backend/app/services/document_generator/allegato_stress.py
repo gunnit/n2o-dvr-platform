@@ -8,7 +8,11 @@ from sqlalchemy import func, select
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_stress_all
-from app.services.document_generator.design import finish_document, insert_logo_at_top
+from app.services.document_generator.design import (
+    add_back_cover,
+    finish_document,
+    setup_document,
+)
 from app.services.document_generator.docx_utils import (
     TEMPLATES_DIR,
     add_data_table,
@@ -22,6 +26,11 @@ from app.services.document_generator.docx_utils import (
     slugify,
     strip_body_images,
 )
+from app.services.document_generator.donor_cover import (
+    insert_kit_cover_at_top,
+    normalize_fonts,
+    strip_donor_cover,
+)
 from app.services.stress_calculator import (
     FINAL_THRESHOLDS,
     TOTALE_B_THRESHOLDS,
@@ -34,6 +43,15 @@ from app.services.stress_calculator import (
 
 TEMPLATE = TEMPLATES_DIR / "ALLEGATO STRESS DA LAVORO CORRELATO.docx"
 TIPO_DOC = "allegato_stress"
+DOC_TITLE = "Valutazione del Rischio Stress Lavoro-Correlato"
+
+# The kit cover carries what the donor's own cover said (wording from
+# draft PR #82).
+COVER = {
+    "title": "Valutazione del rischio stress lavoro-correlato",
+    "subtitle": "Metodo degli indicatori oggettivi (INAIL)",
+    "legal_basis": "ai sensi dell'art. 28, comma 1-bis, del D.Lgs. 81/2008 e s.m.i.",
+}
 
 
 class AllegatoStressGenerator(BaseDocumentGenerator):
@@ -44,9 +62,9 @@ class AllegatoStressGenerator(BaseDocumentGenerator):
         The last generic element is the blank "ORARIO DI LAVORO" checklist
         form that closes the INAIL method chapter; everything after it is
         N2O's filled assessment (scores, premises, staff roster with codici
-        fiscali, officers, measures, scanned signatures). The cover stamp is
-        an image too, so every body picture goes as well — the consultancy
-        mark returns via the running header/footer.
+        fiscali, officers, measures, scanned signatures). Every body picture
+        goes as well — the consultancy mark returns on the kit cover and in
+        the running footer.
         """
         last_generic = find_table_index(doc, "ORARIO DI LAVORO", occurrence=1)
         if last_generic is not None:
@@ -64,6 +82,11 @@ class AllegatoStressGenerator(BaseDocumentGenerator):
 
         if TEMPLATE.exists():
             doc = Document(str(TEMPLATE))
+            # The donor's cover (N2O's identity, revision history and a
+            # stamped signature box in a page frame) ends at a section break;
+            # the kit cover takes its place once the body is complete (spec
+            # 2026-11-10 §4.4).
+            strip_donor_cover(doc)
             # The template was authored from a real N2O self-assessment. Its
             # front matter and the INAIL method chapter (through the last blank
             # "ORARIO DI LAVORO" form) are generic; everything after — N2O's
@@ -74,7 +97,6 @@ class AllegatoStressGenerator(BaseDocumentGenerator):
             # structure (audit 2026-09-03). The generator appends the client's
             # own assessment below, so nothing the client needs is lost.
             self._cut_donor_tail(doc)
-            insert_logo_at_top(doc, self.branding)
             scrub_n2o_legacy_donor(
                 doc,
                 azienda,
@@ -87,6 +109,7 @@ class AllegatoStressGenerator(BaseDocumentGenerator):
             )
         else:
             doc = Document()
+            setup_document(doc, profile="attachment")
 
         page_break(doc)
         add_heading(doc, f"VALUTAZIONE SPECIFICA - {azienda.ragione_sociale}", level=1)
@@ -106,7 +129,7 @@ class AllegatoStressGenerator(BaseDocumentGenerator):
                 add_data_table(doc, ["Mansione", "Punteggio totale", "Livello di rischio"], [
                     [_mansione_titolo(v), _totale_label(v), v.livello_rischio or "—"]
                     for v in valutazioni
-                ])
+                ], centred_columns=(2,))
             for v in valutazioni:
                 add_heading(doc, _mansione_titolo(v), level=2)
                 _render_valutazione(doc, v)
@@ -126,12 +149,26 @@ class AllegatoStressGenerator(BaseDocumentGenerator):
         output_dir = self._get_output_dir()
         slug = slugify(azienda.ragione_sociale or "azienda")
         filepath = os.path.join(output_dir, f"{TIPO_DOC}_{slug}_v{version}.docx")
+        # The kit's look on the donor (spec 2026-11-10 §4.4): its cover,
+        # Arial at the donor's own sizes, the back cover.
+        insert_kit_cover_at_top(
+            doc,
+            azienda=azienda,
+            branding=self.branding,
+            version=version,
+            generated_at=generated_at,
+            # The donor's Storico went with its cover: the kit's replaces it.
+            revision_table=True,
+            **COVER,
+        )
+        normalize_fonts(doc)
+        add_back_cover(doc)
         # Audit 2026-09-03: the donor template's header/footer carried the
         # legacy N2O letterhead and literal placeholders; rewrite them from
         # the organization's branding and set honest file properties.
         finish_document(
             doc,
-            title='Valutazione del Rischio Stress Lavoro-Correlato',
+            title=DOC_TITLE,
             azienda=azienda,
             branding=self.branding,
             version=version,
@@ -175,7 +212,7 @@ def _render_valutazione(doc, stress) -> None:
         ["A - Indicatori aziendali (infortuni, assenze, turnover)", f"{a_raw} / 40", str(a_conv), a_livello],
         ["B - Contesto del lavoro (organizzazione, ruoli, rapporti)", f"{b_raw} / 26", str(max(b_raw, 0)), b_livello],
         ["C - Contenuto del lavoro (ambiente, compiti, ritmo, orario)", f"{c_raw} / 36", str(c_raw), c_livello],
-    ])
+    ], centred_columns=(3,))
     add_paragraph(
         doc,
         "Nota: il punteggio dell'Area A è convertito sulla scala 0/2/5 prima di essere sommato a B e C (max teorico totale = 67). Soglie: 0-17 BASSO, 18-34 MEDIO, 35-67 ALTO.",

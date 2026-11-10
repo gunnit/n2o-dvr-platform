@@ -3,8 +3,11 @@
 /**
  * In-browser document preview + inline text editing.
  *
- * Renders the JSON model served by GET /documenti/{id}/preview as A4-like
- * sheets; clicking any editable paragraph (top-level or table cell) opens a
+ * Renders the JSON model served by GET /documenti/{id}/preview on sheets
+ * in the document's own look — its page size and margins, Arial in points,
+ * covers and dividers with their art, the running header and footer — so a
+ * document reads on screen the way it prints (spec 2026-11-10 §4.3.2).
+ * Clicking any editable paragraph (top-level or table cell) opens a
  * plain-text contentEditable whose commits autosave as content overrides
  * (PATCH /documenti/{id}/overrides). "Scarica .docx" streams the document
  * with overrides applied; "Salva come nuova versione" mints a new
@@ -21,15 +24,23 @@ import { ArrowLeft, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 
 import {
+  DocumentLookContext,
   ParagraphBlockView,
   TableBlockView,
-  groupIntoSheets,
+  type DocumentLook,
 } from "@/components/documents/editor/block-renderer";
+import {
+  groupIntoSheets,
+  sheetGeometry,
+} from "@/components/documents/editor/doc-sheets";
+import { computeListMarkers } from "@/components/documents/editor/doc-typography";
 import { EditorHeader } from "@/components/documents/editor/editor-header";
 import {
   EditorToc,
   buildTocEntries,
 } from "@/components/documents/editor/editor-toc";
+import { DocumentSheet, SheetStack } from "@/components/documents/editor/sheet";
+import { useDocumentImage } from "@/components/documents/editor/use-document-image";
 import { useDocumentOverrides } from "@/components/documents/editor/use-document-overrides";
 import { apiCall, downloadFile } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
@@ -82,6 +93,26 @@ export default function DocumentEditorPage() {
   const sheets = useMemo(
     () => (preview ? groupIntoSheets(preview.blocks) : []),
     [preview],
+  );
+
+  // Page size and margins; A4 with the kit's margins on payloads without them.
+  const geometry = useMemo(
+    () => sheetGeometry(preview?.page_setup),
+    [preview],
+  );
+
+  const documentLook = useMemo<DocumentLook>(
+    () => ({
+      styleProps: preview?.style_props,
+      listMarkers: preview ? computeListMarkers(preview.blocks) : new Map(),
+    }),
+    [preview],
+  );
+
+  // One fetch for the logo every footer band shows.
+  const footerLogo = useDocumentImage(
+    documentId,
+    preview?.furniture?.footer_logo_image_id,
   );
 
   const tocEntries = useMemo(
@@ -224,41 +255,43 @@ export default function DocumentEditorPage() {
           </aside>
 
           <div className="min-w-0 flex-1 rounded-md bg-[#f6f9fc] px-3 py-6 sm:px-6">
-            <div className="mx-auto flex w-full max-w-[794px] flex-col gap-6">
-              {sheets.map((sheet, sheetIdx) => (
-                <section
-                  key={sheet[0].addr}
-                  aria-label={`Pagina ${sheetIdx + 1}`}
-                  className="min-h-[1123px] w-full rounded-sm bg-white px-10 py-12 text-neutral-900 shadow-stripe-standard sm:px-[94px] sm:py-[94px]"
-                  style={{
-                    contentVisibility: "auto",
-                    containIntrinsicSize: "auto 1123px",
-                  }}
-                >
-                  {sheet.map((block) =>
-                    block.kind === "paragraph" ? (
-                      <ParagraphBlockView
-                        key={block.addr}
-                        block={block}
-                        documentId={documentId}
-                        override={overrides[block.addr]}
-                        onOverrideChange={setOverride}
-                      />
-                    ) : (
-                      <TableBlockView
-                        key={block.addr}
-                        block={block}
-                        documentId={documentId}
-                        overrides={
-                          tableOverrideSlices[block.addr] ?? EMPTY_OVERRIDES
-                        }
-                        onOverrideChange={setOverride}
-                      />
-                    ),
-                  )}
-                </section>
-              ))}
-            </div>
+            <DocumentLookContext.Provider value={documentLook}>
+              <SheetStack geometry={geometry}>
+                {sheets.map((sheet, sheetIdx) => (
+                  <DocumentSheet
+                    key={sheet.blocks[0].addr}
+                    sheet={sheet}
+                    index={sheetIdx}
+                    documentId={documentId}
+                    geometry={geometry}
+                    furniture={preview.furniture ?? null}
+                    footerLogoSrc={footerLogo.src}
+                  >
+                    {sheet.blocks.map((block) =>
+                      block.kind === "paragraph" ? (
+                        <ParagraphBlockView
+                          key={block.addr}
+                          block={block}
+                          documentId={documentId}
+                          override={overrides[block.addr]}
+                          onOverrideChange={setOverride}
+                        />
+                      ) : (
+                        <TableBlockView
+                          key={block.addr}
+                          block={block}
+                          documentId={documentId}
+                          overrides={
+                            tableOverrideSlices[block.addr] ?? EMPTY_OVERRIDES
+                          }
+                          onOverrideChange={setOverride}
+                        />
+                      ),
+                    )}
+                  </DocumentSheet>
+                ))}
+              </SheetStack>
+            </DocumentLookContext.Provider>
           </div>
         </div>
       </div>

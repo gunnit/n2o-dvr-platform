@@ -9,18 +9,21 @@ from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
 from app.services.document_generator.data_loader import load_microclima
 from app.services.document_generator.design import (
+    add_back_cover,
     add_cover,
     add_revision_table,
     finish_document,
     setup_document,
 )
 from app.services.document_generator.docx_utils import (
+    NOTE_GREY,
+    TYPE_SCALE,
+    add_body_paragraph,
     add_data_table,
     add_heading,
     add_kv_table,
-    add_paragraph,
     format_sede,
-    page_break,
+    set_run_font,
     slugify,
 )
 from app.services.microclima_calculator import calculate_pmv_ppd
@@ -32,6 +35,13 @@ DOC_TITLE = "Allegato Rischio Microclima"
 def _it(value: float, digits: int) -> str:
     """Italian decimal notation (comma), e.g. 21,0."""
     return f"{value:.{digits}f}".replace(".", ",")
+
+
+def _note(doc, text: str):
+    """The kit's note: 10 pt italic grey."""
+    paragraph = doc.add_paragraph()
+    set_run_font(paragraph.add_run(text), size=TYPE_SCALE["note"], italic=True, color=NOTE_GREY)
+    return paragraph
 
 
 def _compute_pmv_ppd(t_air, t_rad, v_air, rh, met, clo) -> tuple[float | None, float | None]:
@@ -78,9 +88,10 @@ class AllegatoMicroclimaGenerator(BaseDocumentGenerator):
         moderate_rows = [m for m in micro if (m.tipo_ambiente or "moderato") == "moderato"]
 
         doc = Document()
-        setup_document(doc)
+        setup_document(doc, profile="attachment")
         # Audit 2026-09-03: this annex shipped as one US-Letter page with no
-        # cover, header, footer or logo. It now carries the shared furniture.
+        # cover, header, footer or logo. It now carries the shared furniture:
+        # the kit's art cover and back cover (spec 2026-11-10 §4.4).
         add_cover(
             doc,
             title=DOC_TITLE,
@@ -102,7 +113,7 @@ class AllegatoMicroclimaGenerator(BaseDocumentGenerator):
         ])
 
         add_heading(doc, "Metodologia", level=1)
-        add_paragraph(doc, "La norma UNI EN ISO 7730 definisce il comfort termico mediante gli indici PMV (Predicted Mean Vote, scala -3..+3) e PPD (Predicted Percentage of Dissatisfied). I parametri considerati sono: temperatura dell'aria (tdb), temperatura radiante media (tr), velocità dell'aria (var), umidità relativa (RH), metabolismo (met) e isolamento del vestiario (clo).")
+        add_body_paragraph(doc, "La norma UNI EN ISO 7730 definisce il comfort termico mediante gli indici PMV (Predicted Mean Vote, scala -3..+3) e PPD (Predicted Percentage of Dissatisfied). I parametri considerati sono: temperatura dell'aria (tdb), temperatura radiante media (tr), velocità dell'aria (var), umidità relativa (RH), metabolismo (met) e isolamento del vestiario (clo).")
 
         add_data_table(doc, ["Categoria", "PPD", "Giudizio"], [
             ["A", "< 6%", "Eccellente comfort"],
@@ -113,7 +124,7 @@ class AllegatoMicroclimaGenerator(BaseDocumentGenerator):
 
         add_heading(doc, "Parametri per ambiente", level=1)
         if not moderate_rows:
-            add_paragraph(doc, "Nessun ambiente valutato nella fascia moderata.", italic=True)
+            _note(doc, "Nessun ambiente valutato nella fascia moderata.")
         else:
             rows = []
             for m in moderate_rows:
@@ -139,8 +150,9 @@ class AllegatoMicroclimaGenerator(BaseDocumentGenerator):
             )
 
         add_heading(doc, "Misure correttive suggerite", level=1)
-        add_paragraph(doc, "Per ambienti con PPD >= 15%: adeguare il sistema di climatizzazione, rivedere l'isolamento del vestiario, introdurre schermature solari o umidificatori, verificare la velocità dell'aria nelle postazioni.")
+        add_body_paragraph(doc, "Per ambienti con PPD >= 15%: adeguare il sistema di climatizzazione, rivedere l'isolamento del vestiario, introdurre schermature solari o umidificatori, verificare la velocità dell'aria nelle postazioni.")
 
+        add_back_cover(doc)
         finish_document(
             doc,
             title=DOC_TITLE,

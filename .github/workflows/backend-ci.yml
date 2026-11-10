@@ -55,7 +55,12 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          # The minor version must match PYTHON_VERSION in backend/render.yaml
+          # (tests/test_ci_python_version.py). setup-python resolves the newest
+          # 3.14 patch for the runner image: GitHub publishes no 3.14.3 build
+          # for Ubuntu 26.04 (ubuntu-latest), and the minor version is what
+          # carries 3.14's semantics, such as lazy annotations.
+          python-version: "3.14"
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
 

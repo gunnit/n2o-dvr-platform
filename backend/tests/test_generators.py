@@ -16,11 +16,22 @@ from pathlib import Path
 
 import pytest
 from docx import Document
+from docx.oxml.ns import qn
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_ROOT))
 sys.path.insert(0, str(BACKEND_ROOT / "scripts"))
+
+from app.services.document_generator import design  # noqa: E402
+from app.services.document_generator.docx_utils import (  # noqa: E402
+    BRAND_NAVY_HEX,
+    BRAND_SURFACE_HEX,
+    BRAND_TABLE_HEADER_HEX,
+    FONT_FAMILY,
+    RISK_COLORS,
+    TYPE_SCALE,
+)
 
 
 def _load_verify():
@@ -77,8 +88,8 @@ def _paragraph_with_text_after(doc: Document, marker: str, element):
 
 
 def _generate_duvri(module, fixture, output_dir: Path) -> tuple[Document, str]:
-    module.patch_generators(fixture, str(output_dir))
-    ok, path, message = asyncio.run(module.run_one("DUVRI", fixture["azienda"].id))
+    with module.patched_generators(fixture, str(output_dir)):
+        ok, path, message = asyncio.run(module.run_one("DUVRI", fixture["azienda"].id))
     assert ok, message
     return Document(path), path
 
@@ -99,7 +110,6 @@ def generated_outputs(tmp_path_factory):
     out = tmp_path_factory.mktemp("gen_out")
     module = _load_verify()
     fixture = module.build_fixture()
-    module.patch_generators(fixture, str(out))
 
     from app.services.document_generator.dispatcher import ALL_DOCUMENT_TYPES
 
@@ -113,7 +123,9 @@ def generated_outputs(tmp_path_factory):
             except Exception as e:
                 results[tipo] = (False, "", str(e))
 
-    asyncio.run(run_all())
+    # The tests read the files; the fakes go once they are written.
+    with module.patched_generators(fixture, str(out)):
+        asyncio.run(run_all())
     return results
 
 
@@ -331,6 +343,27 @@ def test_fire_renders_current_pi_meaning_and_modeled_hydrants(generated_outputs)
     ) in rows
 
 
+@pytest.mark.parametrize(
+    ("tipo", "header", "column"),
+    [
+        ("ALLEGATO_INCENDIO", ("Ambiente", "INF", "SI", "PI", "Totale", "Livello", "Uscite", "Estintori", "Idranti"), 5),
+        ("ALLEGATO_STRESS", ("Area", "Punteggio grezzo", "Convertito", "Livello parziale"), 3),
+    ],
+)
+def test_level_columns_without_colours_stay_centred(generated_outputs, tipo, header, column):
+    """Final review M-3: a cell is no longer centred for spelling a risk
+    level, so the level columns that take no level colour are centred as
+    columns, whatever their cells hold."""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    ok, path, _ = generated_outputs[tipo]
+    assert ok and path
+    table = _find_table(Document(path), header)
+    assert table is not None and len(table.rows) > 1
+    alignments = {row.cells[column].paragraphs[0].alignment for row in table.rows[1:]}
+    assert alignments == {WD_ALIGN_PARAGRAPH.CENTER}
+
+
 def test_fire_training_and_drill_text_uses_supported_cadence(generated_outputs):
     ok, path, _ = generated_outputs["ALLEGATO_INCENDIO"]
     assert ok and path
@@ -348,11 +381,11 @@ def test_fire_does_not_claim_a_drill_cadence_for_small_employer(tmp_path):
     fixture = module.build_fixture()
     fixture["azienda"].numero_dipendenti_dichiarati = 4
     fixture["persone"] = fixture["persone"][:4]
-    module.patch_generators(fixture, str(tmp_path))
 
-    ok, path, msg = asyncio.run(
-        module.run_one("ALLEGATO_INCENDIO", fixture["azienda"].id)
-    )
+    with module.patched_generators(fixture, str(tmp_path)):
+        ok, path, msg = asyncio.run(
+            module.run_one("ALLEGATO_INCENDIO", fixture["azienda"].id)
+        )
     assert ok, msg
     text = _document_text(path)
 
@@ -375,11 +408,11 @@ def test_fire_does_not_count_registered_consultants_as_declared_workers(tmp_path
         )
         for index in range(10)
     ]
-    module.patch_generators(fixture, str(tmp_path))
 
-    ok, path, msg = asyncio.run(
-        module.run_one("ALLEGATO_INCENDIO", fixture["azienda"].id)
-    )
+    with module.patched_generators(fixture, str(tmp_path)):
+        ok, path, msg = asyncio.run(
+            module.run_one("ALLEGATO_INCENDIO", fixture["azienda"].id)
+        )
     assert ok, msg
     text = _document_text(path)
 
@@ -754,8 +787,9 @@ def test_dvr_parte_ii_has_definizioni_and_criteria(generated_outputs):
 
 
 def test_dvr_parte_iv_has_signature_table(generated_outputs):
-    """US-2.8 AC1: Parte IV emits the improvement program grid and the 2×3
-    signature block as a real table (Templates 109, 110)."""
+    """US-2.8 AC1: Parte IV emits the improvement program grid and the
+    signature block as a real table (Templates 109, 110), in the shape of
+    N2O's model: a 4-column programme and a 2×2 signature grid."""
     ok, path, _ = generated_outputs["DVR_MASTER"]
     assert ok and path
     doc = Document(path)
@@ -766,13 +800,10 @@ def test_dvr_parte_iv_has_signature_table(generated_outputs):
             continue
         header_cells = [cell.text.strip() for cell in table.rows[0].cells]
         if header_cells == [
-            "Priorità",
-            "Rischio",
             "Misura di Miglioramento",
-            "Attività / Procedura",
             "Risorse",
             "Responsabile",
-            "Scadenza",
+            "Priorità",
         ]:
             found_program = True
             break
@@ -782,15 +813,14 @@ def test_dvr_parte_iv_has_signature_table(generated_outputs):
 
     signature_match = False
     for table in doc.tables:
-        if len(table.rows) != 2 or len(table.rows[0].cells) != 3:
+        if len(table.rows) != 6 or len(table.rows[0].cells) != 2:
             continue
-        row0_text = " ".join(cell.text for cell in table.rows[0].cells)
-        row1_text = " ".join(cell.text for cell in table.rows[1].cells)
-        if "Datore di Lavoro" in row0_text and "Rappresentante dei Lavoratori" in row1_text:
+        roles = [cell.text for row in (table.rows[0], table.rows[3]) for cell in row.cells]
+        if roles == ["Datore di Lavoro", "Responsabile del S.P.P.", "Medico Competente", "RLS"]:
             signature_match = True
             break
     assert signature_match, (
-        "missing 2×3 signature table (Template Table 110)"
+        "missing 2×2 signature grid (Template Table 110)"
     )
 
 
@@ -802,6 +832,10 @@ def test_dvr_parte_iii_env_block_structure(generated_outputs):
     table for every applicable macro-category. The Acme fixture has 6 envs
     each with 2 applicable risk categories → at least 6 × (3 + 2) = 30
     template-shaped tables in Parte III alone.
+
+    Part III opens once on its divider ("IDENTIFICAZIONE DELL'AMBIENTE DI
+    LAVORO E DEGLI ADDETTI", N2O's model); each environment then has its
+    risk-factor sub-title.
     """
     ok, path, _ = generated_outputs["DVR_MASTER"]
     assert ok and path
@@ -811,12 +845,15 @@ def test_dvr_parte_iii_env_block_structure(generated_outputs):
         p.text for p in doc.paragraphs
         if p.style.name.startswith("Heading")
     ]
+    assert headings.count(
+        "IDENTIFICAZIONE DELL'AMBIENTE DI LAVORO E DEGLI ADDETTI"
+    ) == 1
     env_identity_headers = [
         h for h in headings
-        if h.startswith("Identificazione dell'Ambiente di Lavoro")
+        if h.startswith("Identificazione dei Fattori di Rischio — ")
     ]
     assert len(env_identity_headers) == 6, (
-        f"expected one env-identity heading per Acme env (6), "
+        f"expected one risk-factor sub-title per Acme env (6), "
         f"got {len(env_identity_headers)}: {env_identity_headers}"
     )
 
@@ -855,3 +892,83 @@ def test_dvr_parte_iii_env_block_structure(generated_outputs):
         f"expected ≥12 per-category risk tables (6 envs × 2 cats), "
         f"got {category_headers_seen}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Design kit adoption (spec 2026-11-10 §4.4)
+# ---------------------------------------------------------------------------
+
+# The seven attachments built in code: cover, tables, notes and back cover all
+# come from the design kit.
+CODE_BUILT_ATTACHMENTS = (
+    "ALLEGATO_MMC",
+    "ALLEGATO_VDT",
+    "ALLEGATO_MICROCLIMA",
+    "ALLEGATO_MICROCLIMA_SEVERO",
+    "ALLEGATO_BIOLOGICO_ALIMENTARE",
+    "ALLEGATO_BIOLOGICO_ASILO",
+    "ALLEGATO_BIOLOGICO_DENTISTI",
+)
+
+_FONT_SLOTS = ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs")
+_THEME_FONT_SLOTS = ("w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme", "w:cstheme")
+# Every colour a kit table may fill a cell with: the header blue, the zebra
+# and light-label surface, the signature grid's navy and the risk levels.
+_KIT_FILLS = {BRAND_TABLE_HEADER_HEX, BRAND_SURFACE_HEX, BRAND_NAVY_HEX} | {
+    str(colour) for colour in RISK_COLORS.values()
+}
+
+
+def _font_parts(doc: Document) -> list[tuple[str, object]]:
+    """The body, the styles and every header and footer part."""
+    parts = [("document", doc.element), ("styles", doc.styles.element)]
+    for rel in doc.part.rels.values():
+        if not rel.is_external and rel.reltype.endswith(("/header", "/footer")):
+            parts.append((str(rel.target_part.partname), rel.target_part.element))
+    return parts
+
+
+def _non_kit_fonts(doc: Document) -> list[tuple[str, list[str], list[str]]]:
+    offenders = []
+    for part, element in _font_parts(doc):
+        for fonts in element.iter(qn("w:rFonts")):
+            declared = {fonts.get(qn(slot)) for slot in _FONT_SLOTS} - {None}
+            themed = [slot for slot in _THEME_FONT_SLOTS if fonts.get(qn(slot))]
+            if declared - {FONT_FAMILY} or themed:
+                offenders.append((part, sorted(declared), themed))
+    return offenders
+
+
+@pytest.mark.parametrize("tipo", CODE_BUILT_ATTACHMENTS)
+def test_attachments_use_kit(generated_outputs, tipo):
+    ok, path, message = generated_outputs[tipo]
+    assert ok, message
+    doc = Document(path)
+
+    # Cover and back cover are the kit's art pages.
+    firsts = design.section_first_blocks(doc)
+    assert design.art_marker(firsts[0]) == "vera-art:cover:cover_vera"
+    assert design.art_marker(firsts[-1]) == "vera-art:back_cover:back_vera"
+    assert len(doc.sections) >= 2
+
+    # No run, paragraph mark or style names a font other than Arial, and no
+    # theme font slips back in through a theme attribute.
+    assert _non_kit_fonts(doc) == []
+
+    # Table header rows are the kit's blue; every other cell colour is a kit
+    # colour too (no navy header bands, greys or pastel tints of their own).
+    body = doc.element.body
+    header_rows = body.xpath(".//w:tr[w:trPr/w:tblHeader]")
+    assert header_rows, "no kit table header in the document"
+    for row in header_rows:
+        fills = [cell.xpath("./w:tcPr/w:shd/@w:fill") for cell in row.xpath("./w:tc")]
+        assert fills and all(fill == [BRAND_TABLE_HEADER_HEX] for fill in fills), fills
+    fills = set(body.xpath(".//w:tc/w:tcPr/w:shd/@w:fill"))
+    assert fills <= _KIT_FILLS, sorted(fills - _KIT_FILLS)
+
+    # Table text is the kit's 10 pt, set on every run that prints.
+    table_size = str(int(TYPE_SCALE["table"] * 2))
+    for run in body.xpath(".//w:tbl//w:r[w:t]"):
+        text = "".join(run.xpath("./w:t/text()"))
+        if text.strip():
+            assert run.xpath("./w:rPr/w:sz/@w:val") == [table_size], text

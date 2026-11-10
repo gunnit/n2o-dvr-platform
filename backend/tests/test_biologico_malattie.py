@@ -52,10 +52,10 @@ def test_unknown_settore_is_rejected():
 
 
 def _generate(module, fixture, tmp_path) -> str:
-    module.patch_generators(fixture, str(tmp_path))
-    ok, path, message = asyncio.run(
-        module.run_one("allegato_biologico_alimentare", fixture["azienda"].id)
-    )
+    with module.patched_generators(fixture, str(tmp_path)):
+        ok, path, message = asyncio.run(
+            module.run_one("allegato_biologico_alimentare", fixture["azienda"].id)
+        )
     assert ok, message
     return path
 
