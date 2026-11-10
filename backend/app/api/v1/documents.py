@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from app.billing.entitlements import Entitlements, get_entitlements
 from app.billing.gates import (
@@ -94,6 +95,27 @@ async def _resolve_user_name(user_id: uuid.UUID | None, db: AsyncSession) -> str
         return None
     result = await db.execute(select(User.full_name).where(User.id == user_id))
     return result.scalar_one_or_none()
+
+
+async def _next_version(
+    azienda_id: uuid.UUID, tipo_documento: str, db: AsyncSession
+) -> int:
+    """One more than the highest ``versione`` of this document type for the
+    azienda, 1 for the first.
+
+    Reads the number alone: loading the latest row to read its ``versione``
+    would also pull its ``file_content`` (about 3 MB for a DVR) out of
+    Postgres.
+    """
+    result = await db.execute(
+        select(func.max(DocumentoGenerato.versione)).where(
+            DocumentoGenerato.azienda_id == azienda_id,
+            DocumentoGenerato.tipo_documento == tipo_documento,
+        )
+    )
+    latest = result.scalar_one_or_none()
+    return latest + 1 if latest is not None else 1
+
 
 router = APIRouter(prefix="/aziende/{azienda_id}/documents", tags=["documents"])
 
@@ -372,18 +394,7 @@ async def generate_document(
 
     await _preflight_dvr_photo_transport(azienda_id, [body.tipo_documento], db)
 
-    # Determine the next version number for this document type
-    result = await db.execute(
-        select(DocumentoGenerato)
-        .where(
-            DocumentoGenerato.azienda_id == azienda_id,
-            DocumentoGenerato.tipo_documento == body.tipo_documento,
-        )
-        .order_by(DocumentoGenerato.versione.desc())
-        .limit(1)
-    )
-    latest = result.scalar_one_or_none()
-    next_version = (latest.versione + 1) if latest else 1
+    next_version = await _next_version(azienda_id, body.tipo_documento, db)
 
     doc = DocumentoGenerato(
         azienda_id=azienda_id,
@@ -438,12 +449,16 @@ async def list_documents(
         )
 
     # Left-join on users so rows with a NULL generated_by (legacy records)
-    # still appear, just without an author name.
+    # still appear, just without an author name. The list only describes the
+    # documents, and the page polls it every 3 s while one is generating: the
+    # bytes stay in Postgres (_doc_to_response never reads them; in an async
+    # session a deferred column that is read raises).
     result = await db.execute(
         select(DocumentoGenerato, User.full_name)
         .outerjoin(User, User.id == DocumentoGenerato.generated_by)
         .where(DocumentoGenerato.azienda_id == azienda_id)
         .order_by(DocumentoGenerato.created_at.desc())
+        .options(defer(DocumentoGenerato.file_content))
     )
     return [_doc_to_response(doc, name) for doc, name in result.all()]
 
@@ -457,6 +472,7 @@ async def get_document_status(
 ):
     """Check generation status for a specific document."""
     await _get_azienda(azienda_id, org_id, db)
+    # Polled while the document generates: metadata only, as in the list.
     result = await db.execute(
         select(DocumentoGenerato, User.full_name)
         .outerjoin(User, User.id == DocumentoGenerato.generated_by)
@@ -464,6 +480,7 @@ async def get_document_status(
             DocumentoGenerato.id == document_id,
             DocumentoGenerato.azienda_id == azienda_id,
         )
+        .options(defer(DocumentoGenerato.file_content))
     )
     row = result.one_or_none()
     if not row:
@@ -576,18 +593,7 @@ async def batch_generate_documents(
     created_docs: list[DocumentoGenerato] = []
 
     for tipo in body.tipi_documento:
-        # Determine the next version number for each document type
-        result = await db.execute(
-            select(DocumentoGenerato)
-            .where(
-                DocumentoGenerato.azienda_id == azienda_id,
-                DocumentoGenerato.tipo_documento == tipo,
-            )
-            .order_by(DocumentoGenerato.versione.desc())
-            .limit(1)
-        )
-        latest = result.scalar_one_or_none()
-        next_version = (latest.versione + 1) if latest else 1
+        next_version = await _next_version(azienda_id, tipo, db)
 
         doc = DocumentoGenerato(
             azienda_id=azienda_id,
@@ -717,18 +723,7 @@ async def restore_document(
     # (D.Lgs. 81/2008 retention); only minting v+1 is charged for.
     await _ensure_new_version_allowed(ent, org_id, azienda_id, source.tipo_documento, db)
 
-    # Next version number for this document type
-    result = await db.execute(
-        select(DocumentoGenerato)
-        .where(
-            DocumentoGenerato.azienda_id == azienda_id,
-            DocumentoGenerato.tipo_documento == source.tipo_documento,
-        )
-        .order_by(DocumentoGenerato.versione.desc())
-        .limit(1)
-    )
-    latest = result.scalar_one_or_none()
-    next_version = (latest.versione + 1) if latest else 1
+    next_version = await _next_version(azienda_id, source.tipo_documento, db)
 
     # Build restored filename
     src_name = source.file_name or (os.path.basename(source.file_path) if source.file_path else f"{source.tipo_documento}_v{source.versione}")
@@ -940,18 +935,7 @@ async def sync_document_from_gdoc(
             detail="Impossibile esportare il documento da Google Docs",
         )
 
-    # Next version for this document type
-    result = await db.execute(
-        select(DocumentoGenerato)
-        .where(
-            DocumentoGenerato.azienda_id == source.azienda_id,
-            DocumentoGenerato.tipo_documento == source.tipo_documento,
-        )
-        .order_by(DocumentoGenerato.versione.desc())
-        .limit(1)
-    )
-    latest = result.scalar_one_or_none()
-    next_version = (latest.versione + 1) if latest else 1
+    next_version = await _next_version(source.azienda_id, source.tipo_documento, db)
 
     # Build filename: append -edited to stem
     src_name = source.file_name or f"{source.tipo_documento}_v{source.versione}.docx"
@@ -1324,18 +1308,7 @@ async def save_edited_version(
         apply_overrides_to_docx, docx_bytes, source.content_overrides
     )
 
-    # Next version for this document type
-    result = await db.execute(
-        select(DocumentoGenerato)
-        .where(
-            DocumentoGenerato.azienda_id == source.azienda_id,
-            DocumentoGenerato.tipo_documento == source.tipo_documento,
-        )
-        .order_by(DocumentoGenerato.versione.desc())
-        .limit(1)
-    )
-    latest = result.scalar_one_or_none()
-    next_version = (latest.versione + 1) if latest else 1
+    next_version = await _next_version(source.azienda_id, source.tipo_documento, db)
 
     # Build filename: append -edited to stem
     src_name = source.file_name or f"{source.tipo_documento}_v{source.versione}.docx"
