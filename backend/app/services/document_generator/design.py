@@ -54,6 +54,7 @@ from app.services.document_generator.docx_utils import (
     FONT_FAMILY,
     TYPE_SCALE,
     add_data_table,
+    add_heading,
     fill_label_table,
     format_sede,
     insert_in_order,
@@ -437,8 +438,13 @@ def _centered(
 
 
 def _add_heading(doc: Document, text: str, level: int):
-    """``doc.add_heading`` with the kit's font on the run."""
-    paragraph = doc.add_heading(text, level=level)
+    """One ``Heading N`` paragraph with the kit's font on the run.
+
+    Through :func:`docx_utils.add_heading`, not python-docx's: a donor
+    template without the style (PEE azienda has no Heading 2) gets one bold
+    paragraph instead of a stray copy and a ``KeyError``.
+    """
+    paragraph = add_heading(doc, text, level=level)
     for run in paragraph.runs:
         set_run_font(run)
     return paragraph
@@ -829,7 +835,7 @@ _PART_LABEL_BLOCK_CM = 0.6
 def _add_part_label(doc: Document, text: str):
     """The small "PARTE I — …" line: Heading 1 (so it is in the index) with
     the part-label look applied directly (9 pt bold navy capitals, centred)."""
-    paragraph = doc.add_heading(text, level=1)
+    paragraph = add_heading(doc, text, level=1)
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     fmt = paragraph.paragraph_format
     fmt.space_before = Pt(0)
@@ -1177,6 +1183,13 @@ def add_running_header_footer(
 # Revision history, table of contents, file properties
 # ---------------------------------------------------------------------------
 
+# The Storico's header row, and the start of it that finds one
+# (docx_utils.find_table_index): the kit's table and the donor templates'
+# have the same header.
+REVISION_TABLE_HEADERS = ("Rev.", "Motivazione", "Data")
+REVISION_TABLE_PREFIX = "Rev. | Motivazione"
+
+
 def add_revision_table(
     doc: Document,
     version: int | None,
@@ -1190,7 +1203,7 @@ def add_revision_table(
         _add_heading(doc, heading, level)
     table = add_data_table(
         doc,
-        ["Rev.", "Motivazione", "Data"],
+        list(REVISION_TABLE_HEADERS),
         [[revision_label(version), revision_motivation(version), generated_at.strftime("%d/%m/%Y")]],
         column_widths_cm=[2.0, 10.5, 4.0],
     )
@@ -1412,7 +1425,7 @@ def fill_cover_tables(
     fill_label_table(doc, values)
     reset_table_rows(
         doc,
-        "Rev. | Motivazione",
+        REVISION_TABLE_PREFIX,
         [[revision_label(version), revision_motivation(version), generated_at.strftime("%d/%m/%Y")]],
     )
 

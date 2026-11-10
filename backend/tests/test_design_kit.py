@@ -359,6 +359,21 @@ def test_add_heading_uses_the_style_when_present():
     assert heading.style.name == "Heading 2"
 
 
+def test_kit_headings_without_the_style_are_one_paragraph():
+    # The kit's own headings go on donor templates too: the revision table
+    # of PEE azienda, which has no Heading 2 (final review M-1). One bold
+    # paragraph in Arial, no exception.
+    doc = _without_heading_styles(Document())
+
+    design.add_revision_table(doc, 1, GENERATED_AT)
+
+    headings = [p for p in doc.paragraphs if p.text == "Storico delle revisioni"]
+    assert len(headings) == 1
+    (run,) = headings[0].runs
+    assert run.bold and run.font.name == docx_utils.FONT_FAMILY
+    assert len(doc.tables) == 1
+
+
 def test_long_cell_does_not_hang_libreoffice(tmp_path):
     # A smoke test, not the guard: on LibreOffice 24.2 this passes with or
     # without cantSplit on the data row. The real guard against the hang

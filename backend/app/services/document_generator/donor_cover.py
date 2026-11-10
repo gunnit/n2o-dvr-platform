@@ -26,14 +26,21 @@ from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
 
 from app.services.document_generator.design import (
+    REVISION_TABLE_PREFIX,
     _crop_to_cover,
     _is_page_break_only,
     _page_size,
     add_cover,
+    add_revision_table,
     art_marker,
     cover_block_lead,
 )
-from app.services.document_generator.docx_utils import FONT_FAMILY, SYMBOL_FONTS, set_font_slots
+from app.services.document_generator.docx_utils import (
+    FONT_FAMILY,
+    SYMBOL_FONTS,
+    find_table_index,
+    set_font_slots,
+)
 
 _PARA_SECTPR = f"{qn('w:pPr')}/{qn('w:sectPr')}"
 
@@ -173,7 +180,7 @@ def _fit_art_to_section(doc: Document, art, section) -> None:
         _crop_to_cover(anchor, image_part.image, width, height)
 
 
-def insert_kit_cover_at_top(doc: Document, **cover: Any) -> int:
+def insert_kit_cover_at_top(doc: Document, *, revision_table: bool = False, **cover: Any) -> int:
     """The kit's attachment cover (:func:`design.add_cover`, same keyword
     arguments) in front of an existing donor body.
 
@@ -185,14 +192,26 @@ def insert_kit_cover_at_top(doc: Document, **cover: Any) -> int:
     ended on, or a page break of the generator's own): two in a row would
     leave an empty page.
 
+    ``revision_table``: the donor's Storico (Rev. | Motivazione | Data) sat
+    on the cover :func:`strip_donor_cover` removed — Incendio, Stress, both
+    PEE and POS. The kit's (:func:`design.add_revision_table`, this
+    emission's row) then goes on the page after the cover, as in the
+    code-built attachments. Only when the body holds no revision table: a
+    donor that kept its own has it filled by ``finish_document(fill_cover=
+    True)``, never doubled.
+
     Call it after the donor's scrubs and picture sweeps, which would rewrite
-    the letterhead or remove the art. Returns the number of body blocks the
-    cover occupies.
+    the letterhead or remove the art. Returns the number of body blocks put
+    in front of the donor body: the cover's, and the Storico's.
     """
     last = doc.sections[-1]
     last_title_page = last.different_first_page_header_footer
+    with_storico = revision_table and find_table_index(doc, REVISION_TABLE_PREFIX) is None
     count = len(_body_blocks(doc))
     add_cover(doc, **cover)
+    cover_blocks = len(_body_blocks(doc)) - count
+    if with_storico:
+        add_revision_table(doc, cover["version"], cover["generated_at"])
     added = _body_blocks(doc)[count:]
     if not added:
         return 0
@@ -216,10 +235,10 @@ def insert_kit_cover_at_top(doc: Document, **cover: Any) -> int:
     lead = added[1] if art is not None else added[0]
     Paragraph(lead, doc._body).paragraph_format.space_before = cover_block_lead(first)
 
-    page_break = added[-1]
+    page_break = added[cover_blocks - 1]
     if _is_page_break_only(page_break) and _starts_new_page(page_break.getnext(), doc.styles.element):
         body.remove(page_break)
-        added = added[:-1]
+        added.remove(page_break)
     return len(added)
 
 

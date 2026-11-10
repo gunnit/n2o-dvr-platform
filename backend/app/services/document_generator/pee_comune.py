@@ -200,6 +200,8 @@ class PeeComuneGenerator(BaseDocumentGenerator):
             branding=self.branding,
             version=version,
             generated_at=generated_at,
+            # The donor's Storico went with its cover: the kit's replaces it.
+            revision_table=True,
             **COVER,
         )
         normalize_fonts(doc)

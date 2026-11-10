@@ -43,7 +43,7 @@ The kit is two modules: `backend/app/services/document_generator/design.py` (pag
 
 ## Donor templates (donor_cover.py)
 
-Gestanti, Incendio, Stress, DUVRI, POS, both PEE and the HACCP manual open one of N2O's completed documents from `templates/`: `strip_donor_cover` removes the donor's cover, `insert_kit_cover_at_top` puts the kit cover in its place (after the body is complete), `normalize_fonts` sets Arial on styles, runs and list levels at the donor's own sizes (Symbol, Wingdings and Webdings bullets keep their font). Then `add_back_cover` and `finish_document`, with `fill_cover=True` where the donor keeps label | value forms to fill. The HACCP record forms get Arial and the running header and footer only: no cover, no back cover.
+Gestanti, Incendio, Stress, DUVRI, POS, both PEE and the HACCP manual open one of N2O's completed documents from `templates/`: `strip_donor_cover` removes the donor's cover, `insert_kit_cover_at_top` puts the kit cover in its place (after the body is complete; `revision_table=True` adds the kit's Storico on the next page for the donors whose own sat on the stripped cover: Incendio, Stress, both PEE, POS), `normalize_fonts` sets Arial on styles, runs and list levels at the donor's own sizes (Symbol, Wingdings and Webdings bullets keep their font). Then `add_back_cover` and `finish_document`, with `fill_cover=True` where the donor keeps label | value forms to fill. The HACCP record forms get Arial and the running header and footer only: no cover, no back cover.
 
 ## Checking a change
 

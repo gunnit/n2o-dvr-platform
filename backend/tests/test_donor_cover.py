@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import io
+import re
 import shutil
 import zipfile
 from datetime import datetime
@@ -491,6 +492,68 @@ def test_insert_kit_cover_at_top_on_a_multi_section_donor():
     assert (int(extent.get("cx")), int(extent.get("cy"))) == (first.page_width, first.page_height)
 
 
+REVISION_HEADER = ["Rev.", "Motivazione", "Data"]
+
+
+def _revision_tables(doc) -> list:
+    """The body's Storico tables: header row "Rev. | Motivazione | Data"."""
+    from docx.table import Table
+
+    found = []
+    for element in _blocks(doc):
+        if element.tag == qn("w:tbl"):
+            table = Table(element, doc)
+            if [cell.text.strip() for cell in table.rows[0].cells][:2] == REVISION_HEADER[:2]:
+                found.append(table)
+    return found
+
+
+def _rows(table) -> list[list[str]]:
+    return [[cell.text for cell in row.cells] for row in table.rows]
+
+
+def test_insert_kit_cover_at_top_puts_the_revision_table_after_the_cover():
+    # Incendio, Stress, the two PEE and POS kept their Storico on the donor
+    # cover strip_donor_cover removes (final review M-1). PEE azienda also
+    # has no Heading 2 for the table's heading.
+    doc = Document(str(TEMPLATES_DIR / "PIANO GESTIONE EMERGENZE - AZIENDA.docx"))
+    assert strip_donor_cover(doc) == 11
+    assert _revision_tables(doc) == []
+    body_start = _blocks(doc)[0]
+
+    added = insert_kit_cover_at_top(doc, revision_table=True, **_cover_kwargs(version=3))
+
+    blocks = _blocks(doc)
+    (table,) = _revision_tables(doc)
+    index = blocks.index(table._tbl)
+    # On the page after the cover, before the donor body.
+    assert design._is_page_break_only(blocks[index - 2])
+    assert _w_text(blocks[index - 1]) == "Storico delle revisioni"
+    assert [_w_text(el) for el in blocks].count("Storico delle revisioni") == 1
+    assert index < added and blocks[added] is body_start
+    # This emission, as the cover prints it ("Revisione 02 · 10/11/2026").
+    assert _rows(table) == [REVISION_HEADER, ["02", "Aggiornamento", "10/11/2026"]]
+    assert "Revisione 02 · 10/11/2026" in [_w_text(el) for el in blocks[:index]]
+    # The cover is unchanged: art first, the title block at 4.5 cm.
+    assert design.art_marker(blocks[0]) == "vera-art:cover:cover_vera"
+    lead = Paragraph(blocks[1], doc._body).paragraph_format.space_before
+    assert abs(lead - design.cover_block_lead(doc.sections[0])) < Cm(0.01)
+
+
+def test_insert_kit_cover_at_top_never_doubles_a_revision_table():
+    # A donor whose own Storico is still in the body keeps it (finish_document
+    # fills it); and without revision_table no Storico is added at all.
+    kept = Document(str(TEMPLATES_DIR / "ALLEGATO RISCHIO INCENDIO.docx"))
+    (own,) = _revision_tables(kept)
+    insert_kit_cover_at_top(kept, revision_table=True, **_cover_kwargs())
+    assert [table._tbl for table in _revision_tables(kept)] == [own._tbl]
+
+    never = Document(str(TEMPLATES_DIR / "ALLEGATO GESTANTI.docx"))
+    strip_donor_cover(never)
+    insert_kit_cover_at_top(never, **_cover_kwargs())
+    assert _revision_tables(never) == []
+
+
 def test_insert_kit_cover_at_top_drops_its_break_before_a_page_break():
     # POS: the donor body is all cover. What follows the kit cover is the
     # generator's own page break; two in a row would leave an empty page.
@@ -575,6 +638,34 @@ def test_headings_the_donor_has_no_style_for_print_once(generated, tipo):
     texts = [_w_text(p).strip() for p in Document(path).element.body.iterchildren(qn("w:p"))]
     repeats = [text for text, following in zip(texts, texts[1:]) if text and text == following]
     assert repeats == []
+
+
+# The donors whose own cover carried the Storico (Rev. | Motivazione | Data).
+DONORS_WITH_A_STORICO = ("ALLEGATO_INCENDIO", "ALLEGATO_STRESS", "PEE_AZIENDA", "PEE_COMUNE", "POS")
+
+
+@pytest.mark.parametrize("tipo", list(DONOR_TEMPLATES))
+def test_donor_attachments_keep_one_revision_table(generated, tipo):
+    """Final review M-1: the Storico left with the donor cover. The five
+    donors that had one print the kit's, right after the cover, with this
+    emission's row; Gestanti, DUVRI and the HACCP manual never had one."""
+    ok, path, message = generated[tipo]
+    assert ok, message
+    doc = Document(path)
+    tables = _revision_tables(doc)
+    if tipo not in DONORS_WITH_A_STORICO:
+        assert tables == []
+        return
+    (table,) = tables
+    blocks = _blocks(doc)
+    index = blocks.index(table._tbl)
+    cover = [_w_text(el) for el in blocks[:index]]
+    revision = next(re.fullmatch(r"Revisione (\d\d) · (\S+)", text) for text in cover if text.startswith("Revisione "))
+    assert _rows(table) == [REVISION_HEADER, [revision[1], "Emissione", revision[2]]]
+    # The first table of the document, on the page after the cover.
+    assert _w_text(blocks[index - 1]) == "Storico delle revisioni"
+    assert design._is_page_break_only(blocks[index - 2])
+    assert not any(el.tag == qn("w:tbl") for el in blocks[:index])
 
 
 def test_haccp_forms_have_no_cover_art(tmp_path, monkeypatch):
