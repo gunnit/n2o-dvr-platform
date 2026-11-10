@@ -3,7 +3,9 @@
 ``documenti_generati.file_content`` holds the whole .docx or .zip: a DVR with
 the 2026-11 art is about 3 MB, and the documents page polls the list every
 3 s while anything is generating. The endpoints that only describe documents
-must not drag those bytes out of Postgres (final review, I-1).
+must not drag those bytes out of Postgres (final review, I-1). Nor do the
+editor's preview on a cache hit and its overrides PATCH, run on every
+autosave (final review, P-2).
 
 Unit-level, like the rest of the off-DB API tests: the session is a mock that
 records each statement, and the SQL is compiled for Postgres to see which
@@ -12,16 +14,25 @@ columns it selects.
 
 from __future__ import annotations
 
+import io
 import uuid
+from collections import OrderedDict
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from docx import Document
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1 import documents as documents_api
-from app.schemas.document import DocumentBatchRequest, DocumentGenerateRequest
+from app.core.exceptions import NotFoundError
+from app.schemas.document import (
+    DocumentBatchRequest,
+    DocumentGenerateRequest,
+    OverridesPatchRequest,
+)
 
 
 def _sql(statement) -> str:
@@ -227,3 +238,231 @@ async def test_next_version_is_read_as_max_versione_without_loading_rows(
         sql = _sql(statement)
         assert "max(documenti_generati.versione)" in sql
         assert "file_content" not in sql
+
+
+# --- The editor: preview, its images, the overrides PATCH (final review P-2) --
+
+
+def _editor_row(**fields) -> _MetadataOnlyDocument:
+    """A completed .docx row as the editor endpoints read it, bytes left in
+    Postgres: reading ``file_content`` off it fails the test."""
+    base = dict(
+        id=uuid.uuid4(),
+        azienda_id=uuid.uuid4(),
+        tipo_documento="dvr_master",
+        versione=2,
+        status="completed",
+        file_name="DVR_acme_v2.docx",
+        file_path=None,
+        stale_snapshot=False,
+        generation_completed_at=datetime(2026, 11, 10, 9, 30),
+        content_overrides={"3": "Testo salvato"},
+    )
+    base.update(fields)
+    return _MetadataOnlyDocument(**base)
+
+
+class _Result:
+    """One statement's result: the (row, azienda name) pair of the
+    org-scoped lookup, or a single scalar (the bytes)."""
+
+    def __init__(self, value):
+        self._value = value
+
+    def one_or_none(self):
+        return self._value
+
+    def scalar_one_or_none(self):
+        return self._value
+
+
+def _scripted_session(*results):
+    db = AsyncMock(spec=AsyncSession)
+    statements = []
+    pending = list(results)
+
+    async def execute(statement, *args, **kwargs):
+        statements.append(statement)
+        return _Result(pending.pop(0))
+
+    db.execute.side_effect = execute
+    return db, statements
+
+
+def _docx_bytes() -> bytes:
+    doc = Document()
+    doc.add_paragraph("Il documento di valutazione dei rischi")
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_preview_on_a_cache_hit_never_selects_the_document_bytes(monkeypatch):
+    row = _editor_row()
+    cached = {"blocks": [], "furniture": None, "page_setup": None, "style_props": {}}
+    monkeypatch.setattr(documents_api, "_PREVIEW_CACHE", OrderedDict({row.id: cached}))
+    db, statements = _scripted_session((row, "Acme Srl"))
+
+    preview = await documents_api.preview_document(row.id, uuid.uuid4(), db)
+
+    assert (preview.id, preview.overrides) == (row.id, {"3": "Testo salvato"})
+    (lookup,) = statements
+    sql = _sql(lookup)
+    assert "documenti_generati.content_overrides" in sql
+    assert "file_content" not in sql
+
+
+@pytest.mark.asyncio
+async def test_preview_on_a_cache_miss_reads_the_bytes_in_a_select_of_their_own(monkeypatch):
+    row = _editor_row()
+    monkeypatch.setattr(documents_api, "_PREVIEW_CACHE", OrderedDict())
+    db, statements = _scripted_session((row, "Acme Srl"), _docx_bytes())
+
+    preview = await documents_api.preview_document(row.id, uuid.uuid4(), db)
+
+    assert [block.runs[0].text for block in preview.blocks] == ["Il documento di valutazione dei rischi"]
+    assert row.id in documents_api._PREVIEW_CACHE
+    lookup, content = (_sql(statement) for statement in statements)
+    assert "file_content" not in lookup
+    assert content.startswith("SELECT documenti_generati.file_content \nFROM documenti_generati")
+    assert "documenti_generati.id =" in content
+
+
+@pytest.mark.asyncio
+async def test_overrides_patch_never_selects_the_document_bytes():
+    row = _editor_row()
+    db, statements = _scripted_session((row, "Acme Srl"))
+
+    out = await documents_api.patch_document_overrides(
+        row.id, OverridesPatchRequest(set={"4": "Nuovo testo", "3": None}), uuid.uuid4(), db
+    )
+
+    assert out.overrides == {"4": "Nuovo testo"}
+    db.commit.assert_awaited_once()
+    (lookup,) = statements
+    assert "file_content" not in _sql(lookup)
+
+
+def _database_url() -> str | None:
+    import os
+
+    from app.db.session import _normalize_async_url
+
+    url = os.environ.get("DATABASE_URL")
+    return _normalize_async_url(url) if url else None
+
+
+async def _reachable(url: str | None) -> bool:
+    if not url:
+        return False
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine(url)
+    try:
+        async with engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False
+    finally:
+        await engine.dispose()
+
+
+def _postgres_reachable() -> bool:
+    import asyncio
+
+    try:
+        return asyncio.run(_reachable(_database_url()))
+    except Exception:
+        return False
+
+
+@pytest.mark.skipif(not _postgres_reachable(), reason="no reachable Postgres in DATABASE_URL")
+@pytest.mark.asyncio
+async def test_editor_endpoints_on_a_real_session_read_the_bytes_only_when_needed(monkeypatch):
+    """The same contract against Postgres: the deferred column is never
+    lazy-loaded (that raises under the async session), the preview fetches
+    it once on a miss, and the PATCH and its refresh never select it."""
+    from sqlalchemy import event, text
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    engine = create_async_engine(_database_url())
+    selected = []
+
+    @event.listens_for(engine.sync_engine, "before_cursor_execute")
+    def record(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith("SELECT"):
+            selected.append(" ".join(statement.split()))
+
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    org_id, azienda_id, document_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    monkeypatch.setattr(documents_api, "_PREVIEW_CACHE", OrderedDict())
+    try:
+        async with factory() as s:
+            await s.execute(
+                text("INSERT INTO organizations (id, name) VALUES (:i, :n)"),
+                {"i": org_id, "n": f"pytest-bytes-{org_id}"},
+            )
+            await s.execute(
+                text(
+                    "INSERT INTO aziende (id, organization_id, ragione_sociale, survey_status)"
+                    " VALUES (:a, :o, 'Acme Srl', 'draft')"
+                ),
+                {"a": azienda_id, "o": org_id},
+            )
+            await s.execute(
+                text(
+                    "INSERT INTO documenti_generati (id, azienda_id, tipo_documento, versione, status,"
+                    " file_content, file_name, generation_attempts)"
+                    " VALUES (:d, :a, 'dvr_master', 1, 'completed', :c, 'DVR_v1.docx', 1)"
+                ),
+                {"d": document_id, "a": azienda_id, "c": _docx_bytes()},
+            )
+            await s.commit()
+
+        def bytes_selects():
+            return [sql for sql in selected if "file_content" in sql]
+
+        async with factory() as s:
+            selected.clear()
+            miss = await documents_api.preview_document(document_id, org_id, s)
+            assert [block.runs[0].text for block in miss.blocks] == ["Il documento di valutazione dei rischi"]
+            (only,) = bytes_selects()
+            assert only.startswith("SELECT documenti_generati.file_content FROM documenti_generati")
+
+        async with factory() as s:
+            selected.clear()
+            hit = await documents_api.preview_document(document_id, org_id, s)
+            assert hit.blocks == miss.blocks and selected and bytes_selects() == []
+
+            selected.clear()
+            out = await documents_api.patch_document_overrides(
+                document_id, OverridesPatchRequest(set={"0": "Testo modificato"}), org_id, s
+            )
+            assert out.overrides == {"0": "Testo modificato"} and selected and bytes_selects() == []
+
+            selected.clear()
+            with pytest.raises(NotFoundError):
+                await documents_api.preview_document_image(document_id, "rId999", org_id, s)
+            assert len(bytes_selects()) == 1
+    finally:
+        async with factory() as s:
+            await s.execute(text("DELETE FROM aziende WHERE organization_id=:o"), {"o": org_id})
+            await s.execute(text("DELETE FROM organizations WHERE id=:o"), {"o": org_id})
+            await s.commit()
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_preview_image_loads_the_bytes_with_the_row():
+    """It always serves a picture out of the bytes: one query, bytes included."""
+    row = SimpleNamespace(**vars(_editor_row()), file_content=_docx_bytes())
+    db, statements = _scripted_session((row, "Acme Srl"))
+
+    with pytest.raises(NotFoundError):  # the document has no such picture
+        await documents_api.preview_document_image(row.id, "rId999", uuid.uuid4(), db)
+
+    (lookup,) = statements
+    assert "documenti_generati.file_content" in _sql(lookup)

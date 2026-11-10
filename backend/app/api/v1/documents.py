@@ -1067,8 +1067,15 @@ async def _get_org_document(
     db: AsyncSession,
     *,
     for_update: bool = False,
+    with_bytes: bool = False,
 ) -> tuple[DocumentoGenerato, str]:
     """Org-scoped fetch by document id, joined with the owning Azienda's name.
+
+    The row comes without ``file_content`` (the whole .docx, ~3 MB for a DVR
+    with its art) unless ``with_bytes``: the preview needs it only on a
+    cache miss and fetches it with :func:`_document_bytes`, the overrides
+    PATCH never. Never read ``file_content`` off a row loaded without it:
+    the lazy load fails under the async session.
 
     ``for_update=True`` row-locks the DocumentoGenerato (Postgres
     ``FOR UPDATE OF``) so concurrent mutating handlers serialise —
@@ -1080,6 +1087,8 @@ async def _get_org_document(
         .join(Azienda, Azienda.id == DocumentoGenerato.azienda_id)
         .where(DocumentoGenerato.id == document_id, Azienda.organization_id == org_id)
     )
+    if not with_bytes:
+        stmt = stmt.options(defer(DocumentoGenerato.file_content))
     if for_update:
         stmt = stmt.with_for_update(of=DocumentoGenerato)
     result = await db.execute(stmt)
@@ -1110,11 +1119,27 @@ def _resolve_docx_filename(doc: DocumentoGenerato) -> str:
 
 
 def _load_docx_bytes(doc: DocumentoGenerato) -> bytes:
-    """Document bytes — DB content preferred, disk fallback (mirrors download)."""
-    if doc.file_content:
-        return doc.file_content
-    if doc.file_path and os.path.exists(doc.file_path):
-        with open(doc.file_path, "rb") as f:
+    """Document bytes of a row loaded ``with_bytes`` — DB content preferred,
+    disk fallback (mirrors download)."""
+    return _content_or_file(doc.file_content, doc.file_path)
+
+
+async def _document_bytes(doc: DocumentoGenerato, db: AsyncSession) -> bytes:
+    """Document bytes of a row loaded without them: one SELECT of that
+    column alone, then the same disk fallback."""
+    content = (
+        await db.execute(
+            select(DocumentoGenerato.file_content).where(DocumentoGenerato.id == doc.id)
+        )
+    ).scalar_one_or_none()
+    return _content_or_file(content, doc.file_path)
+
+
+def _content_or_file(content: bytes | None, file_path: str | None) -> bytes:
+    if content:
+        return content
+    if file_path and os.path.exists(file_path):
+        with open(file_path, "rb") as f:
             return f.read()
     raise NotFoundError("File non disponibile. Rigenera il documento.")
 
@@ -1143,7 +1168,8 @@ async def preview_document(
     if preview is not None:
         _PREVIEW_CACHE.move_to_end(doc.id)
     else:
-        docx_bytes = _load_docx_bytes(doc)
+        # A miss only: the row was loaded without its bytes.
+        docx_bytes = await _document_bytes(doc, db)
 
         from app.services.document_preview import parse_docx_preview
 
@@ -1196,7 +1222,8 @@ async def preview_document_image(
     (``furniture.footer_logo_image_id``). Unknown or malformed ids, and ids
     pointing at non-image parts, 404.
     """
-    doc, _ = await _get_org_document(document_id, org_id, db)
+    # Every picture is read out of the bytes: load them with the row.
+    doc, _ = await _get_org_document(document_id, org_id, db, with_bytes=True)
     _resolve_docx_filename(doc)
     docx_bytes = _load_docx_bytes(doc)
 
@@ -1259,7 +1286,8 @@ async def patch_document_overrides(
     # empties out so "no pending edits" stays queryable as IS NULL.
     doc.content_overrides = merged or None
     await db.commit()
-    await db.refresh(doc)
+    # The map is all the response needs; the row's bytes stay in Postgres.
+    await db.refresh(doc, attribute_names=["content_overrides"])
     return OverridesResponse(overrides=doc.content_overrides or {})
 
 
@@ -1285,7 +1313,8 @@ async def save_edited_version(
     # read the same overrides and mint duplicate version rows. The second
     # transaction blocks here, re-reads the cleared content_overrides after
     # the first commits, and hits the 409 below.
-    source, _ = await _get_org_document(document_id, org_id, db, for_update=True)
+    # The bytes are what this endpoint rewrites: loaded with the locked row.
+    source, _ = await _get_org_document(document_id, org_id, db, for_update=True, with_bytes=True)
     _resolve_docx_filename(source)
 
     if not source.content_overrides:

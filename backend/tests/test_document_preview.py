@@ -1514,12 +1514,17 @@ def _preview_client(monkeypatch, docx_bytes: bytes):
 
     row = _fake_document_row(docx_bytes)
 
-    async def fake_get_org_document(document_id, org_id, db, *, for_update=False):
+    async def fake_get_org_document(document_id, org_id, db, *, for_update=False, with_bytes=False):
         if document_id != row.id:
             raise NotFoundError("Documento non trovato")
         return row, "Acme Meccanica Srl"
 
+    async def fake_document_bytes(doc, db):
+        # The bytes' own SELECT (the SQL is pinned in test_document_metadata_queries).
+        return doc.file_content
+
     monkeypatch.setattr(documents_api, "_get_org_document", fake_get_org_document)
+    monkeypatch.setattr(documents_api, "_document_bytes", fake_document_bytes)
     monkeypatch.setattr(documents_api, "_PREVIEW_CACHE", OrderedDict())
     app = FastAPI()
     app.include_router(documents_api.download_router)
