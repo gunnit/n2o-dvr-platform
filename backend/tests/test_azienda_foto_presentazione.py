@@ -99,6 +99,51 @@ def test_router_is_registered():
     )
 
 
+@pytest.mark.parametrize("method", ["PUT", "GET", "DELETE"])
+def test_routes_describe_themselves_in_the_api_docs(method):
+    # FastAPI publishes the endpoint's docstring as the operation's
+    # description on /docs.
+    assert _route(method).description.strip()
+
+
+def test_put_upsert_stamps_updated_at_with_the_database_clock():
+    """A replaced photo takes ``updated_at`` from the database clock, like
+    the column's server default and ``onupdate``, not from the API host's.
+    The statement is compiled, so no database is needed."""
+    from datetime import datetime
+
+    from sqlalchemy.dialects import postgresql
+
+    statements = []
+
+    class _Result:
+        def __init__(self, value):
+            self._value = value
+
+        def scalar_one_or_none(self):
+            return self._value
+
+        def scalar_one(self):
+            return self._value
+
+    class _Session:
+        async def execute(self, statement):
+            statements.append(statement)
+            # The org check finds the azienda; the upsert returns updated_at.
+            return _Result(uuid.uuid4() if len(statements) == 1 else datetime(2026, 11, 10, 9, 30))
+
+        async def commit(self):
+            pass
+
+    out = asyncio.run(api.put_foto_presentazione(uuid.uuid4(), _upload(_png()), uuid.uuid4(), _Session()))
+
+    assert out.updated_at == datetime(2026, 11, 10, 9, 30)
+    sql = str(statements[-1].compile(dialect=postgresql.dialect()))
+    head, _, set_clause = sql.partition("ON CONFLICT (azienda_id) DO UPDATE SET")
+    assert head and set_clause
+    assert "updated_at = now()" in set_clause
+
+
 # --- DB-backed --------------------------------------------------------------
 
 

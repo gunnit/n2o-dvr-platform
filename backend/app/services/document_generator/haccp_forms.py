@@ -244,7 +244,8 @@ class HaccpFormsGenerator(BaseDocumentGenerator):
         add_paragraph(doc, "________________________")
 
         # A sheet printed and filled in by hand: Arial and the running header
-        # and footer from its first page on, no art pages.
+        # and footer from its first page on (it opens on no art page), no
+        # cover or back cover.
         normalize_fonts(doc)
         finish_document(
             doc,
@@ -253,7 +254,6 @@ class HaccpFormsGenerator(BaseDocumentGenerator):
             branding=self.branding,
             version=version,
             generated_at=generated_at,
-            cover_is_clean=False,
         )
 
         filename = f"{TIPO_DOC}_{code}_{slug}_v{version}.docx"

@@ -20,6 +20,7 @@ from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_ROW_HEIGHT_RULE, WD_T
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import nsmap, qn
 from docx.shared import Cm, Pt, RGBColor, Twips
+from docx.text.paragraph import Paragraph
 
 
 # ---------------------------------------------------------------------------
@@ -51,6 +52,10 @@ FONT_SLOTS = ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs")
 # A theme attribute wins over the explicit name in Word, so a slot left on
 # "minorHAnsi" would print in the theme's Calibri whatever w:ascii says.
 THEME_FONT_ATTRS = ("w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme", "w:cstheme")
+# Fonts whose characters are pictures (lower case): Symbol and the dingbat
+# faces map their glyphs to code points of their own, so a bullet or a check
+# box set in one of them prints as a different character in any other font.
+SYMBOL_FONTS = frozenset({"symbol", "wingdings", "wingdings 2", "wingdings 3", "webdings"})
 
 # Type scale in points. Roles first (the model's hierarchy, with 10 pt tables:
 # at 12 pt the five-column risk tables break words mid-word), then the legacy
@@ -422,16 +427,25 @@ def scrub_n2o_legacy_donor(
 # Simple heading/paragraph helpers
 # ---------------------------------------------------------------------------
 
-def add_heading(doc: Document, text: str, level: int = 1) -> None:
-    """Add a heading; fall back to Normal style if custom heading missing."""
+def add_heading(doc: Document, text: str, level: int = 1) -> Paragraph:
+    """One heading paragraph in the ``Heading N`` style (``Title`` for level
+    0), whether or not the document defines that style.
+
+    Donor templates lack some levels (Gestanti and PEE azienda have no
+    Heading 2). Without the style the paragraph stays Normal with bold
+    text, 14 pt at level 1 and 12 pt below. python-docx's ``add_heading``
+    appends the paragraph and its text *before* it looks the style up, so
+    falling back after it raised printed every such heading twice.
+    """
+    paragraph = doc.add_paragraph(text)
     try:
-        h = doc.add_heading(text, level=level)
-    except Exception:
-        h = doc.add_paragraph(text)
-        for r in h.runs:
-            r.bold = True
-            r.font.size = Pt(14 if level == 1 else 12)
-    return h
+        paragraph.style = "Title" if level == 0 else f"Heading {level}"
+    except (KeyError, ValueError):
+        # KeyError: no such style; ValueError: the name is not a paragraph style.
+        for run in paragraph.runs:
+            run.bold = True
+            run.font.size = Pt(14 if level == 1 else 12)
+    return paragraph
 
 
 def add_paragraph(doc: Document, text: str, *, bold: bool = False, italic: bool = False, size: int = 11) -> None:
@@ -677,8 +691,10 @@ def add_signature_grid(doc: Document, cells: list[tuple[str, str]], *, sign_heig
 
     Each grid row is three table rows: the roles on navy, the names ("—" when
     a role is vacant, so the grid never shrinks), and a blank row of at least
-    ``sign_height_cm`` to sign in. Every row is kept on one page and the first
-    two stay with the signing row, so nobody signs under a page break.
+    ``sign_height_cm`` to sign in. With an odd count the last grid row's free
+    half keeps the navy band and blank cells, never an unshaded half row.
+    Every row is kept on one page and the first two stay with the signing
+    row, so nobody signs under a page break.
     """
     pairs = list(cells)
     if not pairs:
@@ -689,12 +705,16 @@ def add_signature_grid(doc: Document, cells: list[tuple[str, str]], *, sign_heig
     for start in range(0, len(pairs), 2):
         chunk = pairs[start : start + 2]
         roles, names, signs = table.add_row(), table.add_row(), table.add_row()
-        for index, (role, name) in enumerate(chunk):
+        for index in range(2):
+            if index < len(chunk):
+                role, name = chunk[index]
+                role_text, holder = str(role or ""), (name or "").strip() or "—"
+            else:
+                role_text, holder = "", ""
             role_cell = roles.cells[index]
-            _write_cell(role_cell, str(role or ""), bold=True, color=HEADER_TEXT, align=WD_ALIGN_PARAGRAPH.CENTER)
+            _write_cell(role_cell, role_text, bold=True, color=HEADER_TEXT, align=WD_ALIGN_PARAGRAPH.CENTER)
             shade_cell(role_cell, BRAND_NAVY_HEX)
             role_cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-            holder = (name or "").strip() or "—"
             _write_cell(names.cells[index], holder, align=WD_ALIGN_PARAGRAPH.CENTER)
         # Rounded up to whole twips, the unit Word stores: 2.5 cm would
         # otherwise come back as 2.4998 cm.

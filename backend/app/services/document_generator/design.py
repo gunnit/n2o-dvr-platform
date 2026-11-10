@@ -40,7 +40,7 @@ from docx.image.image import Image as DocxImage
 from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import nsdecls, qn
-from docx.shared import Cm, Emu, Pt, RGBColor
+from docx.shared import Cm, Emu, Length, Pt, RGBColor
 from docx.text.paragraph import Paragraph
 
 from app.services.document_generator.branding import Branding, resolve_logo_source
@@ -83,6 +83,9 @@ FOOTER_LOGO_MAX_H_CM = 0.85
 DIVIDER_TITLE_TOP_CM = 12.0
 # Where an attachment cover's title block starts (eyebrow top edge).
 COVER_BLOCK_TOP_CM = 4.5
+# The header's line: the running header's 9 pt text and hairline, or the
+# empty paragraph of an art page's first-page header.
+_HEADER_LINE_CM = 0.5
 
 _BACKSLASH = chr(92)
 
@@ -146,14 +149,22 @@ ART: dict[str, str] = {
 }
 
 
-def _resolve_art(key: str) -> tuple[str, Path] | None:
-    """``(key actually used, file)`` for ``key``: its own file when present,
-    else the generic divider, else ``None``. Every fallback is logged."""
+def _resolve_art(key: str, *, role: str = "divider") -> tuple[str, Path] | None:
+    """``(key actually used, file)`` for ``key``: its own file when present.
+
+    For a divider (and :func:`art_path`) an unknown key or a missing file
+    falls back to the generic divider photo. A cover or back cover never
+    borrows it (spec §5): a divider photo behind a cover is worse than a
+    white page. ``None`` when nothing is found. Every fallback is logged."""
+    fallback = _FALLBACK_ART_KEY if role == "divider" else None
     candidates = [key] if key in ART else []
     if not candidates:
-        logger.warning("Unknown document art key %r; using %r", key, _FALLBACK_ART_KEY)
-    if _FALLBACK_ART_KEY not in candidates:
-        candidates.append(_FALLBACK_ART_KEY)
+        if fallback is None:
+            logger.warning("Unknown document art key %r: the %s gets no art (no divider photo is borrowed)", key, role)
+            return None
+        logger.warning("Unknown document art key %r; using %r", key, fallback)
+    if fallback is not None and fallback not in candidates:
+        candidates.append(fallback)
     for candidate in candidates:
         path = ART_DIR / ART[candidate]
         if path.is_file():
@@ -171,9 +182,10 @@ def art_path(key: str) -> Path | None:
     return resolved[1] if resolved else None
 
 
-def _usable_art(key: str) -> tuple[str, Path] | None:
-    """Like :func:`_resolve_art`, but only an image python-docx can read."""
-    resolved = _resolve_art(key)
+def _usable_art(key: str, *, role: str) -> tuple[str, Path] | None:
+    """Like :func:`_resolve_art` for a page of ``role`` (``cover``,
+    ``divider`` or ``back_cover``), but only an image python-docx can read."""
+    resolved = _resolve_art(key, role=role)
     if resolved is None:
         return None
     try:
@@ -432,30 +444,6 @@ def _add_heading(doc: Document, text: str, level: int):
     return paragraph
 
 
-def insert_logo_at_top(doc: Document, branding: Branding, *, width_cm: float = 4.5) -> bool:
-    """Put the consultancy mark as the very first body element.
-
-    For donor templates whose cover is a text box we cannot restyle: the
-    donor's own logo is stripped with the other body pictures and the
-    organization's mark takes its place above the title.
-    """
-    logo_src = resolve_logo_source(branding)
-    if logo_src is None:
-        return False
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p.paragraph_format.space_after = Pt(6)
-    try:
-        p.add_run().add_picture(logo_src, width=Cm(width_cm))
-    except Exception:
-        p._p.getparent().remove(p._p)
-        return False
-    body = doc.element.body
-    body.remove(p._p)
-    body.insert(0, p._p)
-    return True
-
-
 # ---------------------------------------------------------------------------
 # Page boundaries
 #
@@ -670,9 +658,11 @@ def add_art_cover(doc: Document, art_key: str) -> None:
     title, "D.LGS. 81/08" and the VERA mark are in the art).
 
     Call it first. If the body already has content, the cover is moved in
-    front of it. Without usable art nothing is added, and a warning is logged.
+    front of it. Without usable art of its own (it never borrows a divider
+    photo) nothing is added, and a warning is logged: the title is in the
+    art, so a white cover would be an empty page.
     """
-    resolved = _usable_art(art_key)
+    resolved = _usable_art(art_key, role="cover")
     if resolved is None:
         return
     first_section = doc.sections[0]
@@ -710,19 +700,18 @@ def add_cover(
     assessed company's identity (name, seat, P.IVA, ATECO), revision and date
     and — when ``show_consultancy`` — the "elaborato da" letterhead. Ends
     with a page break. Every field degrades to nothing when the data is
-    missing; the cover never prints a placeholder. Without the artwork the
-    title block stands on a white page.
+    missing; the cover never prints a placeholder. Without the artwork (a
+    divider photo is never borrowed) the title block stands on a white page.
 
     ``logo_width_cm`` is accepted for compatibility and ignored: the VERA
     mark is part of the artwork, so the cover carries no separate logo.
     """
     del logo_width_cm
     section = doc.sections[-1]
-    top_cm = (section.top_margin or Cm(MARGIN_TOP_CM)) / Cm(1)
-    resolved = _usable_art("cover_vera")
+    resolved = _usable_art("cover_vera", role="cover")
     if resolved is not None and _add_art_paragraph(doc, *resolved, role="cover", section=section) is not None:
         section.different_first_page_header_footer = True
-    lead = Cm(max(COVER_BLOCK_TOP_CM - top_cm, 0))
+    lead = cover_block_lead(section)
 
     if eyebrow:
         _centered(doc, eyebrow, size=TYPE_SCALE["small"], colour=BRAND_SLATE, caps=True, spacing=1.2, space_after=8, space_before=lead)
@@ -796,6 +785,21 @@ def add_cover(
     doc.add_page_break()
 
 
+def cover_block_lead(section) -> Length:
+    """Space before an attachment cover's title block, so that it starts
+    ``COVER_BLOCK_TOP_CM`` from the top edge of ``section``'s page.
+
+    The body starts at the top margin, or lower when the header's line
+    reaches below it: Word and LibreOffice push the first line under the
+    header. A donor with a small top margin (PEE comune: 0.75 cm, under a
+    header 1.25 cm from the edge) would otherwise print the block ~1 cm low.
+    The header distance is the one the running header will have.
+    """
+    top = section.top_margin if section.top_margin is not None else Cm(MARGIN_TOP_CM)
+    body_top = max(top, _running_distance(section.header_distance) + Cm(_HEADER_LINE_CM))
+    return Cm(max(COVER_BLOCK_TOP_CM - body_top / Cm(1), 0))
+
+
 def _letterhead_lines(branding: Branding) -> list[str]:
     lines: list[str] = []
     addr = branding.address_line()
@@ -842,10 +846,11 @@ def add_divider(doc: Document, title: str, art_key: str, *, part_label: str | No
     The section shows no header or footer on this first page and the running
     ones after it; the content that follows starts on the next page. The art
     sits in its own empty paragraph, so the title stays an ordinary editable
-    heading. Without usable art the page is white with the title. Returns the
-    title paragraph.
+    heading. An unknown key or a missing file takes the generic divider
+    photo; without usable art at all the page is white with the title.
+    Returns the title paragraph.
     """
-    resolved = _usable_art(art_key)
+    resolved = _usable_art(art_key, role="divider")
     section = _start_art_section(doc)
     used_cm = (section.top_margin or Cm(MARGIN_TOP_CM)) / Cm(1)
     if resolved is not None and _add_art_paragraph(doc, *resolved, role="divider", section=section) is not None:
@@ -909,9 +914,10 @@ def add_sub_title(doc: Document, text: str, *, in_toc: bool = True, new_page: bo
 
 def add_back_cover(doc: Document, art_key: str = "back_vera") -> None:
     """The closing page: a new one-page section that is all art, with no
-    header or footer. Without usable art it is left out entirely: a white
-    last page would serve nobody."""
-    resolved = _usable_art(art_key)
+    header or footer. Without usable art of its own (it never borrows a
+    divider photo) it is left out entirely: a white last page would serve
+    nobody."""
+    resolved = _usable_art(art_key, role="back_cover")
     if resolved is None:
         logger.warning("Back cover %r left out: no usable artwork", art_key)
         return
@@ -967,6 +973,24 @@ def _text_width(section) -> int:
 # ---------------------------------------------------------------------------
 # Running header / footer
 # ---------------------------------------------------------------------------
+
+_RUNNING_DISTANCE_CM = 1.0
+_MIN_RUNNING_DISTANCE_CM = 0.8
+
+
+def _running_distance(current):
+    """The header or footer distance a section has once
+    :func:`add_running_header_footer` ran on it: ``current``, raised to
+    1.0 cm when it is under 0.8 cm or unset.
+
+    Donor templates set the footer distance to 0 (DUVRI) so their letterhead
+    sat on the page edge; the running header/footer needs room, and a 0
+    distance is also where renderers start to struggle.
+    """
+    if current is None or current < Cm(_MIN_RUNNING_DISTANCE_CM):
+        return Cm(_RUNNING_DISTANCE_CM)
+    return current
+
 
 def _clear(container) -> None:
     """Empty a header/footer container so re-application is idempotent."""
@@ -1097,16 +1121,13 @@ def add_running_header_footer(
     branding: Branding,
     version: int | None,
     generated_at: datetime,
-    cover_is_clean: bool = True,
 ) -> None:
     """Header: TITLE | CLIENT. Footer: logo · Rev. NN del gg/mm/aaaa | Pag. X di Y.
 
     Applied to every section. A section whose first paragraph carries an art
     marker (cover, divider, back cover) gets an empty first-page header and
-    footer, and the running ones on its following pages; every other section
-    carries them on all its pages. ``cover_is_clean`` keeps the first page of
-    the first section clean even without art — the covers of the donor
-    templates, which keep their own until they adopt the kit.
+    footer, and the running ones on its following pages; every other section,
+    the first one included, carries them on all its pages.
 
     Content is written fresh into the default, first-page and even-page
     parts, replacing whatever a donor template carried there — this is how
@@ -1119,16 +1140,14 @@ def add_running_header_footer(
     firsts = section_first_blocks(doc)
     for index, section in enumerate(doc.sections):
         first = firsts[index] if index < len(firsts) else None
-        clean = art_marker(first) is not None or (cover_is_clean and index == 0)
+        clean = art_marker(first) is not None
         width_cm = _text_width(section) / Cm(1)
         section.different_first_page_header_footer = clean
-        # Donor templates set the footer distance to 0 (DUVRI) so their
-        # letterhead sat on the page edge; the running header/footer needs
-        # room, and a 0 distance is also where renderers start to struggle.
         for attr in ("header_distance", "footer_distance"):
             current = getattr(section, attr, None)
-            if current is None or current < Cm(0.8):
-                setattr(section, attr, Cm(1.0))
+            wanted = _running_distance(current)
+            if wanted != current:
+                setattr(section, attr, wanted)
         parts = (
             section.header, section.footer,
             section.first_page_header, section.first_page_footer,
@@ -1498,7 +1517,6 @@ def finish_document(
     branding: Branding,
     version: int | None,
     generated_at: datetime,
-    cover_is_clean: bool = True,
     fill_cover: bool = False,
     cover_values: dict[str, str] | None = None,
 ) -> None:
@@ -1515,7 +1533,6 @@ def finish_document(
         branding=branding,
         version=version,
         generated_at=generated_at,
-        cover_is_clean=cover_is_clean,
     )
     set_core_properties(
         doc,

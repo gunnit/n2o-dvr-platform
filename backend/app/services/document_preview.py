@@ -54,6 +54,7 @@ from docx.text.paragraph import Paragraph
 from docx.text.run import Run
 
 from app.services.document_generator.design import ART_MARKER_PREFIX, art_marker
+from app.services.document_generator.docx_utils import SYMBOL_FONTS
 
 logger = logging.getLogger(__name__)
 
@@ -487,7 +488,8 @@ _HEX_COLOR_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
 # Word stores most bullets as a private-use code point (U+F0xx) of a symbol
 # font: Symbol U+F0B7 is "•", Wingdings U+F0A7 is "▪". The browser has
 # neither font, so the preview reports the glyph the font draws. Older files
-# write the same glyphs as the font's 8-bit code ("§" in Wingdings).
+# write the same glyphs as the font's 8-bit code ("§" in Wingdings). A map
+# belongs to its own font only: Wingdings 2 and 3 are other fonts.
 _SYMBOL_FONT_GLYPHS = {
     "symbol": {0xA7: "♣", 0xA8: "♦", 0xA9: "♥", 0xAA: "♠", 0xAE: "→", 0xB7: "•", 0xDE: "⇒", 0xE0: "◊"},
     "wingdings": {
@@ -495,6 +497,9 @@ _SYMBOL_FONT_GLYPHS = {
         0xA7: "▪", 0xD8: "➢", 0xFC: "✓",
     },
 }
+# The maps a private-use code tries when its level names no glyph font.
+# Wingdings first: its U+F0A7 "▪" is Word's square bullet, Symbol's a club.
+_UNNAMED_FONT_MAPS = ("wingdings", "symbol")
 
 # Sentinel: an attribute present but unreadable counts as not specified.
 _UNSET = object()
@@ -673,23 +678,31 @@ def _col_widths_pct(tbl_el) -> list[float] | None:
 
 
 def _bullet_glyph(text: str, font: str) -> str:
-    """The character a bullet level draws (see ``_SYMBOL_FONT_GLYPHS``)."""
+    """The character a bullet level draws (see ``_SYMBOL_FONT_GLYPHS``).
+
+    ``font`` is the level's font, lower case. In a glyph font a code with no
+    known picture is drawn "•", never as the letter the code spells. A
+    private-use code in any other font (or none) is looked up in the
+    Wingdings map, then Symbol's; a text font's own character passes.
+    """
     if len(text) != 1:
         return text
     code = ord(text)
     private_use = 0xF000 <= code <= 0xF0FF
     if not private_use and code > 0xFF:
         return text  # real Unicode: "▪", "•", "–"
-    if font.startswith("courier") and text == "o":
+    name = " ".join(font.split())
+    if name.startswith("courier") and text == "o":
         return "◦"  # Word's second-level hollow bullet
-    tables = [table for name, table in _SYMBOL_FONT_GLYPHS.items() if font.startswith(name)]
-    if not tables and private_use:
-        tables = list(_SYMBOL_FONT_GLYPHS.values())
-    for table in tables:
-        glyph = table.get(code & 0xFF)
+    if name in SYMBOL_FONTS:
+        return _SYMBOL_FONT_GLYPHS.get(name, {}).get(code & 0xFF, "•")
+    if not private_use:
+        return text  # "-", "*", "o" in a text font
+    for map_name in _UNNAMED_FONT_MAPS:
+        glyph = _SYMBOL_FONT_GLYPHS[map_name].get(code & 0xFF)
         if glyph is not None:
             return glyph
-    return "•" if private_use else text
+    return "•"
 
 
 def _level_font(lvl) -> str:

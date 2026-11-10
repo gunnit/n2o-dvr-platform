@@ -23,26 +23,19 @@ from docx import Document
 from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Cm
 from docx.text.paragraph import Paragraph
 
 from app.services.document_generator.design import (
-    COVER_BLOCK_TOP_CM,
-    MARGIN_TOP_CM,
     _crop_to_cover,
     _is_page_break_only,
     _page_size,
     add_cover,
     art_marker,
+    cover_block_lead,
 )
-from app.services.document_generator.docx_utils import FONT_FAMILY, set_font_slots
+from app.services.document_generator.docx_utils import FONT_FAMILY, SYMBOL_FONTS, set_font_slots
 
 _PARA_SECTPR = f"{qn('w:pPr')}/{qn('w:sectPr')}"
-
-# Fonts whose characters are pictures: Symbol and the dingbat faces map
-# their glyphs to code points of their own, so a bullet or a check box set
-# in one of them prints as a different character in Arial.
-SYMBOL_FONTS = frozenset({"symbol", "wingdings", "wingdings 2", "wingdings 3", "webdings"})
 
 
 def _body_blocks(doc: Document) -> list:
@@ -221,9 +214,7 @@ def insert_kit_cover_at_top(doc: Document, **cover: Any) -> int:
     # The title block starts COVER_BLOCK_TOP_CM from the top edge of the
     # cover's own page (add_cover measured it on the last section).
     lead = added[1] if art is not None else added[0]
-    if len(added) > (1 if art is not None else 0):
-        top_cm = (first.top_margin or Cm(MARGIN_TOP_CM)) / Cm(1)
-        Paragraph(lead, doc._body).paragraph_format.space_before = Cm(max(COVER_BLOCK_TOP_CM - top_cm, 0))
+    Paragraph(lead, doc._body).paragraph_format.space_before = cover_block_lead(first)
 
     page_break = added[-1]
     if _is_page_break_only(page_break) and _starts_new_page(page_break.getnext(), doc.styles.element):
@@ -250,6 +241,16 @@ def _point_at(rfonts, family: str) -> bool:
     return dict(rfonts.attrib) != before
 
 
+def _numbering_root(doc: Document):
+    """The numbering part's root element, or ``None`` when the document has
+    none. (``doc.part.numbering_part`` would create an empty one.)"""
+    try:
+        part = doc.part.part_related_by(RT.NUMBERING)
+    except KeyError:
+        return None
+    return getattr(part, "element", None)
+
+
 def _story_roots(doc: Document) -> list:
     """The document part and every header and footer part, once each."""
     roots = [doc.element]
@@ -266,15 +267,16 @@ def _story_roots(doc: Document) -> list:
 
 
 def normalize_fonts(doc: Document, family: str = FONT_FAMILY) -> int:
-    """Set ``family`` (Arial) on every style and every run of the body,
-    headers and footers. Returns the number of runs changed.
+    """Set ``family`` (Arial) on every style, every list level and every run
+    of the body, headers and footers. Returns the number of runs changed.
 
     All four ``w:rFonts`` slots are written (ascii, hAnsi, eastAsia, cs) and
     theme attributes dropped, which Word would otherwise read first. The
     document defaults get the family too, so a run or style that names no
     font inherits it; such runs are left as they are. Every other font
     declaration of the body, headers and footers (paragraph marks, content
-    controls) is rewritten like a run's.
+    controls) is rewritten like a run's, and so are the levels of
+    ``numbering.xml``, whose font prints the list labels ("a)", "1.").
 
     Never touched: a font declaration naming Symbol, Wingdings (1-3) or
     Webdings, and any run holding a ``w:sym``. Their characters are bullets
@@ -296,9 +298,11 @@ def normalize_fonts(doc: Document, family: str = FONT_FAMILY) -> int:
         rpr_default.append(rpr)
     if rpr.find(qn("w:rFonts")) is None:
         rpr.insert(0, OxmlElement("w:rFonts"))
-    for rfonts in styles.iter(qn("w:rFonts")):
-        if not _is_symbol_font(rfonts):
-            set_font_slots(rfonts, family)
+    numbering = _numbering_root(doc)
+    for root in (styles,) if numbering is None else (styles, numbering):
+        for rfonts in root.iter(qn("w:rFonts")):
+            if not _is_symbol_font(rfonts):
+                set_font_slots(rfonts, family)
 
     changed = 0
     for root in _story_roots(doc):

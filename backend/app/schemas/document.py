@@ -128,9 +128,12 @@ class DocumentPreviewStyleProps(BaseModel):
     outline_level: int | None = None
 
     @model_serializer(mode="wrap")
-    def _held_fields_only(self, handler: SerializerFunctionWrapHandler) -> dict:
+    def _held_fields_only(self, handler: SerializerFunctionWrapHandler):
         # A paragraph's direct formatting is a handful of keys; spelling out
         # the other nulls on every paragraph of a DVR costs ~10% of the payload.
+        # No return annotation, on purpose: pydantic publishes a serializer's
+        # return type as the model's serialization schema, so "-> dict" made
+        # OpenAPI show a bare object. Without one, it shows these fields.
         data = handler(self)
         return {key: value for key, value in data.items() if key in self.model_fields_set}
 

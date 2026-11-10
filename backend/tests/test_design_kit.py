@@ -8,6 +8,7 @@ LibreOffice and the preview parser all read.
 
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 from datetime import datetime
@@ -278,6 +279,28 @@ def test_signature_grid_pairs_roles_and_keeps_rows_together():
         assert row._tr.xpath("./w:trPr/w:cantSplit")
 
 
+def test_signature_grid_with_an_odd_count_keeps_the_band_whole():
+    doc = _kit_doc()
+    table = docx_utils.add_signature_grid(
+        doc,
+        [("Datore di Lavoro", "Mario Rossi"), ("Responsabile del S.P.P.", ""), ("Medico Competente", "")],
+    )
+    assert len(table.rows) == 6
+    roles, names, signs = table.rows[3], table.rows[4], table.rows[5]
+    lone, spare = roles.cells
+    assert lone.text == "Medico Competente"
+    # The half with no signatory: the navy band runs on, every cell blank.
+    assert _cell_fill(spare) == _cell_fill(lone) == "003D74"
+    assert spare.vertical_alignment == lone.vertical_alignment
+    assert [c.text for c in names.cells] == ["—", ""]
+    assert [c.text for c in signs.cells] == ["", ""]
+    # Blank cells carry the table type, so the half rows are as tall as
+    # the filled ones.
+    for filled, blank in ((lone, spare), names.cells):
+        assert blank.paragraphs[0].paragraph_format.space_after == filled.paragraphs[0].paragraph_format.space_after
+        assert blank.paragraphs[0].runs[0].font.size == filled.paragraphs[0].runs[0].font.size
+
+
 def test_level_cell_colours_risk_and_priority():
     doc = _kit_doc()
     table = docx_utils.add_data_table(doc, ["Livello"], [["P = 2; D = 3; I = 8; GRAVE"], ["?"]])
@@ -299,7 +322,48 @@ def test_body_paragraph_is_justified():
     assert p.style.name == "Normal"
 
 
+def _without_heading_styles(doc):
+    """Drop Title and every Heading N from the styles part, as in the donor
+    templates that lack some levels (Gestanti has no Heading 2)."""
+    for style in list(doc.styles.element.iter(qn("w:style"))):
+        name = (style.xpath("./w:name/@w:val") or [""])[0].lower()
+        if name == "title" or name.startswith("heading"):
+            style.getparent().remove(style)
+    return doc
+
+
+@pytest.mark.parametrize(("level", "size"), [(1, 14), (2, 12), (3, 12)])
+def test_add_heading_without_the_style_adds_exactly_one_paragraph(level, size):
+    doc = _without_heading_styles(Document())
+    with pytest.raises(KeyError):
+        doc.styles[f"Heading {level}"]
+    before = len(doc.paragraphs)
+
+    heading = docx_utils.add_heading(doc, "Valutazione specifica", level=level)
+
+    # python-docx appends the paragraph before it fails to set the missing
+    # style; the fallback must not append a second copy.
+    assert [p.text for p in doc.paragraphs[before:]] == ["Valutazione specifica"]
+    assert doc.paragraphs[-1]._p is heading._p
+    # The fallback look: a bold Normal paragraph, 14 pt for level 1, else 12.
+    assert heading.style.name == "Normal"
+    assert len(heading.runs) == 1
+    assert heading.runs[0].bold and heading.runs[0].font.size.pt == size
+
+
+def test_add_heading_uses_the_style_when_present():
+    doc = Document()
+    before = len(doc.paragraphs)
+    heading = docx_utils.add_heading(doc, "Valutazione specifica", level=2)
+    assert [p.text for p in doc.paragraphs[before:]] == ["Valutazione specifica"]
+    assert heading.style.name == "Heading 2"
+
+
 def test_long_cell_does_not_hang_libreoffice(tmp_path):
+    # A smoke test, not the guard: on LibreOffice 24.2 this passes with or
+    # without cantSplit on the data row. The real guard against the hang
+    # (commit e0875fa) is the XML assertion in
+    # test_data_table_header_fill_and_borders: data rows carry no cantSplit.
     soffice = shutil.which("soffice")
     if soffice is None:
         pytest.skip("LibreOffice (soffice) is not installed")
@@ -459,6 +523,88 @@ def test_unreadable_art_file_degrades_to_title_only(tmp_path, monkeypatch):
     title = design.add_divider(doc, "GESTIONE ACQUISTI", "div_acquisti")
     assert title.text == "GESTIONE ACQUISTI"
     assert doc.element.body.xpath(".//w:drawing") == []
+
+
+COVER_TITLE = "Valutazione del Rischio Incendio"
+
+
+def _art_cover(doc, key):
+    design.add_art_cover(doc, key or "cover_dvr")
+
+
+def _attachment_cover(doc, key):
+    assert key is None  # add_cover always draws cover_vera
+    design.add_cover(
+        doc, title=COVER_TITLE, azienda=_azienda(), branding=Branding.default(),
+        version=1, generated_at=GENERATED_AT,
+    )
+
+
+def _back_cover(doc, key):
+    doc.add_paragraph("Ultima pagina di contenuto")
+    design.add_back_cover(doc, key or "back_vera")
+
+
+def _art_folder(tmp_path, kind: str):
+    """An ``ART_DIR`` with the covers' own artwork missing or broken. Except in
+    the empty folder, the generic divider photo is there to be borrowed."""
+    folder = tmp_path / kind
+    folder.mkdir()
+    if kind == "empty":
+        return folder
+    generic = design.ART[design._FALLBACK_ART_KEY]
+    shutil.copy(design.ART_DIR / generic, folder / generic)
+    if kind == "unreadable_cover":
+        for key in ("cover_dvr", "back_vera"):
+            (folder / design.ART[key]).write_bytes(b"not an image")
+    return folder
+
+
+@pytest.mark.parametrize(
+    ("page", "art"),
+    [
+        (_art_cover, "empty"),
+        (_art_cover, "generic_divider_only"),
+        (_art_cover, "unreadable_cover"),
+        (_art_cover, "unknown_key"),
+        (_attachment_cover, "empty"),
+        (_attachment_cover, "generic_divider_only"),
+        (_attachment_cover, "unreadable_cover"),
+        (_back_cover, "empty"),
+        (_back_cover, "generic_divider_only"),
+        (_back_cover, "unreadable_cover"),
+        (_back_cover, "unknown_key"),
+    ],
+)
+def test_covers_never_borrow_a_divider_photo(page, art, tmp_path, monkeypatch, caplog):
+    """Spec §5, Ruling 8: without its own art a cover or back cover is white —
+    with the live title where it has one — and a warning is logged. Only a
+    divider may fall back to the generic divider photo."""
+    key = None
+    if art == "unknown_key":
+        key = "cover_inesistente"
+    else:
+        monkeypatch.setattr(design, "ART_DIR", _art_folder(tmp_path, art))
+    doc = _kit_doc("attachment")
+    with caplog.at_level(logging.WARNING, logger=design.logger.name):
+        page(doc, key)  # no exception
+        _finish(doc)
+
+    assert doc.element.body.xpath(".//w:drawing") == []
+    assert not any((name or "").startswith(design.ART_MARKER_PREFIX) for name in _docpr_names(doc.element.body))
+    if page is _attachment_cover:
+        text = "\n".join(_w_text(p) for p in _paragraph_elements(doc))
+        assert COVER_TITLE in text and "ACME MECCANICA SRL" in text
+    assert [r for r in caplog.records if r.name == design.logger.name and r.levelno == logging.WARNING]
+
+
+def test_divider_keeps_the_generic_photo_fallback(tmp_path, monkeypatch):
+    doc = _kit_doc()
+    design.add_divider(doc, "GESTIONE DPI", "div_inesistente")
+    monkeypatch.setattr(design, "ART_DIR", _art_folder(tmp_path, "generic_divider_only"))
+    design.add_divider(doc, "GESTIONE ACQUISTI", "div_acquisti")
+    markers = [n for n in _docpr_names(doc.element.body) if n.startswith(design.ART_MARKER_PREFIX)]
+    assert markers == ["vera-art:divider:div_generico"] * 2
 
 
 def test_art_cover_opens_the_first_section():
@@ -651,14 +797,18 @@ def test_non_art_sections_keep_running_furniture_on_first_page():
     assert "Pag." in _text(plain.first_page_footer)
 
 
-def test_legacy_cover_without_art_keeps_a_clean_first_page():
-    """Donor templates keep their own cover until they adopt the kit."""
+def test_first_page_without_art_carries_the_running_header_and_footer():
+    """Ruling M2: a first section is clean only when its first block is an
+    art page. Every cover is art since the donor templates adopted the kit;
+    a first page that is not (a HACCP record form, a cover whose artwork is
+    missing) prints the running header and footer like any other page."""
     doc = _kit_doc()
-    doc.add_paragraph("Copertina di un modello")
+    doc.add_paragraph("Scheda di autocontrollo")
     _finish(doc)
-    assert doc.sections[0].different_first_page_header_footer
-    _finish(doc, cover_is_clean=False)
-    assert not doc.sections[0].different_first_page_header_footer
+    first = doc.sections[0]
+    assert not first.different_first_page_header_footer
+    assert "DOCUMENTO DI VALUTAZIONE DEI RISCHI" in _text(first.header)
+    assert "Pag." in _text(first.footer)
 
 
 def test_drawing_ids_are_unique_across_body_header_and_footer():

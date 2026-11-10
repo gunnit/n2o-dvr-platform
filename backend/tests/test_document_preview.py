@@ -1148,6 +1148,50 @@ def test_list_glyphs_follow_overrides_style_links_and_symbol_fonts():
     ]
 
 
+def _bullet_glyphs(*levels: tuple[str, str | None]) -> list[str]:
+    """The glyph the preview reports for one-level bullet lists, each given
+    as ``(lvlText, font named by the level or None)``."""
+    w = nsdecls("w")
+    doc = Document()
+    for index, (text, font) in enumerate(levels):
+        num_id = 60 + index
+        fonts = f'<w:rPr><w:rFonts w:ascii="{font}" w:hAnsi="{font}"/></w:rPr>' if font else ""
+        _append_numbering(
+            doc,
+            f'<w:abstractNum {w} w:abstractNumId="{num_id}"><w:lvl w:ilvl="0">'
+            f'<w:numFmt w:val="bullet"/><w:lvlText w:val="{text}"/>{fonts}</w:lvl></w:abstractNum>',
+            f'<w:num {w} w:numId="{num_id}"><w:abstractNumId w:val="{num_id}"/></w:num>',
+        )
+        _set_num_pr(doc.add_paragraph(f"Voce {index}"), num_id=num_id, ilvl=0)
+    return [block["list"]["glyph"] for block in parse_docx_preview(_to_bytes(doc))["blocks"]]
+
+
+def test_unknown_code_of_a_symbol_font_is_a_bullet_not_a_letter():
+    # In a glyph font a letter code is a picture (Symbol "x" draws χ): the
+    # preview cannot draw it and must not print the letter.
+    assert _bullet_glyphs(("x", "Symbol"), ("w", "Wingdings"), ("a", "Webdings"), ("", "Wingdings")) == [
+        "•", "•", "•", "•",
+    ]
+    # Known codes, and a text font's own characters, are unchanged.
+    assert _bullet_glyphs(("§", "Wingdings"), ("", "Symbol"), ("-", "Arial"), ("o", "Courier New")) == [
+        "▪", "•", "-", "◦",
+    ]
+
+
+def test_wingdings_2_and_3_are_not_read_with_the_wingdings_map():
+    # Other fonts, other pictures: U+F0A7 is the small square of Wingdings
+    # only, and "u" its diamond.
+    assert _bullet_glyphs(("", "Wingdings 2"), ("u", "Wingdings 3"), ("", "Wingdings")) == [
+        "•", "•", "▪",
+    ]
+
+
+def test_private_use_code_without_a_glyph_font_tries_wingdings_before_symbol():
+    # U+F0A7 is Wingdings' small square, Word's square bullet; Symbol draws
+    # a club there. U+F0B7 is only in Symbol's map: its round bullet.
+    assert _bullet_glyphs(("", None), ("", None), ("", "Arial")) == ["▪", "•", "▪"]
+
+
 def test_table_col_widths_and_valign():
     blocks = parse_docx_preview(_kit_docx())["blocks"]
     tables = {_para_text(t["rows"][0][0]["paragraphs"][0]): t for t in blocks if t["kind"] == "table"}
@@ -1322,6 +1366,24 @@ def test_preview_response_validates_enriched_preview():
     assert paragraph.page_role is None and paragraph.section_break_after is False
     assert paragraph.runs[0].caps is False
     assert legacy.blocks[4].col_widths_pct is None and legacy.blocks[4].rows[0][0].v_align is None
+
+
+def test_style_props_publish_their_fields_in_openapi():
+    """The wrap serializer emits only the keys a paragraph holds; the schema
+    FastAPI publishes for it still lists every field, so a client generated
+    from /docs knows what ``style_props`` and ``direct`` carry."""
+    from fastapi import FastAPI
+
+    from app.api.v1 import documents as documents_api
+    from app.schemas.document import DocumentPreviewStyleProps
+
+    app = FastAPI()
+    app.include_router(documents_api.download_router)
+    schemas = app.openapi()["components"]["schemas"]
+    names = [name for name in schemas if name.startswith("DocumentPreviewStyleProps")]
+    assert names
+    for name in names:
+        assert set(schemas[name].get("properties", {})) == set(DocumentPreviewStyleProps.model_fields), name
 
 
 def _fake_document_row(docx_bytes: bytes):

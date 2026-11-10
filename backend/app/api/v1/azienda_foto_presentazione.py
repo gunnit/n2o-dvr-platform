@@ -14,7 +14,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -90,9 +90,11 @@ async def put_foto_presentazione(
     stmt = pg_insert(AziendaFotoPresentazione).values(
         id=uuid.uuid4(), azienda_id=azienda_id, **values
     )
+    # A Core upsert skips the ORM's onupdate, so the replace path stamps
+    # updated_at itself, from the database clock like the insert's default.
     stmt = stmt.on_conflict_do_update(
         index_elements=[AziendaFotoPresentazione.azienda_id],
-        set_={**values, "updated_at": dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)},
+        set_={**values, "updated_at": func.now()},
     ).returning(AziendaFotoPresentazione.updated_at)
     updated_at = (await db.execute(stmt)).scalar_one()
     await db.commit()
@@ -138,6 +140,8 @@ async def delete_foto_presentazione(
     org_id: uuid.UUID = Depends(get_current_org),
     db: AsyncSession = Depends(get_db),
 ):
+    """Remove the azienda's presentation photo; the DVR then prints no photo
+    slot. Idempotent: 204 whether or not there was one."""
     await _require_azienda_in_org(azienda_id, org_id, db)
     foto = (
         await db.execute(

@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  removeFotoPresentazione,
+  uploadFotoPresentazione,
+} from "@/components/aziende/foto-presentazione-actions";
 import { Panel, PanelHeader } from "@/components/aziende/tabs/_shared";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/use-api";
@@ -55,17 +59,9 @@ export function FotoPresentazioneCard({ aziendaId }: { aziendaId: string }) {
     async (file: File) => {
       setBusy(true);
       try {
-        const fd = new FormData();
-        fd.append("file", file);
-        await apiFetch(path, { method: "PUT", body: fd });
-        setVersion((v) => v + 1);
-        toast.success("Foto di presentazione salvata");
-      } catch (err) {
-        toast.error(
-          err instanceof Error && err.message
-            ? err.message
-            : "Caricamento della foto non riuscito",
-        );
+        if (await uploadFotoPresentazione(apiFetch, path, file, toast)) {
+          setVersion((v) => v + 1);
+        }
       } finally {
         setBusy(false);
       }
@@ -76,14 +72,9 @@ export function FotoPresentazioneCard({ aziendaId }: { aziendaId: string }) {
   const onRemove = useCallback(async () => {
     setBusy(true);
     try {
-      await apiFetch(path, { method: "DELETE" });
-      setVersion((v) => v + 1);
-    } catch (err) {
-      toast.error(
-        err instanceof Error && err.message
-          ? err.message
-          : "Rimozione della foto non riuscita",
-      );
+      if (await removeFotoPresentazione(apiFetch, path, toast)) {
+        setVersion((v) => v + 1);
+      }
     } finally {
       setBusy(false);
     }
