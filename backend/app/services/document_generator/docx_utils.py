@@ -607,10 +607,11 @@ def _write_cell(
 
 
 def _is_centred_value(text: str) -> bool:
+    """A number or a dash. Never a word: "Rosso" spells a RISK_COLORS key
+    and is a colour name in the signage table. Level cells are centred by
+    ``level_cell``, level columns without colours by ``centred_columns``."""
     value = (text or "").strip()
-    return bool(value) and (
-        value in _DASHES or bool(_NUMBER_RE.match(value)) or value.upper() in RISK_COLORS
-    )
+    return bool(value) and (value in _DASHES or bool(_NUMBER_RE.match(value)))
 
 
 def _is_short(*texts: str) -> bool:
@@ -822,12 +823,16 @@ def add_data_table(
     data_rows: list[list[str]],
     *,
     column_widths_cm: list[float] | None = None,
+    centred_columns: Iterable[int] = (),
 ):
     """Table with a repeating blue header row and zebra data rows.
 
-    10 pt text, left-aligned; numbers, levels and "—" are centred. The table
-    spans the text width unless ``column_widths_cm`` says otherwise.
+    10 pt text, left-aligned; numbers and "—" are centred, and so is every
+    cell of ``centred_columns`` (the indexes of level columns that take no
+    level colour). The table spans the text width unless
+    ``column_widths_cm`` says otherwise.
     """
+    centred_columns = frozenset(centred_columns)
     if column_widths_cm is not None and len(column_widths_cm) != len(headers):
         raise ValueError("column_widths_cm must contain one width per header")
 
@@ -848,7 +853,7 @@ def add_data_table(
         zebra = n % 2 == 1
         for i, cell_val in enumerate(row_data):
             text = "" if cell_val is None else str(cell_val)
-            centred = WD_ALIGN_PARAGRAPH.CENTER if _is_centred_value(text) else None
+            centred = WD_ALIGN_PARAGRAPH.CENTER if i in centred_columns or _is_centred_value(text) else None
             _write_cell(row.cells[i], text, align=centred)
             if zebra:
                 shade_cell(row.cells[i], BRAND_SURFACE_HEX)

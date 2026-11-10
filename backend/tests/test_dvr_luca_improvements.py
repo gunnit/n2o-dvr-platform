@@ -378,6 +378,20 @@ def test_dvr_writes_table_cells_with_the_kit_helper():
     assert dvr_master._write_cell is docx_utils._write_cell
 
 
+def test_signage_colour_table_aligns_each_column_alike():
+    """Final review M-3: CODIFICA CROMATICA DELLA SEGNALETICA centred
+    "Rosso" and "Verde" (they spell RISK_COLORS keys) and left "Azzurro"
+    and "Giallo o giallo-arancio". Every column has one alignment."""
+    doc = Document()
+    _new_generator()._add_segnaletica_section(doc)
+    table = next(t for t in doc.tables if t.rows[0].cells[0].text == "Colore")
+    colours = [row.cells[0].text for row in table.rows[1:]]
+    assert {"Rosso", "Verde", "Azzurro", "Giallo o giallo-arancio"} <= set(colours)
+    for index, column in enumerate(table.columns):
+        alignments = {cell.paragraphs[0].alignment for cell in column.cells[1:]}
+        assert alignments == {None}, (table.rows[0].cells[index].text, alignments)
+
+
 def test_sign_panels_are_judged_by_manifest_key_not_file_name(tmp_path, monkeypatch):
     """A panel prints when the art resolver used the panel's own manifest
     key, whatever its file is called (here, kept in a sub-folder), and a

@@ -184,7 +184,7 @@ class AllegatoIncendioGenerator(BaseDocumentGenerator):
                     str(v.uscite_emergenza), str(v.estintori_presenti),
                     str(v.idranti_presenti),
                 ])
-            add_data_table(doc, headers, rows)
+            add_data_table(doc, headers, rows, centred_columns=(headers.index("Livello"),))
 
         # Segnalazione 2026-08-25: per-ambiente scheda (descrizione con
         # metratura e materiali, persone max, sorgenti di innesco). Same

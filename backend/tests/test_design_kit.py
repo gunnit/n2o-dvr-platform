@@ -219,6 +219,26 @@ def test_data_table_header_fill_and_borders():
     assert sizes == {10}
 
 
+def test_data_table_centres_columns_never_a_cell_for_spelling_a_level():
+    """Final review M-3: "Rosso" and "Verde" spell RISK_COLORS keys, so the
+    signage colour table centred them and left "Azzurro". A cell is centred
+    for being a number or a dash, or because its column is a level column
+    (``centred_columns``), never for its words."""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    doc = _kit_doc()
+    table = docx_utils.add_data_table(
+        doc,
+        ["Colore", "Livello", "N."],
+        [["Rosso", "ALTO", "3"], ["Azzurro", "NON VALUTATO", "—"], ["Verde", "BASSO", "1"]],
+        centred_columns=(1,),
+    )
+    columns = [[row.cells[i].paragraphs[0].alignment for row in table.rows[1:]] for i in range(3)]
+    assert columns[0] == [None, None, None]
+    assert columns[1] == [WD_ALIGN_PARAGRAPH.CENTER] * 3
+    assert columns[2] == [WD_ALIGN_PARAGRAPH.CENTER] * 3
+
+
 def test_kv_table_variants():
     doc = _kit_doc()
     blue = docx_utils.add_kv_table(doc, [("Ragione sociale", "Acme Srl"), ("P.IVA", None)])

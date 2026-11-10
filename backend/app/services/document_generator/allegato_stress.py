@@ -129,7 +129,7 @@ class AllegatoStressGenerator(BaseDocumentGenerator):
                 add_data_table(doc, ["Mansione", "Punteggio totale", "Livello di rischio"], [
                     [_mansione_titolo(v), _totale_label(v), v.livello_rischio or "—"]
                     for v in valutazioni
-                ])
+                ], centred_columns=(2,))
             for v in valutazioni:
                 add_heading(doc, _mansione_titolo(v), level=2)
                 _render_valutazione(doc, v)
@@ -212,7 +212,7 @@ def _render_valutazione(doc, stress) -> None:
         ["A - Indicatori aziendali (infortuni, assenze, turnover)", f"{a_raw} / 40", str(a_conv), a_livello],
         ["B - Contesto del lavoro (organizzazione, ruoli, rapporti)", f"{b_raw} / 26", str(max(b_raw, 0)), b_livello],
         ["C - Contenuto del lavoro (ambiente, compiti, ritmo, orario)", f"{c_raw} / 36", str(c_raw), c_livello],
-    ])
+    ], centred_columns=(3,))
     add_paragraph(
         doc,
         "Nota: il punteggio dell'Area A è convertito sulla scala 0/2/5 prima di essere sommato a B e C (max teorico totale = 67). Soglie: 0-17 BASSO, 18-34 MEDIO, 35-67 ALTO.",

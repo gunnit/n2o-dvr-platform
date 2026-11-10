@@ -343,6 +343,27 @@ def test_fire_renders_current_pi_meaning_and_modeled_hydrants(generated_outputs)
     ) in rows
 
 
+@pytest.mark.parametrize(
+    ("tipo", "header", "column"),
+    [
+        ("ALLEGATO_INCENDIO", ("Ambiente", "INF", "SI", "PI", "Totale", "Livello", "Uscite", "Estintori", "Idranti"), 5),
+        ("ALLEGATO_STRESS", ("Area", "Punteggio grezzo", "Convertito", "Livello parziale"), 3),
+    ],
+)
+def test_level_columns_without_colours_stay_centred(generated_outputs, tipo, header, column):
+    """Final review M-3: a cell is no longer centred for spelling a risk
+    level, so the level columns that take no level colour are centred as
+    columns, whatever their cells hold."""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    ok, path, _ = generated_outputs[tipo]
+    assert ok and path
+    table = _find_table(Document(path), header)
+    assert table is not None and len(table.rows) > 1
+    alignments = {row.cells[column].paragraphs[0].alignment for row in table.rows[1:]}
+    assert alignments == {WD_ALIGN_PARAGRAPH.CENTER}
+
+
 def test_fire_training_and_drill_text_uses_supported_cadence(generated_outputs):
     ok, path, _ = generated_outputs["ALLEGATO_INCENDIO"]
     assert ok and path

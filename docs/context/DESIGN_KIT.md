@@ -37,7 +37,7 @@ The kit is two modules: `backend/app/services/document_generator/design.py` (pag
 
 ## Tables (docx_utils.py)
 
-- `add_data_table(doc, headers, rows, column_widths_cm=…)`: header row 4F81BD with white bold text (`style_header_row`), repeating on every page; zebra rows; black ½ pt borders; numbers and dashes centred.
+- `add_data_table(doc, headers, rows, column_widths_cm=…, centred_columns=…)`: header row 4F81BD with white bold text (`style_header_row`), repeating on every page; zebra rows; black ½ pt borders; numbers and dashes centred, and the whole of each column in `centred_columns` (a level column that takes no colour). A cell is never centred for its words: "Rosso" is a colour name in one table and a level in another.
 - `add_kv_table(doc, rows, variant="blue" | "light")`, `add_role_band`, `add_signature_grid`, `level_cell(cell, level)`, `add_bullets` (real list numbering, also inside cells).
 - **Never `cantSplit` on a data row.** LibreOffice loops forever on a keep-together row taller than a page (commit `e0875fa`). Only header rows and short label rows are kept together.
 
