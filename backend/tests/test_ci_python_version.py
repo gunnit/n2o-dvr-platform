@@ -24,6 +24,10 @@ def _production_versions() -> set[str]:
     }
 
 
+def _minor(version: str) -> str:
+    return ".".join(version.split(".")[:2])
+
+
 @pytest.mark.skipif(not WORKFLOW.exists(), reason="the CI workflow is not in this checkout")
 def test_backend_ci_python_matches_render_python_version():
     workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
@@ -32,4 +36,11 @@ def test_backend_ci_python_matches_render_python_version():
         for step in workflow["jobs"]["test"]["steps"]
         if str(step.get("uses", "")).startswith("actions/setup-python")
     )
-    assert _production_versions() == {str(setup["with"]["python-version"])}
+    production = _production_versions()
+    # The API and the worker run one interpreter.
+    assert len(production) == 1, production
+    (pinned,) = production
+    # CI pins production's exact version or its minor version. GitHub ships no
+    # build of every patch for every runner image (none of 3.14.3 for Ubuntu
+    # 26.04), and the minor version is what changes language semantics.
+    assert str(setup["with"]["python-version"]) in {pinned, _minor(pinned)}
