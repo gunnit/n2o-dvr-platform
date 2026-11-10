@@ -33,37 +33,38 @@ import os
 from datetime import datetime
 
 from docx import Document
-from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-from docx.shared import Cm, Inches, Pt, RGBColor
 from sqlalchemy import func, select
 
 from app.models.documento_generato import DocumentoGenerato
 from app.services.document_generator.base import BaseDocumentGenerator
-from app.services.document_generator.branding import resolve_logo_source
 from app.services.document_generator.data_loader import load_vdt
 from app.services.document_generator.design import (
+    add_back_cover,
     add_cover,
     add_revision_table,
+    add_sub_title,
     add_toc,
     finalize_toc,
     finish_document,
     setup_document,
 )
 from app.services.document_generator.docx_utils import (
-    HEADER_BG,
+    BRAND_NAVY,
+    BRAND_SURFACE_HEX,
+    NOTE_GREY,
+    TYPE_SCALE,
+    add_body_paragraph,
     add_data_table,
     add_heading,
     add_kv_table,
-    add_paragraph,
+    add_signature_grid,
     format_comune,
     format_sede,
+    level_cell,
     page_break,
+    set_run_font,
     shade_cell,
     slugify,
-    style_header_row,
 )
 from app.services.vdt_calculator import (
     VDT_EXPOSURE_THRESHOLD_HOURS,
@@ -75,10 +76,77 @@ from app.services.vdt_surveillance import age_on, surveillance_periodicita
 TIPO_DOC = "allegato_vdt"
 DOC_TITLE = "Allegato Rischio VDT"
 
-_EXPOSURE_COLORS = {
-    "Esposto": "F4CCCC",      # rose — surveillance triggered
-    "Non Esposto": "D9EAD3",  # green
+# Exposure printed in the kit's level colours (``level_cell``). An exposed
+# worker is put under health surveillance, which is what the yellow zone
+# means in the MMC annex; a worker below the threshold is green.
+_EXPOSURE_LEVEL = {
+    "Esposto": "GIALLO",
+    "Non Esposto": "VERDE",
 }
+
+# The DVR Master's dati occupazionali grid (its Table 5) as the attachments
+# print it. Client feedback 2026-08: "inserire sempre la tabella organigramma
+# dipendenti presente sul rischio master". The DVR now follows N2O's model of
+# 2026-10-20, which splits that table in two; the attachments keep this one
+# until N2O sends a model for each (spec 2026-11-10 §4.4).
+ORGANIGRAMMA_HEADERS = [
+    "Nominativo",
+    "Mansione",
+    "Ambiente di Lavoro",
+    "Codice Fiscale",
+    "Tipologia contrattuale",
+]
+
+
+def organigramma_rows(persone: list) -> list[list[str]]:
+    """Rows of the organigramma: Nominativo | Mansione | Ambiente di Lavoro |
+    Codice Fiscale | Tipologia contrattuale, uppercased, with "Tutta
+    l'azienda (ruolo trasversale)" for the cross-site roles. A single dash
+    row when nobody is registered, so the table is always there."""
+    if not persone:
+        return [["—"] * len(ORGANIGRAMMA_HEADERS)]
+    rows = []
+    for p in persone:
+        ambienti_names = ", ".join(
+            (a.nome or "")
+            for a in (getattr(p, "ambienti", None) or [])
+            if getattr(a, "nome", None)
+        )
+        if not ambienti_names:
+            if (
+                p.ruolo_datore_lavoro
+                or p.ruolo_rspp
+                or p.ruolo_rls
+                or getattr(p, "ruolo_medico_competente", False)
+            ):
+                ambienti_names = "Tutta l'azienda (ruolo trasversale)"
+            else:
+                ambienti_names = "—"
+        cf = getattr(p, "codice_fiscale", None) or "—"
+        rows.append([
+            (p.nominativo or "—").upper(),
+            (p.mansione or "—").upper(),
+            ambienti_names.upper(),
+            cf,
+            (p.tipologia_contrattuale or "—").upper(),
+        ])
+    return rows
+
+
+def _note(doc, text: str):
+    """The kit's note: 10 pt italic grey."""
+    paragraph = doc.add_paragraph()
+    set_run_font(paragraph.add_run(text), size=TYPE_SCALE["note"], italic=True, color=NOTE_GREY)
+    return paragraph
+
+
+def _label_cell(cell) -> None:
+    """A row label in the kit's light look: navy bold on the surface tint."""
+    shade_cell(cell, BRAND_SURFACE_HEX)
+    for paragraph in cell.paragraphs:
+        for run in paragraph.runs:
+            set_run_font(run, bold=True, color=BRAND_NAVY)
+
 
 def group_rows_by_person(vdt_rows: list) -> list[tuple[object, list]]:
     """Group VDT rows by persona_id, preserving first-seen order.
@@ -133,11 +201,11 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         persona_by_id = {p.id: p for p in persone}
 
         doc = Document()
-        setup_document(doc)
+        setup_document(doc, profile="attachment")
 
         # Shared cover / storico / indice (audit 2026-09-03): same furniture as
-        # every other attachment, org logo instead of the invisible white mark,
-        # "Revisione 00" for a first issue like the DVR.
+        # every other attachment — the kit's art cover and back cover (spec
+        # 2026-11-10 §4.4) — and "Revisione 00" for a first issue like the DVR.
         add_cover(
             doc,
             title=DOC_TITLE,
@@ -167,6 +235,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         self._add_signature_block(doc, persone)
 
         finalize_toc(doc, *toc_anchors)
+        add_back_cover(doc)
         finish_document(
             doc,
             title=DOC_TITLE,
@@ -212,7 +281,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
             "sanitaria oculistica ai sensi dell'art. 176 (periodicità' "
             "quinquennale, biennale per gli over 50 o con prescrizioni).",
         ]:
-            add_paragraph(doc, txt)
+            add_body_paragraph(doc, txt)
         page_break(doc)
 
     # ------------------------------------------------------------------
@@ -247,58 +316,14 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
     # ------------------------------------------------------------------
 
     def _add_organigramma(self, doc, persone: list) -> None:
-        """Employee organigramma, mirroring the DVR Master's Table 5
-        (``DvrGenerator._add_dati_occupazionali_table``): Nominativo |
-        Mansione | Ambiente di Lavoro | Codice Fiscale | Tipologia
-        contrattuale, uppercased, with the "Tutta l'azienda (ruolo
-        trasversale)" label for cross-site roles.
-
-        Client feedback 2026-08: "inserire sempre la tabella organigramma
-        dipendenti presente sul rischio master" — always rendered, with an
-        em-dash placeholder row when no persone exist (like the master).
-        Logic is replicated rather than imported from dvr_master to keep
-        the two generators decoupled.
+        """Employee organigramma, mirroring the DVR Master's Table 5:
+        see :func:`organigramma_rows`. Always rendered, with an em-dash
+        placeholder row when no persone exist (like the master). The logic
+        is replicated rather than imported from dvr_master to keep the
+        generators decoupled.
         """
         add_heading(doc, "Organigramma Dipendenti", level=1)
-
-        headers = [
-            "Nominativo",
-            "Mansione",
-            "Ambiente di Lavoro",
-            "Codice Fiscale",
-            "Tipologia contrattuale",
-        ]
-        if not persone:
-            add_data_table(doc, headers, [["—", "—", "—", "—", "—"]])
-            page_break(doc)
-            return
-
-        rows = []
-        for p in persone:
-            ambienti_names = ", ".join(
-                (a.nome or "")
-                for a in (getattr(p, "ambienti", None) or [])
-                if getattr(a, "nome", None)
-            )
-            if not ambienti_names:
-                if (
-                    p.ruolo_datore_lavoro
-                    or p.ruolo_rspp
-                    or p.ruolo_rls
-                    or getattr(p, "ruolo_medico_competente", False)
-                ):
-                    ambienti_names = "Tutta l'azienda (ruolo trasversale)"
-                else:
-                    ambienti_names = "—"
-            cf = getattr(p, "codice_fiscale", None) or "—"
-            rows.append([
-                (p.nominativo or "—").upper(),
-                (p.mansione or "—").upper(),
-                ambienti_names.upper(),
-                cf,
-                (p.tipologia_contrattuale or "—").upper(),
-            ])
-        add_data_table(doc, headers, rows)
+        add_data_table(doc, ORGANIGRAMMA_HEADERS, organigramma_rows(persone))
         page_break(doc)
 
     # ------------------------------------------------------------------
@@ -330,7 +355,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
 
     def _add_fattori_rischio(self, doc) -> None:
         add_heading(doc, "Principali fattori di rischio", level=1)
-        add_paragraph(
+        add_body_paragraph(
             doc,
             "I disturbi che i lavoratori addetti ai videoterminali possono accusare "
             "sono riconducibili a tre famiglie di rischio: sollecitazione degli "
@@ -338,7 +363,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         )
 
         add_heading(doc, "Sollecitazione degli organi della vista", level=2)
-        add_paragraph(
+        add_body_paragraph(
             doc,
             "Bruciore, lacrimazione, secchezza, fastidio alla luce, pesantezza, "
             "visione annebbiata o sdoppiata, stanchezza alla lettura. Sono dovuti a "
@@ -351,7 +376,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         )
 
         add_heading(doc, "Posizione del corpo", level=2)
-        add_paragraph(
+        add_body_paragraph(
             doc,
             "Disturbi alla colonna vertebrale dovuti a errata postura e sedentarieta', "
             "disturbi muscolari da affaticamento e indolenzimento, disturbi a mano "
@@ -360,7 +385,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         )
 
         add_heading(doc, "Affaticamento fisico o mentale", level=2)
-        add_paragraph(
+        add_body_paragraph(
             doc,
             "Determinato da: cattiva organizzazione del lavoro (operazioni monotone "
             "ripetitive); cattive condizioni ambientali (temperatura, umidità', "
@@ -377,7 +402,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         add_heading(doc, "La postazione di lavoro", level=1)
 
         add_heading(doc, "Videoterminale, tastiera e mouse", level=2)
-        add_paragraph(
+        add_body_paragraph(
             doc,
             "La postazione VDT deve essere allestita con attrezzature moderne e "
             "ergonomiche: monitor orientabile e inclinabile, con luminosità' e "
@@ -389,7 +414,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         )
 
         add_heading(doc, "Condizioni ambientali", level=2)
-        add_paragraph(
+        add_body_paragraph(
             doc,
             "Temperatura raccomandata 18-22 °C in inverno e 24-26 °C in estate; "
             "umidità' relativa 40-60%; assenza di correnti d'aria fastidiose. "
@@ -399,7 +424,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         )
 
         add_heading(doc, "Corretto posizionamento del videoterminale", level=2)
-        add_paragraph(
+        add_body_paragraph(
             doc,
             "Il monitor va posizionato perpendicolarmente alle finestre per evitare "
             "abbagliamenti e riflessi; la direzione principale dello sguardo deve "
@@ -409,7 +434,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         )
 
         add_heading(doc, "Piano di lavoro, sedia, poggiapiedi", level=2)
-        add_paragraph(
+        add_body_paragraph(
             doc,
             "Piano di lavoro stabile, di profondità' adeguata e altezza regolabile "
             "(70-80 cm). Sedia a 5 razze con sedile e schienale regolabili in "
@@ -442,11 +467,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
     def _add_elenco_postazioni(self, doc, vdt_rows: list, ambiente_by_id: dict) -> None:
         add_heading(doc, "Elenco postazioni VDT", level=1)
         if not vdt_rows:
-            add_paragraph(
-                doc,
-                "Nessuna postazione VDT e' stata valutata per questa azienda.",
-                italic=True,
-            )
+            _note(doc, "Nessuna postazione VDT e' stata valutata per questa azienda.")
             page_break(doc)
             return
 
@@ -508,22 +529,16 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
     ) -> None:
         add_heading(doc, "Tavole di Valutazione del Rischio VDT", level=1)
         if not vdt_rows:
-            add_paragraph(
-                doc,
-                "Nessuna postazione VDT e' stata valutata per questa azienda.",
-                italic=True,
-            )
+            _note(doc, "Nessuna postazione VDT e' stata valutata per questa azienda.")
             page_break(doc)
             return
 
-        add_paragraph(
+        _note(
             doc,
             "Le tavole sono suddivise per dipendente: per ciascun lavoratore "
             "sono elencate tutte le postazioni/dispositivi utilizzati e "
             "l'esposizione e' classificata sulla somma delle ore settimanali "
             "complessive (art. 173 D.Lgs. 81/2008).",
-            italic=True,
-            size=9,
         )
 
         for i, (pid, rows) in enumerate(group_rows_by_person(vdt_rows), 1):
@@ -554,91 +569,48 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
 
         add_heading(doc, heading, level=2)
 
-        # Header table: Nominativo / Mansione, then one row per postazione,
-        # then the summed total + threshold + classification.
-        table = doc.add_table(rows=0, cols=4)
-        try:
-            table.style = "Table Grid"
-        except KeyError:
-            pass
-        table.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-        header_row = table.add_row().cells
-        header_row[0].text = "Nominativo"
-        header_row[1].text = nominativo
-        header_row[2].text = "Mansione"
-        header_row[3].text = mansione
-        for cell in header_row:
-            shade_cell(cell, "1A237E")
-            for p in cell.paragraphs:
-                for run in p.runs:
-                    run.font.bold = True
-                    run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-                    run.font.size = Pt(10)
-
-        # One row per postazione/device used by this worker.
-        for r in rows:
-            ore = float(r.ore_settimanali or 0)
-            sub_row = table.add_row().cells
-            sub_row[0].text = "Postazione"
-            sub_row[1].text = r.postazione or "—"
-            sub_row[2].text = f"Attività: {self._attivita_label(r, ambiente_by_id)}"
-            sub_row[3].text = f"{ore:.1f} h/sett."
-            for cell in sub_row:
-                shade_cell(cell, "EEEEEE")
-                for p in cell.paragraphs:
-                    for run in p.runs:
-                        run.font.size = Pt(9)
-
-        body = [
-            (
+        # Kit table: a header band with Nominativo / Mansione, then one row
+        # per postazione, then the summed total + threshold + classification.
+        # Row labels in the light label look; the classification in its
+        # level colour.
+        table_rows = [
+            [
+                "Postazione",
+                r.postazione or "—",
+                f"Attività: {self._attivita_label(r, ambiente_by_id)}",
+                f"{float(r.ore_settimanali or 0):.1f} h/sett.",
+            ]
+            for r in rows
+        ]
+        table_rows += [
+            [
                 "Tempo di utilizzo totale",
                 "ore/settimana (somma di tutte le postazioni)",
                 f"{total:.1f}",
                 "",
-            ),
-            (
+            ],
+            [
                 "Soglia esposizione",
                 "art. 173 D.Lgs. 81/2008",
                 f">= {int(VDT_EXPOSURE_THRESHOLD_HOURS)} h/sett.",
                 "",
-            ),
-            ("Rischio VDT", "Classificazione (sul totale ore)", esp_label, ""),
+            ],
+            ["Rischio VDT", "Classificazione (sul totale ore)", esp_label, ""],
         ]
-        for code, descr, val, _ in body:
-            row = table.add_row().cells
-            row[0].text = code
-            row[1].text = descr
-            row[2].text = val
-            row[3].text = ""
-            shade_cell(row[0], "F5F5F5")
-            for p in row[0].paragraphs:
-                for run in p.runs:
-                    run.font.bold = True
-                    run.font.size = Pt(10)
-            for cell in (row[1], row[2], row[3]):
-                for p in cell.paragraphs:
-                    for run in p.runs:
-                        run.font.size = Pt(9)
-
-        # Tint the classification row by exposure
-        cls_row = table.rows[-1]
-        tint = _EXPOSURE_COLORS.get(esp_label, "F5F5F5")
-        for cell in cls_row.cells:
-            shade_cell(cell, tint)
-            for p in cell.paragraphs:
-                for run in p.runs:
-                    run.font.bold = True
+        table = add_data_table(
+            doc, ["Nominativo", nominativo, "Mansione", mansione], table_rows
+        )
+        for row in table.rows[1:]:
+            _label_cell(row.cells[0])
+        level_cell(table.rows[-1].cells[2], _EXPOSURE_LEVEL.get(esp_label, ""))
 
         # Ergonomic checklist — one per postazione (the checklist describes
         # the workstation, not the worker).
         for r in rows:
-            add_paragraph(doc, "")
-            add_paragraph(
+            add_sub_title(
                 doc,
                 f"Check-list ergonomica — {r.postazione or 'Postazione'}",
-                bold=True,
-                size=10,
+                in_toc=False,
             )
             check_rows = []
             for attr, label in _CHECKLIST_ITEMS:
@@ -664,8 +636,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
                 eta_label = ">= 50 anni"
             else:
                 eta_label = "—"
-            add_paragraph(doc, "")
-            add_paragraph(doc, "Sorveglianza sanitaria oculistica", bold=True, size=10)
+            add_sub_title(doc, "Sorveglianza sanitaria oculistica", in_toc=False)
             surv_rows = [
                 ("Idoneità visiva", idoneita or "—"),
                 ("Età del lavoratore", eta_label),
@@ -675,7 +646,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
 
         notes = [r.note for r in rows if getattr(r, "note", None)]
         for note in notes:
-            add_paragraph(doc, f"Note: {note}", italic=True, size=9)
+            _note(doc, f"Note: {note}")
         page_break(doc)
 
     # ------------------------------------------------------------------
@@ -690,30 +661,14 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         visualizzato il totale su una riga")."""
         add_heading(doc, "Quadro sinottico di esposizione", level=1)
         if not vdt_rows:
-            add_paragraph(doc, "Nessuna valutazione presente.", italic=True)
+            _note(doc, "Nessuna valutazione presente.")
             page_break(doc)
             return
 
-        table = doc.add_table(rows=1, cols=5)
-        try:
-            table.style = "Table Grid"
-        except KeyError:
-            pass
-        table.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-        hdr = table.rows[0]
-        for i, h in enumerate([
-            "Nominativo",
-            "Mansione",
-            "Postazioni utilizzate",
-            "Ore totali (h/sett)",
-            "Rischio VDT",
-        ]):
-            hdr.cells[i].text = h
-        style_header_row(hdr)
-
         groups = group_rows_by_person(vdt_rows)
         esposti = 0
+        table_rows: list[list[str]] = []
+        labels: list[str] = []
         for pid, rows in groups:
             persona = persona_by_id.get(pid) if pid else None
             nominativo = (persona.nominativo if persona else None) or (
@@ -728,35 +683,38 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
             esp_label = "Esposto" if esposto else "Non Esposto"
             if esposto:
                 esposti += 1
+            table_rows.append([
+                nominativo,
+                mansione,
+                postazioni,
+                f"{total:.1f}" if total > 0 else "—",
+                esp_label,
+            ])
+            labels.append(esp_label)
 
-            row = table.add_row()
-            row.cells[0].text = nominativo
-            row.cells[1].text = mansione
-            row.cells[2].text = postazioni
-            row.cells[3].text = f"{total:.1f}" if total > 0 else "—"
-            row.cells[4].text = esp_label
-
-            tint = _EXPOSURE_COLORS.get(esp_label, "FFFFFF")
-            for cell in (row.cells[3], row.cells[4]):
-                shade_cell(cell, tint)
-                for p in cell.paragraphs:
-                    for run in p.runs:
-                        run.font.bold = True
-                        run.font.size = Pt(10)
-            for cell in (row.cells[0], row.cells[1], row.cells[2]):
-                for p in cell.paragraphs:
-                    for run in p.runs:
-                        run.font.size = Pt(10)
+        table = add_data_table(
+            doc,
+            [
+                "Nominativo",
+                "Mansione",
+                "Postazioni utilizzate",
+                "Ore totali (h/sett)",
+                "Rischio VDT",
+            ],
+            table_rows,
+        )
+        # Hours and classification in the exposure's level colour.
+        for row, esp_label in zip(table.rows[1:], labels):
+            for cell in row.cells[3:]:
+                level_cell(cell, _EXPOSURE_LEVEL.get(esp_label, ""))
 
         # Counters — per worker, not per row.
         total_workers = len(groups)
-        add_paragraph(doc, "")
-        add_paragraph(
+        doc.add_paragraph()
+        _note(
             doc,
             f"Totale lavoratori valutati: {total_workers} · Esposti: {esposti} "
             f"· Non esposti: {total_workers - esposti}",
-            italic=True,
-            size=10,
         )
         page_break(doc)
 
@@ -768,7 +726,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         add_heading(doc, "Misure di prevenzione", level=1)
 
         add_heading(doc, "Pause", level=2)
-        add_paragraph(
+        add_body_paragraph(
             doc,
             "Ai sensi dell'art. 175 del D.Lgs. 81/2008, il lavoratore esposto ha "
             "diritto a una pausa di 15 minuti ogni 120 minuti di applicazione "
@@ -778,7 +736,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         )
 
         add_heading(doc, "Muoversi di più'", level=2)
-        add_paragraph(
+        add_body_paragraph(
             doc,
             "Alternare la posizione seduta con brevi pause attive: alzarsi, fare "
             "qualche passo, sgranchire spalle e collo. La sedentarieta' prolungata "
@@ -786,7 +744,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         )
 
         add_heading(doc, "Training per gli occhi", level=2)
-        add_paragraph(
+        add_body_paragraph(
             doc,
             "Ogni 20 minuti distogliere lo sguardo dallo schermo e fissare un "
             "punto distante (>= 6 metri) per circa 20 secondi (regola del 20-20-20). "
@@ -794,7 +752,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         )
 
         add_heading(doc, "Esercizi di stretching e rilassamento", level=2)
-        add_paragraph(
+        add_body_paragraph(
             doc,
             "Eseguire periodicamente esercizi di mobilizzazione di collo, spalle, "
             "polsi e schiena. Mantenere la schiena appoggiata allo schienale, "
@@ -803,7 +761,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         )
 
         add_heading(doc, "Lavoratrici gestanti", level=2)
-        add_paragraph(
+        add_body_paragraph(
             doc,
             "Per le lavoratrici gestanti l'utilizzo del videoterminale non comporta "
             "rischi specifici da radiazioni; restano comunque applicabili le "
@@ -820,7 +778,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
         self, doc, vdt_rows: list, persona_by_id: dict, generated_at: datetime
     ) -> None:
         add_heading(doc, "Programma di Attuazione delle Misure di Prevenzione", level=1)
-        add_paragraph(
+        add_body_paragraph(
             doc,
             "Tutti i lavoratori esposti al rischio da utilizzo di attrezzature "
             f"munite di videoterminali per almeno {int(VDT_EXPOSURE_THRESHOLD_HOURS)} "
@@ -830,7 +788,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
             "quinquennale; e' biennale per i lavoratori di età' pari o superiore "
             "a 50 anni e per quelli con prescrizioni o idoneità' parziale.",
         )
-        add_paragraph(
+        add_body_paragraph(
             doc,
             "Tutti i dipendenti vengono sottoposti a formazione e informazione "
             "specifica sul rischio VDT (postura, ergonomia, gestione delle pause).",
@@ -851,11 +809,10 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
             == "ESPOSTO"
         ]
         if not esposti_groups:
-            add_paragraph(
+            _note(
                 doc,
                 "Nessun lavoratore risulta esposto: programma di sorveglianza "
                 "sanitaria non attivato.",
-                italic=True,
             )
             page_break(doc)
             return
@@ -902,18 +859,14 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
 
         sede = format_sede(azienda, "legale")
 
-        add_paragraph(
+        add_body_paragraph(
             doc,
             f"Il/la sottoscritto/a {ddl}, in qualita' di Datore di Lavoro di "
             f"{ragione}, con sede legale in {sede},",
         )
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run("DICHIARA")
-        run.bold = True
-        run.font.size = Pt(13)
+        add_sub_title(doc, "DICHIARA", in_toc=False)
 
-        add_paragraph(
+        add_body_paragraph(
             doc,
             "che il procedimento sulla valutazione dei rischi da uso di attrezzature "
             "munite di videoterminali ex Titolo VII del D.Lgs. n. 81/2008 e s.m.i. "
@@ -922,7 +875,7 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
             "nominato e previa consultazione del Rappresentante dei Lavoratori per "
             "la Sicurezza.",
         )
-        add_paragraph(
+        add_body_paragraph(
             doc,
             "Le misure di prevenzione e protezione individuate nel Programma di "
             "Attuazione saranno adottate secondo il cronoprogramma concordato e "
@@ -945,33 +898,17 @@ class AllegatoVdtGenerator(BaseDocumentGenerator):
                     return p.nominativo
             return "—"
 
-        ddl = _first_or_dash(lambda p: bool(p.ruolo_datore_lavoro))
-        rspp = _first_or_dash(lambda p: bool(p.ruolo_rspp))
-        mc = _first_or_dash(lambda p: bool(p.ruolo_medico_competente))
-        rls = _first_or_dash(lambda p: bool(p.ruolo_rls))
-
-        table = doc.add_table(rows=2, cols=2)
-        try:
-            table.style = "Table Grid"
-        except KeyError:
-            pass
-
-        cells = [
-            (0, 0, "Il Datore di Lavoro", ddl),
-            (0, 1, "Il Responsabile del S.P.P.", rspp),
-            (1, 0, "Il Medico Competente", mc),
-            (1, 1, "Il Rappresentante dei Lavoratori (per consultazione)", rls),
-        ]
-        for r, c, label, name in cells:
-            cell = table.rows[r].cells[c]
-            cell.text = ""
-            p1 = cell.paragraphs[0]
-            run = p1.add_run(label)
-            run.font.bold = True
-            run.font.size = Pt(10)
-            p2 = cell.add_paragraph(f"({name})")
-            for run in p2.runs:
-                run.font.size = Pt(10)
-                run.italic = True
-            cell.add_paragraph("")
-            cell.add_paragraph("__________________________")
+        # The kit's signature grid: roles on navy, names ("—" when vacant)
+        # and a blank row to sign in, two signatories per row.
+        add_signature_grid(
+            doc,
+            [
+                ("Il Datore di Lavoro", _first_or_dash(lambda p: bool(p.ruolo_datore_lavoro))),
+                ("Il Responsabile del S.P.P.", _first_or_dash(lambda p: bool(p.ruolo_rspp))),
+                ("Il Medico Competente", _first_or_dash(lambda p: bool(p.ruolo_medico_competente))),
+                (
+                    "Il Rappresentante dei Lavoratori (per consultazione)",
+                    _first_or_dash(lambda p: bool(p.ruolo_rls)),
+                ),
+            ],
+        )

@@ -16,11 +16,22 @@ from pathlib import Path
 
 import pytest
 from docx import Document
+from docx.oxml.ns import qn
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_ROOT))
 sys.path.insert(0, str(BACKEND_ROOT / "scripts"))
+
+from app.services.document_generator import design  # noqa: E402
+from app.services.document_generator.docx_utils import (  # noqa: E402
+    BRAND_NAVY_HEX,
+    BRAND_SURFACE_HEX,
+    BRAND_TABLE_HEADER_HEX,
+    FONT_FAMILY,
+    RISK_COLORS,
+    TYPE_SCALE,
+)
 
 
 def _load_verify():
@@ -855,3 +866,83 @@ def test_dvr_parte_iii_env_block_structure(generated_outputs):
         f"expected ≥12 per-category risk tables (6 envs × 2 cats), "
         f"got {category_headers_seen}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Design kit adoption (spec 2026-11-10 §4.4)
+# ---------------------------------------------------------------------------
+
+# The seven attachments built in code: cover, tables, notes and back cover all
+# come from the design kit.
+CODE_BUILT_ATTACHMENTS = (
+    "ALLEGATO_MMC",
+    "ALLEGATO_VDT",
+    "ALLEGATO_MICROCLIMA",
+    "ALLEGATO_MICROCLIMA_SEVERO",
+    "ALLEGATO_BIOLOGICO_ALIMENTARE",
+    "ALLEGATO_BIOLOGICO_ASILO",
+    "ALLEGATO_BIOLOGICO_DENTISTI",
+)
+
+_FONT_SLOTS = ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs")
+_THEME_FONT_SLOTS = ("w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme", "w:cstheme")
+# Every colour a kit table may fill a cell with: the header blue, the zebra
+# and light-label surface, the signature grid's navy and the risk levels.
+_KIT_FILLS = {BRAND_TABLE_HEADER_HEX, BRAND_SURFACE_HEX, BRAND_NAVY_HEX} | {
+    str(colour) for colour in RISK_COLORS.values()
+}
+
+
+def _font_parts(doc: Document) -> list[tuple[str, object]]:
+    """The body, the styles and every header and footer part."""
+    parts = [("document", doc.element), ("styles", doc.styles.element)]
+    for rel in doc.part.rels.values():
+        if not rel.is_external and rel.reltype.endswith(("/header", "/footer")):
+            parts.append((str(rel.target_part.partname), rel.target_part.element))
+    return parts
+
+
+def _non_kit_fonts(doc: Document) -> list[tuple[str, list[str], list[str]]]:
+    offenders = []
+    for part, element in _font_parts(doc):
+        for fonts in element.iter(qn("w:rFonts")):
+            declared = {fonts.get(qn(slot)) for slot in _FONT_SLOTS} - {None}
+            themed = [slot for slot in _THEME_FONT_SLOTS if fonts.get(qn(slot))]
+            if declared - {FONT_FAMILY} or themed:
+                offenders.append((part, sorted(declared), themed))
+    return offenders
+
+
+@pytest.mark.parametrize("tipo", CODE_BUILT_ATTACHMENTS)
+def test_attachments_use_kit(generated_outputs, tipo):
+    ok, path, message = generated_outputs[tipo]
+    assert ok, message
+    doc = Document(path)
+
+    # Cover and back cover are the kit's art pages.
+    firsts = design.section_first_blocks(doc)
+    assert design.art_marker(firsts[0]) == "vera-art:cover:cover_vera"
+    assert design.art_marker(firsts[-1]) == "vera-art:back_cover:back_vera"
+    assert len(doc.sections) >= 2
+
+    # No run, paragraph mark or style names a font other than Arial, and no
+    # theme font slips back in through a theme attribute.
+    assert _non_kit_fonts(doc) == []
+
+    # Table header rows are the kit's blue; every other cell colour is a kit
+    # colour too (no navy header bands, greys or pastel tints of their own).
+    body = doc.element.body
+    header_rows = body.xpath(".//w:tr[w:trPr/w:tblHeader]")
+    assert header_rows, "no kit table header in the document"
+    for row in header_rows:
+        fills = [cell.xpath("./w:tcPr/w:shd/@w:fill") for cell in row.xpath("./w:tc")]
+        assert fills and all(fill == [BRAND_TABLE_HEADER_HEX] for fill in fills), fills
+    fills = set(body.xpath(".//w:tc/w:tcPr/w:shd/@w:fill"))
+    assert fills <= _KIT_FILLS, sorted(fills - _KIT_FILLS)
+
+    # Table text is the kit's 10 pt, set on every run that prints.
+    table_size = str(int(TYPE_SCALE["table"] * 2))
+    for run in body.xpath(".//w:tbl//w:r[w:t]"):
+        text = "".join(run.xpath("./w:t/text()"))
+        if text.strip():
+            assert run.xpath("./w:rPr/w:sz/@w:val") == [table_size], text

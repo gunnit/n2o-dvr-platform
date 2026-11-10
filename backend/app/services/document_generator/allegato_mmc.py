@@ -23,16 +23,10 @@ template structure end-to-end:
 from __future__ import annotations
 
 import os
-import uuid
 from datetime import datetime
-from pathlib import Path
 
 from docx import Document
-from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-from docx.shared import Cm, Inches, Pt, RGBColor
+from docx.shared import Pt
 from sqlalchemy import func, select
 
 from app.data.niosh_factors import (
@@ -48,10 +42,14 @@ from app.data.niosh_factors import (
 )
 from app.models.documento_generato import DocumentoGenerato
 from app.services.codice_fiscale import extract_age, extract_sex
+from app.services.document_generator.allegato_vdt import (
+    ORGANIGRAMMA_HEADERS,
+    organigramma_rows,
+)
 from app.services.document_generator.base import BaseDocumentGenerator
-from app.services.document_generator.branding import resolve_logo_source
 from app.services.document_generator.data_loader import load_mmc
 from app.services.document_generator.design import (
+    add_back_cover,
     add_cover,
     add_revision_table,
     add_toc,
@@ -59,33 +57,34 @@ from app.services.document_generator.design import (
     finish_document,
     setup_document,
 )
-from app.services.document_generator.dvr_master import (
-    DVRMasterGenerator,
-    _employee_persons,
-)
+from app.services.document_generator.dvr_master import _employee_persons
 from app.services.document_generator.docx_utils import (
-    HEADER_BG,
-    RISK_COLORS,
+    BRAND_NAVY,
+    BRAND_SURFACE_HEX,
+    NOTE_GREY,
+    TYPE_SCALE,
+    add_body_paragraph,
     add_data_table,
     add_heading,
     add_kv_table,
-    add_paragraph,
+    add_signature_grid,
     format_comune,
-    format_sede,
+    level_cell,
     page_break,
+    set_run_font,
     shade_cell,
     slugify,
-    style_header_row,
 )
 
 
 TIPO_DOC = "allegato_mmc"
 DOC_TITLE = "Allegato Rischio MMC"
 
-_AREA_COLORS = {
-    "Verde": "D9EAD3",
-    "Gialla": "FFF2CC",
-    "Rossa": "F4CCCC",
+# Each NIOSH area printed in its level colour (``level_cell``).
+_AREA_LEVEL = {
+    "Verde": "VERDE",
+    "Gialla": "GIALLO",
+    "Rossa": "ROSSO",
 }
 
 _ZONE_HEADINGS = {
@@ -115,6 +114,30 @@ _DEFAULT_MEASURES_BY_ZONE = {
         "delle misure entro 6 mesi."
     ),
 }
+
+
+def _body(doc, text: str, *, bold: bool = False, italic: bool = False):
+    """A justified body paragraph (the kit's body role), optionally bold or
+    italic."""
+    paragraph = add_body_paragraph(doc, text)
+    if bold or italic:
+        set_run_font(paragraph.runs[0], bold=bold or None, italic=italic or None)
+    return paragraph
+
+
+def _note(doc, text: str):
+    """The kit's note: 10 pt italic grey."""
+    paragraph = doc.add_paragraph()
+    set_run_font(paragraph.add_run(text), size=TYPE_SCALE["note"], italic=True, color=NOTE_GREY)
+    return paragraph
+
+
+def _label_cell(cell) -> None:
+    """A row label in the kit's light look: navy bold on the surface tint."""
+    shade_cell(cell, BRAND_SURFACE_HEX)
+    for paragraph in cell.paragraphs:
+        for run in paragraph.runs:
+            set_run_font(run, bold=True, color=BRAND_NAVY)
 
 
 def _task_order_key(task: object) -> tuple[bool, float, str]:
@@ -181,12 +204,13 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         persona_by_id = {p.id: p for p in persone}
 
         doc = Document()
-        setup_document(doc)
+        setup_document(doc, profile="attachment")
 
         # Cover, storico and indice come from the shared design module so this
         # attachment is furnished like every other one (audit 2026-09-03: the
         # cover logo was the white sidebar mark — invisible on paper — and the
-        # first issue printed "Revisione 01" while the DVR said "00").
+        # first issue printed "Revisione 01" while the DVR said "00"). The
+        # cover and back cover are the kit's art pages (spec 2026-11-10 §4.4).
         add_cover(
             doc,
             title=DOC_TITLE,
@@ -214,6 +238,7 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         self._add_signature_block(doc, persone)
 
         finalize_toc(doc, *toc_anchors)
+        add_back_cover(doc)
         finish_document(
             doc,
             title=DOC_TITLE,
@@ -259,7 +284,7 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
             "Verde (rischio trascurabile, IR <= 0,75), Gialla (sorveglianza, "
             "0,75 < IR <= 1,00) o Rossa (riprogettazione, IR > 1,00).",
         ]:
-            add_paragraph(doc, txt)
+            _body(doc, txt)
         page_break(doc)
 
     # ------------------------------------------------------------------
@@ -305,12 +330,14 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         add_heading(doc, "Dati Occupazionali", level=1)
         employees = _employee_persons(persone)
 
-        # Table 1 — identical to the DVR Master. Delegate to the DVR
-        # renderer (its table builders are instance-state free) so the two
-        # documents can never drift apart. It renders a dash row when the
-        # roster is empty, which is exactly the "sempre la tabella" ask.
-        dvr_renderer = object.__new__(DVRMasterGenerator)
-        dvr_renderer._add_dati_occupazionali_table(doc, employees)
+        # Table 1 — the DVR Master's Table 5 over the same employees
+        # (external safety consultants excluded), in the kit's table look:
+        # the same rows as VDT's organigramma, a dash row when the roster is
+        # empty ("sempre la tabella"). It no longer delegates to the DVR
+        # renderer: the DVR now follows N2O's model of 2026-10-20, which
+        # splits that table in two, and the attachments keep their
+        # structure until N2O sends a model for each (spec 2026-11-10 §4.4).
+        add_data_table(doc, ORGANIGRAMMA_HEADERS, organigramma_rows(employees))
         doc.add_paragraph("")
 
         # Table 2 — MMC-specific worker roster. Prefer the workers actually
@@ -320,11 +347,7 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         add_heading(doc, "Lavoratori oggetto della valutazione MMC", level=2)
         roster = assessed_persone if assessed_persone else employees
         if not roster:
-            add_paragraph(
-                doc,
-                "Nessun lavoratore registrato per questa azienda.",
-                italic=True,
-            )
+            _note(doc, "Nessun lavoratore registrato per questa azienda.")
             page_break(doc)
             return
 
@@ -390,16 +413,16 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
 
     def _add_metodologia(self, doc) -> None:
         add_heading(doc, "Metodologia - Il metodo NIOSH per azioni di sollevamento", level=1)
-        add_paragraph(
+        _body(
             doc,
             "Per ogni compito di sollevamento si calcola il Peso Limite Raccomandato (PLR) "
             "moltiplicando la costante di peso CP (kg) per i sei fattori demoltiplicativi "
             "A, B, C, D, E, F. L'Indice di Rischio IR si ottiene come rapporto tra il peso "
             "effettivamente sollevato P e il PLR.",
         )
-        add_paragraph(doc, "PLR = CP x A x B x C x D x E x F", bold=True)
-        add_paragraph(doc, "IR = P / PLR", bold=True)
-        add_paragraph(
+        _body(doc, "PLR = CP x A x B x C x D x E x F", bold=True)
+        _body(doc, "IR = P / PLR", bold=True)
+        _body(
             doc,
             "Soglie di accettabilità: IR <= 0,75 = VERDE (rischio trascurabile); "
             "0,75 < IR <= 1,00 = GIALLO (sorveglianza sanitaria); "
@@ -420,12 +443,7 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
 
         # Factor A
         add_heading(doc, "Fattore A - Altezza da terra delle mani all'inizio (cm)", level=2)
-        add_paragraph(
-            doc,
-            "Formula: A = 1 - 0,003 * |V - 75|. Valore ottimale V = 75 cm (altezza nocche).",
-            italic=True,
-            size=9,
-        )
+        _note(doc, "Formula: A = 1 - 0,003 * |V - 75|. Valore ottimale V = 75 cm (altezza nocche).")
         add_data_table(
             doc,
             ["Altezza V (cm)", "Fattore A"],
@@ -497,11 +515,10 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
     ) -> None:
         add_heading(doc, "Tavole di Valutazione del Rischio MMC", level=1)
         if not mmc_groups:
-            add_paragraph(
+            _note(
                 doc,
                 "Nessuna attività di movimentazione manuale dei carichi e' stata "
                 "valutata per questa azienda.",
-                italic=True,
             )
             page_break(doc)
             return
@@ -538,7 +555,7 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
 
         add_heading(doc, f"{idx}. {r.compito or 'Compito'}", level=3)
         if ambiente:
-            add_paragraph(doc, f"Ambiente: {ambiente.nome or '—'}", italic=True, size=10)
+            _note(doc, f"Ambiente: {ambiente.nome or '—'}")
 
         # Server-side recompute guard: if all 7 inputs are present, derive
         # multipliers + PLR + IR from the canonical lookup tables. This
@@ -564,32 +581,6 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         mult_d = recomputed.get("fattore_d") if recomputed else r.fattore_d
         mult_e = recomputed.get("fattore_e") if recomputed else r.fattore_e
         mult_f = recomputed.get("fattore_f") if recomputed else r.fattore_f
-
-        # 13-row x 4-col table mirroring the template T14 layout:
-        #   col0 = Fattore (CP/A/B/C/D/E/F/PLR/P/IR)
-        #   col1 = Descrizione
-        #   col2 = Input (cm/gradi/giudizio/atti per minuto/durata)
-        #   col3 = Valore (multiplier or final number)
-        table = doc.add_table(rows=0, cols=4)
-        try:
-            table.style = "Table Grid"
-        except KeyError:
-            pass
-        table.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-        # Header band: nominativo + mansione (merged-look via header style)
-        header_row = table.add_row().cells
-        header_row[0].text = "Nominativo"
-        header_row[1].text = nominativo
-        header_row[2].text = "Mansione"
-        header_row[3].text = mansione
-        for cell in header_row:
-            shade_cell(cell, "1A237E")
-            for p in cell.paragraphs:
-                for run in p.runs:
-                    run.font.bold = True
-                    run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-                    run.font.size = Pt(10)
 
         sex_label = (
             "Maschi > 18 anni" if (r.sesso or "M") == "M" and (r.fascia_eta or "").startswith(">")
@@ -634,45 +625,38 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
             ("IR = P/PLR", "Indice di rischio",
              "", f"{ir:.2f}" if plr > 0 else "—"),
         ]
-
-        for code, descr, input_val, multiplier in body_rows:
-            row = table.add_row().cells
-            row[0].text = code
-            row[1].text = descr
-            row[2].text = str(input_val)
-            row[3].text = str(multiplier)
-            shade_cell(row[0], "F5F5F5")
-            for p in row[0].paragraphs:
-                for run in p.runs:
-                    run.font.bold = True
-                    run.font.size = Pt(10)
-            for cell in (row[1], row[2], row[3]):
-                for p in cell.paragraphs:
-                    for run in p.runs:
-                        run.font.size = Pt(9)
-
-        # Final result row, color-shaded by zone
-        result_row = table.add_row().cells
-        result_row[0].text = "Risultato"
-        result_row[1].text = "Classificazione"
-        result_row[2].text = livello
-        result_row[3].text = (
+        area = (
             "Verde" if livello == "VERDE"
             else "Gialla" if livello == "GIALLO"
             else "Rossa" if livello == "ROSSO"
             else "—"
         )
-        area = result_row[3].text
-        shade_hex = _AREA_COLORS.get(area, "F5F5F5")
-        for cell in result_row:
-            shade_cell(cell, shade_hex)
-            for p in cell.paragraphs:
-                for run in p.runs:
-                    run.font.bold = True
-                    run.font.size = Pt(10)
+
+        # 13-row x 4-col kit table mirroring the template T14 layout, under
+        # a header band with nominativo + mansione:
+        #   col0 = Fattore (CP/A/B/C/D/E/F/PLR/P/IR), a light row label
+        #   col1 = Descrizione
+        #   col2 = Input (cm/gradi/giudizio/atti per minuto/durata)
+        #   col3 = Valore (multiplier or final number)
+        # The last row is the result, its zone in the level colour.
+        table = add_data_table(
+            doc,
+            ["Nominativo", nominativo, "Mansione", mansione],
+            [
+                [code, descr, str(input_val), str(multiplier)]
+                for code, descr, input_val, multiplier in body_rows
+            ]
+            + [["Risultato", "Classificazione", livello, area]],
+        )
+        for row in table.rows[1:]:
+            _label_cell(row.cells[0])
+        result_row = table.rows[-1].cells
+        _label_cell(result_row[1])
+        for cell in result_row[2:]:
+            level_cell(cell, livello)
 
         if r.note:
-            add_paragraph(doc, f"Note: {r.note}", italic=True, size=9)
+            _note(doc, f"Note: {r.note}")
 
     # ------------------------------------------------------------------
     # Quadro sinottico
@@ -685,22 +669,12 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
     ) -> None:
         add_heading(doc, "Quadro sinottico di esposizione", level=1)
         if not mmc_groups:
-            add_paragraph(doc, "Nessuna valutazione presente.", italic=True)
+            _note(doc, "Nessuna valutazione presente.")
             page_break(doc)
             return
 
-        table = doc.add_table(rows=1, cols=5)
-        try:
-            table.style = "Table Grid"
-        except KeyError:
-            pass
-        table.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-        hdr = table.rows[0]
-        for i, h in enumerate(["Nominativo", "Mansione", "Compito", "IR", "Area"]):
-            hdr.cells[i].text = h
-        style_header_row(hdr)
-
+        rows: list[list[str]] = []
+        areas: list[str] = []
         for persona, tasks in mmc_groups:
             nominativo = (
                 (getattr(persona, "nominativo", None) or "—")
@@ -728,24 +702,16 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
                     )
                 )
 
-                row = table.add_row()
-                row.cells[0].text = nominativo
-                row.cells[1].text = mansione
-                row.cells[2].text = task.compito or "—"
-                row.cells[3].text = f"{ir:.2f}"
-                row.cells[4].text = area or "—"
+                rows.append(
+                    [nominativo, mansione, task.compito or "—", f"{ir:.2f}", area or "—"]
+                )
+                areas.append(area or "")
 
-                shade_hex = _AREA_COLORS.get(area or "", "FFFFFF")
-                for cell in (row.cells[3], row.cells[4]):
-                    shade_cell(cell, shade_hex)
-                    for paragraph in cell.paragraphs:
-                        for run in paragraph.runs:
-                            run.font.bold = True
-                            run.font.size = Pt(10)
-                for cell in (row.cells[0], row.cells[1], row.cells[2]):
-                    for paragraph in cell.paragraphs:
-                        for run in paragraph.runs:
-                            run.font.size = Pt(10)
+        table = add_data_table(doc, ["Nominativo", "Mansione", "Compito", "IR", "Area"], rows)
+        # IR and area in the area's level colour.
+        for row, area in zip(table.rows[1:], areas):
+            for cell in row.cells[3:]:
+                level_cell(cell, _AREA_LEVEL.get(area, ""))
 
         page_break(doc)
 
@@ -819,7 +785,7 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
     ) -> None:
         add_heading(doc, "Programma di Attuazione delle Misure di Prevenzione", level=1)
         if not mmc_rows:
-            add_paragraph(doc, "Nessuna valutazione presente.", italic=True)
+            _note(doc, "Nessuna valutazione presente.")
             page_break(doc)
             return
 
@@ -836,12 +802,7 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         for zone, rows in zones.items():
             add_heading(doc, _ZONE_HEADINGS.get(zone, zone), level=2)
             if not rows:
-                notice = add_paragraph(
-                    doc,
-                    f"Nessun lavoratore classificato in {zone.lower()}.",
-                    italic=True,
-                    size=10,
-                )
+                notice = _note(doc, f"Nessun lavoratore classificato in {zone.lower()}.")
                 # LibreOffice can visually crowd this notice into the long
                 # Heading 2 above it unless the separation is explicit.
                 notice.paragraph_format.space_before = Pt(6)
@@ -886,12 +847,11 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
                 ["Lavoratore", "AZIONE", "Misure di prevenzione e protezione"],
                 data_rows,
             )
-            # Tint every body cell so the zone is visually obvious even when
-            # the table spans a page break (bullet from audit P3 #15).
-            tint = _AREA_COLORS.get(zone, "F5F5F5")
+            # Every row opens on the zone's level colour, so the zone stays
+            # obvious when the table spans a page break (audit P3 #15); the
+            # measures stay dark text on the kit's zebra rows.
             for row in tbl.rows[1:]:
-                for cell in row.cells:
-                    shade_cell(cell, tint)
+                level_cell(row.cells[0], _AREA_LEVEL[zone])
 
         page_break(doc)
 
@@ -904,7 +864,7 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
         ddl_names = [p.nominativo for p in persone if p.ruolo_datore_lavoro and p.nominativo]
         ddl = ddl_names[0] if ddl_names else "il Datore di Lavoro"
         ragione = azienda.ragione_sociale or "l'Azienda"
-        add_paragraph(
+        _body(
             doc,
             f"Il sottoscritto {ddl}, in qualita di Datore di Lavoro di {ragione}, "
             "dichiara di aver effettuato la valutazione del rischio da movimentazione "
@@ -914,7 +874,7 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
             "Competente ove nominato e previa consultazione del Rappresentante dei "
             "Lavoratori per la Sicurezza.",
         )
-        add_paragraph(
+        _body(
             doc,
             "Le misure di prevenzione e protezione individuate nel Programma di "
             "Attuazione saranno adottate secondo il cronoprogramma concordato e "
@@ -937,34 +897,17 @@ class AllegatoMmcGenerator(BaseDocumentGenerator):
                     return p.nominativo
             return "—"
 
-        ddl = _first_or_dash(lambda p: bool(p.ruolo_datore_lavoro))
-        rspp = _first_or_dash(lambda p: bool(p.ruolo_rspp))
-        mc = _first_or_dash(lambda p: bool(p.ruolo_medico_competente))
-        rls = _first_or_dash(lambda p: bool(p.ruolo_rls))
-
-        # 2x2 signature grid
-        table = doc.add_table(rows=2, cols=2)
-        try:
-            table.style = "Table Grid"
-        except KeyError:
-            pass
-
-        cells = [
-            (0, 0, "Il Datore di Lavoro", ddl),
-            (0, 1, "Il Responsabile del S.P.P.", rspp),
-            (1, 0, "Il Medico Competente", mc),
-            (1, 1, "Il Rappresentante dei Lavoratori (per consultazione)", rls),
-        ]
-        for r, c, label, name in cells:
-            cell = table.rows[r].cells[c]
-            cell.text = ""
-            p1 = cell.paragraphs[0]
-            run = p1.add_run(label)
-            run.font.bold = True
-            run.font.size = Pt(10)
-            p2 = cell.add_paragraph(f"({name})")
-            for run in p2.runs:
-                run.font.size = Pt(10)
-                run.italic = True
-            cell.add_paragraph("")
-            cell.add_paragraph("__________________________")
+        # The kit's signature grid: roles on navy, names ("—" when vacant)
+        # and a blank row to sign in, two signatories per row.
+        add_signature_grid(
+            doc,
+            [
+                ("Il Datore di Lavoro", _first_or_dash(lambda p: bool(p.ruolo_datore_lavoro))),
+                ("Il Responsabile del S.P.P.", _first_or_dash(lambda p: bool(p.ruolo_rspp))),
+                ("Il Medico Competente", _first_or_dash(lambda p: bool(p.ruolo_medico_competente))),
+                (
+                    "Il Rappresentante dei Lavoratori (per consultazione)",
+                    _first_or_dash(lambda p: bool(p.ruolo_rls)),
+                ),
+            ],
+        )
