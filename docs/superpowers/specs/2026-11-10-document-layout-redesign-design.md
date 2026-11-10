@@ -231,8 +231,9 @@ asset or bad data never crashes generation.
 
 All tables:
 - Table Grid with black ½ pt borders, centred, full text width.
-- Header rows repeat on every page, and no row splits across a page break
-  (`cantSplit`, as today).
+- Header rows repeat on every page. Only header rows and short label rows
+  are kept together (`cantSplit`). Data rows never are: LibreOffice loops
+  forever on a keep-together row taller than a page (commit `e0875fa`).
 - 10 pt text, left-aligned. Header cells, numbers, levels and "—" are centred.
 
 | Builder | Look | Used for |
