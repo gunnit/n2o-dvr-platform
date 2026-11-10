@@ -80,6 +80,111 @@ def test_exif_orientation_is_applied():
         assert image.size == (20, 40)
 
 
+_PRIVATE_COMMENT = b"Casa di Mario Rossi, via Roma 1"
+_XMP_WITH_GPS = (
+    b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF '
+    b'xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description '
+    b'xmlns:exif="http://ns.adobe.com/exif/1.0/" exif:GPSLatitude="45,27.833N"/>'
+    b"</rdf:RDF></x:xmpmeta>"
+)
+
+
+def _phone_jpeg_with_location() -> bytes:
+    """A JPEG as a phone writes it: GPS in EXIF and XMP, plus a comment."""
+    exif = Image.Exif()
+    exif[0x010F] = "PhoneMaker"
+    gps = exif.get_ifd(0x8825)
+    gps.update({1: "N", 2: (45.0, 27.0, 50.0), 3: "E", 4: (9.0, 11.0, 25.0)})
+    source = _image_bytes(
+        Image.new("RGB", (64, 48), "teal"),
+        "JPEG",
+        exif=exif,
+        comment=_PRIVATE_COMMENT,
+        xmp=_XMP_WITH_GPS,
+    )
+    with Image.open(BytesIO(source)) as image:
+        assert image.info["comment"] == _PRIVATE_COMMENT
+        assert image.getexif().get_ifd(0x8825)
+        assert "xmp" in image.info
+    return source
+
+
+def _assert_no_metadata(content: bytes) -> None:
+    assert content[:2] == b"\xff\xd8"
+    assert _PRIVATE_COMMENT not in content
+    assert b"Exif\x00\x00" not in content
+    assert b"ns.adobe.com/xap" not in content
+    with Image.open(BytesIO(content)) as image:
+        assert "comment" not in image.info
+        assert "xmp" not in image.info
+        assert not image.getexif()
+
+
+def test_normalized_photo_drops_comment_exif_gps_and_xmp():
+    _assert_no_metadata(normalize_document_image(_phone_jpeg_with_location()).content)
+
+
+@pytest.mark.asyncio
+async def test_environment_photo_upload_stores_no_location_or_comment(tmp_path, monkeypatch):
+    class CountResult:
+        def scalar_one(self):
+            return 0
+
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = CountResult()
+    db.add = Mock()
+    db.refresh = AsyncMock()
+    monkeypatch.setattr(settings, "FILE_STORAGE_PATH", str(tmp_path))
+    monkeypatch.setattr("app.api.v1.ambienti._get_ambiente_for_org", AsyncMock())
+    upload = UploadFile(
+        filename="reparto.jpg",
+        file=BytesIO(_phone_jpeg_with_location()),
+        headers={"content-type": "image/jpeg"},
+    )
+
+    photo = await upload_ambiente_foto(uuid.uuid4(), uuid.uuid4(), upload, uuid.uuid4(), db)
+
+    _assert_no_metadata(photo.document_image_bytes)
+
+
+@pytest.mark.asyncio
+async def test_company_photo_upload_stores_no_location_or_comment():
+    from sqlalchemy.dialects import postgresql
+
+    from app.api.v1 import azienda_foto_presentazione as company_photo_api
+
+    azienda_id = uuid.uuid4()
+    statements = []
+
+    class Found:
+        def scalar_one_or_none(self):
+            return azienda_id
+
+    class Upserted:
+        def scalar_one(self):
+            return datetime(2026, 11, 10)
+
+    async def execute(statement, *args, **kwargs):
+        statements.append(statement)
+        return Found() if len(statements) == 1 else Upserted()
+
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.side_effect = execute
+    upload = UploadFile(
+        filename="sede.jpg",
+        file=BytesIO(_phone_jpeg_with_location()),
+        headers={"content-type": "image/jpeg"},
+    )
+
+    await company_photo_api.put_foto_presentazione(azienda_id, upload, uuid.uuid4(), db)
+
+    params = statements[-1].compile(dialect=postgresql.dialect()).params
+    stored = [value for value in params.values() if isinstance(value, bytes)]
+    assert stored
+    for content in stored:
+        _assert_no_metadata(content)
+
+
 def test_small_image_is_not_enlarged():
     result = normalize_document_image(
         _image_bytes(Image.new("RGB", (320, 200), "blue"), "PNG")

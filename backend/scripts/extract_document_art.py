@@ -10,7 +10,7 @@ spec, Appendix A, for the key -> source mapping):
 * ``div_*.jpg``      - section divider pages (``div_generico`` is aliased to
                        ``div_ambienti`` by the manifest, so no extra file)
 * ``sign_*.jpg``     - safety-sign panels, kept at native size
-* ``vera_italia_mark.png`` - logo, alpha preserved
+* ``vera_italia_mark.png`` - logo, alpha preserved, 360 px wide (``mark_png``)
 
 Page art is centre-cropped to A4 aspect (21/29.7) and resized to 1654 px wide
 with Lanczos, never upscaled.
@@ -27,6 +27,10 @@ from PIL import Image
 
 A4_ASPECT = 21 / 29.7
 PAGE_WIDTH = 1654
+# The mark prints at most 2.4 cm wide in the footer (3.4 cm on a HACCP form's
+# letterhead): 360 px is about 380 dpi there. The model's own copy is 640 px
+# and 86 KB, and it ships in every document and every HACCP form.
+MARK_WIDTH = 360
 
 DIVIDERS = {
     "div_servizi_igienici": "image3.png",
@@ -114,6 +118,27 @@ def save_jpeg(im: Image.Image, path: Path, quality: int) -> None:
     im.save(path, "JPEG", quality=quality, progressive=True, optimize=True)
 
 
+def mark_png(data: bytes) -> bytes:
+    """The logo as committed: RGBA (alpha kept), ``MARK_WIDTH`` px wide at its
+    own aspect (never upscaled), a lossless PNG with ``optimize``.
+
+    Bicubic rather than the page art's Lanczos: at the printed size the two
+    are indistinguishable, and Lanczos ringing adds colours that make the PNG
+    a fifth larger. Palette mode is not used: the mark's gradients and
+    anti-aliased edges hold thousands of colours, which 256 cannot keep.
+    """
+    im = Image.open(io.BytesIO(data))
+    im.load()
+    im = im.convert("RGBA")
+    if im.width > MARK_WIDTH:
+        im = im.resize((MARK_WIDTH, round(im.height * MARK_WIDTH / im.width)), Image.BICUBIC)
+    out = io.BytesIO()
+    # The source's EXIF and XMP are not written (Pillow carries over only an
+    # ICC profile, which keeps the colours if the model ever has one).
+    im.save(out, "PNG", optimize=True)
+    return out.getvalue()
+
+
 def main(docx: Path, out: Path) -> None:
     out.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(docx) as z:
@@ -131,7 +156,7 @@ def main(docx: Path, out: Path) -> None:
             save_jpeg(page_art(open_img(src)), out / f"{key}.jpg", 80)
         for key, src in SIGNS.items():
             save_jpeg(to_rgb(open_img(src)), out / f"{key}.jpg", 85)
-        (out / "vera_italia_mark.png").write_bytes(media("image21.png"))
+        (out / "vera_italia_mark.png").write_bytes(mark_png(media("image21.png")))
 
 
 if __name__ == "__main__":
