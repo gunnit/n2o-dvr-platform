@@ -2490,6 +2490,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             headers=["P", "Livello", "Criteri"],
             rows=[list(row) for row in _PROBABILITA_CRITERI_ROWS],
             widths=[1.5, 3.5, 11.5],
+            centred_columns=(1,),
         )
 
         add_section_title(doc, "SCALA DEL DANNO (D)")
@@ -2498,6 +2499,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             headers=["D", "Livello", "Criteri"],
             rows=[list(row) for row in _DANNO_CRITERI_ROWS],
             widths=[1.5, 3.5, 11.5],
+            centred_columns=(1,),
         )
 
     def _add_risk_level_table(self, doc: Document) -> None:
@@ -2897,6 +2899,7 @@ class DVRMasterGenerator(BaseDocumentGenerator):
             doc,
             headers=["Colore", "Significato", "Indicazioni e precisazioni", "Esempi"],
             rows=color_rows,
+            centred_columns=(0,),
         )
 
         # Tabella 106 — Forma dei cartelli (Allegato XXIV D.Lgs. 81/2008).
@@ -3902,18 +3905,24 @@ class DVRMasterGenerator(BaseDocumentGenerator):
         *,
         widths: list[float] | None = None,
         v_center: bool = True,
+        centred_columns: tuple[int, ...] = (),
     ) -> Table:
         """A data table, built by the kit's ``add_data_table``: the blue
         header row repeats on every page and never splits, zebra rows, 10 pt
-        text with numbers, levels and dashes centred. Data rows may split:
-        a keep-together row taller than a page makes LibreOffice loop forever
+        text with numbers and dashes centred. Data rows may split: a
+        keep-together row taller than a page makes LibreOffice loop forever
         (commit e0875fa). ``widths`` are column widths in cm.
+
+        ``centred_columns`` centres whole columns that N2O's model centres,
+        such as the uncoloured level and colour-name columns.
 
         ``v_center`` centres the data cells vertically, as N2O's model does
         next to bulleted lists and multi-line cells; the risk tables keep
         their text at the top, like the model's.
         """
-        table = add_data_table(doc, headers, rows, column_widths_cm=widths)
+        table = add_data_table(
+            doc, headers, rows, column_widths_cm=widths, centred_columns=centred_columns
+        )
         if v_center:
             _center_vertically(table.rows[1:])
         return table

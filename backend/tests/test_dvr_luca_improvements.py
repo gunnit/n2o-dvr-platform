@@ -18,7 +18,7 @@ import uuid
 import pytest
 from docx import Document
 from docx.enum.table import WD_ROW_HEIGHT_RULE
-from docx.enum.text import WD_BREAK
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
 from docx.shared import Cm, Pt
 from PIL import Image
 
@@ -378,18 +378,45 @@ def test_dvr_writes_table_cells_with_the_kit_helper():
     assert dvr_master.write_cell is docx_utils.write_cell
 
 
-def test_signage_colour_table_aligns_each_column_alike():
-    """Final review M-3: CODIFICA CROMATICA DELLA SEGNALETICA centred
-    "Rosso" and "Verde" (they spell RISK_COLORS keys) and left "Azzurro"
-    and "Giallo o giallo-arancio". Every column has one alignment."""
+def _column_alignments(table):
+    return [
+        {cell.paragraphs[0].alignment for cell in column.cells[1:]}
+        for column in table.columns
+    ]
+
+
+def test_signage_colour_table_centres_the_colour_column_like_the_model():
+    """Final review M-3 made each column of CODIFICA CROMATICA DELLA
+    SEGNALETICA take one alignment ("Rosso" and "Verde" used to be centred
+    for spelling RISK_COLORS keys, "Azzurro" was not). N2O's model (p. 59)
+    centres the whole Colore column and leaves the text columns left."""
     doc = Document()
     _new_generator()._add_segnaletica_section(doc)
     table = next(t for t in doc.tables if t.rows[0].cells[0].text == "Colore")
     colours = [row.cells[0].text for row in table.rows[1:]]
     assert {"Rosso", "Verde", "Azzurro", "Giallo o giallo-arancio"} <= set(colours)
-    for index, column in enumerate(table.columns):
-        alignments = {cell.paragraphs[0].alignment for cell in column.cells[1:]}
-        assert alignments == {None}, (table.rows[0].cells[index].text, alignments)
+    assert _column_alignments(table) == [
+        {WD_ALIGN_PARAGRAPH.CENTER},
+        {None},
+        {None},
+        {None},
+    ]
+
+
+def test_probability_and_damage_scales_centre_the_level_column_like_the_model():
+    """N2O's model centres "Livello" in SCALA DI PROBABILITÀ (p. 30:
+    ELEVATA … BASSA) and SCALA DEL DANNO (p. 31: INGENTE … TRASCURABILE);
+    the numbers column is centred and the criteria stay left."""
+    doc = Document()
+    _new_generator()._add_part_ii(doc)
+    for first_header in ("P", "D"):
+        table = next(t for t in doc.tables if t.rows[0].cells[0].text == first_header)
+        assert [c.text for c in table.rows[0].cells] == [first_header, "Livello", "Criteri"]
+        assert _column_alignments(table) == [
+            {WD_ALIGN_PARAGRAPH.CENTER},
+            {WD_ALIGN_PARAGRAPH.CENTER},
+            {None},
+        ], first_header
 
 
 def test_sign_panels_are_judged_by_manifest_key_not_file_name(tmp_path, monkeypatch):

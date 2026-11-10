@@ -172,7 +172,7 @@ def resolve_art(key: str, *, role: str = "divider") -> tuple[str, Path] | None:
             if candidate != key and key in ART:
                 logger.warning("Document art %r is missing in %s; using %r", key, ART_DIR, candidate)
             return candidate, path
-    logger.warning("No document art for %r in %s; the page is left white", key, ART_DIR)
+    logger.warning("No document art for %r in %s; no art is drawn", key, ART_DIR)
     return None
 
 
@@ -192,7 +192,7 @@ def _usable_art(key: str, *, role: str) -> tuple[str, Path] | None:
     try:
         DocxImage.from_file(str(resolved[1]))
     except Exception:
-        logger.warning("Document art %s is not a readable image; the page is left white", resolved[1])
+        logger.warning("Document art %s is not a readable image; no art is drawn", resolved[1])
         return None
     return resolved
 
@@ -645,7 +645,7 @@ def _add_art_paragraph(doc: Document, key: str, path: Path, *, role: str, sectio
     try:
         inline = run.add_picture(str(path), width=Emu(width), height=Emu(height))._inline
     except Exception:
-        logger.warning("Document art %s could not be embedded; the page is left white", path, exc_info=True)
+        logger.warning("Document art %s could not be embedded; no art is drawn", path, exc_info=True)
         paragraph._p.getparent().remove(paragraph._p)
         return None
     blip = inline.find(".//" + qn("a:blip"))
