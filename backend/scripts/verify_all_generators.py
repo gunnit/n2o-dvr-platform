@@ -348,7 +348,8 @@ def patch_generators(fixture: dict, output_dir: str):
     # directly from the DB. Bypass with empty collections in the off-DB
     # harness — tests cover the static structure of the doc, not the
     # dynamic-data flow. Per-persona DPI + rischi flags now live on the
-    # Persona rows themselves, so no extras key is needed for them.
+    # Persona rows themselves, so no extras key is needed for them. Acme
+    # has no company photo: its PRESENTAZIONE DELL'AZIENDA has no photo slot.
     async def fake_load_dvr_extras(self, data):
         return {
             "foto_by_ambiente": {},
@@ -359,6 +360,7 @@ def patch_generators(fixture: dict, output_dir: str):
                 ("stress", "Allegato Stress Lavoro-Correlato"),
             ],
             "misure_miglioramento": [],
+            "foto_presentazione": None,
         }
     DVRMasterGenerator._load_dvr_extras = fake_load_dvr_extras
 

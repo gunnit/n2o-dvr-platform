@@ -734,6 +734,59 @@ def add_body_paragraph(doc: Document, text: str):
     return paragraph
 
 
+_BULLET_STYLE = "List Bullet"
+
+
+def _is_blank_paragraph(paragraph) -> bool:
+    return not paragraph.text.strip() and not paragraph._p.xpath(
+        ".//w:drawing | .//w:pict | .//w:object"
+    )
+
+
+def add_bullets(container, items: list[str], *, size_pt: float | None = None) -> list:
+    """A bulleted list with real list numbering, in a document or a table cell.
+
+    Each item is a ``List Bullet`` paragraph: the bullet comes from the
+    style's numbering (python-docx's default template defines it), so Word,
+    LibreOffice and the preview parser all see a list, never a typed "•".
+    In a cell the empty paragraph every cell starts with becomes the first
+    item instead of staying above the list, and cell bullets carry no
+    paragraph spacing, like the rest of the kit's table text. Blank items are
+    skipped; with nothing left, nothing is added. ``size_pt`` sets the item
+    size (``TYPE_SCALE["table"]`` in a cell); ``None`` keeps the style's.
+
+    A document without the style (a donor template) gets plain paragraphs
+    with a typed bullet rather than an error. Returns the item paragraphs.
+    """
+    texts = [str(item).strip() for item in items if item is not None and str(item).strip()]
+    in_cell = hasattr(container, "_tc")
+    reuse = None
+    if (
+        texts
+        and in_cell
+        and len(container.paragraphs) == 1
+        and _is_blank_paragraph(container.paragraphs[0])
+    ):
+        reuse = container.paragraphs[0]
+        # Its empty runs (a table builder's blank cell text) go too.
+        for run in list(reuse._p.r_lst):
+            reuse._p.remove(run)
+    paragraphs = []
+    for index, text in enumerate(texts):
+        paragraph = reuse if index == 0 and reuse is not None else container.add_paragraph()
+        try:
+            paragraph.style = _BULLET_STYLE
+            label = text
+        except KeyError:
+            label = f"• {text}"
+        set_run_font(paragraph.add_run(label), size=size_pt)
+        if in_cell:
+            paragraph.paragraph_format.space_before = Pt(0)
+            paragraph.paragraph_format.space_after = Pt(0)
+        paragraphs.append(paragraph)
+    return paragraphs
+
+
 def _try_set_table_style(table) -> bool:
     """Try Table Grid; return True if applied."""
     try:

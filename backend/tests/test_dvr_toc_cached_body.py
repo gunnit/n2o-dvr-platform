@@ -12,6 +12,10 @@ from docx.oxml.ns import qn
 
 from app.services.document_generator.dvr_master import DVRMasterGenerator
 
+# The design kit's cached index line, shown until the finalizer (or Word)
+# writes the real one.
+PLACEHOLDER = "Indice in fase di aggiornamento"
+
 
 def _new_generator() -> DVRMasterGenerator:
     return DVRMasterGenerator.__new__(DVRMasterGenerator)
@@ -45,7 +49,7 @@ def test_toc_cached_body_replaced_with_real_headings() -> None:
     # Before finalize: just the single placeholder line.
     initial = _cached_body_paragraphs(doc, field_start_p, end_p)
     assert len(initial) == 1
-    assert "Ctrl+A" in initial[0]
+    assert PLACEHOLDER in initial[0]
 
     # Simulate what the rest of the generator does — add a few headings
     # at multiple levels. INDICE is already a Heading 1 above the field
@@ -62,7 +66,7 @@ def test_toc_cached_body_replaced_with_real_headings() -> None:
 
     cached = _cached_body_paragraphs(doc, field_start_p, end_p)
     # Placeholder is gone, real headings are in.
-    assert "Ctrl+A" not in "\n".join(cached)
+    assert PLACEHOLDER not in "\n".join(cached)
     assert cached == [
         "Premessa",
         "PARTE I — DATI GENERALI DELL'AZIENDA",
@@ -118,4 +122,4 @@ def test_toc_finalize_noop_when_no_headings() -> None:
 
     cached = _cached_body_paragraphs(doc, field_start_p, end_p)
     assert len(cached) == 1
-    assert "Ctrl+A" in cached[0]
+    assert PLACEHOLDER in cached[0]

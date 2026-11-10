@@ -765,8 +765,9 @@ def test_dvr_parte_ii_has_definizioni_and_criteria(generated_outputs):
 
 
 def test_dvr_parte_iv_has_signature_table(generated_outputs):
-    """US-2.8 AC1: Parte IV emits the improvement program grid and the 2×3
-    signature block as a real table (Templates 109, 110)."""
+    """US-2.8 AC1: Parte IV emits the improvement program grid and the
+    signature block as a real table (Templates 109, 110), in the shape of
+    N2O's model: a 4-column programme and a 2×2 signature grid."""
     ok, path, _ = generated_outputs["DVR_MASTER"]
     assert ok and path
     doc = Document(path)
@@ -777,13 +778,10 @@ def test_dvr_parte_iv_has_signature_table(generated_outputs):
             continue
         header_cells = [cell.text.strip() for cell in table.rows[0].cells]
         if header_cells == [
-            "Priorità",
-            "Rischio",
             "Misura di Miglioramento",
-            "Attività / Procedura",
             "Risorse",
             "Responsabile",
-            "Scadenza",
+            "Priorità",
         ]:
             found_program = True
             break
@@ -793,15 +791,14 @@ def test_dvr_parte_iv_has_signature_table(generated_outputs):
 
     signature_match = False
     for table in doc.tables:
-        if len(table.rows) != 2 or len(table.rows[0].cells) != 3:
+        if len(table.rows) != 6 or len(table.rows[0].cells) != 2:
             continue
-        row0_text = " ".join(cell.text for cell in table.rows[0].cells)
-        row1_text = " ".join(cell.text for cell in table.rows[1].cells)
-        if "Datore di Lavoro" in row0_text and "Rappresentante dei Lavoratori" in row1_text:
+        roles = [cell.text for row in (table.rows[0], table.rows[3]) for cell in row.cells]
+        if roles == ["Datore di Lavoro", "Responsabile del S.P.P.", "Medico Competente", "RLS"]:
             signature_match = True
             break
     assert signature_match, (
-        "missing 2×3 signature table (Template Table 110)"
+        "missing 2×2 signature grid (Template Table 110)"
     )
 
 
@@ -813,6 +810,10 @@ def test_dvr_parte_iii_env_block_structure(generated_outputs):
     table for every applicable macro-category. The Acme fixture has 6 envs
     each with 2 applicable risk categories → at least 6 × (3 + 2) = 30
     template-shaped tables in Parte III alone.
+
+    Part III opens once on its divider ("IDENTIFICAZIONE DELL'AMBIENTE DI
+    LAVORO E DEGLI ADDETTI", N2O's model); each environment then has its
+    risk-factor sub-title.
     """
     ok, path, _ = generated_outputs["DVR_MASTER"]
     assert ok and path
@@ -822,12 +823,15 @@ def test_dvr_parte_iii_env_block_structure(generated_outputs):
         p.text for p in doc.paragraphs
         if p.style.name.startswith("Heading")
     ]
+    assert headings.count(
+        "IDENTIFICAZIONE DELL'AMBIENTE DI LAVORO E DEGLI ADDETTI"
+    ) == 1
     env_identity_headers = [
         h for h in headings
-        if h.startswith("Identificazione dell'Ambiente di Lavoro")
+        if h.startswith("Identificazione dei Fattori di Rischio — ")
     ]
     assert len(env_identity_headers) == 6, (
-        f"expected one env-identity heading per Acme env (6), "
+        f"expected one risk-factor sub-title per Acme env (6), "
         f"got {len(env_identity_headers)}: {env_identity_headers}"
     )
 
