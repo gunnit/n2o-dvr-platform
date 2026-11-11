@@ -2,6 +2,7 @@
 paths:
   - "backend/app/services/document_generator/**"
   - "backend/app/services/*calculator*.py"
+  - "backend/app/services/document_preview.py"
   - "backend/scripts/**"
 ---
 
@@ -27,6 +28,17 @@ Full input/output specs in `docs/context/FORMULAS_AND_CALCULATIONS.md`. The ones
 - **VDT exposure**: ≥ 20 hours/week = exposed.
 - **Fire risk**: `INF + SI + PI`, each 1–3. Sum 3–4 low, 5–7 medium, 8–9 high.
 - Thermal comfort (PMV/PPD) and severe heat (PHS) come from `pythermalcomfort` — don't hand-roll them.
+
+## Layout: the design kit
+
+Every document's look comes from the kit: `design.py` (page types, running header/footer, art) and `docx_utils.py` (tokens, table builders). Read `docs/context/DESIGN_KIT.md` before changing a layout. The spec is `docs/superpowers/specs/2026-11-10-document-layout-redesign-design.md`.
+
+- Arial only (`FONT_FAMILY`). Font sizes come from `TYPE_SCALE`, never from a literal size in a generator.
+- Page types: `add_art_cover`, `add_cover`, `add_divider`, `add_section_title`, `add_sub_title`, `add_back_cover`. Call `setup_document(profile=…)` first and `finish_document(...)` last.
+- Art pages carry the `vera-art:<role>:<key>` marker that `document_preview.py` reads. Never rename it.
+- **Never put `cantSplit` on a data row.** LibreOffice loops forever on a keep-together row taller than a page.
+- Donor templates go through `donor_cover.py`: `strip_donor_cover` removes their cover, `insert_kit_cover_at_top` adds the kit cover (`revision_table=True` where the donor's Storico sat on its cover), and `normalize_fonts` sets Arial.
+- The DVR's visual ground truth is `templates/dvr_modello_luca_2026-10-20/DVR_RISCHIO MASTER.pdf`; its page map is in `docs/context/DVR_TEMPLATE_MAPPING.md`.
 
 ## Verifying a change
 
